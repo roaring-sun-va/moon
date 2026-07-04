@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v7.1</title>
+<title>DM Re:Vault v7.3</title>
 <style>
 :root{
   --bg:#0c0f16; --panel:#151b28; --panel-2:#1d2536; --line:#2a3550;
@@ -364,6 +364,7 @@ body.vs .pboard{gap:3px}
   <button class="btn small" id="btnMulti">複数選択</button>
   <button class="btn small" id="btnWho" style="display:none">操作:P1</button>
   <button class="btn small" id="btnSeat" style="display:none">視点:P1</button>
+  <button class="btn small warn" id="btnResignBar" style="display:none">🏳 投了</button>
   <button class="btn primary" id="btnNextTurn">次のターン ▶</button>
 </div>
 
@@ -568,12 +569,13 @@ body.vs .pboard{gap:3px}
       <button class="btn small on" id="bTabMain">メイン <span id="bTotalMain">0</span>/40</button>
       <button class="btn small" id="bTabGR">超GR <span id="bTotalGR">0</span>/12</button>
       <button class="btn small" id="bTabHy">超次元 <span id="bTotalHy">0</span>/8</button>
+      <button class="btn small" id="bTabEx">ゲーム外 <span id="bTotalEx">0</span></button>
       <input type="text" id="bSearch" placeholder="絞り込み" style="flex:1;min-width:100px">
       <button class="btn small ghost" id="bReset">クリア</button>
       <button class="btn small" id="bCancel">閉じる</button>
       <button class="btn primary small" id="bApply">反映</button>
     </div>
-    <div class="hint">タップで枚数切替（超GRは2枚まで）。特殊カード（禁断など）はテキスト欄に直接入力してください。</div>
+    <div class="hint">タップで枚数切替（超GRは2枚まで）。ゲーム外タブはタップで枚数を直接入力（上限なし）。特殊カード（禁断など）はテキスト欄に直接入力してください。</div>
     <div id="bGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;overflow-y:auto;max-height:75dvh;padding:4px"></div>
   </div>
 </div>
@@ -1183,7 +1185,11 @@ function startGame(picks){
 function draw(pi,n=1){
   const Z=S.players[pi].zones;
   for(let i=0;i<n;i++){
-    if(!Z.deck.length){toast("山札がありません（LO）");break;}
+    if(!Z.deck.length){
+      toast("山札がありません（LO）");
+      if(S.vs&&S.turn>0)declareWin(pi?0:1,`山札切れ：${S.players[pi].label} はカードを引けない`);
+      break;
+    }
     const c=Z.deck.shift();c.faceup=true;c.sideways=false;Z.hand.push(c);
     markArrive(c);
   }
@@ -1461,6 +1467,15 @@ const EFFECTS=[
      }
      closeSheet();renderAll();sfx("ok");
      toast("Vivy-ラプチャー解決：手札・墓地→山札→各5ドロー");
+   }},
+  {name:"特殊勝利（エクストラウィン）",
+   desc:"カードの特殊勝利条件を満たした時に、勝者を選んで勝敗を記録",
+   async run(){
+     closeSheet();
+     if(!S.vs){toast("対戦モードでのみ記録できます");return;}
+     const j=await askChoice("🏆 特殊勝利！ 勝者は？",[S.players[0].label,S.players[1].label]);
+     if(j===null)return;
+     declareWin(j,"⭐ 特殊勝利（エクストラウィン）",false);
    }},
   {name:"探索/超探索（山札・墓地・マナ）",
    desc:"ゾーンと条件を指定→条件に合うカードから3種（超探索は5種）をランダム提示",
@@ -2097,7 +2112,11 @@ async function execAttack(pi,id,tg){
     else n=parseInt(bk,10)||1;
     await breakShields(op,n,c);
   }
-  else{sfx("atk");toast(`💥 ダイレクトアタック！ ${S.players[pi].label} の勝利！`);}
+  else{
+    sfx("atk");
+    toast(`💥 ダイレクトアタック！`);
+    if(S.vs&&S.turn>0)declareWin(pi,`💥 ダイレクトアタック成立`);
+  }
   renderAll();
 }
 /* ---- 効果登録エディタ ---- */
@@ -2902,6 +2921,7 @@ function renderAll(){
   $("btnWho").textContent=`操作:${S.players[S.who].label}`;
   $("btnSeat").style.display=S.vs?"":"none";
   $("btnSeat").textContent=`視点:${S.players[S.seat|0].label}`;
+  $("btnResignBar").style.display=(S.vs&&S.turn>0)?"":"none";
   $("btnVs").classList.toggle("on",S.vs);
   $("btnFlip").style.display=S.vs?"":"none";
   $("btnFlip").classList.toggle("on",S.flip);
@@ -3037,6 +3057,12 @@ function setupConn(conn){
       buildBoards();renderAll();
       toast(`相手の名前：${S.players[seat].label}`);
     }
+    else if(msg&&msg.t==="win"){
+      if(msg.score){SCORE[0]=msg.score[0]|0;SCORE[1]=msg.score[1]|0;}
+      toast(`🏆 ${S.players[msg.winner|0].label} の勝利！（${msg.reason||""}／戦績 ${SCORE[0]} - ${SCORE[1]}）`);
+      sfx("atk");
+      renderAll();
+    }
     else if(msg&&msg.t==="resign"){
       if(msg.score){SCORE[0]=msg.score[0]|0;SCORE[1]=msg.score[1]|0;}
       const w=msg.loser?0:1;
@@ -3161,6 +3187,17 @@ async function olSendDeckImages(names){
   }
   toast(`🖼 画像送信完了（${sent}枚）`);
 }
+async function declareWin(winner,reason,askFirst=true){
+  if(!S.vs){toast(`🏆 ${reason}`);return;}
+  if(askFirst&&!(await ask(`${reason}\n${S.players[winner].label} の勝ちとして戦績に記録しますか？`)))return;
+  SCORE[winner]++;
+  toast(`🏆 ${S.players[winner].label} の勝利！（${reason}／戦績 ${SCORE[0]} - ${SCORE[1]}）`);
+  sfx("atk");
+  if(ONLINE.conn&&ONLINE.conn.open){
+    try{ONLINE.conn.send({t:"win",winner,reason,score:SCORE.slice()});}catch(e){}
+  }
+  renderAll();
+}
 async function doResign(){
   if(!S.vs){toast("対戦モードでのみ使用できます");return;}
   let loser;
@@ -3204,6 +3241,7 @@ $("olDeckSend").addEventListener("click",async ()=>{
   }catch(e){toast("送信に失敗しました");}
 });
 $("olResign").addEventListener("click",doResign);
+$("btnResignBar").addEventListener("click",doResign);
 $("olScoreReset").addEventListener("click",async ()=>{
   if(!await ask("戦績（勝敗カウント）をリセットしますか？"))return;
   SCORE[0]=0;SCORE[1]=0;
@@ -5017,19 +5055,21 @@ $("btnDeckList").addEventListener("click",async ()=>{await renderDeckList();$("d
 $("dlClose").addEventListener("click",()=>$("deckListOlay").classList.remove("open"));
 
 /* ================= deck builder ================= */
-const B={mode:"main",counts:{main:new Map(),gr:new Map(),hy:new Map()}};
+const B={mode:"main",counts:{main:new Map(),gr:new Map(),hy:new Map(),ex:new Map()}};
 const bMax=()=>B.mode==="gr"?2:4;
 function bTotals(){
   const t=m=>Array.from(m.values()).reduce((s,n)=>s+n,0);
   $("bTotalMain").textContent=t(B.counts.main);
   $("bTotalGR").textContent=t(B.counts.gr);
   $("bTotalHy").textContent=t(B.counts.hy);
+  $("bTotalEx").textContent=t(B.counts.ex);
 }
 function bSeed(){
-  B.counts.main.clear();B.counts.gr.clear();B.counts.hy.clear();
+  B.counts.main.clear();B.counts.gr.clear();B.counts.hy.clear();B.counts.ex.clear();
   for(const e of parseList($("deckText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.main.set(k,Math.min(e.count,4));}
   for(const e of parseList($("grText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.gr.set(k,Math.min(e.count,2));}
   for(const e of parseList($("hyText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.hy.set(k,Math.min(e.count,4));}
+  for(const e of parseList($("exText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.ex.set(k,e.count);}
 }
 function bRender(){
   const g=$("bGrid");g.innerHTML="";
@@ -5042,8 +5082,15 @@ function bRender(){
     const n=counts.get(k)||0;
     const el=vCardEl(dispName.get(k),{cnt:n});
     if(n)el.classList.add("picked");
-    el.addEventListener("click",()=>{
-      const next=((counts.get(k)||0)+1)%(bMax()+1);
+    el.addEventListener("click",async ()=>{
+      let next;
+      if(B.mode==="ex"){
+        const v=await askNumber(`${dispName.get(k)} の枚数（0で外す・上限なし）`,(counts.get(k)||0)+1,999);
+        if(v===null)return;
+        next=Math.max(0,v);
+      }else{
+        next=((counts.get(k)||0)+1)%(bMax()+1);
+      }
       if(next===0)counts.delete(k);else counts.set(k,next);
       el.querySelector(".cnt").textContent=next;
       el.classList.toggle("picked",next>0);
@@ -5058,6 +5105,7 @@ function bSetMode(m){
   $("bTabMain").classList.toggle("on",m==="main");
   $("bTabGR").classList.toggle("on",m==="gr");
   $("bTabHy").classList.toggle("on",m==="hy");
+  $("bTabEx").classList.toggle("on",m==="ex");
   bRender();
 }
 $("btnBuilder").addEventListener("click",()=>{
@@ -5068,6 +5116,7 @@ $("btnBuilder").addEventListener("click",()=>{
 $("bTabMain").addEventListener("click",()=>bSetMode("main"));
 $("bTabGR").addEventListener("click",()=>bSetMode("gr"));
 $("bTabHy").addEventListener("click",()=>bSetMode("hy"));
+$("bTabEx").addEventListener("click",()=>bSetMode("ex"));
 $("bSearch").addEventListener("input",bRender);
 $("bReset").addEventListener("click",()=>{B.counts[B.mode].clear();bRender();});
 $("bCancel").addEventListener("click",()=>$("builderOlay").classList.remove("open"));
@@ -5076,6 +5125,7 @@ $("bApply").addEventListener("click",()=>{
   $("deckText").value=toText(B.counts.main);
   $("grText").value=toText(B.counts.gr);
   $("hyText").value=toText(B.counts.hy);
+  $("exText").value=toText(B.counts.ex);
   $("builderOlay").classList.remove("open");
   $("deckStatus").textContent=`ビルダーから反映：メイン${listTotal(parseList($("deckText").value))}枚。「保存して使用」で開始。`;
 });
