@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v6.6</title>
+<title>DM Re:Vault v7.1</title>
 <style>
 :root{
   --bg:#0c0f16; --panel:#151b28; --panel-2:#1d2536; --line:#2a3550;
@@ -363,6 +363,7 @@ body.vs .pboard{gap:3px}
   <button class="btn small" id="btnUndo">↩ 戻る</button>
   <button class="btn small" id="btnMulti">複数選択</button>
   <button class="btn small" id="btnWho" style="display:none">操作:P1</button>
+  <button class="btn small" id="btnSeat" style="display:none">視点:P1</button>
   <button class="btn primary" id="btnNextTurn">次のターン ▶</button>
 </div>
 
@@ -387,6 +388,7 @@ body.vs .pboard{gap:3px}
       <textarea id="grText" style="min-height:52px" placeholder="超GRゾーン12枚（不要なら空欄）"></textarea>
       <textarea id="hyText" style="min-height:52px" placeholder="超次元ゾーン8枚（不要なら空欄）"></textarea>
       <textarea id="spText" style="min-height:52px" placeholder="特殊カード（禁断/零龍など。ゲーム開始時に場に出ます。1行1枚）"></textarea>
+      <textarea id="exText" style="min-height:52px" placeholder="ゲーム外ゾーン（ゲーム開始時からゲーム外に置くカード。1行1種、枚数自由）"></textarea>
       <div class="row">
         <button class="btn small" id="btnBuilder">🖼 画像から組む</button>
         <button class="btn primary small" id="btnSaveDeck">保存して使用</button>
@@ -518,6 +520,11 @@ body.vs .pboard{gap:3px}
       <select id="stDeck1" style="flex:1"></select>
     </div>
     <div class="row">
+      <span style="font-size:12px;color:var(--muted);width:44px">名前</span>
+      <input type="text" id="stName0" placeholder="P1の名前" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
+      <input type="text" id="stName1" placeholder="P2の名前" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
+    </div>
+    <div class="row">
       <span style="font-size:12px;color:var(--muted);width:44px">先行</span>
       <select id="stFirst" style="flex:1">
         <option value="random">ランダム（P1/P2）</option>
@@ -535,6 +542,14 @@ body.vs .pboard{gap:3px}
         <button class="btn small primary" id="olHost">部屋を作る（ホスト）</button>
         <button class="btn small" id="olJoin">部屋に入る（ゲスト）</button>
         <button class="btn small ghost" id="olLeave" style="display:none">切断</button>
+      </div>
+      <div class="row">
+        <button class="btn small" id="olDeckSend">📤 自分のデッキを相手に送る</button>
+      </div>
+      <div class="row">
+        <button class="btn small warn" id="olResign">🏳 投了</button>
+        <span id="olScore" style="font-size:13px;font-weight:800;flex:1;text-align:center"></span>
+        <button class="btn small ghost" id="olScoreReset">戦績リセット</button>
       </div>
       <div class="hint" id="olStatus">未接続。ホストが部屋を作る→ゲストが同じ合言葉で入る→ホストがデッキを選んで対戦開始すると、盤面が自動同期されます。</div>
     </section>
@@ -906,12 +921,12 @@ let nextId=1;
 function makeCard(name){return {id:nextId++, name, tapped:false, faceup:true, sideways:false, face:0, rot:0, mark:false, buff:null, under:[], seals:[], gear:[]};}
 function emptyZones(){return {deck:[],hand:[],mana:[],battle:[],grave:[],shield:[],gr:[],hyper:[],resolve:[],reveal:[],look:[],exile:[]};}
 const S={
-  vs:false, flip:false, hideOpp:true, who:0, turn:0,
+  vs:false, flip:false, hideOpp:true, who:0, turn:0, seat:0,
   expert:false, sound:true,
   sleeve:[null,null],
   players:[
-    {label:"P1", deckName:"", mainList:[], grList:[], hyList:[], spList:[], zones:emptyZones()},
-    {label:"P2", deckName:"", mainList:[], grList:[], hyList:[], spList:[], zones:emptyZones()},
+    {label:"P1", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
+    {label:"P2", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
   ],
   multi:false, sel:null, msel:[],
   extra:[0,0],
@@ -934,6 +949,7 @@ const HIST=[];
 const REDO=[];
 const LIMWARN=[{},{}];
 const ONLINE={peer:null,conn:null,role:null,applying:false,timer:null};
+const SCORE=[0,0];
 function serializeState(){return JSON.stringify({t:S.turn,w:S.who,z:S.players.map(p=>p.zones)});}
 function snap(){
   const s=serializeState();
@@ -1086,12 +1102,12 @@ function parseList(t){
 }
 const listTotal=l=>l.reduce((s,c)=>s+c.count,0);
 const listToText=l=>l.map(c=>`${c.count} ${c.name}`).join("\n");
-async function saveDeck(name,main,gr,hy,sp){if(db)await idbPut("decks",name,{main,gr,hy,sp});else memDecks.set(name,{main,gr,hy,sp});}
+async function saveDeck(name,main,gr,hy,sp,ex){if(db)await idbPut("decks",name,{main,gr,hy,sp,ex});else memDecks.set(name,{main,gr,hy,sp,ex});}
 async function getDeck(name){return db?await idbGet("decks",name):memDecks.get(name);}
 async function deckNames(){return db?await idbKeys("decks"):Array.from(memDecks.keys());}
 function setPlayerDeck(pi,name,d){
   const P=S.players[pi];
-  P.deckName=name;P.mainList=d.main;P.grList=d.gr||[];P.hyList=d.hy||[];P.spList=d.sp||[];
+  P.deckName=name;P.mainList=d.main;P.grList=d.gr||[];P.hyList=d.hy||[];P.spList=d.sp||[];P.exList=d.ex||[];
 }
 async function refreshDeckSelects(){
   const names=await deckNames();
@@ -1129,6 +1145,13 @@ function dealPlayer(pi,pick){
   P.zones.deck=pool;
   while(P.zones.shield.length<5&&P.zones.deck.length){const c=P.zones.deck.shift();c.faceup=false;P.zones.shield.push(c);}
   while(P.zones.hand.length<5&&P.zones.deck.length)P.zones.hand.push(P.zones.deck.shift());
+  for(const e of (P.exList||[])){
+    for(let i=0;i<e.count;i++){
+      const c=makeCard(e.name);
+      c.faceup=true;
+      P.zones.exile.push(c);
+    }
+  }
   for(const e of P.spList){
     for(let i=0;i<e.count;i++){
       const c=makeCard(e.name);
@@ -2557,16 +2580,17 @@ function insertSideways(pi,fromZone,id){
 /* ================= board DOM ================= */
 function buildBoards(){
   const board=$("board");board.innerHTML="";
-  const order=S.vs?[1,0]:[0];
+  const seat=S.vs?(S.seat|0):0;
+  const order=S.vs?[seat===1?0:1,seat]:[0];
   for(const pi of order){
     const pb=document.createElement("div");
-    pb.className="pboard "+(pi===0?"me":"opp");
+    pb.className="pboard "+(pi===seat?"me":"opp");
     pb.dataset.p=pi;
     const selBtn=z=>`<button class="zbtn" data-pi="${pi}" data-act="selall" data-z="${z}">全選択</button>`;
     const handBtns=(S.vs)
       ?`<span class="spacer"></span>
         ${selBtn("hand")}
-        ${pi===1?`<button class="zbtn" data-pi="1" data-act="peek">👁 見る</button>`:""}
+        ${pi!==seat?`<button class="zbtn" data-pi="${pi}" data-act="peek">👁 見る</button>`:""}
         <button class="zbtn" data-pi="${pi}" data-act="randdisc">ランダム捨て</button>`
       :`<span class="spacer"></span>${selBtn("hand")}`;
     const rows={
@@ -2612,7 +2636,7 @@ function buildBoards(){
     };
     let seq;
     if(!S.vs)seq=["sys","battle","mana","hand"];
-    else if(pi===1)seq=S.flip?["battle","sys","mana","hand"]:["hand","mana","sys","battle"];
+    else if(pi!==seat)seq=S.flip?["battle","sys","mana","hand"]:["hand","mana","sys","battle"];
     else seq=["battle","sys","mana","hand"];
     pb.innerHTML=seq.map(k=>rows[k]).join("");
     board.appendChild(pb);
@@ -2676,7 +2700,7 @@ function gearSideEl(pi,host,g){
 function cardEl(pi,zone,c){
   const el=document.createElement("div");
   el.className="card";
-  const hidden=(S.vs&&S.hideOpp&&pi===1&&zone==="hand");
+  const hidden=(S.vs&&S.hideOpp&&pi!==(S.seat|0)&&zone==="hand");
   const showFace=c.faceup&&!hidden;
   if(c.tapped)el.classList.add("tapped");
   if(!showFace)el.classList.add("facedown");
@@ -2869,9 +2893,15 @@ function renderPlayer(pi){
 function renderAll(){
   const order=S.vs?[1,0]:[0];
   for(const pi of order)renderPlayer(pi);
-  $("turnBadge").textContent=`ターン ${S.turn}${S.vs?"・"+S.players[S.who].label:""}`;
+  $("turnBadge").textContent=`ターン ${S.turn}${S.vs?"・"+S.players[S.who].label:""}${S.vs&&(SCORE[0]||SCORE[1])?`　🏆${SCORE[0]}-${SCORE[1]}`:""}`;
+  {
+    const os=$("olScore");
+    if(os)os.textContent=`戦績　P1 ${SCORE[0]} - ${SCORE[1]} P2`;
+  }
   $("btnWho").style.display=S.vs?"":"none";
   $("btnWho").textContent=`操作:${S.players[S.who].label}`;
+  $("btnSeat").style.display=S.vs?"":"none";
+  $("btnSeat").textContent=`視点:${S.players[S.seat|0].label}`;
   $("btnVs").classList.toggle("on",S.vs);
   $("btnFlip").style.display=S.vs?"":"none";
   $("btnFlip").classList.toggle("on",S.flip);
@@ -2953,12 +2983,13 @@ function roomIdFromPass(pass){
   return "dmrv-"+h.toString(36);
 }
 function serializeFull(){
-  return {t:"state",turn:S.turn,who:S.who,vs:S.vs,z:S.players.map(pl=>pl.zones)};
+  return {t:"state",turn:S.turn,who:S.who,vs:S.vs,score:SCORE.slice(),z:S.players.map(pl=>pl.zones)};
 }
 function applyRemote(msg){
   ONLINE.applying=true;
   try{
     S.turn=msg.turn;S.who=msg.who;S.vs=!!msg.vs;
+    if(msg.score){SCORE[0]=msg.score[0]|0;SCORE[1]=msg.score[1]|0;}
     msg.z.forEach((z,i)=>{
       for(const k of Object.keys(emptyZones()))if(!z[k])z[k]=[];
       for(const k of Object.keys(z))z[k].forEach(normalizeCard);
@@ -2979,12 +3010,47 @@ function setupConn(conn){
   ONLINE.conn=conn;
   conn.on("data",msg=>{
     if(msg&&msg.t==="state")applyRemote(msg);
+    else if(msg&&msg.t==="deck"){
+      const seat=msg.seat|0;
+      setPlayerDeck(seat,msg.name+"（相手の端末から）",msg.deck);
+      toast(`📥 相手のデッキを受信：${msg.name} → ${S.players[seat].label}に適用`);
+      olStatus(`相手のデッキ「${msg.name}」を${S.players[seat].label}に適用しました。${ONLINE.role==="host"?"「開始/再試合」で対戦を開始できます。":""}`);
+      sfx("ok");
+      renderAll();
+    }
+    else if(msg&&msg.t==="img"){
+      if(!imgURL.has(msg.key)&&msg.buf){
+        try{
+          const blob=new Blob([msg.buf],{type:"image/jpeg"});
+          imgURL.set(msg.key,URL.createObjectURL(blob));
+          if(msg.key!=="__back__"&&!dispName.has(msg.key))dispName.set(msg.key,msg.name||msg.key);
+          renderAll();
+        }catch(e){}
+      }
+    }
+    else if(msg&&msg.t==="link"){
+      if(msg.base&&msg.faces&&!LINKS.has(msg.base))LINKS.set(msg.base,msg.faces);
+    }
+    else if(msg&&msg.t==="name"){
+      const seat=msg.seat|0;
+      S.players[seat].label=String(msg.label||"").slice(0,12)||(seat?"P2":"P1");
+      buildBoards();renderAll();
+      toast(`相手の名前：${S.players[seat].label}`);
+    }
+    else if(msg&&msg.t==="resign"){
+      if(msg.score){SCORE[0]=msg.score[0]|0;SCORE[1]=msg.score[1]|0;}
+      const w=msg.loser?0:1;
+      toast(`🏳 ${S.players[msg.loser].label} が投了！ ${S.players[w].label} の勝ち！（戦績 P1 ${SCORE[0]} - ${SCORE[1]} P2）`);
+      sfx("atk");
+      renderAll();
+    }
   });
   conn.on("open",()=>{
     $("olLeave").style.display="";
     if(ONLINE.role==="guest"){
-      S.flip=true;
-      olStatus("接続完了！ あなたはゲスト（P2側）。盤面はホストから自動同期されます。下部の「操作」をP2にしてください。");
+      S.seat=1;S.who=1;
+      buildBoards();
+      olStatus("接続完了！ あなたはゲスト（P2側・自動で視点P2/操作P2に設定済み）。盤面はホストと自動同期されます。");
     }else{
       olStatus("接続完了！ デッキを選んで対戦開始すると相手にも盤面が同期されます。");
       olBroadcast();
@@ -2992,6 +3058,10 @@ function setupConn(conn){
     toast("🌐 オンライン接続しました");
     sfx("ok");
     renderAll();
+    try{
+      const mySeat=ONLINE.role==="guest"?1:0;
+      ONLINE.conn.send({t:"name",seat:mySeat,label:S.players[mySeat].label});
+    }catch(e){}
   });
   conn.on("close",()=>{
     olStatus("相手が切断しました");
@@ -3040,6 +3110,107 @@ function olLeaveRoom(){
   ONLINE.conn=null;ONLINE.peer=null;
   const b=$("olLeave");if(b)b.style.display="none";
 }
+async function shrinkImageBlob(blob,maxW=480,q=0.8){
+  try{
+    const img=await new Promise(res=>{
+      const im=new Image();
+      im.onload=()=>res(im);
+      im.onerror=()=>res(null);
+      im.src=URL.createObjectURL(blob);
+    });
+    if(!img)return blob;
+    const sc=Math.min(1,maxW/img.naturalWidth);
+    const cv=document.createElement("canvas");
+    cv.width=Math.max(1,Math.round(img.naturalWidth*sc));
+    cv.height=Math.max(1,Math.round(img.naturalHeight*sc));
+    cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
+    const out=await new Promise(res=>cv.toBlob(res,"image/jpeg",q));
+    return out||blob;
+  }catch(e){return blob;}
+}
+async function olSendDeckImages(names){
+  if(!ONLINE.conn||!ONLINE.conn.open)return;
+  const keys=[...new Set(names.map(n=>normName(n)))].filter(k=>imgURL.has(k));
+  const extra=[];
+  for(const k of keys){
+    const l=LINKS.get(k);
+    if(l)for(const f of l)if(imgURL.has(f))extra.push(f);
+  }
+  const all=[...new Set([...keys,...extra])];
+  if(!all.length){toast("送信できる画像がありません");return;}
+  toast(`🖼 画像を送信中…（${all.length}枚・少し時間がかかります）`);
+  let sent=0;
+  for(const k of all){
+    if(!ONLINE.conn||!ONLINE.conn.open)break;
+    const blob=db?await idbGet("images",k):memImages.get(k);
+    if(!blob)continue;
+    const small=await shrinkImageBlob(blob);
+    const buf=await small.arrayBuffer();
+    try{
+      ONLINE.conn.send({t:"img",key:k,name:dispName.get(k)||k,buf});
+    }catch(e){break;}
+    sent++;
+    if(sent%8===0)toast(`🖼 画像送信中… ${sent}/${all.length}`);
+    await new Promise(r=>setTimeout(r,40));
+  }
+  for(const k of keys){
+    const l=LINKS.get(k);
+    if(l&&ONLINE.conn&&ONLINE.conn.open){
+      try{ONLINE.conn.send({t:"link",base:k,faces:l});}catch(e){}
+    }
+  }
+  toast(`🖼 画像送信完了（${sent}枚）`);
+}
+async function doResign(){
+  if(!S.vs){toast("対戦モードでのみ使用できます");return;}
+  let loser;
+  if(ONLINE.conn&&ONLINE.conn.open)loser=S.seat|0;
+  else{
+    const j=await askChoice("どちらが投了しますか？",[S.players[0].label,S.players[1].label]);
+    if(j===null)return;
+    loser=j;
+  }
+  if(!await ask(`🏳 ${S.players[loser].label} が投了します。よろしいですか？`))return;
+  const winner=loser?0:1;
+  SCORE[winner]++;
+  toast(`🏳 ${S.players[loser].label} 投了！ ${S.players[winner].label} の勝ち！（戦績 P1 ${SCORE[0]} - ${SCORE[1]} P2）`);
+  sfx("atk");
+  if(ONLINE.conn&&ONLINE.conn.open){
+    try{ONLINE.conn.send({t:"resign",loser,score:SCORE.slice()});}catch(e){}
+  }
+  renderAll();
+}
+$("olDeckSend").addEventListener("click",async ()=>{
+  if(!ONLINE.conn||!ONLINE.conn.open){toast("先にオンライン接続してください");return;}
+  const n=$("stDeck0").value||S.players[0].deckName;
+  if(!n){toast("上の「自分」欄でデッキを選択してから送ってください");return;}
+  const d=await getDeck(n);
+  if(!d){toast("デッキが見つかりません");return;}
+  const seat=S.seat|0;
+  try{
+    ONLINE.conn.send({t:"deck",seat,name:n,deck:{main:d.main,gr:d.gr||[],hy:d.hy||[],sp:d.sp||[],ex:d.ex||[]}});
+    setPlayerDeck(seat,n,d);
+    toast(`📤 デッキ「${n}」を送信しました（あなた＝${S.players[seat].label}のデッキとして使われます）`);
+    if(await ask("🖼 このデッキのカード画像も相手に送りますか？\n（相手の画面であなたのカードが画像表示されます。数MB・数十秒）")){
+      const names=[
+        ...d.main.map(e=>e.name),
+        ...(d.gr||[]).map(e=>e.name),
+        ...(d.hy||[]).map(e=>e.name),
+        ...(d.sp||[]).map(e=>e.name),
+        ...(d.ex||[]).map(e=>e.name),
+      ];
+      olSendDeckImages(names);
+    }
+  }catch(e){toast("送信に失敗しました");}
+});
+$("olResign").addEventListener("click",doResign);
+$("olScoreReset").addEventListener("click",async ()=>{
+  if(!await ask("戦績（勝敗カウント）をリセットしますか？"))return;
+  SCORE[0]=0;SCORE[1]=0;
+  renderAll();
+  toast("戦績をリセットしました");
+  if(ONLINE.conn&&ONLINE.conn.open)olBroadcast();
+});
 $("olHost").addEventListener("click",olHostStart);
 $("olJoin").addEventListener("click",olJoinRoom);
 $("olLeave").addEventListener("click",()=>{olLeaveRoom();olStatus("切断しました");});
@@ -4514,7 +4685,24 @@ async function fillStartDecks(){
     }
   }
 }
-async function openStartOlay(){await fillStartDecks();$("startOlay").classList.add("open");}
+async function openStartOlay(){
+  await fillStartDecks();
+  $("stName0").value=S.players[0].label==="P1"?"":S.players[0].label;
+  $("stName1").value=S.players[1].label==="P2"?"":S.players[1].label;
+  $("startOlay").classList.add("open");
+}
+function applyPlayerName(pi,v){
+  const nm=(v||"").trim()||(pi?"P2":"P1");
+  if(S.players[pi].label===nm)return;
+  S.players[pi].label=nm.slice(0,12);
+  if(db)idbPut("misc","pname"+pi,S.players[pi].label);
+  buildBoards();renderAll();
+  if(ONLINE.conn&&ONLINE.conn.open){
+    try{ONLINE.conn.send({t:"name",seat:pi,label:S.players[pi].label});}catch(e){}
+  }
+}
+$("stName0").addEventListener("change",()=>applyPlayerName(0,$("stName0").value));
+$("stName1").addEventListener("change",()=>applyPlayerName(1,$("stName1").value));
 $("stDeck0").addEventListener("change",async ()=>{
   const n=$("stDeck0").value;if(!n)return;
   const d=await getDeck(n);if(!d)return;
@@ -4524,7 +4712,7 @@ $("stDeck0").addEventListener("change",async ()=>{
 });
 $("stDeck1").addEventListener("change",async ()=>{
   const n=$("stDeck1").value;
-  if(!n){S.players[1]={...S.players[1],deckName:"",mainList:[],grList:[],hyList:[],spList:[],zones:emptyZones()};renderAll();return;}
+  if(!n){S.players[1]={...S.players[1],deckName:"",mainList:[],grList:[],hyList:[],spList:[],exList:[],zones:emptyZones()};renderAll();return;}
   const d=await getDeck(n);if(!d)return;
   setPlayerDeck(1,n,d);
   if(db)await idbPut("misc","lastDeckOpp",n);
@@ -4556,6 +4744,11 @@ $("btnMulti").addEventListener("click",()=>{
   toast(S.multi?"複数選択モード：カードをタップして選択（処理後は自動解除）":"複数選択モード解除");
 });
 $("btnWho").addEventListener("click",()=>{S.who=S.who?0:1;renderAll();});
+$("btnSeat").addEventListener("click",()=>{
+  S.seat=S.seat?0:1;
+  buildBoards();renderAll();
+  toast(`視点：${S.players[S.seat].label} を手前に表示`);
+});
 $("btnVs").addEventListener("click",()=>{
   S.vs=!S.vs;
   if(S.vs&&!S.players[1].mainList.length)toast("設定で相手デッキを選ぶと相手側にも配られます");
@@ -4651,11 +4844,12 @@ $("btnSaveDeck").addEventListener("click",async ()=>{
   const gr=parseList($("grText").value);
   const hy=parseList($("hyText").value);
   const sp=parseList($("spText").value);
+  const ex=parseList($("exText").value);
   const total=listTotal(main);
   if(!total){$("deckStatus").textContent="デッキリストが空です";return;}
-  await saveDeck(name,main,gr,hy,sp);
+  await saveDeck(name,main,gr,hy,sp,ex);
   if(db)await idbPut("misc","lastDeck",name);
-  setPlayerDeck(0,name,{main,gr,hy,sp});
+  setPlayerDeck(0,name,{main,gr,hy,sp,ex});
   await refreshDeckSelects();
   $("deckStatus").textContent=`保存：メイン${total}枚${listTotal(gr)?` / GR${listTotal(gr)}`:""}${listTotal(hy)?` / 超次元${listTotal(hy)}`:""}${listTotal(sp)?` / 特殊${listTotal(sp)}`:""}${total!==40?" ※40枚ではありません":""}`;
   $("deckOlay").classList.remove("open");
@@ -4667,7 +4861,7 @@ $("btnLoadDeck").addEventListener("click",async ()=>{
   $("deckName").value=name;
   $("deckText").value=listToText(d.main);
   $("grText").value=listToText(d.gr||[]);
-  $("hyText").value=listToText(d.hy||[]);
+  $("hyText").value=listToText(d.hy||[]);$("exText").value=listToText(d.ex||[]);
   $("spText").value=listToText(d.sp||[]);
   $("deckStatus").textContent=`「${name}」を編集欄に読み込みました`;
 });
@@ -4682,7 +4876,7 @@ $("btnDeleteDeck").addEventListener("click",async ()=>{
 });
 $("oppDeckSelect").addEventListener("change",async ()=>{
   const name=$("oppDeckSelect").value;
-  if(!name){S.players[1]={...S.players[1],deckName:"",mainList:[],grList:[],hyList:[],spList:[],zones:emptyZones()};renderAll();return;}
+  if(!name){S.players[1]={...S.players[1],deckName:"",mainList:[],grList:[],hyList:[],spList:[],exList:[],zones:emptyZones()};renderAll();return;}
   const d=await getDeck(name);if(!d)return;
   setPlayerDeck(1,name,d);
   if(db)await idbPut("misc","lastDeckOpp",name);
@@ -4910,6 +5104,10 @@ $("bApply").addEventListener("click",()=>{
   const tm=db?await idbGet("misc","tapMultiMana"):null;
   if(tm!==null&&tm!==undefined)S.tapMultiMana=!!tm;
   for(const pi of [0,1]){
+    const pn=db?await idbGet("misc","pname"+pi):null;
+    if(pn)S.players[pi].label=String(pn).slice(0,12);
+  }
+  for(const pi of [0,1]){
     const sk=db?await idbGet("misc",`sleeve${pi}`):null;
     if(sk&&imgURL.has(sk))S.sleeve[pi]=sk;
   }
@@ -4920,7 +5118,7 @@ $("bApply").addEventListener("click",()=>{
       setPlayerDeck(0,last,d);
       $("deckName").value=last;$("deckText").value=listToText(d.main);
       $("grText").value=listToText(d.gr||[]);
-      $("hyText").value=listToText(d.hy||[]);
+      $("hyText").value=listToText(d.hy||[]);$("exText").value=listToText(d.ex||[]);
       $("spText").value=listToText(d.sp||[]);
       toast(`前回のデッキ「${last}」を読み込みました`);
     }
