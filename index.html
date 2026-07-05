@@ -6639,10 +6639,16 @@ function renderStackPanel(){
     $("stackOlay").classList.remove("open");renderAll();return;
   }
   const c=f.card;
-  $("stTitle").textContent=`《${faceNameOf(c)}》の下（${c.under.length}枚）　${stSel.size?stSel.size+"枚選択中":"タップ選択／⌘+タップで複数／ドラッグで盤面へ"}`;
+  $("stTitle").textContent=`《${(stCtx.zone==="shield"&&!c.faceup)?"裏向きの盾":faceNameOf(c)}》の下（${c.under.length}枚）　${stSel.size?stSel.size+"枚選択中":"タップ選択／⌘+タップで複数／ドラッグで盤面へ"}`;
   const g=$("stGrid");g.innerHTML="";
+  const hideDown=stCtx.zone==="shield";
   c.under.forEach((u,i)=>{
-    const el=vCardEl(u.name,{idx:i+1});
+    const el=(hideDown&&!u.faceup)?vCardEl("（裏向きの盾）",{idx:i+1,back:true}):vCardEl(u.name,{idx:i+1});
+    if(hideDown&&!u.faceup){
+      el.querySelectorAll("img").forEach(im=>im.remove());
+      el.style.background="#0d1119";
+      el.style.outline="2px dashed var(--line)";
+    }
     if(stSel.has(u.id))el.classList.add("picked");
     stackDragAttach(el,u);
     g.appendChild(el);
