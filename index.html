@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v8.4</title>
+<title>DM Re:Vault v8.5</title>
 <style>
 :root{
   --bg:#0c0f16; --panel:#151b28; --panel-2:#1d2536; --line:#2a3550;
@@ -154,6 +154,8 @@ body.vs .pboard{gap:3px}
 @keyframes pileShake{0%,100%{translate:0 0;rotate:0deg}18%{translate:-2px 2px;rotate:-4deg}36%{translate:3px -1px;rotate:4deg}54%{translate:-3px 0;rotate:-3deg}72%{translate:2px 1px;rotate:3deg}90%{translate:-1px -1px;rotate:-1deg}}
 .pile.shuffling{animation:pileShake .55s ease}
 .card:active{box-shadow:0 0 0 2px var(--accent),0 8px 22px rgba(0,0,0,.55)}
+.vcard.picked{outline:3px solid var(--accent)!important;outline-offset:-2px;box-shadow:0 0 12px rgba(255,200,60,.45)}
+.vcard.picked::after{content:"✓";position:absolute;top:2px;left:2px;background:var(--accent);color:#000;font-size:11px;font-weight:900;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:6}
 .card .stacktag{
   position:absolute;left:0;bottom:0;z-index:1;
   background:var(--accent);color:#1a1405;
@@ -203,9 +205,11 @@ body.vs .pboard{gap:3px}
 #evoBar.show{display:flex}
 .pboard{position:relative}
 .pboard>*{position:relative;z-index:1}
-.matbg{position:absolute;inset:0;z-index:0;opacity:.20;background-size:cover;background-position:center;pointer-events:none;border-radius:12px}
-.pboard.hasmat .zone{background:rgba(13,17,25,.66)!important}
-.pboard.hasmat .pile{background:rgba(13,17,25,.6)}
+.matbg{position:absolute;inset:0;z-index:0;opacity:.30;background-size:cover;background-position:center;pointer-events:none;border-radius:12px}
+.pboard.hasmat .zone{background:rgba(13,17,25,.55)!important}
+.pboard.hasmat.opp .zone{background:rgba(15,20,34,.55)!important}
+.pboard.hasmat .pile{background:rgba(13,17,25,.55)}
+.pboard.hasmat .zone::before{opacity:.5}
 .pboard.opp .matbg{transform:rotate(180deg)}
 .card.gearside{
   width:calc(var(--card-h)*1.4);
@@ -408,6 +412,7 @@ body.vs .pboard{gap:3px}
       <textarea id="exText" style="min-height:52px" placeholder="ゲーム外ゾーン（ゲーム開始時からゲーム外に置くカード。1行1種、枚数自由）"></textarea>
       <div class="row">
         <button class="btn small" id="btnBuilder">🖼 画像から組む</button>
+        <button class="btn small ghost" id="btnNewDeck">🆕 新規</button>
         <button class="btn primary small" id="btnSaveDeck">💾 保存（この画面のまま）</button>
         <button class="btn small" id="btnSaveUseDeck">保存して対戦へ</button>
         <button class="btn small ghost" id="btnDeckList">📋 デッキ一覧</button>
@@ -801,6 +806,9 @@ body.vs .pboard{gap:3px}
           <option value="">文明指定なし</option>
           <option value="light">光</option><option value="water">水</option><option value="dark">闇</option><option value="fire">火</option><option value="nature">自然</option>
         </select>
+        <label><input type="checkbox" id="fxHyper"> ハイパー化（味方1体タップでHM解放）</label>
+        <label><input type="checkbox" id="fxZRush"> Zラッシュ（いずれかの盾が離れるとHM解放）</label>
+        <input type="text" id="fxHyperNote" placeholder="HM時の能力メモ（パワー+○○等）" style="flex:1;min-width:140px">
         <span style="font-size:12px;font-weight:700">キリフダッシュ</span>
         <select id="fxKirifuda" style="width:auto;flex:0 0 80px">
           <option value="0">なし</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
@@ -1427,6 +1435,11 @@ function nextTurn(){
   else Z.mana.forEach(c=>c.tapped=false);
   let jdN=[];
   Z.battle.forEach(c=>{if(c.jd){c.jd=false;jdN.push(faceNameOf(c));}});
+  {
+    const hmN=[];
+    Z.battle.forEach(c=>{if(c.hyper){c.hyper=false;hmN.push(faceNameOf(c));}});
+    if(hmN.length)toast(`ハイパーモード終了：${hmN.join("、")}`);
+  }
   if(jdN.length)toast(`🌀 ジャストダイバー終了：${jdN.join("、")}`);
   draw(pi,1);
   toast(`ターン ${S.turn}：${S.players[pi].label} のターン${extra?"（⚡エクストラターン！）":""}（アンタップ＆ドロー）`);
@@ -2396,6 +2409,22 @@ async function breakShields(op,count,attacker){
       }
     }
   }
+  // Zラッシュ：いずれかの盾が離れた → 両プレイヤーのZラッシュ持ちに解放確認
+  if(S.expert){
+    for(const zp of [0,1]){
+      if(!S.vs&&zp===1)continue;
+      const ZB=zonesOf(zp).battle.filter(x=>!x.hyper&&(()=>{const r2=getReg(x);return r2&&r2.zrush;})());
+      for(const zc of ZB){
+        const r2=getReg(zc);
+        const yes=await ask(`⚡ Zラッシュ！（盾が離れた）\n${S.players[zp].label}の《${faceNameOf(zc)}》のハイパーモードを解放しますか？${r2.hyperNote?`\n（${r2.hyperNote}）`:""}`);
+        if(yes){
+          zc.hyper=true;
+          sfx("ok");renderAll();
+          toast(`⚡ Zラッシュ！ ハイパーモード解放：${faceNameOf(zc)}`);
+        }
+      }
+    }
+  }
   await offerKirifudash(op);
   const areg=attacker?getReg(attacker):null;
   if(areg&&areg.dragonB&&shs.length){
@@ -2742,6 +2771,9 @@ function renderFxEditor(){
   $("fxUraNinja").value=String(FXEDIT.uraNinja||0);
   $("fxUraCiv").value=FXEDIT.uraCiv||"";
   $("fxKirifuda").value=String(FXEDIT.kirifuda||0);
+  $("fxHyper").checked=!!FXEDIT.hyper;
+  $("fxZRush").checked=!!FXEDIT.zrush;
+  $("fxHyperNote").value=FXEDIT.hyperNote||"";
   $("fxSInvade").value=FXEDIT.sInvade||"";
   $("fxSympathy").value=FXEDIT.sympathy||"";
   $("fxGZero").value=FXEDIT.gzero||"";
@@ -2827,6 +2859,9 @@ function openFxEditor(key){
     uraNinja:cur?((typeof cur.uraNinja==="number")?cur.uraNinja:(cur.uraNinja?(cur.ninja||0):0)):0,
     uraCiv:cur&&cur.uraCiv||"",
     kirifuda:cur&&cur.kirifuda||0,
+    hyper:cur?!!cur.hyper:false,
+    zrush:cur?!!cur.zrush:false,
+    hyperNote:cur&&cur.hyperNote||"",
     sInvade:cur&&cur.sInvade||"",
     sympathy:cur&&cur.sympathy||"",
     gzero:cur&&cur.gzero||"",
@@ -2918,6 +2953,9 @@ $("fxSave").addEventListener("click",async ()=>{
     uraNinja:+$("fxUraNinja").value||0,
     uraCiv:$("fxUraCiv").value||"",
     kirifuda:+$("fxKirifuda").value||0,
+    hyper:$("fxHyper").checked,
+    zrush:$("fxZRush").checked,
+    hyperNote:$("fxHyperNote").value.trim(),
     sInvade:$("fxSInvade").value||"",
     sympathy:$("fxSympathy").value.trim(),
     gzero:$("fxGZero").value.trim(),
@@ -3078,6 +3116,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.ddd)attrs.push("DDD");
     if(v.uraNinja)attrs.push(`裏NS${v.uraNinja}${v.uraCiv?"("+({light:"光",water:"水",dark:"闇",fire:"火",nature:"自然"}[v.uraCiv]||"")+")":""}`);
     if(v.kirifuda)attrs.push(`キリフダッシュ${v.kirifuda}`);
+    if(v.hyper)attrs.push("ハイパー化");
+    if(v.zrush)attrs.push("Zラッシュ");
     if(v.sInvade)attrs.push("S級侵略");
     if(v.sympathy)attrs.push(`シンパシー(${v.sympathy})`);
     if(v.gzero)attrs.push("G・ゼロ");
@@ -3473,6 +3513,14 @@ function cardEl(pi,zone,c){
   if(c.frozen){
     const ft=document.createElement("span");ft.className="frztag";ft.textContent="❄凍結";
     el.appendChild(ft);
+  }
+  if(c.hyper&&zone==="battle"){
+    const hp=document.createElement("span");
+    hp.className="frztag";
+    hp.style.cssText+=";background:linear-gradient(90deg,#f59e0b,#ef4444);color:#fff";
+    hp.textContent="HYPER";
+    hp.title="ハイパーモード解放中";
+    el.appendChild(hp);
   }
   if(c.noAtkBlock&&zone==="battle"){
     const nb=document.createElement("span");nb.className="frztag";nb.style.background="#7c3aed";nb.textContent="🚫";
@@ -4591,6 +4639,47 @@ function openCardSheet(ctx){
   if(!masked&&ctx.zone!=="shield"){
     box.appendChild(actBtn(c.faceup?"裏向きにする":"表向きにする",()=>{c.faceup=!c.faceup;sfx("flip");rerender();}));
   }
+  {
+    const rH=getReg(c);
+    if(ctx.zone==="battle"&&rH&&(rH.hyper||rH.zrush)){
+      if(!c.hyper){
+        if(rH.hyper){
+          box.appendChild(actBtn("⚡ ハイパー化（自分の他クリーチャー1体タップ→HM解放）",async ()=>{
+            const Z2=zonesOf(ctx.p);
+            const pool=Z2.battle.filter(x=>x.id!==c.id&&!x.tapped);
+            if(!pool.length){toast("タップできる他のクリーチャーがいません");return;}
+            const j=pool.length===1?0:await askChoice("タップするクリーチャーを選択",pool.map(x=>faceNameOf(x)));
+            if(j===null)return;
+            snap();
+            pool[j].tapped=true;
+            c.hyper=true;
+            sfx("ok");closeSel();renderAll();
+            toast(`⚡ ハイパーモード解放！ ${faceNameOf(c)}${rH.hyperNote?`（${rH.hyperNote}）`:""}（次の自分のターン開始まで）`);
+          },"primary",true));
+        }
+        if(rH.zrush){
+          box.appendChild(actBtn("⚡ HM解放（Zラッシュ・手動）",()=>{
+            snap();
+            c.hyper=true;
+            sfx("ok");closeSel();renderAll();
+            toast(`⚡ Zラッシュ！ ハイパーモード解放：${faceNameOf(c)}${rH.hyperNote?`（${rH.hyperNote}）`:""}`);
+          },"",true));
+        }
+      }else{
+        box.appendChild(actBtn("ハイパーモードを解除する",()=>{
+          snap();c.hyper=false;
+          closeSel();renderAll();
+          toast(`ハイパーモード解除：${faceNameOf(c)}`);
+        },"",true));
+      }
+    }
+  }
+  if(ctx.zone==="battle"){
+    box.appendChild(actBtn(`↻ 90°回転（現在：${c.rot||0}°）`,()=>{
+      c.rot=((c.rot||0)+90)%360;
+      sfx("flip");rerender();
+    }));
+  }
   if(!masked&&["hand","mana","grave","deck"].includes(ctx.zone)){
     box.appendChild(actBtn("🌑 無月の門（墓地/場から選んで下に敷く）",()=>{
       closeSheet();closeSel();
@@ -5205,6 +5294,7 @@ function openHyperViewer(pi){
   }
   Z.hyper.forEach(c=>{
     const el=vCardEl(dispName.get(faceKeyOf(c))||c.name);
+    if(S.msel.some(x=>x.id===c.id))el.classList.add("picked");
     attachPointer(el,{p:pi,zone:"hyper",id:c.id,viewer:true,tap:()=>{
       closeViewer();
       S.sel={p:pi,zone:"hyper",id:c.id};renderAll();
@@ -5906,7 +5996,16 @@ $("setAutoTap").addEventListener("change",async ()=>{
   if(db)await idbPut("misc","autoTap",S.autoTap);
   toast(S.autoTap?"自動マナタップ：ON":"自動マナタップ：OFF");
 });
-function openDeckPanel(){$("deckOlay").classList.add("open");refreshDeckSelects();}
+function clearDeckEditor(){
+  for(const id of ["deckName","deckText","grText","hyText","spText","exText"])$(id).value="";
+  DECK_DIRTY=false;updateEditingBanner();
+  $("deckStatus").textContent="";
+}
+function openDeckPanel(){
+  if(!DECK_DIRTY)clearDeckEditor();
+  $("deckOlay").classList.add("open");
+  refreshDeckSelects();
+}
 $("btnSettings").addEventListener("click",openSettings);
 $("btnCloseSettings").addEventListener("click",()=>$("settingsOlay").classList.remove("open"));
 $("settingsOlay").addEventListener("click",e=>{if(e.target===$("settingsOlay"))$("settingsOlay").classList.remove("open");});
@@ -5936,6 +6035,11 @@ async function doSaveDeck(useAfter){
   sfx("ok");
   if(useAfter){$("deckOlay").classList.remove("open");await openStartOlay();}
 }
+$("btnNewDeck").addEventListener("click",async ()=>{
+  if(DECK_DIRTY&&!await ask("未保存の変更があります。破棄して新規作成しますか？"))return;
+  clearDeckEditor();
+  toast("🆕 新規デッキ：まっさらな状態にしました");
+});
 $("btnSaveDeck").addEventListener("click",()=>doSaveDeck(false));
 $("btnSaveUseDeck").addEventListener("click",()=>doSaveDeck(true));
 $("btnLoadDeck").addEventListener("click",async ()=>{
@@ -6291,6 +6395,13 @@ $("bTabHy").addEventListener("click",()=>bSetMode("hy"));
 $("bTabEx").addEventListener("click",()=>bSetMode("ex"));
 $("bTypeFilter").addEventListener("change",bRender);
 $("bListView").addEventListener("click",()=>{
+  $("builderOlay").classList.remove("open");
+  const prevCancel=$("vCancel").onclick;
+  $("vCancel").onclick=()=>{
+    closeViewer();
+    $("vCancel").onclick=prevCancel;
+    $("builderOlay").classList.add("open");
+  };
   const t=(m)=>Array.from(m.values()).reduce((a,b)=>a+b,0);
   $("vTitle").textContent=`📋 現在のリスト（メイン${t(B.counts.main)} / GR${t(B.counts.gr)} / 超次元${t(B.counts.hy)} / ゲーム外${t(B.counts.ex)}）`;
   $("vHint").textContent="閉じるとビルダーに戻ります";
