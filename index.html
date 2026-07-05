@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v8.9</title>
+<title>DM Re:Vault v9.0</title>
 <style>
 :root{
   --bg:#0c0f16; --panel:#151b28; --panel-2:#1d2536; --line:#2a3550;
@@ -98,7 +98,7 @@ body.vs .pboard{gap:3px}
 }
 .zbtn:active{transform:translateY(1px)}
 .cards{
-  display:flex;gap:5px;min-height:var(--card-h);
+  display:flex;gap:var(--cardgap,5px);min-height:var(--card-h);
   flex-wrap:wrap;overflow:visible;
   -webkit-overflow-scrolling:touch;
   align-items:flex-start;padding:2px 1px;scrollbar-width:thin;
@@ -522,6 +522,11 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
         <div id="zoneScaleList" style="display:flex;flex-direction:column;gap:3px"></div>
       </div>
       <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700">カード間隔</span>
+        <input type="range" id="setCardGap" min="2" max="18" step="1" value="5" style="flex:1">
+        <span id="cardGapVal" style="font-size:12px;width:44px;text-align:right">5px</span>
+      </div>
+      <div class="row" style="align-items:center;gap:8px">
         <span style="font-size:12px;font-weight:700">カードサイズ</span>
         <input type="range" id="setCardScale" min="70" max="150" step="5" value="100" style="flex:1">
         <span id="cardScaleVal" style="font-size:12px;width:44px;text-align:right">100%</span>
@@ -795,7 +800,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
         <input type="text" id="fxRace4" list="raceList" placeholder="種族4" style="flex:1;min-width:110px">
         <input type="text" id="fxRace5" list="raceList" placeholder="種族5" style="flex:1;min-width:110px">
         <datalist id="raceList">
-          <option value="アポロニア・ドラゴン"><option value="アース・ドラゴン"><option value="アーマード・ドラゴン"><option value="エンジェル・コマンド・ドラゴン"><option value="ガイア・コマンド・ドラゴン"><option value="クリスタル・コマンド・ドラゴン"><option value="グリーン・コマンド・ドラゴン"><option value="コマンド・ドラゴン"><option value="サイバー・ドラゴン"><option value="ジャイアント・ドラゴン"><option value="ジュラシック・コマンド・ドラゴン"><option value="ジョーカーズ・ドラゴン"><option value="デーモン・コマンド・ドラゴン"><option value="ドラゴン"><option value="ドラゴンギルド"><option value="ドラゴン・ゾンビ"><option value="ブラック・コマンド・ドラゴン"><option value="ブルー・コマンド・ドラゴン"><option value="ホワイト・コマンド・ドラゴン"><option value="ボルケーノ・ドラゴン"><option value="ポセイディア・ドラゴン"><option value="マジック・コマンド・ドラゴン"><option value="マスター・ドラゴン"><option value="メガ・コマンド・ドラゴン"><option value="レッド・コマンド・ドラゴン"><option value="ワールド・ドラゴン"><option value="アウトレイジ・コマンドMAX"><option value="エンジェル・コマンド"><option value="ガイア・コマンド"><option value="サイバー・コマンド"><option value="ソニック・コマンド"><option value="デーモン・コマンド"><option value="フレイム・コマンド"><option value="マジック・コマンド"><option value="メカ・エンジェル・コマンド"><option value="ワールド・コマンド"><option value="S級侵略者"><option value="アウトレイジ"><option value="アウトレイジMAX"><option value="アビスロイヤル"><option value="アンノイズ"><option value="アンノウン"><option value="アーク・セラフィム"><option value="アースイーター"><option value="アーマロイド"><option value="アーマード・ワイバーン"><option value="イニシエート"><option value="イニシャルズ"><option value="イニシャルズX"><option value="エイリアン"><option value="エクストリーマー"><option value="エグザイル・クリーチャー"><option value="エレメンタル"><option value="オラクル"><option value="オリジン"><option value="ガーゴイル"><option value="ガーディアン"><option value="キマイラ"><option value="ギャング・ビート"><option value="グラディエーター"><option value="グランセクト"><option value="グランド・デビル"><option value="グレートメカオー"><option value="ゲル・フィッシュ"><option value="コスモ・ウォーカー"><option value="コロニー・ビートル"><option value="ゴッド"><option value="ゴッド・ノヴァ"><option value="ゴッド・ノヴァOMG"><option value="ゴースト"><option value="サイバーロード"><option value="サイバー・ウイルス"><option value="サイバー・ムーン"><option value="サムライ"><option value="シノビ"><option value="ジャイアント"><option value="ジャイアント・インセクト"><option value="ジャイアント・スノーフェアリー"><option value="ジャスティス・ウイング"><option value="ジョーカーズ"><option value="スターライト・ツリー"><option value="スチーム・ナイト"><option value="スノーフェアリー"><option value="スピリット・クォーツ"><option value="スプラッシュ・クイーン"><option value="スペシャルズ"><option value="スペース・サーパント"><option value="セラフィム"><option value="ゼニス"><option value="ゼノパーツ"><option value="ソルトルーパー"><option value="ダークロード"><option value="チームACE"><option value="チームウェイブ"><option value="チームボンバー"><option value="チーム切札"><option value="チーム銀河"><option value="チーム零"><option value="ツリーフォーク"><option value="ティラノ・ドレイク"><option value="テクノ・サムライ"><option value="ディスタス"><option value="ディスペクター"><option value="デスパペット"><option value="デビルマスク"><option value="デモニオ"><option value="デリートロン"><option value="トリックス"><option value="ドラグナー"><option value="ドラゴノイド"><option value="ドラゴノイド号"><option value="ドラゴノイド爆"><option value="ドリームメイト"><option value="ドルスザク"><option value="ナイト"><option value="ハムカツ団"><option value="ハンター"><option value="バルーン・マッシュルーム"><option value="バーサーカー"><option value="パラサイトワーム"><option value="パンドラボックス"><option value="ヒューマノイド"><option value="ヒューマノイド爆"><option value="ビックリーノ"><option value="ビーストフォーク"><option value="ビーストフォーク號"><option value="ビートジョッキー"><option value="ファイアー・バード"><option value="ファンキー・ナイトメア"><option value="ファントム・ビースト"><option value="フィッシュ"><option value="フュージョナー"><option value="ブレイブ・スピリット"><option value="ヘドリアン"><option value="ホーン・ビースト"><option value="マイナー・スピリット"><option value="マシン・イーター"><option value="マジック"><option value="マジック・アウトレイジMAX"><option value="マフィ・ギャング"><option value="マーフォーク"><option value="ミステリー・トーテム"><option value="ミルクボーイ"><option value="ムートピア"><option value="メカサンダー"><option value="メカ・デル・ソル"><option value="メカ・デル・ディネロ"><option value="メタリカ"><option value="メルト・ウォリアー"><option value="ライトブリンガー"><option value="リキッド・ピープル"><option value="リキッド・ピープル閃"><option value="リヴァイアサン"><option value="レインボー・ファントム"><option value="レクスターズ"><option value="ロスト・クルセイダー"><option value="ロック・ビースト"><option value="ワイルド・ベジーズ"><option value="ワーム"><option value="侵略者"><option value="暴拳王国"><option value="最終禁断"><option value="月光王国"><option value="禁断"><option value="超化獣"><option value="超竜"><option value="革命軍"><option value="鬼レクスターズ"><option value="魔導具">
+          <option value="アポロニア・ドラゴン"><option value="アース・ドラゴン"><option value="アーマード・ドラゴン"><option value="エンジェル・コマンド・ドラゴン"><option value="ガイア・コマンド・ドラゴン"><option value="クリスタル・コマンド・ドラゴン"><option value="グリーン・コマンド・ドラゴン"><option value="コマンド・ドラゴン"><option value="サイバー・ドラゴン"><option value="ジャイアント・ドラゴン"><option value="ジュラシック・コマンド・ドラゴン"><option value="ジョーカーズ・ドラゴン"><option value="デーモン・コマンド・ドラゴン"><option value="ドラゴン"><option value="ドラゴンギルド"><option value="ドラゴン・ゾンビ"><option value="ブラック・コマンド・ドラゴン"><option value="ブルー・コマンド・ドラゴン"><option value="ホワイト・コマンド・ドラゴン"><option value="ボルケーノ・ドラゴン"><option value="ポセイディア・ドラゴン"><option value="マジック・コマンド・ドラゴン"><option value="マスター・ドラゴン"><option value="メガ・コマンド・ドラゴン"><option value="レッド・コマンド・ドラゴン"><option value="ワールド・ドラゴン"><option value="アウトレイジ・コマンドMAX"><option value="エンジェル・コマンド"><option value="ガイア・コマンド"><option value="サイバー・コマンド"><option value="ソニック・コマンド"><option value="デーモン・コマンド"><option value="トリニティ・コマンド"><option value="フレイム・コマンド"><option value="マジック・コマンド"><option value="メカ・エンジェル・コマンド"><option value="ワールド・コマンド"><option value="S級侵略者"><option value="アイドル"><option value="アウトレイジ"><option value="アウトレイジMAX"><option value="アビスロイヤル"><option value="アンノイズ"><option value="アンノウン"><option value="アーク・セラフィム"><option value="アースイーター"><option value="アーマロイド"><option value="アーマード・ワイバーン"><option value="イニシエート"><option value="イニシャルズ"><option value="イニシャルズX"><option value="ウェーブストライカー"><option value="エイリアン"><option value="エクストリーマー"><option value="エグザイル・クリーチャー"><option value="エレメンタル"><option value="オラクル"><option value="オリジン"><option value="カレンダー"><option value="ガーゴイル"><option value="ガーディアン"><option value="キカイヒーロー"><option value="キマイラ"><option value="ギャング・ビート"><option value="グラディエーター"><option value="グランセクト"><option value="グランド・デビル"><option value="グレンモルト"><option value="グレートメカオー"><option value="ゲル・フィッシュ"><option value="コスモ・ウォーカー"><option value="コロニー・ビートル"><option value="ゴッド"><option value="ゴッド・ノヴァ"><option value="ゴッド・ノヴァOMG"><option value="ゴースト"><option value="サイバーロード"><option value="サイバー・ウイルス"><option value="サイバー・ムーン"><option value="サバイバー"><option value="サムライ"><option value="シノビ"><option value="ジャイアント"><option value="ジャイアント・インセクト"><option value="ジャイアント・スノーフェアリー"><option value="ジャスティス・ウイング"><option value="ジャッジメント・エンブレム"><option value="ジョーカーズ"><option value="ジョーカーズZ"><option value="スターライト・ツリー"><option value="スチーム・ナイト"><option value="スノーフェアリー"><option value="スノーフェアリー風"><option value="スピリット・クォーツ"><option value="スプラッシュ・クイーン"><option value="スペシャルズ"><option value="スペース・サーパント"><option value="セラフィム"><option value="ゼニス"><option value="ゼノパーツ"><option value="ソルトルーパー"><option value="ダイナモ"><option value="ダークロード"><option value="チームACE"><option value="チームウェイブ"><option value="チームボンバー"><option value="チーム切札"><option value="チーム銀河"><option value="チーム零"><option value="ツリーフォーク"><option value="ティラノ・ドレイク"><option value="テクノ・サムライ"><option value="ディスタス"><option value="ディスペクター"><option value="ディープ・マリーン"><option value="デスパペット"><option value="デビルマスク"><option value="デモニオ"><option value="デリートロン"><option value="トリックス"><option value="ドラグナー"><option value="ドラゴノイド"><option value="ドラゴノイド号"><option value="ドラゴノイド爆"><option value="ドリームメイト"><option value="ドルスザク"><option value="ナイト"><option value="ハムカツ団"><option value="ハンター"><option value="バルーン・マッシュルーム"><option value="バーサーカー"><option value="パラサイトワーム"><option value="パンドラボックス"><option value="ヒューマノイド"><option value="ヒューマノイド爆"><option value="ビックリーノ"><option value="ビーストフォーク"><option value="ビーストフォーク號"><option value="ビートジョッキー"><option value="ファイアー・バード"><option value="ファンキー・ナイトメア"><option value="ファントム・ビースト"><option value="フィッシュ"><option value="フェニックス"><option value="フュージョナー"><option value="ブレイブ・スピリット"><option value="ヘドリアン"><option value="ホーン・ビースト"><option value="マイナー・スピリット"><option value="マシン・イーター"><option value="マジック"><option value="マジック・アウトレイジMAX"><option value="マフィ・ギャング"><option value="マーフォーク"><option value="ミステリー・トーテム"><option value="ミルクボーイ"><option value="ムートピア"><option value="メカ"><option value="メカサンダー"><option value="メカ・サンダー"><option value="メカ・デル・ソル"><option value="メカ・デル・ディネロ"><option value="メタリカ"><option value="メルト・ウォリアー"><option value="ライトブリンガー"><option value="リキッド・ピープル"><option value="リキッド・ピープル閃"><option value="リヴァイアサン"><option value="レインボー・ファントム"><option value="レクスターズ"><option value="ロスト・クルセイダー"><option value="ロック・ビースト"><option value="ワイルド・ベジーズ"><option value="ワーム"><option value="侵略者"><option value="暴拳王国"><option value="最終禁断"><option value="月光王国"><option value="無色"><option value="禁断"><option value="超化獣"><option value="超竜"><option value="革命軍"><option value="鬼レクスターズ"><option value="魔導具">
         </datalist>
       </div>
       <div class="row" style="gap:12px">
@@ -854,6 +859,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
         <label><input type="checkbox" id="fxInvadeZero"> 侵略ZERO（相手がクリーチャーを出した時、手札/墓地/マナから自分のクリーチャーに重ねる）</label>
         <label><input type="checkbox" id="fxRev0"> 革命0トリガー（自分の盾0で相手の攻撃時、手札から無料使用）</label>
         <label><input type="checkbox" id="fxSilent"> サイレントスキル（アンタップの代わりに効果発動）</label>
+        <label><input type="checkbox" id="fxGuardman"> ガードマン（味方が攻撃された時、タップして身代わり）</label>
         <input type="text" id="fxHyperNote" placeholder="HM時の能力メモ（パワー+○○等）" style="flex:1;min-width:140px">
         <span style="font-size:12px;font-weight:700">キリフダッシュ</span>
         <select id="fxKirifuda" style="width:auto;flex:0 0 80px">
@@ -1504,7 +1510,7 @@ function nextTurn(){
       const izCands=DZ.hand.filter(h=>{const r=getReg(h);return r&&r.invadeZero;});
       if(izCands.length&&DZ.battle.length){
         (async()=>{
-          const j=await askChoice(`⚡0 ターン終了時：${S.players[def].label}の侵略ZERO発動？\n（条件：このターン、相手がコストを支払わずにクリーチャーを出した場合。判断はプレイヤー）`,
+          const j=await askChoice(`⚡0 ターン終了時：${S.players[def].label}の侵略ZERO発動？\n（判断ポイント：このターン相手が踏み倒しでクリーチャーを出したか？　例：踏倒:ONでのプレイ／超次元・GRゾーンから出た／侵略・NS等）`,
             [...izCands.map(h=>faceNameOf(h)),"発動しない"]);
           if(j===null||j>=izCands.length)return;
           const h=izCands[j];
@@ -2744,8 +2750,55 @@ async function execAttack(pi,id,tg){
       }
     }
   }
+  // D・D・D（攻撃側：手札/墓地/マナから、条件を満たしていれば発動確認）
+  if(S.expert){
+    const zLbD={hand:"手札",grave:"墓地",mana:"マナ"};
+    const dCands=[];
+    for(const zn of ["hand","grave","mana"]){
+      for(const h of Z[zn]){
+        const r=getReg(h);
+        if(!r||!r.ddd)continue;
+        const need=r.dddCost|0;
+        if(need&&Z.mana.length<need)continue;
+        if(r.dddCiv){
+          const has=Z.mana.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(r.dddCiv);});
+          if(!has)continue;
+        }
+        dCands.push({h,zn});
+      }
+    }
+    if(dCands.length){
+      const j=await askChoice(`🌀 攻撃時：D・D・D を発動しますか？`,
+        [...dCands.map(({h,zn})=>`${faceNameOf(h)}（${zLbD[zn]}）`),"発動しない"]);
+      if(j!==null&&j<dCands.length){
+        const {h,zn}=dCands[j];
+        snap();
+        const arr0=Z[zn];
+        const hi=arr0.findIndex(x=>x.id===h.id);
+        arr0.splice(hi,1);
+        const r2=getReg(h);
+        h.faceup=true;h.tapped=false;
+        if(r2&&r2.ctype==="spell"){
+          if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
+          Z.resolve.push(h);
+        }else{
+          Z.battle.push(h);
+          emitEvent(pi,"summon");
+        }
+        markArrive(h);
+        enqueueFx(pi,h);
+        sfx("ok");renderAll();
+        toast(`🌀 D・D・D 発動！ ${faceNameOf(h)}（${zLbD[zn]}から・コスト踏み倒し）`);
+        await waitFxIdle();renderAll();
+      }
+    }
+  }
   // 革命0トリガー（防御側・盾0）
-  if(S.expert&&S.vs&&!OZ.shield.length){
+  let rev0Asked=false;
+  async function offerRev0(){
+    if(rev0Asked)return;
+    rev0Asked=true;
+    if(!S.expert||OZ.shield.length)return;
     const r0s=OZ.hand.filter(h=>{const r=getReg(h);return r&&r.rev0;});
     for(const h of r0s){
       const yes=await ask(`🔥 革命0トリガー！\n${S.players[op].label}：《${faceNameOf(h)}》を公開してコストを支払わずに使いますか？\n（条件はプレイヤー判断）`);
@@ -2769,6 +2822,7 @@ async function execAttack(pi,id,tg){
       await waitFxIdle();renderAll();
     }
   }
+  await offerRev0();
   // ニンジャ・ストライク（防御側）
   if(S.expert&&S.vs){
     while(true){
@@ -2810,8 +2864,22 @@ async function execAttack(pi,id,tg){
   }
   if(defender){await doBattle(pi,c,op,defender);return;}
   if(tg.kind==="creature"){
-    const d=OZ.battle.find(x=>x.id===tg.cid);
+    let d=OZ.battle.find(x=>x.id===tg.cid);
     if(!d){toast("攻撃対象が場を離れたため、攻撃は中止されました");renderAll();return;}
+    if(S.expert){
+      const gms=OZ.battle.filter(x=>x.id!==d.id&&!x.tapped&&(()=>{const r2=getReg(x);return r2&&r2.guardman;})());
+      if(gms.length){
+        const j=await askChoice(`🛡 ${S.players[op].label}：ガードマンで攻撃先を変更しますか？（選んだクリーチャーをタップして身代わり）`,
+          [...gms.map(x=>faceNameOf(x)),"変更しない"]);
+        if(j!==null&&j<gms.length){
+          snap();
+          d=gms[j];
+          d.tapped=true;
+          renderAll();
+          toast(`🛡 ガードマン！ 攻撃先が ${faceNameOf(d)} に変更された`);
+        }
+      }
+    }
     await doBattle(pi,c,op,d);
   }
   else if(tg.kind==="shield"){
@@ -2828,6 +2896,10 @@ async function execAttack(pi,id,tg){
     await breakShields(op,n,c);
   }
   else{
+    rev0Asked=false;
+    await offerRev0();
+    const cStill=Z.battle.find(x=>x.id===id);
+    if(!cStill){toast("攻撃クリーチャーが場を離れたため、攻撃は中止されました");renderAll();return;}
     sfx("atk");
     toast(`💥 ダイレクトアタック！`);
     if(S.vs&&S.turn>0)declareWin(pi,`💥 ダイレクトアタック成立`);
@@ -2958,6 +3030,7 @@ function renderFxEditor(){
   $("fxInvadeZero").checked=!!FXEDIT.invadeZero;
   $("fxRev0").checked=!!FXEDIT.rev0;
   $("fxSilent").checked=!!FXEDIT.silent;
+  $("fxGuardman").checked=!!FXEDIT.guardman;
   $("fxZRush").checked=!!FXEDIT.zrush;
   $("fxHyperNote").value=FXEDIT.hyperNote||"";
   $("fxSInvade").value=FXEDIT.sInvade||"";
@@ -3050,6 +3123,7 @@ function openFxEditor(key){
     invadeZero:cur?!!cur.invadeZero:false,
     rev0:cur?!!cur.rev0:false,
     silent:cur?!!cur.silent:false,
+    guardman:cur?!!cur.guardman:false,
     zrush:cur?!!cur.zrush:false,
     hyperNote:cur&&cur.hyperNote||"",
     sInvade:cur&&cur.sInvade||"",
@@ -3148,6 +3222,7 @@ $("fxSave").addEventListener("click",async ()=>{
     invadeZero:$("fxInvadeZero").checked,
     rev0:$("fxRev0").checked,
     silent:$("fxSilent").checked,
+    guardman:$("fxGuardman").checked,
     zrush:$("fxZRush").checked,
     hyperNote:$("fxHyperNote").value.trim(),
     sInvade:$("fxSInvade").value||"",
@@ -3315,6 +3390,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.invadeZero)attrs.push("侵略ZERO");
     if(v.rev0)attrs.push("革命0");
     if(v.silent)attrs.push("サイレントスキル");
+    if(v.guardman)attrs.push("ガードマン");
     if(v.zrush)attrs.push("Zラッシュ");
     if(v.sInvade)attrs.push("S級侵略");
     if(v.sympathy)attrs.push(`シンパシー(${v.sympathy})`);
@@ -3578,16 +3654,6 @@ function buildBoards(){
   for(const pi of order){
     const pb=document.createElement("div");
     pb.className="pboard "+(pi===seat?"me":"opp");
-    {
-      const mk="__mat"+pi+"__";
-      if(imgURL.has(mk)){
-        const mb=document.createElement("div");
-        mb.className="matbg";
-        mb.style.backgroundImage=`url(${imgURL.get(mk)})`;
-        pb.appendChild(mb);
-        pb.classList.add("hasmat");
-      }
-    }
     pb.dataset.p=pi;
     const selBtn=z=>`<button class="zbtn" data-pi="${pi}" data-act="selall" data-z="${z}">全選択</button>`;
     const handBtns=(S.vs)
@@ -3657,6 +3723,16 @@ function buildBoards(){
         wrap.className="zpair";
         pb.insertBefore(wrap,first);
         wrap.appendChild(a);wrap.appendChild(b);
+      }
+    }
+    {
+      const mk="__mat"+pi+"__";
+      if(imgURL.has(mk)){
+        const mb=document.createElement("div");
+        mb.className="matbg";
+        mb.style.backgroundImage=`url(${imgURL.get(mk)})`;
+        pb.insertBefore(mb,pb.firstChild);
+        pb.classList.add("hasmat");
       }
     }
     board.appendChild(pb);
@@ -3739,7 +3815,7 @@ function cardEl(pi,zone,c){
   if(c.rot){
     el.style.transform=`rotate(${c.rot}deg)${c.tapped?" scale(.9)":""}`;
     if(c.rot%180===90&&zone==="battle"){
-      el.style.marginLeft=el.style.marginRight="calc((var(--card-h) - var(--card-w))/2 + 4px)";
+      el.style.marginLeft=el.style.marginRight="calc((var(--card-h) - var(--card-w))/2 + 12px)";
     }
   }
   if(c.under&&c.under.length){
@@ -6315,6 +6391,8 @@ function openSettings(){
   $("setWidePair").value=S.widePair||"sys,hand";
   renderZoneOrderEditor();
   renderZoneScaleEditor();
+  $("setCardGap").value=String(S.cardGap||5);
+  $("cardGapVal").textContent=(S.cardGap||5)+"px";
   $("setCardScale").value=String(S.cardScale||100);
   $("cardScaleVal").textContent=(S.cardScale||100)+"%";
   $("setNoUntapMana").checked=!!S.noUntapMana;
@@ -6348,6 +6426,12 @@ $("setLayout").addEventListener("change",async ()=>{
   renderZoneOrderEditor();
   buildBoards();fitBoard();renderAll();
   toast(`レイアウト：${{stack:"縦積み",cols:"2カラム",wide:"ワイド段組み"}[S.layout]}`);
+});
+$("setCardGap").addEventListener("input",async ()=>{
+  S.cardGap=+$("setCardGap").value||5;
+  $("cardGapVal").textContent=S.cardGap+"px";
+  document.documentElement.style.setProperty("--cardgap",S.cardGap+"px");
+  if(db)await idbPut("misc","cardGap",S.cardGap);
 });
 $("setCardScale").addEventListener("input",async ()=>{
   S.cardScale=+$("setCardScale").value||100;
@@ -6835,6 +6919,8 @@ $("bApply").addEventListener("click",()=>{
   if(at!==null&&at!==undefined)S.autoTap=!!at;
   const cs=db?await idbGet("misc","cardScale"):null;
   if(cs)S.cardScale=+cs||100;
+  const cg=db?await idbGet("misc","cardGap"):null;
+  if(cg){S.cardGap=+cg||5;document.documentElement.style.setProperty("--cardgap",S.cardGap+"px");}
   const ly=db?await idbGet("misc","layout"):null;
   if(ly)S.layout=ly;
   const zo=db?await idbGet("misc","zoneOrder"):null;
