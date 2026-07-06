@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v9.5</title>
+<title>DM Re:Vault v9.7</title>
 <style>
 :root{
   --bg:#0c0f16; --panel:#151b28; --panel-2:#1d2536; --line:#2a3550;
@@ -290,6 +290,15 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
   max-height:55dvh;overflow-y:auto;
 }
 #sheet.open{transform:translateY(0)}
+@media(min-width:900px){
+  #sheet{
+    left:auto;right:0;top:52px;bottom:0;width:min(460px,46vw);
+    max-height:none;border-radius:14px 0 0 14px;
+    border-top:none;border-left:2px solid var(--accent);
+    transform:translateX(105%);
+  }
+  #sheet.open{transform:translateX(0)}
+}
 #sheet .title{font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
 #sheet .title b{color:var(--text);font-size:13px;word-break:break-all}
 #sheet .actions{display:flex;flex-wrap:wrap;gap:7px}
@@ -700,7 +709,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
       <button class="btn small" id="bListView">📋 リスト確認</button>
       <button class="btn primary small" id="bApply">反映</button>
     </div>
-    <div class="hint">タップで枚数切替（超GRは2枚まで）。ゲーム外タブはタップで枚数を直接入力（上限なし）。特殊カード（禁断など）はテキスト欄に直接入力してください。</div>
+    <div class="hint">タップで＋1（⌘/Ctrl＋タップで−1）。上限（4枚／超GR2枚）に達した状態でタップすると「制限なしカード」として5枚以上も指定できます。ゲーム外タブはタップで枚数を直接入力。特殊カード（禁断など）はテキスト欄に直接入力してください。</div>
     <div class="row">
       <select id="bTypeFilter" style="width:auto;flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px;font-size:12px">
         <option value="">全タイプ</option>
@@ -787,6 +796,19 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
         </select>
       </div>
       <div class="row">
+        <span style="font-size:12px;font-weight:700">パワーアタッカー ＋</span>
+        <input type="number" id="fxPA" style="width:100px" placeholder="0" min="0">
+        <span style="font-size:12px;font-weight:700">ブレイク数</span>
+        <select id="fxBreaks" style="width:auto;flex:1;min-width:120px">
+          <option value="1">1（通常）</option>
+          <option value="2">2（W・ブレイカー）</option>
+          <option value="3">3（T・ブレイカー）</option>
+          <option value="all">全部（ワールド・ブレイカー）</option>
+          <option value="powered">パワード・ブレイカー（パワー6000ごとに＋1）</option>
+          <option value="masterw">マスター・W・ブレイカー（2枚＋出たターンならブレイク数だけ相手を破壊）</option>
+        </select>
+      </div>
+      <div class="row">
         <span style="font-size:12px;font-weight:700">コスト</span>
         <select id="fxCost" style="width:auto;flex:0 0 96px"></select>
         <span style="font-size:12px;font-weight:700" id="fxCost2Label">下面コスト</span>
@@ -802,7 +824,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
           <option value="onismaxevo">鬼S-MAX進化</option>
           <option value="gneo">G・NEO進化</option>
           <option value="twinpact">ツインパクト（上：クリーチャー／下：呪文）</option>
-          <option value="lunatic">ルナティック進化</option><option value="tamaseed">タマシード</option><option value="exile">エグザイル・クリーチャー</option>
+          <option value="lunatic">ルナティック進化</option><option value="tamaseed">タマシード</option><option value="exile">エグザイル・クリーチャー</option><option value="field">フィールド</option>
           <option value="ultimate">究極進化</option>
           <option value="spell">呪文</option>
           <option value="crossgear">クロスギア</option><option value="gigaaura">ギガオレガオーラ</option>
@@ -904,7 +926,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;font-weight:700">シンパシー</span>
-        <input type="text" id="fxSympathy" list="raceList" placeholder="対象（種族/名前の一部）" style="flex:1;min-width:130px">
+        <input type="text" id="fxSympathy" list="raceList" placeholder="対象（種族/名前・「／」区切りで複数OK）" style="flex:1;min-width:130px">
         <select id="fxSymX" style="width:auto;flex:0 0 96px">
           <option value="1">×1軽減</option>
           <option value="2">×2（ダブル）</option>
@@ -932,7 +954,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
           <option value="">文明不問</option>
           <option value="light">光</option><option value="water">水</option><option value="dark">闇</option><option value="fire">火</option><option value="nature">自然</option>
         </select>
-        <input type="text" id="fxInvRace" list="raceList" placeholder="種族（例：コマンド/ドラゴン）" style="flex:1;min-width:120px">
+        <input type="text" id="fxInvRace" list="raceList" placeholder="種族（「／」区切りで複数OK：例 ドラゴン／コマンド）" style="flex:1;min-width:120px">
         <input type="number" id="fxInvCost" placeholder="コスト以上" style="width:86px">
         <input type="number" id="fxInvPow" placeholder="パワー以上" style="width:96px">
       </div>
@@ -955,6 +977,21 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
         <label><input type="checkbox" id="fxSTPlus"> S・トリガー・プラス（相手ターンに2枚以上ブレイクされていれば追加能力）</label>
         <label><input type="checkbox" id="fxLaby"> ラビリンス（自分の盾が相手より多ければ有効）</label>
         <label><input type="checkbox" id="fxLabyMagic"> ラビリンス・マジック（ターン終了時に条件を満たせばI→II→IIIを順に使用）</label>
+        <span style="font-size:12px;font-weight:700">フィールド種</span>
+        <select id="fxFieldKind" style="width:auto;flex:0 0 140px">
+          <option value="">－</option>
+          <option value="d2">D2フィールド</option>
+          <option value="dg">DGフィールド</option>
+          <option value="normal">フィールド（汎用）</option>
+          <option value="kindan">禁断フィールド</option>
+          <option value="cho">超フィールド</option>
+        </select>
+        <span style="font-size:12px;font-weight:700">攻撃誘導</span>
+        <select id="fxTaunt" style="width:auto;flex:0 0 150px">
+          <option value="">なし</option>
+          <option value="always">永続（可能なら常にこのクリーチャーへ）</option>
+          <option value="first">各ターン最初の攻撃のみ誘導</option>
+        </select>
         <span style="font-size:12px;font-weight:700">P'Sドロンゴー</span>
         <select id="fxDronGo" style="width:auto;flex:0 0 110px">
           <option value="">なし</option>
@@ -995,20 +1032,17 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
           <option value="0">なし</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option>
         </select>
       </div>
-      <div class="row">
-        <span style="font-size:12px;font-weight:700">パワーアタッカー ＋</span>
-        <input type="number" id="fxPA" style="width:100px" placeholder="0" min="0">
-        <span style="font-size:12px;font-weight:700">ブレイク数</span>
-        <select id="fxBreaks" style="width:auto;flex:1;min-width:120px">
-          <option value="1">1（通常）</option>
-          <option value="2">2（W・ブレイカー）</option>
-          <option value="3">3（T・ブレイカー）</option>
-          <option value="all">全部（ワールド・ブレイカー）</option>
-          <option value="powered">パワード・ブレイカー（パワー6000ごとに＋1）</option>
-        </select>
-      </div>
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <label><input type="checkbox" id="fxST"> ⚡S・トリガー</label>
+        <select id="fxSTWhen" style="width:auto;flex:0 0 190px">
+          <option value="">ST付与条件：なし</option>
+          <option value="s3">自分の盾が3枚以下ならST</option>
+          <option value="s2">自分の盾が2枚以下ならST</option>
+          <option value="s1">自分の盾が1枚以下ならST</option>
+          <option value="s0">自分の盾が0枚ならST</option>
+          <option value="oppTurn">相手のターン中ならST</option>
+          <option value="manual">条件は手動判断（バッジのみ）</option>
+        </select>
         <label><input type="checkbox" id="fxSBack"> S・バック</label>
         <label><input type="checkbox" id="fxSabaki"> サバキZ</label>
         <label><input type="checkbox" id="fxMonsho"> 裁きの紋章</label>
@@ -1296,6 +1330,7 @@ function markArrive(c){
   c.dealIdx=null;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
   try{
     if(S.turn>0&&[0,1].some(p=>zonesOf(p).battle.includes(c))){
+      c.bornTurn=S.turn;
       const r=getReg(c);
       const evo=r&&["evo","neoevo","starevo","smaxevo","onismaxevo","gneo","lunatic","ultimate"].includes(r.ctype);
       c.sick=!evo&&!(r&&r.sa);
@@ -1581,6 +1616,8 @@ function draw(pi,n=1){
 function nextTurn(){
   if(S.turn===0){toast("先に「開始/再試合」を押してください");return;}
   S.brokenTurn={};
+  S.manaX2={};
+  S.tauntUsed={};
   snap();
   for(const P of S.players){
     const Z=P.zones;
@@ -1815,8 +1852,9 @@ function runWatchFx(pi,type){
   for(const c of zonesOf(pi).battle){
     const r=getReg(c);
     if(r&&r.watchFx&&r.watchFx.length){
+      if(type==="oppSummonTapped"&&!c.tapped)continue;
       const fx=r.watchFx.filter(w=>w.ev===type);
-      if(fx.length){toast(`⚡誘発処理：${faceNameOf(c)}`);runFxList(pi,fx);}
+      if(fx.length){toast(`⚡誘発処理：${faceNameOf(c)}`);runFxList(pi,fx,c);}
     }
   }
 }
@@ -1841,6 +1879,8 @@ function emitEvent(actor,type){
   if(type==="summon"&&S.vs){
     const def=actor===0?1:0;
     const DZ=zonesOf(def);
+    runWatchFx(def,"oppSummon");
+    runWatchFx(def,"oppSummonTapped");
     const un=DZ.hand.filter(h=>{
       const r=getReg(h);
       if(!r)return false;
@@ -2032,6 +2072,33 @@ const EFFECTS=[
      if(j===null)return;
      declareWin(j,"⭐ 特殊勝利（エクストラウィン）",false);
    }},
+  {name:"山札からカードを探して手札へ（シャッフル）",cat:"🎴 山札",
+   desc:"山札の中から好きなカードを選んで手札に加え、山札をシャッフルします",
+   async run(){
+     const pi=S.vs?S.who:0;
+     closeSheet();
+     const Z=zonesOf(pi);
+     if(!Z.deck.length){toast("山札がありません");return;}
+     const names=Z.deck.map((x,k)=>`${k+1}. ${x.name}`);
+     const j=await askChoice("🔍 山札から手札に加えるカードを選択",names);
+     if(j===null)return;
+     snap();
+     const cc=Z.deck.splice(j,1)[0];
+     cc.faceup=true;Z.hand.push(cc);markArrive(cc);
+     Z.deck.sort(()=>Math.random()-.5);
+     sfx("draw");renderAll();
+     toast(`🔍 ${cc.name} を手札に加え、山札をシャッフルした`);
+   }},
+  {name:"マナを2倍にする（このターン）",cat:"💎 マナ",
+   desc:"このターン、マナ1枚が2マナぶんになります（自動タップが必要数の半分＝切り上げでタップ）。ターン終了で解除",
+   async run(){
+     const pi=S.vs?S.who:0;
+     closeSheet();
+     S.manaX2=S.manaX2||{};
+     S.manaX2[pi]=true;
+     sfx("ok");
+     toast(`💎✨ ${S.players[pi].label}：このターン、マナが2倍！（コスト支払いのタップ枚数が半分に）`);
+   }},
   {name:"メクレイド（山上3枚からコストn以下を出す）",
    desc:"山札の上から3枚を見て、コストn以下（種族条件はプレイヤー判断）のカードを1枚出し、残りは山札の下へ",
    async run(){
@@ -2194,18 +2261,41 @@ const EFFECTS=[
    desc:"全ゾーンのカードを山札・超GR・超次元に戻してシャッフル（確認あり）",
    run(){recollectAll();}},
 ];
+function fxCategory(name){
+  if(/山札|シャッフル|メクレイド|サーチ/.test(name))return "🎴 山札";
+  if(/手札|ハンデス|ドロー/.test(name))return "✋ 手札";
+  if(/マナ/.test(name))return "💎 マナ";
+  if(/シールド|盾/.test(name))return "🛡 シールド";
+  if(/クリーチャー|破壊|バウンス|タップ|フリーズ|ランダム/.test(name))return "⚔ バトルゾーン";
+  if(/ターン|エクストラ|スキップ|終了/.test(name))return "⏭ ターン";
+  return "✨ その他";
+}
 function openEffects(){
   $("sheetName").textContent="✨ 効果解決";
   const d=$("sheetDesc");d.style.display="";
   d.textContent="汎用効果です。カード個別の自動効果は「設定 → エキスパートモード」から登録できます。";
   const box=$("sheetActions");box.innerHTML="";
+  const groups=new Map();
   for(const ef of EFFECTS){
-    const b=document.createElement("button");
-    b.className="btn small";
-    b.innerHTML=`<b>${ef.name}</b><br><span style="font-size:10px;color:var(--muted);font-weight:400">${ef.desc}</span>`;
-    b.style.flex="1 1 100%";b.style.textAlign="left";b.style.lineHeight="1.5";
-    b.onclick=()=>ef.run();
-    box.appendChild(b);
+    const cat=ef.cat||fxCategory(ef.name);
+    if(!groups.has(cat))groups.set(cat,[]);
+    groups.get(cat).push(ef);
+  }
+  const order=["⚔ バトルゾーン","🛡 シールド","✋ 手札","💎 マナ","🎴 山札","⏭ ターン","✨ その他"];
+  for(const cat of order){
+    if(!groups.has(cat))continue;
+    const h=document.createElement("div");
+    h.textContent=cat;
+    h.style.cssText="flex:1 1 100%;font-size:12px;font-weight:900;color:var(--muted);margin-top:8px;border-bottom:1px solid var(--line);padding-bottom:3px";
+    box.appendChild(h);
+    for(const ef of groups.get(cat)){
+      const b=document.createElement("button");
+      b.className="btn small";
+      b.innerHTML=`<b>${ef.name}</b><br><span style="font-size:10px;color:var(--muted);font-weight:400">${ef.desc}</span>`;
+      b.style.flex="1 1 100%";b.style.textAlign="left";b.style.lineHeight="1.5";
+      b.onclick=()=>ef.run();
+      box.appendChild(b);
+    }
   }
   $("sheet").classList.add("open");
 }
@@ -2223,9 +2313,11 @@ const FX_TYPES=[
   ["bounce","相手クリーチャーをランダムn体 手札に戻す"],
   ["destroyRnd","相手クリーチャーをランダムn体 破壊"],
   ["grsummon","GR召喚 n体（超GRの上から）"],
+  ["tutor","山札から好きなカードをn枚 手札に加える（シャッフル）"],
+  ["battleAsk","相手のクリーチャーとバトルする（対象選択・確認つき）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["peek"]);
+const FX_NO_N=new Set(["peek","battleAsk"]);
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
@@ -2256,14 +2348,19 @@ async function autoTapCost(pi,c){
       toast(`💞 ${mult>1?"ダブル":""}シンパシー（${w}）：${cnt}体×${mult} → コスト${dec}軽減（残り${cost}）`);
     }
   }
+  let payN=cost;
+  if(S.manaX2&&S.manaX2[pi]&&cost>0){
+    payN=Math.ceil(cost/2);
+    toast(`💎✨ マナ2倍：コスト${cost} → タップは${payN}枚`);
+  }
   let n=0;
   for(const m of Z.mana){
-    if(n>=cost)break;
+    if(n>=payN)break;
     if(!m.tapped){m.tapped=true;n++;}
   }
   renderAll();
-  if(n<cost)toast(`⚠ マナ不足：${n}/${cost} だけタップしました`);
-  else if(cost>0)toast(`マナ自動タップ：${cost}`);
+  if(n<payN)toast(`⚠ マナ不足：${n}/${payN} だけタップしました`);
+  else if(payN>0)toast(`マナ自動タップ：${payN}`);
 }
 async function destroyCreature(pi,c){
   const Z=zonesOf(pi);
@@ -2335,6 +2432,7 @@ async function destroyCreature(pi,c){
     Z.hyper.push(c);
     sfx("grave");
     toast(`🌌 破壊：サイキック ${c.name} は超次元ゾーンへ戻った`);
+    runWatchFx(pi,"myDestroyed");
     if(S.expert&&r&&r.lastburst)toast(`💥 ラストバースト：呪文側を唱えられます（${faceNameOf(c)}）`);
     return;
   }
@@ -2343,6 +2441,7 @@ async function destroyCreature(pi,c){
     Z.gr.push(c);
     sfx("grave");
     toast(`破壊：GRクリーチャーはGRゾーンの下へ戻った`);
+    runWatchFx(pi,"myDestroyed");
     if(S.expert&&r&&r.lastburst)toast(`💥 ラストバースト：呪文側を唱えられます（${faceNameOf(c)}）`);
     return;
   }
@@ -2351,9 +2450,10 @@ async function destroyCreature(pi,c){
   Z[dest].push(c);
   sfx("grave");
   toast(`破壊：${faceNameOf(c)}${dest==="hand"?"（手札へ）":dest==="mana"?"（マナへ）":""}`);
+  runWatchFx(pi,"myDestroyed");
   if(S.expert&&r&&r.lastburst)toast(`💥 ラストバースト：呪文側を唱えられます（${faceNameOf(c)}）`);
 }
-async function runFxList(pi,list){
+async function runFxList(pi,list,srcCard){
   const op=pi===0?1:0;
   for(const f of list){
     const Z=zonesOf(pi), OZ=zonesOf(op);
@@ -2411,6 +2511,36 @@ async function runFxList(pi,list){
         const j=randInt(OZ.battle.length);
         await destroyWithReplace(op,OZ.battle[j]);
       }
+    }else if(f.t==="tutor"){
+      if(!Z.deck.length){toast("山札がありません");continue;}
+      for(let i=0;i<n;i++){
+        if(!Z.deck.length)break;
+        const names=Z.deck.map((x,k)=>`${k+1}. ${x.name}`);
+        const j=await askChoice(`🔍 山札からカードを選択（${i+1}/${n}枚目・キャンセルで終了）`,names);
+        if(j===null)break;
+        const cc=Z.deck.splice(j,1)[0];
+        cc.faceup=true;Z.hand.push(cc);markArrive(cc);
+        toast(`🔍 ${cc.name} を手札に加えた`);
+        renderAll();
+      }
+      Z.deck.sort(()=>Math.random()-.5);
+      toast("山札をシャッフルした");
+      sfx("draw");
+    }else if(f.t==="battleAsk"){
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      if(!OZ.battle.length){toast("相手のバトルゾーンにクリーチャーがいません");continue;}
+      let src=srcCard&&Z.battle.find(x=>x.id===srcCard.id)?srcCard:null;
+      if(!src){
+        if(!Z.battle.length){toast("自分のクリーチャーがいません");continue;}
+        const k=Z.battle.length===1?0:await askChoice("バトルする自分のクリーチャーを選択",Z.battle.map(x=>faceNameOf(x)));
+        if(k===null)continue;
+        src=Z.battle[k];
+      }
+      const j=await askChoice(`⚔ ${faceNameOf(src)} で相手クリーチャーとバトルしますか？`,
+        [...OZ.battle.map(x=>faceNameOf(x)),"バトルしない"]);
+      if(j===null||j>=OZ.battle.length)continue;
+      await doBattle(pi,src,op,OZ.battle[j]);
+      renderAll();
     }else if(f.t==="grsummon"){
       for(let i=0;i<n;i++){
         if(!Z.gr.length){toast("超GRデッキが空です");break;}
@@ -2738,6 +2868,19 @@ function processBroken(op,stack,label){
           const badge=document.createElement("div");
           badge.style.cssText="position:absolute;bottom:0;left:0;right:0;background:#22c55e;color:#000;font-size:10px;font-weight:900;text-align:center;padding:1px 0;z-index:5;border-radius:0 0 4px 4px";
           badge.textContent="G・ストライク";
+          el.querySelector(".thumb").style.position="relative";
+          el.querySelector(".thumb").appendChild(badge);
+        }else if(r2&&r2.stWhen&&(()=>{
+          const w=r2.stWhen;
+          if(w==="manual")return true;
+          if(w==="oppTurn")return S.who!==op;
+          const lim={s3:3,s2:2,s1:1,s0:0}[w];
+          return lim!=null&&Z.shield.length<=lim;
+        })()){
+          el.style.outline="2px solid #38bdf8";
+          const badge=document.createElement("div");
+          badge.style.cssText="position:absolute;bottom:0;left:0;right:0;background:#38bdf8;color:#000;font-size:10px;font-weight:900;text-align:center;padding:1px 0;z-index:5;border-radius:0 0 4px 4px";
+          badge.textContent="⚡ST付与 条件達成";
           el.querySelector(".thumb").style.position="relative";
           el.querySelector(".thumb").appendChild(badge);
         }else if(r2&&r2.sst&&!Z.shield.length){
@@ -3298,6 +3441,29 @@ async function execAttack(pi,id,tg){
     }
   }
   if(defender){await doBattle(pi,c,op,defender);return;}
+  // 攻撃誘導：防御側に誘導持ちがいれば攻撃先を変更
+  if(S.expert){
+    S.tauntUsed=S.tauntUsed||{};
+    const taunts=OZ.battle.filter(x=>{
+      const r2=getReg(x);
+      if(!r2||!r2.taunt)return false;
+      if(r2.taunt==="first"&&S.tauntUsed[op])return false;
+      return true;
+    });
+    const alreadyTaunt=tg.kind==="creature"&&taunts.some(x=>x.id===tg.cid);
+    if(taunts.length&&!alreadyTaunt){
+      const j=taunts.length===1?0:await askChoice(`🧲 攻撃誘導！ 攻撃先は以下のクリーチャーに変更されます（選択）`,taunts.map(x=>faceNameOf(x)));
+      if(j!==null){
+        const t=taunts[j];
+        tg={kind:"creature",cid:t.id};
+        if((getReg(t)||{}).taunt==="first")S.tauntUsed[op]=true;
+        toast(`🧲 攻撃誘導：攻撃先が ${faceNameOf(t)} に変更された`);
+      }
+    }else if(alreadyTaunt&&tg.kind==="creature"){
+      const t=taunts.find(x=>x.id===tg.cid);
+      if(t&&(getReg(t)||{}).taunt==="first")S.tauntUsed[op]=true;
+    }
+  }
   if(tg.kind==="creature"){
     let d=OZ.battle.find(x=>x.id===tg.cid);
     if(!d){toast("攻撃対象が場を離れたため、攻撃は中止されました");renderAll();return;}
@@ -3327,8 +3493,21 @@ async function execAttack(pi,id,tg){
       n=Math.max(1,1+Math.floor(P/6000));
       toast(`パワード・ブレイカー！ パワー${P} → ${n}枚ブレイク`);
     }
+    else if(bk==="masterw")n=2;
     else n=parseInt(bk,10)||1;
+    const brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
     await breakShields(op,n,c);
+    if(bk==="masterw"&&S.expert&&c.bornTurn===S.turn&&brokeN>0){
+      for(let i=0;i<brokeN;i++){
+        if(!OZ.battle.length)break;
+        const j=await askChoice(`👑 マスター・W・ブレイカー（${i+1}/${brokeN}体目）\n出たターンのブレイク！ 破壊する相手クリーチャーを選択`,
+          [...OZ.battle.map(x=>faceNameOf(x)),"破壊しない（終了）"]);
+        if(j===null||j>=OZ.battle.length)break;
+        snap();
+        await destroyCreature(op,OZ.battle[j]);
+        renderAll();
+      }
+    }
   }
   else{
     rev0Asked=false;
@@ -3409,6 +3588,9 @@ const TRIG_EVS=[
   ["turnEndBoth","お互いのターンの終わりに"],
   ["manaCharge","自分のマナにカードが置かれた時（スペース・チャージ）"],
   ["shieldLeave","自分のシールドが離れた時（オシオキムーン）"],
+  ["myDestroyed","自分のクリーチャーが破壊された時"],
+  ["oppSummon","相手のクリーチャーがバトルゾーンに出た時"],
+  ["oppSummonTapped","相手のクリーチャーが出た時（このクリーチャーがタップ中のみ・カツドン型）"],
 ];
 function fxTrigRowEl(i){
   const f=FXEDIT.watchFx[i];
@@ -3503,6 +3685,9 @@ function renderFxEditor(){
   $("fxLabyMagic").checked=!!FXEDIT.labyMagic;
   $("fxDronGo").value=FXEDIT.dronGo||"";
   $("fxJD").checked=!!FXEDIT.jdiver;
+  $("fxTaunt").value=FXEDIT.taunt||"";
+  $("fxSTWhen").value=FXEDIT.stWhen||"";
+  $("fxFieldKind").value=FXEDIT.fieldKind||"";
   $("fxBAD").checked=!!FXEDIT.bad;
   $("fxInvRace").value=FXEDIT.invRace||"";
   $("fxInvCost").value=FXEDIT.invCost||"";
@@ -3562,28 +3747,22 @@ function renderFxEditor(){
   th.appendChild(el);
   $("fxTitle").textContent=`効果を登録：${FXEDIT.name}`;
   {
-    let pv=$("fxPreview");
-    if(!pv){
-      pv=document.createElement("img");
-      pv.id="fxPreview";
-      pv.style.cssText="width:84px;height:84px;object-fit:cover;object-position:50% 22%;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;float:right;margin:0 0 6px 8px";
-      $("fxTitle").after(pv);
-      pv.addEventListener("click",()=>{
-        const u=pv.dataset.full;
-        if(!u)return;
+    const th=$("fxThumb");
+    const im=th&&th.querySelector("img");
+    if(im&&!im._zoomBound){
+      im._zoomBound=true;
+      im.style.cursor="zoom-in";
+      im.addEventListener("click",()=>{
         const ol=document.createElement("div");
         ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:990;display:flex;align-items:center;justify-content:center;cursor:zoom-out";
         const big=document.createElement("img");
-        big.src=u;big.draggable=false;
+        big.src=im.src;big.draggable=false;
         big.style.cssText="max-width:94vw;max-height:92dvh;object-fit:contain;border-radius:12px";
         ol.appendChild(big);
         ol.addEventListener("click",()=>ol.remove());
         document.body.appendChild(ol);
       });
     }
-    const u=imgURL.get(FXEDIT.key);
-    if(u){pv.src=u;pv.dataset.full=u;pv.style.display="";}
-    else pv.style.display="none";
   }
 }
 function openFxEditor(key){
@@ -3649,6 +3828,9 @@ function openFxEditor(key){
     labyMagic:cur?!!cur.labyMagic:false,
     dronGo:cur&&cur.dronGo||"",
     jdiver:cur?!!cur.jdiver:false,
+    taunt:cur&&cur.taunt||"",
+    stWhen:cur&&cur.stWhen||"",
+    fieldKind:cur&&cur.fieldKind||"",
     bad:cur?!!cur.bad:false,
     invRace:cur&&cur.invRace||"",
     invCost:cur&&(+cur.invCost||0)||0,
@@ -3706,8 +3888,20 @@ function fxBackToSettings(){$("fxOlay").classList.remove("open");openDeckPanel()
   for(const id of ["fxCost","fxCost2"]){
     const cs=$(id);
     const c0=document.createElement("option");c0.value="";c0.textContent="－";cs.appendChild(c0);
-    for(let v=0;v<=20;v++){
+    for(let v=0;v<=30;v++){
       const o=document.createElement("option");o.value=v;o.textContent=v;cs.appendChild(o);
+    }
+    for(const v of [35,40,50,77,99]){
+      const o=document.createElement("option");o.value=v;o.textContent=v;cs.appendChild(o);
+    }
+    const oi=document.createElement("option");oi.value=999;oi.textContent="♾️ 無限";cs.appendChild(oi);
+  }
+  {
+    const ps=$("fxPowerSel");
+    if(ps){
+      for(const [v,l] of [[100000,"10万"],[1000000,"100万"],[999999999,"♾️ 無限"]]){
+        const o=document.createElement("option");o.value=v;o.textContent=l;ps.appendChild(o);
+      }
     }
   }
 })();
@@ -3777,6 +3971,9 @@ $("fxSave").addEventListener("click",async ()=>{
     labyMagic:$("fxLabyMagic").checked,
     dronGo:$("fxDronGo").value||"",
     jdiver:$("fxJD").checked,
+    taunt:$("fxTaunt").value||"",
+    stWhen:$("fxSTWhen").value||"",
+    fieldKind:$("fxFieldKind").value||"",
     bad:$("fxBAD").checked,
     invRace:$("fxInvRace").value.trim(),
     invCost:+$("fxInvCost").value||0,
@@ -3911,7 +4108,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.atkUn)attrs.push("アンタップ攻撃可");
     if(v.d2)attrs.push("D2");
     if(v.seal)attrs.push(`封印${v.seal}`);
-    if(v.pa)attrs.push(`PA+${v.pa}`);
+    if(v.pa)attrs.push(v.pa>=999999999?"PA+∞":v.pa>=1000000?`PA+${Math.floor(v.pa/10000)}万`:`PA+${v.pa}`);
     if(v.breaks&&v.breaks!=="1")attrs.push(v.breaks==="all"?"ワールドB":`${v.breaks}ブレイク`);
     if(v.gimmick==="dorma")attrs.push("ドルマゲドン型");
     if(v.gimmick==="zeron")attrs.push("零龍型");
@@ -3970,6 +4167,9 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.labyMagic)attrs.push("ラビリンス・マジック");
     if(v.dronGo)attrs.push(`P'Sドロンゴー${v.dronGo==="V"?"V":""}`);
     if(v.jdiver)attrs.push("ジャストダイバー");
+    if(v.taunt)attrs.push(v.taunt==="always"?"攻撃誘導（永続）":"攻撃誘導（最初の1回）");
+    if(v.stWhen)attrs.push("条件ST");
+    if(v.fieldKind)attrs.push({d2:"D2フィールド",dg:"DGフィールド",normal:"フィールド",kindan:"禁断フィールド",cho:"超フィールド"}[v.fieldKind]||"フィールド");
     if(v.bad)attrs.push("B・A・D");
     if(v.gimmick==="complex")attrs.push("COMPLEX型");
     if(v.gimmick==="phoenixfield")attrs.push("フェニックス・フィールド");
@@ -4216,6 +4416,13 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone){
       }else toast("💠 EXライフ：山札がないため盾を追加できません");
     }
     emitEvent(pTo,"summon");
+  }
+  if(S.expert&&fromZone==="battle"&&toZone==="grave"&&pi===pTo){
+    const cX=zonesOf(pi).battle.find(x=>x.id===id);
+    if(cX&&!cX._skipDestroy){
+      destroyCreature(pi,cX);
+      return;
+    }
   }
   if(toZone==="battle"&&fromZone==="hyper"){
     const rP=getReg(c);
@@ -4720,6 +4927,14 @@ function cardEl(pi,zone,c){
   if(c.frozen){
     const ft=document.createElement("span");ft.className="frztag";ft.textContent="❄凍結";
     el.appendChild(ft);
+  }
+  if(zone==="hand"&&c.faceup&&!hidden&&getReg(c)){
+    const rd=document.createElement("span");
+    rd.className="frztag";
+    rd.style.cssText+=";background:#0ea5e9;left:2px;right:auto";
+    rd.textContent="⚙";
+    rd.title="効果登録あり（シンパシー等のキーワードを含む）";
+    el.appendChild(rd);
   }
   if(c.sick&&zone==="battle"&&(()=>{const r=getReg(c);return !(r&&r.sa);})()){
     const zz=document.createElement("span");
@@ -5965,6 +6180,46 @@ function openCardSheet(ctx){
       renderAll();
     },"primary"));
   }
+  if(reg&&reg.gimmick==="phoenixfield"&&ctx.zone==="battle"){
+    box.appendChild(actBtn(`🔥 ドラゴンを下に格納／進化チェック（現在${(c.under||[]).length}枚）`,async ()=>{
+      closeSheet();closeSel();
+      const Z2=zonesOf(ctx.p);
+      c.under=c.under||[];
+      while(true){
+        const pool=Z2.battle.filter(x=>x.id!==c.id&&(()=>{const rx=getReg(x);return rx&&raceMatch(rx,"ドラゴン");})());
+        if(!pool.length)break;
+        const j=await askChoice(`🔥 フェニックス・フィールド：下に置くドラゴンを選択（現在${c.under.length}枚）`,
+          [...pool.map(x=>faceNameOf(x)),"置かない/終了"]);
+        if(j===null||j>=pool.length)break;
+        snap();
+        const t=pool[j];
+        const bi=Z2.battle.findIndex(x=>x.id===t.id);
+        Z2.battle.splice(bi,1);
+        if(t.gear&&t.gear.length){const gs=t.gear.splice(0);gs.forEach(g=>gearOut(Z2,g));}
+        const st=[t,...(t.under?t.under.splice(0):[])];
+        st.forEach(x=>{x.tapped=false;x.faceup=true;c.under.push(x);});
+        renderAll();
+        toast(`格納：${faceNameOf(t)} → フィールドの下（計${c.under.length}枚）`);
+      }
+      if(c.under.length>=3&&(c.face||0)===0){
+        const lk=LINKS.get(normName(c.name));
+        if(lk&&lk.length>1){
+          const yes=await ask(`✨ 下にカードが${c.under.length}枚！ 進化しますか？（召喚扱い・出た時効果も誘発）`);
+          if(yes){
+            snap();
+            c.face=1;c.tapped=false;
+            markArrive(c);
+            emitEvent(ctx.p,"summon");
+            enqueueFx(ctx.p,c);
+            toast(`✨ 進化！ ${faceNameOf(c)}（召喚扱い）`);
+          }
+        }else{
+          toast(`下に${c.under.length}枚（多面カードの2面目を登録すると進化変身できます）`);
+        }
+      }
+      renderAll();
+    },"primary",true));
+  }
   if(reg&&reg.gimmick==="complex"&&ctx.zone==="battle"){
     box.appendChild(actBtn(`⬛ 山札の上を1枚、下に置く（現在${(c.under||[]).length}枚・他クリーチャーが離れた時など）`,()=>{
       const Z2=zonesOf(ctx.p);
@@ -6883,20 +7138,56 @@ function openZeronPanel(pi,c){
 }
 function openDeckViewer(pi){
   const Z=zonesOf(pi);
-  $("vTitle").textContent=`山札（上から順・${Z.deck.length}枚）`;
-  $("vHint").textContent="※中身を見たあとは通常シャッフル推奨。横向きカードは回転表示。タップで移動メニュー。";
-  $("vSearch").style.display="none";
-  $("vOk").style.display="none";$("vStatus").textContent="";
-  const g=$("vGrid");g.innerHTML="";
-  Z.deck.forEach((c,i)=>{
-    const el=vCardEl(c.name,{idx:i+1,side:c.sideways});
-    el.addEventListener("click",()=>{
-      closeViewer();
-      S.sel={p:pi,zone:"deck",id:c.id};renderAll();
-      openCardSheet({p:pi,zone:"deck",id:c.id});
+  let dvMode=false;
+  const dvSel=new Set();
+  const ok=$("vOk");
+  function updateBar(){
+    ok.style.display="";
+    ok.textContent=dvMode?(dvSel.size?`📤 ${dvSel.size}枚をまとめて移動…`:"通常タップに戻す"):"☑ 複数選択モード";
+    $("vHint").textContent=dvMode
+      ?"タップで選択/解除（⌘なしでOK）→「まとめて移動」でゾーンを選択"
+      :"タップで移動メニュー。⌘/Ctrl＋タップ、または「複数選択モード」で複数枚をまとめて移動できます。";
+  }
+  function build(){
+    $("vTitle").textContent=`山札（上から順・${Z.deck.length}枚）${dvSel.size?`　${dvSel.size}枚選択中`:""}`;
+    const g=$("vGrid");g.innerHTML="";
+    Z.deck.forEach((c,i)=>{
+      const el=vCardEl(c.name,{idx:i+1,side:c.sideways});
+      if(dvSel.has(c.id))el.classList.add("picked");
+      el.addEventListener("click",ev=>{
+        if(dvMode||ev.metaKey||ev.ctrlKey){
+          if(dvSel.has(c.id))dvSel.delete(c.id);else dvSel.add(c.id);
+          el.classList.toggle("picked",dvSel.has(c.id));
+          updateBar();
+          $("vTitle").textContent=`山札（上から順・${Z.deck.length}枚）${dvSel.size?`　${dvSel.size}枚選択中`:""}`;
+          return;
+        }
+        closeViewer();
+        S.sel={p:pi,zone:"deck",id:c.id};renderAll();
+        openCardSheet({p:pi,zone:"deck",id:c.id});
+      });
+      g.appendChild(el);
     });
-    g.appendChild(el);
-  });
+  }
+  ok.onclick=async ()=>{
+    if(!dvMode){dvMode=true;updateBar();return;}
+    if(!dvSel.size){dvMode=false;updateBar();return;}
+    const j=await askChoice(`${dvSel.size}枚の行き先を選択`,
+      ["手札へ","マナへ","墓地へ","シールドへ（裏）","シールドへ（表向き）","バトルへ","ゲーム外へ","山札の下へ"]);
+    if(j===null)return;
+    const dest=["hand","mana","grave","shield","shieldUp","battle","exile","deckBottom"][j];
+    snap();
+    const ids=Z.deck.filter(c=>dvSel.has(c.id)).map(c=>c.id);
+    for(const id of ids)moveCardX(pi,"deck",id,pi,dest);
+    dvSel.clear();
+    renderAll();
+    toast(`📤 ${ids.length}枚を移動しました`);
+    if(Z.deck.length)build();else closeViewer();
+    updateBar();
+  };
+  $("vSearch").style.display="none";$("vStatus").textContent="";
+  updateBar();
+  build();
   $("viewerOlay").classList.add("open");
 }
 
@@ -7915,7 +8206,9 @@ function bSeed(){
 }
 function raceMatch(reg,word){
   if(!reg||!reg.races||!word)return false;
-  return reg.races.some(r=>r&&r.includes(word));
+  const words=String(word).split(/[／\/、,]/).map(w=>w.trim()).filter(Boolean);
+  if(!words.length)return false;
+  return words.some(w=>reg.races.some(r=>r&&r.includes(w)));
 }
 function typeMatch(k,tf){
   if(!tf)return true;
@@ -7940,14 +8233,28 @@ function bRender(){
     const n=counts.get(k)||0;
     const el=vCardEl(dispName.get(k),{cnt:n});
     if(n)el.classList.add("picked");
-    el.addEventListener("click",async ()=>{
+    el.addEventListener("click",async ev=>{
       let next;
-      if(B.mode==="ex"){
-        const v=await askNumber(`${dispName.get(k)} の枚数（0で外す・上限なし）`,(counts.get(k)||0)+1,999);
+      const cur=counts.get(k)||0;
+      if(ev.metaKey||ev.ctrlKey){
+        next=Math.max(0,cur-1);
+      }else if(B.mode==="ex"){
+        const v=await askNumber(`${dispName.get(k)} の枚数（0で外す・上限なし）`,cur+1,999);
         if(v===null)return;
         next=Math.max(0,v);
+      }else if(cur>=bMax()){
+        const j=await askChoice(`${dispName.get(k)}：現在${cur}枚（通常上限${bMax()}枚）`,
+          ["0枚に戻す","1枚減らす","このカードは制限なし → 枚数を入力（ボルバル等の4枚超え対応）"]);
+        if(j===null)return;
+        if(j===0)next=0;
+        else if(j===1)next=cur-1;
+        else{
+          const v=await askNumber(`${dispName.get(k)} の枚数（5枚以上OK・0で外す）`,cur+1,99);
+          if(v===null)return;
+          next=Math.max(0,v);
+        }
       }else{
-        next=((counts.get(k)||0)+1)%(bMax()+1);
+        next=cur+1;
       }
       if(next===0)counts.delete(k);else counts.set(k,next);
       el.querySelector(".cnt").textContent=next;
