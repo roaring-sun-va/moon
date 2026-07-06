@@ -1345,7 +1345,7 @@ const memImages=new Map(), memDecks=new Map();
 let PENDING=null;
 const arrived=new Set();
 function markArrive(c){
-  c.dealIdx=null;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
+  c.dealIdx=null;c._pfAsked=false;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
   try{
     if(S.turn>0&&[0,1].some(p=>zonesOf(p).battle.includes(c))){
       c.bornTurn=S.turn;
@@ -1730,7 +1730,7 @@ function nextTurn(){
       offerInvadeZeroPrompt(def);
       // ガイアッシュ型：相手のターンの終わりに手札から出す
       const DZ=zonesOf(def);
-      const gCands=DZ.hand.filter(h=>{const r=getReg(h);return r&&r.gaiash;});
+      const gCands=S.expert?DZ.hand.filter(h=>{const r=getReg(h);return r&&r.gaiash;}):[];
       if(gCands.length){
         (async()=>{
           const j=await askChoice(`🐲 ${S.players[def].label}：相手のターンの終わりに手札から出しますか？\n（例：そのターン相手が踏み倒した／攻撃してきた等。条件はプレイヤー判断）`,
@@ -1916,16 +1916,16 @@ function emitEvent(actor,type){
     toast(`⚡誘発確認（${WATCH_LABEL[type]}時）：${names.join("、")}`);
   }
   if(S.vs)runWatchFx(actor===0?1:0,type);
+  if(type==="summon"){
+    const AZ0=zonesOf(actor);
+    const news0=AZ0.battle.filter(x=>arrived.has(x.id)&&!x._pfAsked);
+    for(const nc of news0)offerPhoenixStore(actor,nc);
+  }
   if(type==="summon"&&S.vs){
     const def=actor===0?1:0;
     const DZ=zonesOf(def);
     runWatchFx(def,"oppSummon");
     runWatchFx(def,"oppSummonTapped");
-    {
-      const AZ=zonesOf(actor);
-      const news=AZ.battle.filter(x=>arrived.has(x.id)&&!x._pfAsked);
-      for(const nc of news)offerPhoenixStore(actor,nc);
-    }
     const un=DZ.hand.filter(h=>{
       const r=getReg(h);
       if(!r)return false;
@@ -2361,9 +2361,10 @@ const FX_TYPES=[
   ["tutor","山札から好きなカードをn枚 手札に加える（TCG式・全部見える）"],
   ["tutorDMPS","山札から条件に合うカードをn枚 手札へ（デュエプレ式・候補のみ表示／無ければ不発）"],
   ["battleAsk","相手のクリーチャーとバトルする（対象選択・確認つき）"],
+  ["hold","⏸ 処理中にする（攻撃を保留して手動で解決。もう一度攻撃で続行）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["peek","battleAsk"]);
+const FX_NO_N=new Set(["peek","battleAsk","hold"]);
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
@@ -2512,6 +2513,7 @@ async function destroyCreature(pi,c){
   runWatchFx(pi,"myDestroyed");
   if(S.expert&&r&&r.lastburst)toast(`💥 ラストバースト：呪文側を唱えられます（${faceNameOf(c)}）`);
 }
+let FX_HOLD=false;
 async function runFxList(pi,list,srcCard){
   const op=pi===0?1:0;
   for(const f of list){
@@ -2585,6 +2587,12 @@ async function runFxList(pi,list,srcCard){
       Z.deck.sort(()=>Math.random()-.5);
       toast("山札をシャッフルした");
       sfx("draw");
+    }else if(f.t==="hold"){
+      const yes=await ask(`⏸ ${srcCard?faceNameOf(srcCard):"このカード"} の効果を手動で処理しますか？\n（例：メテオバーン＝下のカードを墓地へ、シールド焼却など）\n「はい」で攻撃を保留し、解決後に「▶ 攻撃を再開」ボタンで続行できます`);
+      if(yes){
+        FX_HOLD=true;
+        toast(`⏸ 処理中：盤面で効果を解決 →「▶ 攻撃を再開」で続行`);
+      }
     }else if(f.t==="tutorDMPS"){
       if(!Z.deck.length){toast("山札がありません");continue;}
       const def=srcCard?String(srcCard.name).replace(/\s*[（(].*$/,""):"";
@@ -2693,12 +2701,19 @@ function gearOut(Z,g){
 async function offerPhoenixStore(pi,newCard){
   if(!S.expert)return;
   const Z=zonesOf(pi);
-  const reg=getReg(newCard);
-  if(!reg||!reg.civs||!reg.civs.includes("fire")||!raceMatch(reg,"ドラゴン"))return;
-  if(newCard._pfAsked)return;
-  newCard._pfAsked=true;
   const fld=Z.battle.find(x=>x.id!==newCard.id&&(()=>{const rf=getReg(x);return rf&&rf.gimmick==="phoenixfield";})());
   if(!fld)return;
+  const reg=getReg(newCard);
+  if(!reg||!reg.civs||!reg.civs.includes("fire")||!raceMatch(reg,"ドラゴン")){
+    if(!newCard._pfDiag){
+      newCard._pfDiag=true;
+      const why=!reg?"効果登録なし":(!reg.civs||!reg.civs.includes("fire"))?"文明「火」が未登録":"種族に「ドラゴン」を含む登録なし";
+      toast(`🔥 フェニックス・フィールド：${faceNameOf(newCard)} は対象外（${why}）`);
+    }
+    return;
+  }
+  if(newCard._pfAsked)return;
+  newCard._pfAsked=true;
   fld.under=fld.under||[];
   while(true){
     const pool=Z.battle.filter(x=>x.id!==fld.id&&(()=>{const rx=getReg(x);return rx&&raceMatch(rx,"ドラゴン");})());
@@ -2733,6 +2748,7 @@ async function offerPhoenixStore(pi,newCard){
   renderAll();
 }
 async function offerInvadeZeroPrompt(def){
+  if(!S.expert)return;
   const DZ=zonesOf(def);
   const izCands=DZ.hand.filter(h=>{const r=getReg(h);return r&&r.invadeZero;});
   if(!izCands.length||!DZ.battle.length)return;
@@ -3282,6 +3298,31 @@ async function startAttack(pi,id){
   }
   await execAttack(pi,id,tg);
 }
+function showResumeBtn(){
+  let b=document.getElementById("resumeAtkBtn");
+  if(!b){
+    b=document.createElement("button");
+    b.id="resumeAtkBtn";
+    b.className="btn small primary";
+    b.style.cssText="position:fixed;left:10px;bottom:64px;z-index:85;box-shadow:0 4px 16px rgba(0,0,0,.5)";
+    b.addEventListener("click",async ()=>{
+      const pa=S.pendingAtk;
+      hideResumeBtn();
+      if(!pa)return;
+      const c2=zonesOf(pa.pi).battle.find(x=>x.id===pa.id);
+      if(!c2){toast("攻撃クリーチャーが場にいないため再開できません");S.pendingAtk=null;return;}
+      S.pendingAtk=null;
+      await execAttack(pa.pi,pa.id,pa.tg);
+    });
+    document.body.appendChild(b);
+  }
+  b.textContent="▶ 攻撃を再開";
+  b.style.display="";
+}
+function hideResumeBtn(){
+  const b=document.getElementById("resumeAtkBtn");
+  if(b)b.style.display="none";
+}
 async function execAttack(pi,id,tg){
   const Z=zonesOf(pi);
   let c=Z.battle.find(x=>x.id===id);
@@ -3299,14 +3340,22 @@ async function execAttack(pi,id,tg){
     }
   }
   const op=pi===0?1:0, OZ=zonesOf(op);
-  if(S.expert){
+  if(S.expert&&!c._atkFxDone){
     const aw=getReg(c);
     if(aw&&aw.watchFx&&aw.watchFx.length){
       const evs=["selfAtk",tg.kind==="creature"?"selfAtkC":"selfAtkP"];
       const fx=aw.watchFx.filter(w=>evs.includes(w.ev));
       if(fx.length){
         toast(`⚡攻撃時効果：${faceNameOf(c)}`);
-        await runFxList(pi,fx);
+        await runFxList(pi,fx,c);
+        if(FX_HOLD){
+          FX_HOLD=false;
+          c._atkFxDone=true;
+          S.pendingAtk={pi,id,tg:JSON.parse(JSON.stringify(tg))};
+          showResumeBtn();
+          renderAll();
+          return;
+        }
         if(!Z.battle.find(x=>x.id===id)){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
       }
     }
@@ -3729,13 +3778,13 @@ const TRIG_EVS=[
 function fxTrigRowEl(i){
   const f=FXEDIT.watchFx[i];
   const row=document.createElement("div");row.className="fxrow";
-  row.style.cssText="display:flex;flex-wrap:wrap;gap:6px;align-items:center";
+  row.style.cssText="display:flex;flex-wrap:nowrap;gap:6px;align-items:center;width:100%";
   const ev=document.createElement("select");
-  ev.style.cssText="flex:1 1 46%;min-width:180px;max-width:100%";
+  ev.style.cssText="flex:2 1 0;min-width:0";
   for(const [v,lb] of TRIG_EVS){const o=document.createElement("option");o.value=v;o.textContent=lb;if(v===f.ev)o.selected=true;ev.appendChild(o);}
   ev.onchange=()=>{f.ev=ev.value;};
   const sel=document.createElement("select");
-  sel.style.cssText="flex:1 1 38%;min-width:150px;max-width:100%";
+  sel.style.cssText="flex:2 1 0;min-width:0";
   for(const [v,lb] of FX_TYPES){const o=document.createElement("option");o.value=v;o.textContent=lb;if(v===f.t)o.selected=true;sel.appendChild(o);}
   fxAddSpecialOptions(sel,f.t);
   const num=document.createElement("select");
