@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v10.0</title>
+<title>DM Re:Vault v10.1</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1039,7 +1039,10 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
           <option value="">アナウンスのみ（効果は手動）</option>
           <option value="noLeave">バトルゾーンを離れない（P・ギャラクシー型）</option>
           <option value="noDestroy">破壊されない</option>
+          <option value="pw">パワー＋n</option>
+          <option value="break">ブレイク数＋n</option>
         </select>
+        <input type="number" id="fxSForceN" style="width:80px" placeholder="n" min="0">
         <span style="font-size:12px;font-weight:700">シールド・プラス</span>
         <select id="fxSPlus" style="width:auto;flex:0 0 170px">
           <option value="0">なし</option>
@@ -1054,6 +1057,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
         <label><input type="checkbox" id="fxStAllSA"> 自分のクリーチャー全てスピードアタッカー</label>
         <label><input type="checkbox" id="fxStUnblock"> 自分のクリーチャー全てブロックされない（攻撃時アナウンス）</label>
         <label><input type="checkbox" id="fxStOriotis"> オリオティス（相手のマナ枚数よりコストが大きい相手クリーチャーが出たら山札の下へ）</label>
+        <label><input type="checkbox" id="fxStNoCheat"> 相手は召喚以外でクリーチャーを出せない（センノー型。侵略/チェンジ/蘇生/ST出しなど不可・GR召喚や墓地召喚は「召喚」なので可）</label>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span style="font-size:12px;font-weight:700">置換ロック</span>
           <select id="fxRepIn" style="width:auto;flex:0 0 190px">
@@ -1724,6 +1728,15 @@ function nextTurn(){
   S.tauntUsed={};
   S.playedTurn={};
   S.oriotisTurn={};
+  S.nextPlay={};
+  if(S.noLoseCnt){
+    for(const k of [0,1]){
+      if(S.noLoseCnt[k]>0){
+        S.noLoseCnt[k]--;
+        if(S.noLoseCnt[k]===0)toast(`🏆「負けない」効果が終了（${S.players[k].label}）`);
+      }
+    }
+  }
   for(const p2 of [0,1]){
     zonesOf(p2).battle.forEach(b=>{
       if(b.buff){b.buff.noLeave=false;b.buff.noDestroy=false;}
@@ -2317,6 +2330,34 @@ const EFFECTS=[
      sfx("grave");renderAll();
      toast(`💥 マナ破壊（ランダム）：${names.join("、")} を墓地へ`);
    }},
+  {name:"次に召喚するクリーチャーのコスト−n（文明指定可・プレリュード型）",cat:"💎 マナ",
+   desc:"このターン、次に召喚する1体のコストを−n。文明を指定するとその文明のみ対象（重ね掛け可）",
+   async run(){
+     closeSheet();
+     const pi=S.vs?S.who:0;
+     const n=await askNumber("コスト−いくつ？",5);
+     if(n==null||n<=0)return;
+     const j=await askChoice("対象文明（プレリュードなら光）",["指定なし","光","水","闇","火","自然"]);
+     if(j===null)return;
+     const civ=["","light","water","dark","fire","nature"][j];
+     S.nextPlay=S.nextPlay||{};
+     S.nextPlay[pi]=S.nextPlay[pi]||[];
+     S.nextPlay[pi].push({n,civ});
+     sfx("ok");
+     toast(`✨ 次に召喚する${j>0?["","光の","水の","闇の","火の","自然の"][j]:""}クリーチャーのコスト−${n}（このターン）`);
+   }},
+  {name:"nターンの間、自分は負けない（ダイハード型）",cat:"⏭ ターン",
+   desc:"指定したターン切替回数の間、敗北確定の場面で警告が出ます（自分＋相手で1往復＝2）",
+   async run(){
+     closeSheet();
+     const pi=S.vs?S.who:0;
+     const n=await askNumber("何ターン（切替回数）の間 負けない？（1往復＝2）",2);
+     if(n==null||n<=0)return;
+     S.noLoseCnt=S.noLoseCnt||{};
+     S.noLoseCnt[pi]=n;
+     sfx("ok");
+     toast(`🏆 ${S.players[pi].label}：${n}ターンの間、ゲームに負けない！`);
+   }},
   {name:"バトルゾーンのクリーチャーを全て破壊",cat:"⚔ バトルゾーン",
    desc:"自分／相手／両方を選んで、バトルゾーンのクリーチャーを全て破壊します（置換・帰還処理も通ります）",
    async run(){
@@ -2580,6 +2621,7 @@ const FX_TYPES=[
   ["hold","⏸ 処理中にする（攻撃を保留して手動で解決。もう一度攻撃で続行）"],
   ["oriotis1","このターン（次の相手ターン）オリオティス効果を得る（真悠I）"],
   ["drawTapped","自分のタップしているクリーチャー1体につき1ドロー（真悠II）"],
+  ["nextCost","次に召喚するクリーチャーのコスト−n（実行時に文明指定・プレリュード型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
 const FX_NO_N=new Set(["peek","battleAsk","hold","oriotis1","drawTapped"]);
@@ -2667,6 +2709,25 @@ async function autoTapCost(pi,c){
         toast(`⚙ 常在コスト軽減（${faceNameOf(m2)}${rb.stCostF?`・対象：${rb.stCostF}`:""}）：−${dec}（残り${cost}）`);
       }
     }
+  }
+  // 次プレイ付与（プレリュード型）：文明一致分を消費して軽減
+  if(S.nextPlay&&S.nextPlay[pi]&&S.nextPlay[pi].length&&cost>0){
+    const rest=[];
+    for(const g of S.nextPlay[pi]){
+      if(cost>0&&(!g.civ||(r.civs&&r.civs.includes(g.civ)))){
+        const dec=Math.min(g.n,cost);
+        cost-=dec;
+        toast(`✨ 付与軽減：−${dec}（残り${cost}）`);
+      }else rest.push(g);
+    }
+    S.nextPlay[pi]=rest;
+  }
+  // 手札個別バフ：コスト−n（1回で消費）
+  if(c.buff&&c.buff.costM>0&&cost>0){
+    const dec=Math.min(c.buff.costM,cost);
+    cost-=dec;
+    c.buff.costM=0;
+    toast(`✨ 個別バフ：コスト−${dec}（残り${cost}）`);
   }
   // B・A・D：2軽減召喚（ターンの終わりに破壊）※自動タップと連動
   if(r.bad&&cost>=1){
@@ -2916,6 +2977,14 @@ async function runFxList(pi,list,srcCard){
       Z.deck.sort(()=>Math.random()-.5);
       toast("山札をシャッフルした");
       sfx("draw");
+    }else if(f.t==="nextCost"){
+      const j=await askChoice(`✨ コスト−${n}の対象文明を選択`,["指定なし","光","水","闇","火","自然"]);
+      if(j===null)continue;
+      const civ=["","light","water","dark","fire","nature"][j];
+      S.nextPlay=S.nextPlay||{};
+      S.nextPlay[pi]=S.nextPlay[pi]||[];
+      S.nextPlay[pi].push({n,civ});
+      toast(`✨ 次に召喚するクリーチャーのコスト−${n}${civ?`（${["","光","水","闇","火","自然"][j]}のみ）`:""}`);
     }else if(f.t==="oriotis1"){
       S.oriotisTurn=S.oriotisTurn||{};
       S.oriotisTurn[pi]=true;
@@ -3146,6 +3215,7 @@ async function effPower(c,attacking,inBattle){
   }
   if(attacking&&r&&r.pa)p+=(+r.pa||0);
   if(inBattle&&r&&r.pb)p+=(+r.pb||0);
+  if(c.sfActive&&r&&r.sforceFx==="pw"&&r.sforceN)p+=(+r.sforceN||0);
   if(c.buff)p+=(c.buff.pa||0)+(c.buff.pm||0);
   return p;
 }
@@ -3698,7 +3768,7 @@ async function execAttack(pi,id,tg){
       const rSelf=getReg(c);
       const condSA=rSelf&&rSelf.cstCond&&rSelf.cstFx==="sa"&&zoneCondOk(rSelf.cstCond,pi);
       if(condSA)toast(`✨ 条件常在（${rSelf.cstCond}）：スピードアタッカー！`);
-      const hasAllSA=condSA||Z.battle.some(b=>{const rb=getReg(b);return rb&&rb.stAllSA;});
+      const hasAllSA=condSA||(c.buff&&c.buff.sa)||Z.battle.some(b=>{const rb=getReg(b);return rb&&rb.stAllSA;});
       if(hasAllSA){
         c.sick=false;
         toast(`⚡ 常在効果：全員スピードアタッカー（召喚酔い無効）`);
@@ -4136,6 +4206,11 @@ async function execAttack(pi,id,tg){
     }
     else if(bk==="masterw")n=2;
     else n=parseInt(bk,10)||1;
+    if(typeof n==="number"){
+      const rSF=getReg(c);
+      if(c.sfActive&&rSF&&rSF.sforceFx==="break"&&rSF.sforceN){n+=rSF.sforceN;toast(`🛡✨ SF有効：ブレイク数＋${rSF.sforceN} → ${n}枚`);}
+      if(c.buff&&c.buff.breakPlus){n+=c.buff.breakPlus;toast(`💥 バフ：ブレイク数＋${c.buff.breakPlus} → ${n}枚`);}
+    }
     const brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
     await breakShields(op,n,c);
     if(S.expert){
@@ -4366,6 +4441,7 @@ function renderFxEditor(){
   $("fxGaiash").checked=!!FXEDIT.gaiash;
   $("fxSForce").checked=!!FXEDIT.sforce;
   $("fxSForceFx").value=FXEDIT.sforceFx||"";
+  $("fxSForceN").value=FXEDIT.sforceN||"";
   $("fxCStCond").value=FXEDIT.cstCond||"";
   $("fxCStFx").value=FXEDIT.cstFx||"";
   $("fxSPlus").value=String(FXEDIT.splus||0);
@@ -4375,6 +4451,7 @@ function renderFxEditor(){
   $("fxStAllSA").checked=!!FXEDIT.stAllSA;
   $("fxStUnblock").checked=!!FXEDIT.stUnblock;
   $("fxStOriotis").checked=!!FXEDIT.stOriotis;
+  $("fxStNoCheat").checked=!!FXEDIT.stNoCheat;
   $("fxRepIn").value=FXEDIT.repIn||"";
   $("fxRepInF").value=FXEDIT.repInF||"";
   $("fxMadness").value=FXEDIT.madness||"";
@@ -4537,6 +4614,7 @@ function openFxEditor(key){
     gaiash:cur?!!cur.gaiash:false,
     sforce:cur?!!cur.sforce:false,
     sforceFx:cur&&cur.sforceFx||"",
+    sforceN:cur&&cur.sforceN||0,
     cstCond:cur&&cur.cstCond||"",
     cstFx:cur&&cur.cstFx||"",
     splus:cur&&cur.splus||0,
@@ -4546,6 +4624,7 @@ function openFxEditor(key){
     stAllSA:cur?!!cur.stAllSA:false,
     stUnblock:cur?!!cur.stUnblock:false,
     stOriotis:cur?!!cur.stOriotis:false,
+    stNoCheat:cur?!!cur.stNoCheat:false,
     repIn:cur&&cur.repIn||"",
     repInF:cur&&cur.repInF||"",
     madness:cur&&cur.madness||"",
@@ -4707,6 +4786,7 @@ $("fxSave").addEventListener("click",async ()=>{
     gaiash:$("fxGaiash").checked,
     sforce:$("fxSForce").checked,
     sforceFx:$("fxSForceFx").value||"",
+    sforceN:+$("fxSForceN").value||0,
     cstCond:$("fxCStCond").value.trim(),
     cstFx:$("fxCStFx").value||"",
     splus:+$("fxSPlus").value||0,
@@ -4716,6 +4796,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stAllSA:$("fxStAllSA").checked,
     stUnblock:$("fxStUnblock").checked,
     stOriotis:$("fxStOriotis").checked,
+    stNoCheat:$("fxStNoCheat").checked,
     repIn:$("fxRepIn").value||"",
     repInF:$("fxRepInF").value.trim(),
     madness:$("fxMadness").value||"",
@@ -4937,6 +5018,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.stAllSA)attrs.push("常在：全員SA");
     if(v.stUnblock)attrs.push("常在：ブロックされない");
     if(v.stOriotis)attrs.push("常在：オリオティス");
+    if(v.stNoCheat)attrs.push("常在：召喚以外で出せない");
     if(v.repIn)attrs.push(`常在：置換ロック（${v.repInF||"相手全て"}→${v.repIn==="grave"?"墓地":"山下"}）`);
     if(v.madness)attrs.push(v.madness==="baiken"?"マッドネス（バイケン型）":"マッドネス（永遠型）");
     if(v.stCostM)attrs.push(`常在：${v.stCostF?v.stCostF+"の":""}召喚コスト−${v.stCostM}`);
@@ -5084,6 +5166,36 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone){
     }
   }
   if(toZone==="battle"){
+    if(S.expert){
+      const foeN=pTo===0?1:0;
+      const noCheat=zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoCheat;});
+      if(noCheat&&!c._noCheatChk){
+        c._noCheatChk=true;
+        (async()=>{
+          const j=await askChoice(`🚫 ${faceNameOf(noCheat)}：相手は召喚以外でクリーチャーを出せない\n《${c.name}》は【召喚】で出しましたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝OK。侵略・革命チェンジ・蘇生・トリガー出しは不可）`,
+            ["召喚で出した（そのまま）","召喚以外（出せない→戻す）"]);
+          c._noCheatChk=false;
+          if(j!==1)return;
+          const ZB5=zonesOf(pTo).battle;
+          const bi5=ZB5.findIndex(x=>x.id===c.id);
+          if(bi5<0)return;
+          snap();
+          const k=await askChoice(`《${c.name}》の戻し先を選択（出す前の場所へ）`,
+            ["手札へ","墓地へ","超次元へ","GRゾーンの下へ","山札の上へ"]);
+          if(k===null)return;
+          ZB5.splice(bi5,1);
+          c.tapped=false;
+          const Z5=zonesOf(pTo);
+          if(k===0){c.faceup=true;Z5.hand.push(c);}
+          else if(k===1){c.faceup=true;Z5.grave.push(c);}
+          else if(k===2){c.faceup=true;Z5.hyper.push(c);}
+          else if(k===3){c.faceup=false;Z5.gr.push(c);}
+          else{c.faceup=false;Z5.deck.unshift(c);}
+          sfx("grave");renderAll();
+          toast(`🚫 ${c.name} は出せなかった（召喚以外）`);
+        })();
+      }
+    }
     if(S.expert&&!c._viaMadness){
       const foeR=pTo===0?1:0;
       const rIn=getReg(c);
@@ -5877,6 +5989,18 @@ function cardEl(pi,zone,c){
       el.appendChild(sy);
     }
   }
+  if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden){
+    const ab=document.createElement("button");
+    ab.textContent="⚔";
+    ab.title="攻撃";
+    ab.style.cssText="position:absolute;left:-6px;top:26%;z-index:7;width:26px;height:26px;border-radius:50%;border:2px solid #ef4444;background:#1a0d0d;color:#ef4444;font-size:13px;font-weight:900;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.6);padding:0;line-height:1";
+    ab.addEventListener("click",ev=>{
+      ev.stopPropagation();ev.preventDefault();
+      startAttack(pi,c.id);
+    });
+    ab.addEventListener("pointerdown",ev=>ev.stopPropagation());
+    el.appendChild(ab);
+  }
   if(c.sick&&zone==="battle"&&(()=>{const r=getReg(c);return !(r&&r.sa);})()){
     const zz=document.createElement("span");
     zz.className="frztag";
@@ -6376,6 +6500,7 @@ async function declareWin(winner,reason,askFirst=true){
     const loser=winner===0?1:0;
     const nl=zonesOf(loser).battle.filter(x=>{const r=getReg(x);return r&&r.noLose;}).map(x=>faceNameOf(x));
     if(nl.length)warn=`\n⚠️「ゲームに負けない」持ちが${S.players[loser].label}の場にいます：${[...new Set(nl)].join("、")}\n（負けない場合はキャンセルしてください）`;
+    if(S.noLoseCnt&&S.noLoseCnt[loser]>0)warn+=`\n⚠️ ${S.players[loser].label}は「負けない」効果中（残り${S.noLoseCnt[loser]}ターン）→キャンセルしてください`;
   }
   if(askFirst&&!(await ask(`${reason}${warn}\n${S.players[winner].label} の勝ちとして戦績に記録しますか？`)))return;
   SCORE[winner]++;
@@ -6775,7 +6900,7 @@ function openCardSheet(ctx){
     }
     box.appendChild(actBtn("✨ 1ターン付与（パワー±/PA/スレイヤー等）",async ()=>{
       const pick=await askChoice(`《${faceNameOf(c)}》に付与\n（バフはターン終了で解除／❄フリーズ・JDは自動解除）`,
-        ["パワー ＋（数値入力）","パワー −（数値入力）","パワーアタッカー ＋（数値入力）","スレイヤー","ブロッカー","メモ（自由入力）","❄ フリーズ（次のターン アンタップしない）","🌀 ジャストダイバー（次の自分のターン開始まで）","🚫 攻撃もブロックもできない（プリンプリン型）","🛡 バトルゾーンを離れない（このターン）","🛡 破壊されない（このターン）"]);
+        ["パワー ＋（数値入力）","パワー −（数値入力）","パワーアタッカー ＋（数値入力）","スレイヤー","ブロッカー","メモ（自由入力）","❄ フリーズ（次のターン アンタップしない）","🌀 ジャストダイバー（次の自分のターン開始まで）","🚫 攻撃もブロックもできない（プリンプリン型）","🛡 バトルゾーンを離れない（このターン）","🛡 破壊されない（このターン）","⚡ スピードアタッカー付与","💥 ブレイク数＋n"]);
       if(pick===null)return;
       snap();
       if(pick===8){
@@ -6802,6 +6927,8 @@ function openCardSheet(ctx){
       else if(pick===2){const v=await askNumber("パワーアタッカー＋いくつ？",2222);if(v!=null)c.buff.pa=(c.buff.pa||0)+v;}
       else if(pick===9){c.buff.noLeave=true;toast(`🛡 ${faceNameOf(c)}：このターン、バトルゾーンを離れない`);}
       else if(pick===10){c.buff.noDestroy=true;toast(`🛡 ${faceNameOf(c)}：このターン、破壊されない`);}
+      else if(pick===11){c.buff.sa=true;toast(`⚡ ${faceNameOf(c)}：スピードアタッカー付与`);}
+      else if(pick===12){const v=await askNumber("ブレイク数＋いくつ？",1);if(v!=null){c.buff.breakPlus=(c.buff.breakPlus||0)+v;toast(`💥 ${faceNameOf(c)}：ブレイク数＋${v}`);}}
       else if(pick===3)c.buff.slayer=true;
       else if(pick===4)c.buff.blocker=true;
       else if(pick===5){const t2=await askText("付与内容（メモ）","");if(t2)c.buff.note=t2;}
@@ -7309,6 +7436,14 @@ function openCardSheet(ctx){
   }
   if(ctx.zone==="hand"){
     box.appendChild(actBtn("唱える（解決中へ）",()=>{moveCard(ctx.p,ctx.zone,ctx.id,"resolve");closeSel();renderAll();},"primary"));
+    box.appendChild(actBtn(`✨ このカードにバフ（コスト−${(c.buff&&c.buff.costM)||0}）`,async ()=>{
+      const v=await askNumber("このカードの召喚コスト −いくつ？（0で解除）",(c.buff&&c.buff.costM)||5);
+      if(v==null)return;
+      c.buff=c.buff||{};
+      c.buff.costM=Math.max(0,v);
+      toast(v>0?`✨ ${faceNameOf(c)}：召喚時コスト−${v}（1回で消費）`:`バフ解除`);
+      rerender();
+    }));
   }
   if(ctx.zone==="resolve"){
     box.appendChild(actBtn("解決 → 墓地へ",()=>{moveCard(ctx.p,ctx.zone,ctx.id,"grave");closeSel();renderAll();},"primary"));
