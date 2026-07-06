@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v10.1</title>
+<title>DM Re:Vault v10.2</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -296,6 +296,18 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
 }
 #sheet.open{transform:translateY(0)}
 #sheet .btn,#sheetActions .btn,.ask .btn,#askBox .btn{white-space:normal;word-break:break-word;line-height:1.45;text-align:left}
+@keyframes anTap{0%{transform:rotate(0) scale(1)}45%{transform:rotate(12deg) scale(1.06)}100%{transform:rotate(0) scale(1)}}
+@keyframes anUntap{0%{transform:rotate(0) scale(1)}45%{transform:rotate(-12deg) scale(1.06)}100%{transform:rotate(0) scale(1)}}
+@keyframes anFlip{0%{transform:rotateY(90deg) scale(1.08);opacity:.4}100%{transform:rotateY(0) scale(1);opacity:1}}
+@keyframes anSpin{0%{transform:rotateY(0) scale(1)}50%{transform:rotateY(180deg) scale(1.12)}100%{transform:rotateY(360deg) scale(1)}}
+@keyframes anDeal{0%{transform:translateY(-26px) scale(.85);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}
+@keyframes anPop{0%{transform:scale(.7);opacity:.3}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+.an-tap{animation:anTap .28s ease-out}
+.an-untap{animation:anUntap .28s ease-out}
+.an-flip{animation:anFlip .35s ease-out}
+.an-spin{animation:anSpin .55s ease-in-out}
+.an-deal{animation:anDeal .3s ease-out}
+.an-pop{animation:anPop .25s ease-out}
 #fxOlay .row{flex-wrap:wrap}
 #fxOlay .row>*{min-width:0;max-width:100%}
 #fxOlay select,#fxOlay input[type="text"],#fxOlay input[type="number"]{max-width:100%;box-sizing:border-box}
@@ -440,6 +452,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
       <div class="row">
         <select id="deckSelect" style="flex:1"></select>
         <button class="btn small" id="btnLoadDeck">編集欄へ</button>
+        <button class="btn small" id="btnViewDeck">🖼 見る</button>
         <button class="btn small warn" id="btnDeleteDeck">削除</button>
       </div>
       <div id="editingBanner" style="display:none;background:#2a1a4a;border:1px solid #7b4bd6;border-radius:8px;padding:6px 10px;margin-bottom:6px;font-size:12px">
@@ -524,6 +537,23 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
   <div class="panelbox">
     <h2>⚙ 設定</h2>
     <div class="row"><button class="btn small" id="btnHelp" style="flex:1">❓ 使い方・条件式リファレンス</button></div>
+    <div class="row" style="align-items:center;gap:8px">
+      <span style="font-size:12px;font-weight:700">効果音 音量</span>
+      <input type="range" id="setSfxVol" min="0" max="100" step="5" value="100" style="flex:1">
+      <span id="sfxVolLb" style="font-size:12px;width:36px;text-align:right">100%</span>
+    </div>
+    <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:700">BGM</span>
+      <input type="file" id="bgmFile" accept="audio/*" style="flex:1;min-width:120px;font-size:11px">
+      <button class="btn small" id="bgmPlay">▶ 再生</button>
+      <button class="btn small ghost" id="bgmDel">🗑</button>
+    </div>
+    <div class="row" style="align-items:center;gap:8px">
+      <span style="font-size:12px;font-weight:700">BGM 音量</span>
+      <input type="range" id="setBgmVol" min="0" max="100" step="5" value="40" style="flex:1">
+      <span id="bgmVolLb" style="font-size:12px;width:36px;text-align:right">40%</span>
+      <span id="bgmState" style="font-size:11px;color:var(--muted)">未登録</span>
+    </div>
     <section>
       <h3>サウンド</h3>
       <div class="row"><button class="btn small" id="btnSound">🔊 効果音：ON</button></div>
@@ -999,6 +1029,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
         <label><input type="checkbox" id="fxJD"> ジャストダイバー（出た時にアナウンスのみ・付与はメニューから手動）</label>
         <label><input type="checkbox" id="fxBAD"> B・A・D（コスト2軽減で召喚できる。そうしたらターンの終わりに破壊）</label>
         <label><input type="checkbox" id="fxBadBrand"> マスターB・A・D（−2＋このターン召喚した他の火のクリーチャー×−2。使ったらターンの終わりに自分のクリーチャー1体破壊・コスト0以下にならない）</label>
+        <input type="text" id="fxAtkChance" list="raceList" placeholder="アタック・チャンス対象（種族/名前・呪文に登録・空欄=なし）" style="flex:1;min-width:170px">
         <span style="font-size:12px;font-weight:700">2回攻撃</span>
         <select id="fxTwice" style="width:auto;flex:0 0 230px">
           <option value="">なし</option>
@@ -1066,6 +1097,15 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
             <option value="grave">相手クリーチャーは出るかわりに墓地へ（キング・アルカディアス型）</option>
           </select>
           <input type="text" id="fxRepInF" list="raceList" placeholder="対象条件（単色/多色/文明/種族/名前・「／」区切り・空欄＝全て）" style="flex:1;min-width:170px">
+        </div>
+        <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700">能力無視</span>
+          <select id="fxIgnore" style="width:auto;flex:0 0 240px">
+            <option value="">なし</option>
+            <option value="cost">コストn以下のクリーチャーの能力を無視（ゲンム型・両プレイヤー対象）</option>
+            <option value="name">出た時に指定した名前のクリーチャーの能力を無視（あたりポン型）</option>
+          </select>
+          <input type="number" id="fxIgnoreN" style="width:70px" placeholder="n" min="0">
         </div>
         <span style="font-size:12px;font-weight:700">マッドネス</span>
         <select id="fxMadness" style="width:auto;flex:0 0 220px">
@@ -1377,6 +1417,7 @@ function shuffle(a){for(let i=a.length-1;i>0;i--){const j=randInt(i+1);[a[i],a[j
 
 /* ================= sound ================= */
 let AC=null;
+const CARD_PREV=new Map();
 function sfx(kind){
   if(!S.sound)return;
   try{
@@ -1384,7 +1425,9 @@ function sfx(kind){
     if(AC.state==="suspended")AC.resume();
     const t=AC.currentTime;
     const o=AC.createOscillator(),g=AC.createGain();
-    o.connect(g);g.connect(AC.destination);
+    const VOL=(S.sfxVol!=null?S.sfxVol:100)/100;
+    const mg=AC.createGain();mg.gain.value=VOL;
+    o.connect(g);g.connect(mg);mg.connect(AC.destination);
     g.gain.setValueAtTime(0.0001,t);
     const conf={
       tap:   [520, 660, .05, "square",  .06],
@@ -2021,6 +2064,7 @@ function runWatchFx(pi,type){
   for(const c of zonesOf(pi).battle){
     const r=getReg(c);
     if(r&&r.watchFx&&r.watchFx.length){
+      if(isIgnored(c,pi))continue;
       if(type==="oppSummonTapped"&&!c.tapped)continue;
       const fx=r.watchFx.filter(w=>w.ev===type);
       if(fx.length){toast(`⚡誘発処理：${faceNameOf(c)}`);runFxList(pi,fx,c);}
@@ -2622,9 +2666,12 @@ const FX_TYPES=[
   ["oriotis1","このターン（次の相手ターン）オリオティス効果を得る（真悠I）"],
   ["drawTapped","自分のタップしているクリーチャー1体につき1ドロー（真悠II）"],
   ["nextCost","次に召喚するクリーチャーのコスト−n（実行時に文明指定・プレリュード型）"],
+  ["graveView","相手の墓地を見る（一覧表示）"],
+  ["graveViewMy","自分の墓地を見る（一覧表示）"],
+  ["randMove","ランダムでn枚選んで移動（実行時に対象ゾーンと行き先を選択・デッドソード型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["peek","battleAsk","hold","oriotis1","drawTapped"]);
+const FX_NO_N=new Set(["peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy"]);
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
@@ -2790,6 +2837,10 @@ async function destroyCreature(pi,c){
   if(i<0)return;
   if(S.expert){
     const rCX=getReg(c);
+    const IGN=isIgnored(c,pi);
+    if(IGN&&rCX&&(rCX.ggg||rCX.sforceFx||rCX.cstCond||rCX.gimmick==="complex")){
+      toast(`🚯 ${faceNameOf(c)} の能力は無視されている（破壊耐性なし）`);
+    }
     if(c.buff&&c.buff.noDestroy){
       toast(`🛡 ${faceNameOf(c)} はこのターン破壊されない！`);
       return;
@@ -2798,23 +2849,23 @@ async function destroyCreature(pi,c){
       toast(`🛡 ${faceNameOf(c)} はこのターン離れない！`);
       return;
     }
-    if(rCX&&rCX.cstCond&&(rCX.cstFx==="noDestroy"||rCX.cstFx==="noLeave")&&zoneCondOk(rCX.cstCond,pi)){
+    if(!IGN&&rCX&&rCX.cstCond&&(rCX.cstFx==="noDestroy"||rCX.cstFx==="noLeave")&&zoneCondOk(rCX.cstCond,pi)){
       toast(`✨ 条件常在（${rCX.cstCond}）：${faceNameOf(c)} は${rCX.cstFx==="noLeave"?"離れない":"破壊されない"}！`);
       return;
     }
-    if(c.sfActive&&rCX&&rCX.sforceFx==="noDestroy"){
+    if(!IGN&&c.sfActive&&rCX&&rCX.sforceFx==="noDestroy"){
       toast(`🛡✨ シールド・フォース有効中：${faceNameOf(c)} は破壊されない！`);
       return;
     }
-    if(c.sfActive&&rCX&&rCX.sforceFx==="noLeave"){
+    if(!IGN&&c.sfActive&&rCX&&rCX.sforceFx==="noLeave"){
       toast(`🛡✨ シールド・フォース有効中：${faceNameOf(c)} は離れない！（パーフェクト・ギャラクシー型）`);
       return;
     }
-    if(rCX&&rCX.ggg==="noDestroy"&&Z.hand.length<=1){
+    if(!IGN&&rCX&&rCX.ggg==="noDestroy"&&Z.hand.length<=1){
       toast(`🎸 G・G・G！ 手札${Z.hand.length}枚 → ${faceNameOf(c)} は破壊されない！`);
       return;
     }
-    if(rCX&&rCX.gimmick==="complex"&&(c.under?c.under.length:0)<8){
+    if(!IGN&&rCX&&rCX.gimmick==="complex"&&(c.under?c.under.length:0)<8){
       toast(`⬛ ${faceNameOf(c)} は離れない！（下が7枚以下）`);
       return;
     }
@@ -2977,6 +3028,57 @@ async function runFxList(pi,list,srcCard){
       Z.deck.sort(()=>Math.random()-.5);
       toast("山札をシャッフルした");
       sfx("draw");
+    }else if(f.t==="randMove"){
+      const zj=await askChoice(`🎲 ランダム移動（${n}枚）：対象ゾーンを選択`,
+        ["相手の手札","相手のマナ","相手のバトルゾーン","相手の墓地","自分の手札","自分のマナ","自分の墓地"]);
+      if(zj===null)continue;
+      const srcDef=[[op,"hand"],[op,"mana"],[op,"battle"],[op,"grave"],[pi,"hand"],[pi,"mana"],[pi,"grave"]][zj];
+      const dj=await askChoice(`🎲 行き先を選択`,
+        ["山札の下","山札の上","墓地","手札","マナ（タップなし）","シールド（裏向き）"]);
+      if(dj===null)continue;
+      const sp2=zonesOf(srcDef[0]);
+      const srcArr=sp2[srcDef[1]];
+      if(!srcArr.length){toast("対象ゾーンにカードがありません");continue;}
+      snap();
+      const moved=[];
+      for(let i=0;i<n&&srcArr.length;i++){
+        const ri=Math.floor(Math.random()*srcArr.length);
+        const cc=srcArr.splice(ri,1)[0];
+        cc.tapped=false;
+        if(srcDef[1]==="battle"&&cc.gear&&cc.gear.length){const gs=cc.gear.splice(0);gs.forEach(g=>gearOut(sp2,g));}
+        if(srcDef[1]==="battle"&&cc.under&&cc.under.length){const us=cc.under.splice(0);us.forEach(u=>{u.faceup=true;sp2.grave.push(u);});}
+        if(dj===0){cc.faceup=false;sp2.deck.push(cc);}
+        else if(dj===1){cc.faceup=false;sp2.deck.unshift(cc);}
+        else if(dj===2){cc.faceup=true;sp2.grave.push(cc);}
+        else if(dj===3){cc.faceup=true;sp2.hand.push(cc);}
+        else if(dj===4){cc.faceup=true;sp2.mana.push(cc);}
+        else{cc.faceup=false;sp2.shield.push(cc);}
+        moved.push(cc.name);
+      }
+      sfx("move");renderAll();
+      const dst=["山札の下","山札の上","墓地","手札","マナ","シールド"][dj];
+      toast(`🎲 ランダム：${moved.join("、")} を${dst}へ`);
+    }else if(f.t==="graveView"||f.t==="graveViewMy"){
+      const gp=f.t==="graveView"?op:pi;
+      const arr=zonesOf(gp).grave;
+      if(!arr.length){toast(`${S.players[gp].label}の墓地は空です`);continue;}
+      const ol=document.createElement("div");
+      ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:990;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:zoom-out;padding:16px";
+      const ttl=document.createElement("div");
+      ttl.style.cssText="color:#fff;font-weight:900";
+      ttl.textContent=`👁 ${S.players[gp].label}の墓地（${arr.length}枚）`;
+      ol.appendChild(ttl);
+      const g2=document.createElement("div");
+      g2.style.cssText="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-height:70dvh;overflow:auto";
+      arr.forEach(x=>{const e2=vCardEl(x.name,{});g2.appendChild(e2);});
+      ol.appendChild(g2);
+      const ht=document.createElement("div");
+      ht.style.cssText="color:#9aa4b2;font-size:12px";
+      ht.textContent="タップで閉じる";
+      ol.appendChild(ht);
+      ol.addEventListener("click",()=>ol.remove());
+      document.body.appendChild(ol);
+      await new Promise(r=>{const iv=setInterval(()=>{if(!document.body.contains(ol)){clearInterval(iv);r();}},200);});
     }else if(f.t==="nextCost"){
       const j=await askChoice(`✨ コスト−${n}の対象文明を選択`,["指定なし","光","水","闇","火","自然"]);
       if(j===null)continue;
@@ -3062,8 +3164,40 @@ async function runFxList(pi,list,srcCard){
   }
 }
 const fxQueue=[];let fxRunning=false;
+function isIgnored(c,pi){
+  if(!S.expert)return false;
+  const r=getReg(c);
+  for(const p2 of [0,1]){
+    for(const x of zonesOf(p2).battle){
+      if(x.id===c.id)continue;
+      const rx=getReg(x);
+      if(!rx||!rx.ignore)continue;
+      if(isIgnoredRaw(x))continue;
+      if(rx.ignore==="cost"&&r&&r.cost!=null&&r.cost<=(rx.ignoreN||0))return true;
+      if(rx.ignore==="name"&&x.ignoreName&&normName(faceNameOf(c))===x.ignoreName)return true;
+    }
+  }
+  return false;
+}
+function isIgnoredRaw(c){
+  const r=getReg(c);
+  for(const p2 of [0,1]){
+    for(const x of zonesOf(p2).battle){
+      if(x.id===c.id)continue;
+      const rx=getReg(x);
+      if(!rx||!rx.ignore)continue;
+      if(rx.ignore==="cost"&&r&&r.cost!=null&&r.cost<=(rx.ignoreN||0))return true;
+      if(rx.ignore==="name"&&x.ignoreName&&normName(faceNameOf(c))===x.ignoreName)return true;
+    }
+  }
+  return false;
+}
 function enqueueFx(pi,c){
   if(!S.expert)return;
+  if(zonesOf(pi).battle.some(b=>b.id===c.id)&&isIgnored(c,pi)){
+    toast(`🚯 ${faceNameOf(c)} の能力は無視されている（出た時効果は発動しない）`);
+    return;
+  }
   if([0,1].some(p=>zonesOf(p).battle.some(b=>b.gear&&b.gear.includes(c))))return;
   const reg=getReg(c);
   const hasFx=reg&&(reg.faces[0].length||(reg.twin&&reg.faces[1].length)||(reg.modeN|0)>0);
@@ -4070,6 +4204,29 @@ async function execAttack(pi,id,tg){
   }
   if(defender){await doBattle(pi,c,op,defender);return;}
   if(S.expert){
+    const rAtk2=getReg(c);
+    const acs=Z.hand.filter(h=>{
+      const rh=getReg(h);
+      return rh&&rh.atkChance&&((rAtk2&&raceMatch(rAtk2,rh.atkChance))||faceNameOf(c).includes(rh.atkChance));
+    });
+    if(acs.length){
+      const j=await askChoice(`✨ アタック・チャンス！ コストを支払わずに唱えますか？`,
+        [...acs.map(h=>faceNameOf(h)),"唱えない"]);
+      if(j!==null&&j<acs.length){
+        snap();
+        const sp=acs[j];
+        const hi=Z.hand.findIndex(x=>x.id===sp.id);
+        Z.hand.splice(hi,1);
+        sp.faceup=true;Z.resolve.push(sp);
+        toast(`✨ アタック・チャンス：${faceNameOf(sp)} を唱えた（解決中へ）`);
+        renderAll();
+        const rs=getReg(sp);
+        if(rs&&rs.faces&&rs.faces[0]&&rs.faces[0].length)await runFxList(pi,rs.faces[0],sp);
+        renderAll();
+      }
+    }
+  }
+  if(S.expert){
     const rK=getReg(c);
     if(rK&&rK.kizuna){
       const kFxOf=x=>{const rx=getReg(x);return rx&&rx.watchFx?rx.watchFx.filter(w=>w.ev==="kizuna"):[];};
@@ -4435,6 +4592,7 @@ function renderFxEditor(){
   $("fxGGG").value=FXEDIT.ggg||"";
   $("fxKizuna").value=FXEDIT.kizuna||"";
   $("fxTwice").value=FXEDIT.twice||"";
+  $("fxAtkChance").value=FXEDIT.atkChance||"";
   $("fxUSaber").value=FXEDIT.usaber||"";
   $("fxNoLose").checked=!!FXEDIT.noLose;
   $("fxSoulShift").checked=!!FXEDIT.soulshift;
@@ -4455,6 +4613,8 @@ function renderFxEditor(){
   $("fxRepIn").value=FXEDIT.repIn||"";
   $("fxRepInF").value=FXEDIT.repInF||"";
   $("fxMadness").value=FXEDIT.madness||"";
+  $("fxIgnore").value=FXEDIT.ignore||"";
+  $("fxIgnoreN").value=FXEDIT.ignoreN||"";
   $("fxStCostM").value=FXEDIT.stCostM||"";
   $("fxStCostF").value=FXEDIT.stCostF||"";
   $("fxInvRace").value=FXEDIT.invRace||"";
@@ -4608,6 +4768,7 @@ function openFxEditor(key){
     ggg:cur&&cur.ggg||"",
     kizuna:cur&&cur.kizuna||"",
     twice:cur&&cur.twice||"",
+    atkChance:cur&&cur.atkChance||"",
     usaber:cur&&cur.usaber||"",
     noLose:cur?!!cur.noLose:false,
     soulshift:cur?!!cur.soulshift:false,
@@ -4628,6 +4789,8 @@ function openFxEditor(key){
     repIn:cur&&cur.repIn||"",
     repInF:cur&&cur.repInF||"",
     madness:cur&&cur.madness||"",
+    ignore:cur&&cur.ignore||"",
+    ignoreN:cur&&cur.ignoreN||0,
     stCostM:cur&&cur.stCostM||0,
     stCostF:cur&&cur.stCostF||"",
     invRace:cur&&cur.invRace||"",
@@ -4780,6 +4943,7 @@ $("fxSave").addEventListener("click",async ()=>{
     ggg:$("fxGGG").value||"",
     kizuna:$("fxKizuna").value||"",
     twice:$("fxTwice").value||"",
+    atkChance:$("fxAtkChance").value.trim(),
     usaber:$("fxUSaber").value.trim(),
     noLose:$("fxNoLose").checked,
     soulshift:$("fxSoulShift").checked,
@@ -4800,6 +4964,8 @@ $("fxSave").addEventListener("click",async ()=>{
     repIn:$("fxRepIn").value||"",
     repInF:$("fxRepInF").value.trim(),
     madness:$("fxMadness").value||"",
+    ignore:$("fxIgnore").value||"",
+    ignoreN:+$("fxIgnoreN").value||0,
     stCostM:+$("fxStCostM").value||0,
     stCostF:$("fxStCostF").value.trim(),
     invRace:$("fxInvRace").value.trim(),
@@ -5005,6 +5171,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.ggg)attrs.push(v.ggg==="cost0"?"GGG：コスト0":"GGG：破壊されない");
     if(v.kizuna)attrs.push({k:"キズナ",plus:"キズナプラス",comp:"キズナコンプ"}[v.kizuna]);
     if(v.twice)attrs.push(v.twice==="onAtk"?"2回攻撃（攻撃時アンタップ）":"2回攻撃（攻撃後アンタップ）");
+    if(v.atkChance)attrs.push(`アタック・チャンス：${v.atkChance}`);
     if(v.usaber)attrs.push(`ウルトラ・セイバー：${v.usaber}`);
     if(v.noLose)attrs.push("ゲームに負けない");
     if(v.soulshift)attrs.push("ソウルシフト");
@@ -5021,6 +5188,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.stNoCheat)attrs.push("常在：召喚以外で出せない");
     if(v.repIn)attrs.push(`常在：置換ロック（${v.repInF||"相手全て"}→${v.repIn==="grave"?"墓地":"山下"}）`);
     if(v.madness)attrs.push(v.madness==="baiken"?"マッドネス（バイケン型）":"マッドネス（永遠型）");
+    if(v.ignore)attrs.push(v.ignore==="cost"?`能力無視：コスト${v.ignoreN}以下`:"能力無視：名前指定");
     if(v.stCostM)attrs.push(`常在：${v.stCostF?v.stCostF+"の":""}召喚コスト−${v.stCostM}`);
     if(v.gimmick==="complex")attrs.push("COMPLEX型");
     if(v.gimmick==="phoenixfield")attrs.push("フェニックス・フィールド");
@@ -5237,6 +5405,19 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone){
     if(S.expert&&reg&&reg.tapIn&&(!reg.gimmick||reg.gimmick!=="complex")){c.tapped=true;toast(`⤵ ${c.name} はタップして出る`);}
     if(S.expert&&reg&&reg.jdiver){
       toast(`🌀 ジャストダイバー持ち：${faceNameOf(c)}（付与はメニューのバフから手動で・処理順は任意）`);
+    }
+    if(S.expert&&reg&&reg.ignore==="name"&&!c.ignoreName){
+      (async()=>{
+        const nm=window.prompt(`🚯 ${faceNameOf(c)}：能力を無視するクリーチャーの名前を指定`,"");
+        if(nm&&nm.trim()){
+          c.ignoreName=normName(nm.trim());
+          toast(`🚯 「${nm.trim()}」の能力を無視する（このカードが場にある間）`);
+          renderAll();
+        }
+      })();
+    }
+    if(S.expert&&reg&&reg.ignore==="cost"){
+      toast(`🚯 ${faceNameOf(c)}：コスト${reg.ignoreN||0}以下のクリーチャーの能力を無視（両プレイヤー）`);
     }
     if(S.expert&&reg&&reg.sforce){
       (async()=>{
@@ -5680,7 +5861,7 @@ function insertSideways(pi,fromZone,id){
 }
 
 /* ================= board DOM ================= */
-const ZONE_LB={battle:"バトルゾーン",sys:"山札/墓地/盾",mana:"マナ",hand:"手札"};
+const ZONE_LB={battle:"バトルゾーン",sys:"山札/墓地/GR/超次元など",shield:"盾（追加倍率）",mana:"マナ",hand:"手札"};
 function renderZoneOrderEditor(){
   const box=$("zoneOrderList");if(!box)return;
   box.innerHTML="";
@@ -5709,7 +5890,7 @@ function renderZoneOrderEditor(){
     box.appendChild(row);
   });
 }
-const ZONE_SCALE_DEF={battle:100,sys:100,mana:100,hand:100};
+const ZONE_SCALE_DEF={battle:100,sys:100,shield:100,mana:100,hand:100};
 function renderZoneScaleEditor(){
   const box=$("zoneScaleList");if(!box)return;
   box.innerHTML="";
@@ -5908,6 +6089,20 @@ function cardEl(pi,zone,c){
   if(S.msel.some(s=>s.p===pi&&s.zone===zone&&s.id===c.id))el.classList.add("msel");
   if(PENDING&&PENDING.list.some(s=>s.id===c.id))el.classList.add("msel");
   if(c.mark)el.classList.add("marked");
+  if(zone==="shield"){
+    const shz=(S.zoneScale&&S.zoneScale.shield)||100;
+    if(shz!==100)el.style.zoom=shz/100;
+  }
+  {
+    const pv=CARD_PREV.get(c.id);
+    if(pv&&S.anim!==false){
+      if(pv.face!==(c.face||0))el.classList.add("an-spin");
+      else if(pv.faceup!==c.faceup)el.classList.add("an-flip");
+      else if(pv.zone!==zone)el.classList.add(zone==="hand"?"an-deal":"an-pop");
+      else if(pv.tapped!==c.tapped)el.classList.add(c.tapped?"an-tap":"an-untap");
+    }
+    CARD_PREV.set(c.id,{tapped:!!c.tapped,faceup:!!c.faceup,zone,face:c.face||0});
+  }
   const url=showFace?imgURL.get(faceKeyOf(c)):backURL(pi);
   if(url){const im=document.createElement("img");im.src=url;im.alt="";im.draggable=false;if(!showFace&&pi!==S.seat)im.style.transform="rotate(180deg)";el.appendChild(im);}
   else{const np=document.createElement("div");np.className="nameplate";np.textContent=showFace?faceNameOf(c):(zone==="shield"?"盾":"?");el.appendChild(np);}
@@ -5988,6 +6183,20 @@ function cardEl(pi,zone,c){
       sy.title=`シンパシー：${rg0.sympathy}${rg0.symX>1?"（×2）":""}`;
       el.appendChild(sy);
     }
+  }
+  if(zone==="battle"&&!hidden&&(!S.vs||pi===S.seat)){
+    const tb=document.createElement("button");
+    tb.textContent=c.tapped?"⤴":"⤵";
+    tb.title=c.tapped?"アンタップ":"タップ";
+    tb.style.cssText="position:absolute;left:-6px;top:58%;z-index:7;width:24px;height:24px;border-radius:50%;border:2px solid #38bdf8;background:#0b1626;color:#38bdf8;font-size:12px;font-weight:900;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.6);padding:0;line-height:1";
+    tb.addEventListener("click",ev=>{
+      ev.stopPropagation();ev.preventDefault();
+      c.tapped=!c.tapped;
+      sfx("move");
+      renderAll();
+    });
+    tb.addEventListener("pointerdown",ev=>ev.stopPropagation());
+    el.appendChild(tb);
   }
   if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden){
     const ab=document.createElement("button");
@@ -9069,6 +9278,45 @@ $("btnLoadDeck").addEventListener("click",async ()=>{
   DECK_DIRTY=false;updateEditingBanner();
   $("deckStatus").textContent=`「${name}」を編集欄に読み込みました`;
 });
+$("btnViewDeck").addEventListener("click",async ()=>{
+  const name=$("deckSelect").value;
+  if(!name){toast("プルダウンでデッキを選択してください");return;}
+  const d=await getDeck(name);if(!d){toast("デッキが見つかりません");return;}
+  const ol=document.createElement("div");
+  ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:995;display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px;overflow:auto";
+  const secs=[["メイン",d.main||[]],["超GR",d.gr||[]],["超次元",d.hy||[]],["ゲーム外",d.ex||[]],["特殊",d.sp||[]]];
+  const ttl=document.createElement("div");
+  ttl.style.cssText="color:#fff;font-weight:900;font-size:15px";
+  const total=(d.main||[]).reduce((a,x)=>a+(x.n||1),0);
+  ttl.textContent=`🖼 ${name}（メイン${total}枚）`;
+  ol.appendChild(ttl);
+  for(const [lb,arr] of secs){
+    if(!arr.length)continue;
+    const h=document.createElement("div");
+    h.style.cssText="color:#9aa4b2;font-size:12px;font-weight:700;align-self:flex-start";
+    h.textContent=`■ ${lb}`;
+    ol.appendChild(h);
+    const g2=document.createElement("div");
+    g2.style.cssText="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-start;align-self:stretch";
+    for(const it of arr){
+      const e2=vCardEl(it.name,{});
+      if((it.n||1)>1){
+        const b=document.createElement("span");
+        b.style.cssText="position:absolute;right:2px;bottom:2px;background:#000c;color:#fff;font-size:11px;font-weight:900;border-radius:6px;padding:1px 5px;z-index:3";
+        b.textContent="×"+it.n;
+        e2.style.position="relative";
+        e2.appendChild(b);
+      }
+      g2.appendChild(e2);
+    }
+    ol.appendChild(g2);
+  }
+  const cl=document.createElement("button");
+  cl.className="btn small";cl.textContent="閉じる";
+  cl.addEventListener("click",()=>ol.remove());
+  ol.appendChild(cl);
+  document.body.appendChild(ol);
+});
 $("btnDeleteDeck").addEventListener("click",async ()=>{
   const name=$("deckSelect").value;
   if(!name){toast("削除するデッキをプルダウンで選択してください");return;}
@@ -9374,6 +9622,57 @@ $("dlNewFolder").addEventListener("click",async ()=>{
   toast(`📁 フォルダ「${f}」を作成しました（デッキの「📁移動」で入れられます）`);
   renderDeckList();
 });
+let BGM=null;
+function bgmSetState(t){const e=$("bgmState");if(e)e.textContent=t;}
+async function bgmLoad(){
+  const d=db?await idbGet("misc","bgmData"):null;
+  if(d){
+    BGM=new Audio(d);
+    BGM.loop=true;
+    BGM.volume=(S.bgmVol!=null?S.bgmVol:40)/100;
+    bgmSetState("登録済み（▶で再生・ループ）");
+  }
+}
+$("bgmFile").addEventListener("change",async e=>{
+  const f=e.target.files&&e.target.files[0];
+  if(!f)return;
+  if(f.size>25*1024*1024){toast("25MB以下のファイルにしてください");return;}
+  const r=new FileReader();
+  r.onload=async ()=>{
+    if(db)await idbPut("misc","bgmData",r.result);
+    if(BGM){BGM.pause();}
+    BGM=new Audio(r.result);
+    BGM.loop=true;
+    BGM.volume=(S.bgmVol!=null?S.bgmVol:40)/100;
+    bgmSetState("登録済み（▶で再生・ループ）");
+    toast(`🎵 BGMを登録しました：${f.name}`);
+  };
+  r.readAsDataURL(f);
+});
+$("bgmPlay").addEventListener("click",()=>{
+  if(!BGM){toast("BGMが未登録です（ファイルを選択してください）");return;}
+  if(BGM.paused){BGM.play();$("bgmPlay").textContent="⏸ 停止";bgmSetState("再生中（ループ）");}
+  else{BGM.pause();$("bgmPlay").textContent="▶ 再生";bgmSetState("停止中");}
+});
+$("bgmDel").addEventListener("click",async ()=>{
+  if(BGM){BGM.pause();BGM=null;}
+  if(db)await idbPut("misc","bgmData",null);
+  $("bgmPlay").textContent="▶ 再生";
+  bgmSetState("未登録");
+  toast("BGMを削除しました");
+});
+$("setBgmVol").addEventListener("input",async ()=>{
+  S.bgmVol=+$("setBgmVol").value;
+  $("bgmVolLb").textContent=S.bgmVol+"%";
+  if(BGM)BGM.volume=S.bgmVol/100;
+  if(db)await idbPut("misc","bgmVol",S.bgmVol);
+});
+$("setSfxVol").addEventListener("input",async ()=>{
+  S.sfxVol=+$("setSfxVol").value;
+  $("sfxVolLb").textContent=S.sfxVol+"%";
+  if(db)await idbPut("misc","sfxVol",S.sfxVol);
+  sfx("ok");
+});
 $("btnHelp").addEventListener("click",()=>{
   let ol=document.getElementById("helpOlay");
   if(!ol){
@@ -9651,6 +9950,11 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   const hk=db?await idbGet("misc","hotkeys"):null;if(hk){try{S.hotkeys=JSON.parse(hk);}catch(e){}}
   const mx=db?await idbGet("misc","matPosX"):null;if(mx!=null&&mx!==undefined)S.matPosX=+mx;
   const my=db?await idbGet("misc","matPosY"):null;if(my!=null&&my!==undefined)S.matPosY=+my;
+  const sv=db?await idbGet("misc","sfxVol"):null;
+  if(sv!=null){S.sfxVol=sv;$("setSfxVol").value=sv;$("sfxVolLb").textContent=sv+"%";}
+  const bv=db?await idbGet("misc","bgmVol"):null;
+  if(bv!=null){S.bgmVol=bv;$("setBgmVol").value=bv;$("bgmVolLb").textContent=bv+"%";}
+  bgmLoad();
   const shp=db?await idbGet("misc","sheetPos"):null;
   if(shp)S.sheetPos=shp;
   applySheetPos();
