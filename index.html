@@ -1104,6 +1104,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
         <label><input type="checkbox" id="fxStUnblock"> 自分のクリーチャー全てブロックされない（攻撃時アナウンス）</label>
         <label><input type="checkbox" id="fxStOriotis"> オリオティス（相手のマナ枚数よりコストが大きい相手クリーチャーが出たら山札の下へ）</label>
         <label><input type="checkbox" id="fxNoUntap"> 常在：ターン開始時にアンタップしない（自身）</label>
+        <label><input type="checkbox" id="fxStNoHandes"> 常在：自分の手札は相手のカードの効果によって捨てられない</label>
         <label><input type="checkbox" id="fxCostFloor1"> コストは0にならない（軽減してもコスト1以上・ゼロ文明でも）</label>
         <label><input type="checkbox" id="fxStNoCheat"> 相手は召喚以外でクリーチャーを出せない（センノー型。侵略/チェンジ/蘇生/ST出しなど不可・GR召喚や墓地召喚は「召喚」なので可）</label>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -3006,6 +3007,7 @@ async function runFxList(pi,list,srcCard){
       toast(`条件未達（${f.cond}）：効果をスキップ`);
       continue;
     }
+    if(f.hold){FX_HOLD=true;toast("⏸ この誘発の処理後、攻撃を保留します（▶再開で続行）");}
     if(f.t&&f.t.startsWith("sp:")){
       const nm=f.t.slice(3);
       const ef=(typeof EFFECTS!=="undefined")&&EFFECTS.find(e=>e.name===nm);
@@ -3033,6 +3035,10 @@ async function runFxList(pi,list,srcCard){
       renderAll();openRevealPanel(pi,"look");
     }else if(f.t==="handes"){
       if(!S.vs){toast("（ソロのためハンデスはスキップ）");continue;}
+      {
+        const hb=handesBlockedBy(op);
+        if(hb){toast(`🛡 ${faceNameOf(hb)}：手札は相手の効果によって捨てられない！`);continue;}
+      }
       for(let i=0;i<n&&OZ.hand.length;i++){
         const j=randInt(OZ.hand.length);
         const c=OZ.hand.splice(j,1)[0];
@@ -3201,6 +3207,10 @@ async function runFxList(pi,list,srcCard){
   }
 }
 const fxQueue=[];let fxRunning=false;
+function handesBlockedBy(owner){
+  if(!S.expert)return null;
+  return zonesOf(owner).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoHandes;})||null;
+}
 function afterHandDiscard(owner,c){
   if(!S.expert)return;
   // マッドネス
@@ -4577,10 +4587,17 @@ function fxTrigRowEl(i){
   cnd.style.cssText="flex:1 1 100%;min-width:0;font-size:12px";
   cnd.value=f.cond||"";
   cnd.onchange=()=>{f.cond=cnd.value.trim();};
+  const hld=document.createElement("label");
+  hld.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  const hcb=document.createElement("input");
+  hcb.type="checkbox";hcb.checked=!!f.hold;
+  hcb.onchange=()=>{f.hold=hcb.checked;};
+  hld.appendChild(hcb);
+  hld.appendChild(document.createTextNode("⏸処理中"));
   const del=document.createElement("button");
   del.className="btn small warn del";del.textContent="✕";
   del.onclick=()=>{FXEDIT.watchFx.splice(i,1);renderFxEditor();};
-  row.appendChild(ev);row.appendChild(sel);row.appendChild(num);row.appendChild(del);row.appendChild(cnd);
+  row.appendChild(ev);row.appendChild(sel);row.appendChild(num);row.appendChild(hld);row.appendChild(del);row.appendChild(cnd);
   return row;
 }
 function fxUiPolish(){
@@ -4633,17 +4650,29 @@ function fxUiPolish(){
         const inp=bar.querySelector("#fxFinder");
         inp.addEventListener("input",()=>{
           const q=inp.value.trim();
-          const rows=[...panel.querySelectorAll(".row")].filter(r=>r!==bar&&!r.contains(bar));
+          const rows=[...panel.querySelectorAll(".row,.fxrow")].filter(r=>r!==bar&&!r.contains(bar)&&!r.closest(".fxrow, .row .row"));
           if(!q){rows.forEach(r=>{r.style.display="";});return;}
           rows.forEach(r=>{
-            let txt=r.innerText||"";
-            r.querySelectorAll("select option").forEach(o=>{txt+=" "+o.textContent;});
+            let txt=r.textContent||"";
             r.querySelectorAll("input[placeholder]").forEach(x=>{txt+=" "+x.placeholder;});
+            r.querySelectorAll("input[type=text],input[type=number]").forEach(x=>{txt+=" "+(x.value||"");});
             r.style.display=txt.includes(q)?"":"none";
           });
         });
       }
     }catch(e){console.warn("finder",e);}
+    // GGGラベル＋セレクトの泣き別れ解消（この1箇所のみ・幅自然）
+    try{
+      const gl=[...ol.querySelectorAll("span")].find(x=>x.textContent==="G・G・G（手札1枚以下）");
+      if(gl&&gl.nextElementSibling&&gl.nextElementSibling.tagName==="SELECT"){
+        const sel2=gl.nextElementSibling;
+        const w=document.createElement("span");
+        w.style.cssText="display:inline-flex;gap:6px;align-items:center;flex-wrap:nowrap;max-width:100%";
+        gl.parentElement.insertBefore(w,gl);
+        w.appendChild(gl);
+        w.appendChild(sel2);
+      }
+    }catch(e){console.warn("ggg",e);}
     // DDD行を薄背景で見やすく
     const ddd=document.getElementById("fxDDD");
     if(ddd){
@@ -4801,6 +4830,7 @@ function renderFxEditor(){
   $("fxStNoCheat").checked=!!FXEDIT.stNoCheat;
   $("fxCostFloor1").checked=!!FXEDIT.costFloor1;
   $("fxNoUntap").checked=!!FXEDIT.noUntap;
+  $("fxStNoHandes").checked=!!FXEDIT.stNoHandes;
   $("fxRepIn").value=FXEDIT.repIn||"";
   $("fxRepInF").value=FXEDIT.repInF||"";
   $("fxRepInNC").checked=!!FXEDIT.repInNC;
@@ -4984,6 +5014,7 @@ function openFxEditor(key){
     stNoCheat:cur?!!cur.stNoCheat:false,
     costFloor1:cur?!!cur.costFloor1:false,
     noUntap:cur?!!cur.noUntap:false,
+    stNoHandes:cur?!!cur.stNoHandes:false,
     repIn:cur&&cur.repIn||"",
     repInF:cur&&cur.repInF||"",
     repInNC:cur?!!cur.repInNC:false,
@@ -5166,6 +5197,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stNoCheat:$("fxStNoCheat").checked,
     costFloor1:$("fxCostFloor1").checked,
     noUntap:$("fxNoUntap").checked,
+    stNoHandes:$("fxStNoHandes").checked,
     repIn:$("fxRepIn").value||"",
     repInF:$("fxRepInF").value.trim(),
     repInNC:$("fxRepInNC").checked,
@@ -5398,6 +5430,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.stNoCheat)attrs.push("常在：召喚以外で出せない");
     if(v.costFloor1)attrs.push("コスト0にならない");
     if(v.noUntap)attrs.push("アンタップしない");
+    if(v.stNoHandes)attrs.push("常在：ハンデスされない");
     if(v.repIn)attrs.push(`常在：置換ロック（${v.repInF||"相手全て"}${v.repInNC?"・召喚以外":""}→${v.repIn==="grave"?"墓地":"山下"}）`);
     if(v.madness)attrs.push(v.madness==="baiken"?"マッドネス（バイケン型）":"マッドネス（永遠型）");
     if(v.ignore)attrs.push(v.ignore==="cost"?`能力無視：コスト${v.ignoreN}以下`:"能力無視：名前指定");
@@ -5471,7 +5504,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone){
   f.arr.splice(f.idx,1);
   const c=f.card,Z=zonesOf(pTo);
   c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;
-  c.faceup=(toZone!=="shield");
+  c.faceup=(toZone!=="shield")?true:(fromZone==="battle"&&c.faceup);
   markArrive(c);
   if((toZone==="shield"||toZone==="shieldUp")&&S.turn>0)c.mark=true;
   if(toZone==="resolve"){
@@ -5986,6 +6019,8 @@ function runHotkey(act){
   }else if(act==="handes"){
     const OZ=zonesOf(op);
     if(!OZ.hand.length){toast("相手の手札がありません");return;}
+    const hb=handesBlockedBy(op);
+    if(hb){toast(`🛡 ${faceNameOf(hb)}：手札は相手の効果によって捨てられない！`);return;}
     snap();
     const i=Math.floor(Math.random()*OZ.hand.length);
     const c=OZ.hand.splice(i,1)[0];
@@ -6118,10 +6153,11 @@ function buildBoards(){
     const selBtn=z=>`<button class="zbtn" data-pi="${pi}" data-act="selall" data-z="${z}">全選択</button>`;
     const handBtns=(S.vs)
       ?`<span class="spacer"></span>
+        <button class="zbtn" data-pi="${pi}" data-act="hdraw">🃏 ドロー</button>
         ${selBtn("hand")}
         ${pi!==seat?`<button class="zbtn" data-pi="${pi}" data-act="peek">👁 見る</button>`:""}
         <button class="zbtn" data-pi="${pi}" data-act="randdisc">ランダム捨て</button>`
-      :`<span class="spacer"></span>${selBtn("hand")}`;
+      :`<span class="spacer"></span><button class="zbtn" data-pi="${pi}" data-act="hdraw">🃏 ドロー</button>${selBtn("hand")}`;
     const rows={
       sys:`
       <div class="zone" data-zone="sys">
@@ -6222,14 +6258,25 @@ function buildBoards(){
       }else if(act==="peek"){
         S.hideOpp=!S.hideOpp;renderAll();
         toast(S.hideOpp?"相手の手札を非公開にしました":"相手の手札を公開表示中");
+      }else if(act==="hdraw"){
+        if(!Z.deck.length){toast("山札がありません");return;}
+        snap();
+        const c=Z.deck.shift();
+        c.faceup=true;
+        Z.hand.push(c);
+        sfx("draw");renderAll();
+        toast(`ドロー（${S.players[pi].label}）`);
       }else if(act==="randdisc"){
         if(!Z.hand.length){toast(`${S.players[pi].label}の手札がありません`);return;}
+        const hb=handesBlockedBy(pi);
+        if(hb){toast(`🛡 ${faceNameOf(hb)}：手札は相手の効果によって捨てられない！（自分の効果で捨てる場合は手札から手動で）`);return;}
         snap();
         const i=randInt(Z.hand.length);
         const c=Z.hand.splice(i,1)[0];
         c.faceup=true;Z.grave.push(c);
         sfx("grave");
         renderAll();toast(`ランダムハンデス（${S.players[pi].label}）：${c.name} を墓地へ`);
+        afterHandDiscard(pi,c);
       }else if(act==="selall"){
         const z=b.dataset.z;
         if(!Z[z].length){toast("カードがありません");return;}
