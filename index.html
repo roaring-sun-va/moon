@@ -1785,10 +1785,69 @@ function draw(pi,n=1){
   renderAll();
 }
 let NEXT_TURN_HOLD=0;
+let LABY_RUN=false;
+async function runLabyEnd(cur2){
+  const ZL=zonesOf(cur2);
+  const OZL=zonesOf(cur2===0?1:0);
+  const lms=ZL.battle.filter(x=>{const r=getReg(x);return r&&r.labyMagic&&(x.labyStep|0)<3;});
+  for(const lc of lms){
+    const step=lc.labyStep|0;
+    const cond=ZL.shield.length>OZL.shield.length;
+    if(!cond){toast(`🌀 ラビリンス・マジック（${faceNameOf(lc)}）：条件未達（盾${ZL.shield.length}対${OZL.shield.length}・進行は${step}のまま維持）`);continue;}
+    const yes=await ask(`🌀 ラビリンス・マジック（${faceNameOf(lc)}）\n条件達成！ 第${step+1}の能力「${["I","II","III"][step]}」を使いますか？`);
+    if(!yes)continue;
+    snap();
+    lc.labyStep=step+1;
+    sfx("flip");
+    toast(`🌀 ラビリンス・マジック「${["I","II","III"][step]}」を使用！（${lc.labyStep}/3）`);
+    {
+      const rL=getReg(lc);
+      const ev=["labyI","labyII","labyIII"][step];
+      const fx=rL&&rL.watchFx?rL.watchFx.filter(w=>w.ev===ev):[];
+      if(fx.length)await runFxList(cur2,fx,lc);
+      else toast(`（${["I","II","III"][step]}の効果は手動で処理してください）`);
+    }
+    if(lc.labyStep>=3){
+      const lk=LINKS.get(normName(lc.name));
+      if(lk&&lk.length>1&&(lc.face||0)===0){
+        const yes2=await ask(`✨ III使用！ 変身しますか？（アンタップ・出た時効果も誘発）`);
+        if(yes2){
+          snap();
+          lc.face=1;lc.tapped=false;lc.rot=0;lc.sideways=false;
+          markArrive(lc);
+          emitEvent(cur2,"summon");
+          enqueueFx(cur2,lc);
+          toast(`✨ 変身！ ${faceNameOf(lc)}`);
+        }
+      }
+    }
+    renderAll();
+  }
+  await waitFxIdle().catch(()=>{});
+  renderAll();
+}
 function nextTurn(){
-  if(NEXT_TURN_HOLD>0){
-    toast("⏳ ターン終了時の処理中です（ラビリンス・マジック等の確認を先に完了してください）");
+  if(LABY_RUN){
+    toast("⏳ ラビリンス・マジックの処理中です");
     return;
+  }
+  if(NEXT_TURN_HOLD>0){
+    toast("⏳ ターン終了時の処理中です");
+    return;
+  }
+  if(S.expert&&!S._skipLaby){
+    const cur=S.vs?S.who:0;
+    const ZL0=zonesOf(cur);
+    const has=ZL0.battle.some(x=>{const r=getReg(x);return r&&r.labyMagic&&(x.labyStep|0)<3;});
+    if(has){
+      LABY_RUN=true;
+      runLabyEnd(cur).finally(()=>{
+        LABY_RUN=false;
+        S._skipLaby=true;
+        try{nextTurn();}finally{S._skipLaby=false;}
+      });
+      return;
+    }
   }
   if(S.turn===0){toast("先に「開始/再試合」を押してください");return;}
   S.brokenTurn={};
@@ -1839,54 +1898,6 @@ function nextTurn(){
     for(const pi2 of (S.vs?[0,1]:[0])){
       const isMine=pi2===cur2;
       runWatchFxCond(pi2,(ev)=>ev==="turnEndBoth"||(isMine&&ev==="turnEndMine")||(!isMine&&ev==="turnEndOpp"));
-    }
-    // ラビリンス・マジック：ターン終了時にI→II→IIIを順に使用
-    {
-      const ZL=zonesOf(cur2);
-      const OZL=zonesOf(cur2===0?1:0);
-      const lms=ZL.battle.filter(x=>{const r=getReg(x);return r&&r.labyMagic&&(x.labyStep|0)<3;});
-      if(lms.length){
-        NEXT_TURN_HOLD=(NEXT_TURN_HOLD||0)+1;
-        (async()=>{
-          try{
-          for(const lc of lms){
-            const step=lc.labyStep|0;
-            const cond=ZL.shield.length>OZL.shield.length;
-            if(!cond){toast(`🌀 ラビリンス・マジック（${faceNameOf(lc)}）：条件未達（盾${ZL.shield.length}対${OZL.shield.length}・進行は${step}のまま維持）`);continue;}
-            const yes=await ask(`🌀 ラビリンス・マジック（${faceNameOf(lc)}）\n条件達成！ 第${step+1}の能力「${["I","II","III"][step]}」を使いますか？\n（その他の条件はプレイヤー判断・効果は手動/効果登録で処理）`);
-            if(!yes)continue;
-            snap();
-            lc.labyStep=step+1;
-            sfx("flip");
-            toast(`🌀 ラビリンス・マジック「${["I","II","III"][step]}」を使用！（${lc.labyStep}/3）`);
-            {
-              const rL=getReg(lc);
-              const ev=["labyI","labyII","labyIII"][step];
-              const fx=rL&&rL.watchFx?rL.watchFx.filter(w=>w.ev===ev):[];
-              if(fx.length)await runFxList(cur2,fx,lc);
-              else toast(`（${["I","II","III"][step]}の効果は手動で処理してください）`);
-            }
-            if(lc.labyStep>=3){
-              const lk=LINKS.get(normName(lc.name));
-              if(lk&&lk.length>1&&(lc.face||0)===0){
-                const tv=await ask(`✨ IIIまで到達！ 変身しますか？（多面カード2面目へ）`);
-                if(tv){
-                  lc.face=1;lc.tapped=false;
-                  markArrive(lc);
-                  emitEvent(cur2,"summon");
-                  enqueueFx(cur2,lc);
-                  toast(`✨ 変身！ ${faceNameOf(lc)}`);
-                }
-              }
-            }
-            renderAll();
-          }
-          }finally{
-            NEXT_TURN_HOLD=Math.max(0,(NEXT_TURN_HOLD||1)-1);
-            renderAll();
-          }
-        })();
-      }
     }
     // B・A・D：軽減召喚したクリーチャーはターンの終わりに破壊
     {
@@ -4546,13 +4557,13 @@ const TRIG_EVS=[
 function fxTrigRowEl(i){
   const f=FXEDIT.watchFx[i];
   const row=document.createElement("div");row.className="fxrow";
-  row.style.cssText="display:flex;flex-wrap:nowrap;gap:6px;align-items:center;width:100%";
+  row.style.cssText="display:flex;flex-wrap:wrap;gap:6px;align-items:center;width:100%";
   const ev=document.createElement("select");
-  ev.style.cssText="flex:2 1 0;min-width:0";
+  ev.style.cssText="flex:1 1 42%;min-width:160px;max-width:100%";
   for(const [v,lb] of TRIG_EVS){const o=document.createElement("option");o.value=v;o.textContent=lb;if(v===f.ev)o.selected=true;ev.appendChild(o);}
   ev.onchange=()=>{f.ev=ev.value;};
   const sel=document.createElement("select");
-  sel.style.cssText="flex:2 1 0;min-width:0";
+  sel.style.cssText="flex:1 1 38%;min-width:150px;max-width:100%";
   for(const [v,lb] of FX_TYPES){const o=document.createElement("option");o.value=v;o.textContent=lb;if(v===f.t)o.selected=true;sel.appendChild(o);}
   fxAddSpecialOptions(sel,f.t);
   const num=document.createElement("select");
@@ -4587,6 +4598,52 @@ function fxUiPolish(){
         condRow.style.cssText+=";border-left:3px solid var(--accent);padding-left:8px;margin-top:2px";
       }
     }
+    // 常在関連（条件付き常在・置換ロック・能力無視）を常在セクションへ集約
+    try{
+      const anchorEl=document.getElementById("fxStNoCheat");
+      if(anchorEl){
+        let anchor=anchorEl.closest(".row");
+        for(const id of ["fxCStCond","fxRepIn","fxIgnore"]){
+          const e=document.getElementById(id);
+          if(!e||!anchor)continue;
+          let wrap=e.closest("div");
+          while(wrap&&!(wrap.getAttribute("style")||"").includes("flex:1 1 100%")&&!wrap.classList.contains("row"))wrap=wrap.parentElement;
+          if(!wrap)continue;
+          if(wrap.classList.contains("row")){anchor.after(wrap);anchor=wrap;}
+          else{
+            const nr=document.createElement("div");
+            nr.className="row";
+            anchor.after(nr);
+            nr.appendChild(wrap);
+            anchor=nr;
+          }
+        }
+      }
+    }catch(e){console.warn("gather",e);}
+    // 項目検索フィルタ（入力欄・タイプで絞り込み）
+    try{
+      const panel=ol.querySelector(".panel")||ol;
+      const firstH3=panel.querySelector("h3");
+      if(firstH3&&!document.getElementById("fxFinder")){
+        const bar=document.createElement("div");
+        bar.className="row";
+        bar.style.cssText="position:sticky;top:0;z-index:5;background:var(--panel,#131a2a);padding:6px 0;margin:0";
+        bar.innerHTML='<input type="text" id="fxFinder" placeholder="🔎 項目をしぼり込み（例：マッドネス／常在／侵略／シールド…・空欄で全表示）" style="flex:1;min-width:180px">';
+        firstH3.parentElement.insertBefore(bar,firstH3);
+        const inp=bar.querySelector("#fxFinder");
+        inp.addEventListener("input",()=>{
+          const q=inp.value.trim();
+          const rows=[...panel.querySelectorAll(".row")].filter(r=>r!==bar&&!r.contains(bar));
+          if(!q){rows.forEach(r=>{r.style.display="";});return;}
+          rows.forEach(r=>{
+            let txt=r.innerText||"";
+            r.querySelectorAll("select option").forEach(o=>{txt+=" "+o.textContent;});
+            r.querySelectorAll("input[placeholder]").forEach(x=>{txt+=" "+x.placeholder;});
+            r.style.display=txt.includes(q)?"":"none";
+          });
+        });
+      }
+    }catch(e){console.warn("finder",e);}
     // DDD行を薄背景で見やすく
     const ddd=document.getElementById("fxDDD");
     if(ddd){
@@ -5539,7 +5596,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone){
       });
       if(locker){
         const rL=getReg(locker);
-        if(rL.repInNC){
+        if(rL.repInNC||rL.repIn==="deckBottom"){
           c._repPending=true;
           (async()=>{
             const j=await askChoice(`🔒 ${faceNameOf(locker)}：置換ロック（召喚以外のみ）\n《${c.name}》はどの方法で出しましたか？`,
@@ -5894,6 +5951,10 @@ function hotkeyMap(){
   return Object.assign(def,S.hotkeys||{});
 }
 function runHotkey(act){
+  if(LABY_RUN){
+    toast("⏳ ラビリンス・マジックの処理中です（完了後にターンが送られます）");
+    return;
+  }
   if(NEXT_TURN_HOLD>0){
     toast("⏳ ターン終了時の処理中です。確認パネルを先に完了してください");
     return;
@@ -6308,7 +6369,7 @@ function cardEl(pi,zone,c){
       el.appendChild(sy);
     }
   }
-  if(zone==="battle"&&!hidden&&c.faceup&&(!S.vs||pi===S.seat)){
+  if(zone!=="deck"&&!hidden&&c.faceup&&(!S.vs||pi===S.seat)){
     const gb=document.createElement("button");
     gb.textContent="⚙";
     gb.title="効果を登録/編集";
