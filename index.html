@@ -316,16 +316,16 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
 @keyframes anLose{0%{filter:none;transform:scale(1)}30%{filter:brightness(1.6) drop-shadow(0 0 14px #ef4444)}100%{filter:brightness(.35) grayscale(.7);transform:scale(.9);opacity:.25}}
 @keyframes anVanish{0%{opacity:1;filter:none;transform:scale(1)}30%{filter:brightness(1.7) drop-shadow(0 0 12px #ef4444)}100%{opacity:0;transform:scale(.75);filter:brightness(.3)}}
 @keyframes anClash{0%{transform:scale(1)}40%{transform:scale(1.12)}100%{transform:scale(1)}}
-@keyframes anCip{0%{box-shadow:0 0 0 2px rgba(96,165,250,1);filter:brightness(1.35)}100%{box-shadow:0 0 0 28px rgba(96,165,250,0);filter:none}}
-@keyframes anDark{0%{box-shadow:0 0 0 0 rgba(232,121,249,.9);filter:brightness(1.4) hue-rotate(20deg)}100%{box-shadow:0 0 0 22px rgba(232,121,249,0);filter:none}}
+@keyframes anCip{0%{box-shadow:inset 0 0 0 3px rgba(96,165,250,.95),inset 0 0 26px rgba(96,165,250,.85);filter:brightness(1.6) saturate(1.3)}100%{box-shadow:inset 0 0 0 0 rgba(96,165,250,0);filter:none}}
+@keyframes anDark{0%{box-shadow:inset 0 0 0 3px rgba(232,121,249,.9),inset 0 0 28px rgba(168,85,247,.9);filter:brightness(1.45) hue-rotate(20deg)}100%{box-shadow:inset 0 0 0 0 rgba(232,121,249,0);filter:none}}
 @keyframes bodyShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-7px,3px)}40%{transform:translate(6px,-4px)}60%{transform:translate(-5px,-3px)}80%{transform:translate(4px,3px)}}
 body.shake{animation:bodyShake .4s ease-out}
-.an-cip{animation:anCip .55s ease-out;border-radius:10px}
+.an-cip{animation:anCip .7s ease-out}
 .an-dark{animation:anDark .7s ease-out;border-radius:10px}
-@keyframes anGold{0%{box-shadow:0 0 0 0 rgba(250,204,21,.95);filter:brightness(1.55)}100%{box-shadow:0 0 0 22px rgba(250,204,21,0);filter:none}}
+@keyframes anGold{0%{box-shadow:inset 0 0 0 3px rgba(250,204,21,.95),inset 0 0 28px rgba(250,204,21,.9);filter:brightness(1.7)}100%{box-shadow:inset 0 0 0 0 rgba(250,204,21,0);filter:none}}
 .an-gold{animation:anGold .7s ease-out;border-radius:10px}
-@keyframes anCharge{0%{box-shadow:0 0 0 2px rgba(74,222,128,1);transform:scale(1.18);filter:brightness(1.4)}100%{box-shadow:0 0 0 26px rgba(74,222,128,0);transform:scale(1);filter:none}}
-.an-charge{animation:anCharge .45s ease-out;border-radius:10px}
+@keyframes anCharge{0%{box-shadow:inset 0 0 0 3px rgba(74,222,128,.95),inset 0 0 24px rgba(74,222,128,.85);transform:scale(1.12);filter:brightness(1.5) saturate(1.4)}100%{box-shadow:inset 0 0 0 0 rgba(74,222,128,0);transform:scale(1);filter:none}}
+.an-charge{animation:anCharge .6s ease-out}
 #resultOlay{position:fixed;inset:0;z-index:96;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(2,4,10,.86);animation:fadeIn .3s ease-out}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes resPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
@@ -561,8 +561,9 @@ body.shake{animation:bodyShake .4s ease-out}
     <h2>⚙ 設定</h2>
     <div class="row"><button class="btn small" id="btnHelp" style="flex:1">❓ 使い方・条件式リファレンス</button></div>
     <div class="row">
-      <label><input type="checkbox" id="setAnim" checked> 🎬 カード演出（タップ/めくり/攻撃などのアニメーション）</label>
+      <label><input type="checkbox" id="setAnim" checked> 🎬 カード演出（マスター・全演出の一括ON/OFF）</label>
     </div>
+    <div class="row" id="animSetRow" style="gap:4px 12px;flex-wrap:wrap"></div>
     <div class="row" style="align-items:center;gap:8px">
       <span style="font-size:12px;font-weight:700">効果音 音量</span>
       <input type="range" id="setSfxVol" min="0" max="100" step="5" value="100" style="flex:1">
@@ -958,6 +959,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxSlayer"> スレイヤー</label>
       </div>
       <div class="row" style="gap:12px">
+        <label><input type="checkbox" id="fxCantAtk"> 攻撃できない</label>
+        <label><input type="checkbox" id="fxCantAtkP"> 相手プレイヤーを攻撃できない</label>
         <label><input type="checkbox" id="fxAtkUn"> タップしていないクリーチャーも攻撃できる</label>
         <label><input type="checkbox" id="fxMachF"> マッハファイター（出たターンでも相手獣を攻撃可・アンタップ獣も対象）</label>
       </div>
@@ -2417,16 +2420,28 @@ function revealMaxMin(op,spellOnly){
   // 各カードの参照コスト集合を算出：ツインパクト/多面は全面のreg（コスト登録済み）を参照
   const cand=[];
   for(const c of Z.hand){
-    const keys=LINKS.get(normName(c.name))||[faceKeyOf(c)];
-    const regs=keys.map(k=>FXDB.get(k)).filter(r=>r&&r.cost!=null&&!isNaN(+r.cost));
-    if(!regs.length){
-      const r0=getReg(c);
-      if(r0&&r0.cost!=null&&!isNaN(+r0.cost))regs.push(r0);
+    // 参照エントリ収集：各面ごとに {cost, spell}
+    const ent=[];
+    const keys=[...new Set([faceKeyOf(c),...(LINKS.get(normName(c.name))||[])])];
+    let any=false;
+    for(const k of keys){
+      const r=FXDB.get(k);
+      if(!r)continue;
+      any=true;
+      const isTwin=r.twin||r.ctype==="twinpact";
+      if(r.cost!=null&&!isNaN(+r.cost))ent.push({cost:+r.cost,spell:r.ctype==="spell"});
+      if(isTwin&&r.cost2!=null&&!isNaN(+r.cost2))ent.push({cost:+r.cost2,spell:true});
     }
-    // ガシュラ型：呪文面のみ参照（呪文面を1つでも持てば対象。参照コストは呪文面のもの）
-    const use=spellOnly?regs.filter(r=>r.ctype==="spell"):regs;
+    if(!any){
+      const r0=getReg(c);
+      if(r0&&r0.cost!=null&&!isNaN(+r0.cost)){
+        ent.push({cost:+r0.cost,spell:r0.ctype==="spell"});
+        if((r0.twin||r0.ctype==="twinpact")&&r0.cost2!=null&&!isNaN(+r0.cost2))ent.push({cost:+r0.cost2,spell:true});
+      }
+    }
+    const use=spellOnly?ent.filter(e=>e.spell):ent;
     if(!use.length)continue;
-    const costs=use.map(r=>+r.cost);
+    const costs=use.map(e=>e.cost);
     cand.push({c,maxC:Math.max(...costs),minC:Math.min(...costs)});
   }
   if(!cand.length){
@@ -3870,7 +3885,7 @@ async function doBattle(pa,a,pd,d){
       toast(`✨ 条件常在（${rx.cstCond}）：${faceNameOf(x)} はスレイヤー！（負けても相手を破壊）`);
     }
   }
-  if(S.anim!==false){
+  if(animOn("clash")){
     fxAnim(a.id,"an-clash",300);
     await fxAnim(d.id,"an-clash",300);
   }
@@ -4080,7 +4095,7 @@ async function breakShields(op,count,attacker,forceIdx){
   }
   snap();
   idxs.sort((a,b)=>b-a);
-  if(S.anim!==false){
+  if(animOn("break")){
     for(const i of idxs){
       const sc0=OZ.shield[i];
       if(!sc0)continue;
@@ -4227,8 +4242,12 @@ async function startAttack(pi,id){
   const Z=zonesOf(pi);
   const c=Z.battle.find(x=>x.id===id);if(!c)return;
   if(isSealed(c)){toast(`🔒 ${c.name} は封印されている！（クリーチャーとして扱われず、攻撃できません）`);return;}
+  if(S.expert){
+    const rA=getReg(c);
+    if(rA&&rA.cantAtk&&!isIgnored(c,pi)){toast(`⛔ ${faceNameOf(c)} は攻撃できない`);return;}
+  }
   snap();
-  if(S.anim!==false)window.__atkAnim=id;
+  if(animOn("atk"))window.__atkAnim=id;
   if(!c.tapped){c.tapped=true;renderAll();}
   if(!S.vs){
     toast("攻撃宣言（タップ）しました。対戦モードで攻撃対象の処理ができます。");
@@ -4781,6 +4800,14 @@ async function execAttack(pi,id,tg){
       if(c.buff&&c.buff.breakPlus){n+=c.buff.breakPlus;toast(`💥 バフ：ブレイク数＋${c.buff.breakPlus} → ${n}枚`);}
     }
     const brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
+    if(S.expert){
+      const rA=getReg(c);
+      if(rA&&rA.cantAtkP&&!isIgnored(c,pi)){
+        toast(`⛔ ${faceNameOf(c)} は相手プレイヤーを攻撃できない！（攻撃中止）`);
+        renderAll();
+        return;
+      }
+    }
     if(bk==="masterw"&&S.expert){
       for(let i2=0;i2<2;i2++){
         if(!OZ.battle.length)break;
@@ -4817,7 +4844,15 @@ async function execAttack(pi,id,tg){
     }
   }
   else{
-    if(S.anim!==false){
+    if(S.expert){
+      const rA=getReg(c);
+      if(rA&&rA.cantAtkP&&!isIgnored(c,pi)){
+        toast(`⛔ ${faceNameOf(c)} は相手プレイヤーを攻撃できない！（攻撃中止）`);
+        renderAll();
+        return;
+      }
+    }
+    if(animOn("shake")){
       document.body.classList.add("shake");
       setTimeout(()=>document.body.classList.remove("shake"),450);
     }
@@ -5201,6 +5236,8 @@ function renderFxEditor(){
   $("fxBlocker").checked=!!FXEDIT.blocker;
   $("fxSlayer").checked=!!FXEDIT.slayer;
   $("fxAtkUn").checked=!!FXEDIT.atkUn;
+  $("fxCantAtk").checked=!!FXEDIT.cantAtk;
+  $("fxCantAtkP").checked=!!FXEDIT.cantAtkP;
   $("fxMachF").checked=!!FXEDIT.machf;
   $("fxNoBlock").checked=!!FXEDIT.noBlock;
   $("fxNoAtked").checked=!!FXEDIT.noAtked;
@@ -5393,6 +5430,8 @@ function openFxEditor(key){
     blocker:cur?!!cur.blocker:false,
     slayer:cur?!!cur.slayer:false,
     atkUn:cur?!!cur.atkUn:false,
+    cantAtk:cur?!!cur.cantAtk:false,
+    cantAtkP:cur?!!cur.cantAtkP:false,
     machf:cur?!!cur.machf:false,
     noBlock:cur?!!cur.noBlock:false,
     noAtked:cur?!!cur.noAtked:false,
@@ -5584,6 +5623,8 @@ $("fxSave").addEventListener("click",async ()=>{
     blocker:$("fxBlocker").checked,
     slayer:$("fxSlayer").checked,
     atkUn:$("fxAtkUn").checked,
+    cantAtk:$("fxCantAtk").checked,
+    cantAtkP:$("fxCantAtkP").checked,
     machf:$("fxMachF").checked,
     noBlock:$("fxNoBlock").checked,
     noAtked:$("fxNoAtked").checked,
@@ -5819,6 +5860,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.blocker)attrs.push("ブロッカー");
     if(v.slayer)attrs.push("スレイヤー");
     if(v.atkUn)attrs.push("アンタップ攻撃可");
+    if(v.cantAtk)attrs.push("攻撃できない");
+    if(v.cantAtkP)attrs.push("プレイヤー攻撃不可");
     if(v.d2)attrs.push("D2");
     if(v.seal)attrs.push(`封印${v.seal}`);
     if(v.pa)attrs.push(v.pa>=999999999?"PA+∞":v.pa>=1000000?`PA+${Math.floor(v.pa/10000)}万`:`PA+${v.pa}`);
@@ -6217,7 +6260,7 @@ function dissolveGhostBadge(id2){
   fxAnim(id2,"an-dark",600);
 }
 function dissolveGhost(id2,mode){
-  if(S.anim===false)return;
+  if(!animOn("vanish"))return;
   const el=document.querySelector(`[data-cid="${id2}"]`);
   if(!el)return;
   const r=el.getBoundingClientRect();
@@ -7138,14 +7181,14 @@ function cardEl(pi,zone,c){
     if(pv&&S.anim!==false){
       if(pv.face!==(c.face||0))el.classList.add("an-spin");
       else if(pv.faceup!==c.faceup)el.classList.add("an-flip");
-      else if(pv.zone!==zone){
+      else if(pv.zone!==zone&&animOn("zone")){
         const zc=zone==="hand"?"an-deal":(zone==="mana"?"an-charge":"an-pop");
         el.classList.add(zc);
         ANIM_FX.set(c.id,{cls:zc,until:Date.now()+460});
         setTimeout(()=>{const a2=ANIM_FX.get(c.id);if(a2&&a2.cls===zc)ANIM_FX.delete(c.id);},470);
       }
       else if(pv.tapped!==c.tapped)el.classList.add(c.tapped?"an-tap":"an-untap");
-    }else if(S.anim!==false&&arrived.has(c.id)&&!ANIM_FX.has(c.id)&&["hand","mana","battle"].includes(zone)&&S.turn>0){
+    }else if(animOn("zone")&&arrived.has(c.id)&&!ANIM_FX.has(c.id)&&["hand","mana","battle"].includes(zone)&&S.turn>0){
       const zc=zone==="hand"?"an-deal":(zone==="mana"?"an-charge":"an-pop");
       el.classList.add(zc);
       ANIM_FX.set(c.id,{cls:zc,until:Date.now()+460});
@@ -8057,8 +8100,16 @@ function openShieldStack(pi,id){
   document.body.appendChild(ol);
 }
 const ANIM_FX=new Map();
+const ANIM_KEYS=[["atk","⚔ 攻撃モーション"],["zone","🃏 移動（配り/マナ/着地）"],["break","🛡 盾ブレイク"],["clash","⚡ バトル衝突"],["shake","💥 画面シェイク"],["cip","✨ cip光輪"],["pulse","🌟 パルス（HM金/禁断紫）"],["vanish","💨 消滅の残像"]];
+function animOn(k){
+  if(S.anim===false)return false;
+  return !S.animSet||S.animSet[k]!==false;
+}
+const ANIM_CLS_KEY={"an-cip":"cip","an-gold":"pulse","an-dark":"pulse","an-clash":"clash","an-atkF":"atk","an-atkB":"atk"};
 function fxAnim(id,cls,ms){
   if(S.anim===false)return Promise.resolve();
+  const k=ANIM_CLS_KEY[cls];
+  if(k&&!animOn(k))return Promise.resolve();
   ms=ms||400;
   ANIM_FX.set(id,{cls,until:Date.now()+ms});
   const el=document.querySelector(`[data-cid="${id}"]`);
@@ -8180,7 +8231,8 @@ function attachPointer(el,ctx){
         if(lpT&&Math.hypot(dx,dy)>5){clearTimeout(lpT);lpT=null;}
         if(Math.hypot(dx,dy)<10)return;
         if(lpT){clearTimeout(lpT);lpT=null;}
-        if(scroller&&Math.abs(dx)>Math.abs(dy)*1.4)mode="scroll";
+        const canScroll=scroller&&scroller.scrollWidth>scroller.clientWidth+4;
+        if(canScroll&&Math.abs(dx)>Math.abs(dy)*2.2)mode="scroll";
         else{
           mode="drag";
           if(ctx.viewer){
@@ -11456,6 +11508,27 @@ $("setAnim").addEventListener("change",async ()=>{
   if(db)await idbPut("misc","anim",S.anim);
   toast(S.anim?"🎬 演出：ON":"🎬 演出：OFF");
 });
+function buildAnimSetUI(){
+  const row=$("animSetRow");
+  if(!row)return;
+  row.innerHTML="";
+  S.animSet=S.animSet||{};
+  for(const [k,lb] of ANIM_KEYS){
+    const l=document.createElement("label");
+    l.style.cssText="font-size:11px;display:inline-flex;gap:3px;align-items:center";
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=S.animSet[k]!==false;
+    cb.addEventListener("change",async ()=>{
+      S.animSet[k]=cb.checked;
+      if(db)await idbPut("misc","animSet",JSON.stringify(S.animSet));
+    });
+    l.appendChild(cb);
+    l.appendChild(document.createTextNode(lb));
+    row.appendChild(l);
+  }
+}
+buildAnimSetUI();
 $("setSfxVol").addEventListener("input",async ()=>{
   S.sfxVol=+$("setSfxVol").value;
   $("sfxVolLb").textContent=S.sfxVol+"%";
@@ -11766,6 +11839,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   const my=db?await idbGet("misc","matPosY"):null;if(my!=null&&my!==undefined)S.matPosY=+my;
   const an=db?await idbGet("misc","anim"):null;
   if(an!=null){S.anim=an;$("setAnim").checked=!!an;}
+  const as2=db?await idbGet("misc","animSet"):null;
+  if(as2){try{S.animSet=JSON.parse(as2);}catch(e){}buildAnimSetUI();}
   const sv=db?await idbGet("misc","sfxVol"):null;
   if(sv!=null){S.sfxVol=sv;$("setSfxVol").value=sv;$("sfxVolLb").textContent=sv+"%";}
   const bv=db?await idbGet("misc","bgmVol"):null;
