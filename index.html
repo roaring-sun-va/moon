@@ -1034,6 +1034,15 @@ body.shake{animation:bodyShake .4s ease-out}
         <span style="font-size:12px;font-weight:700">HM時パワー</span>
         <input type="number" id="fxHmPow" style="width:96px" placeholder="上書き値">
         <label><input type="checkbox" id="fxHmSA"> HM時SA</label>
+        <label><input type="checkbox" id="fxHmBlocker"> HM時ブロッカー</label>
+        <label><input type="checkbox" id="fxHmSlayer"> HM時スレイヤー</label>
+        <select id="fxHmBk" style="width:auto;flex:0 0 150px">
+          <option value="">HM時ブレイク数：変更なし</option>
+          <option value="2">HM時：W・ブレイカー</option>
+          <option value="3">HM時：T・ブレイカー</option>
+          <option value="4">HM時：4枚ブレイク</option>
+          <option value="all">HM時：ワールド</option>
+        </select>
         <label><input type="checkbox" id="fxHmBK"> HM時ブロッカー</label>
         <label><input type="checkbox" id="fxHmSL"> HM時スレイヤー</label>
         <span style="font-size:12px;font-weight:700">キリフダッシュ</span>
@@ -3925,6 +3934,9 @@ async function doBattle(pa,a,pd,d){
     if(rx&&rx.cstCond&&rx.cstFx==="slayer"&&!isSealed(x)&&zoneCondOk(rx.cstCond,pp)){
       toast(`✨ 条件常在（${rx.cstCond}）：${faceNameOf(x)} はスレイヤー！（負けても相手を破壊）`);
     }
+    if(rx&&rx.hmSlayer&&x.hyper&&!isSealed(x)){
+      toast(`⚡ HM解放中：${faceNameOf(x)} はスレイヤー！（負けても相手を破壊）`);
+    }
   }
   if(animOn("clash")){
     fxAnim(a.id,"an-clash",300);
@@ -4678,6 +4690,7 @@ async function execAttack(pi,id,tg){
     const rb=getReg(b);
     if(rb&&rb.blocker)return true;
     if(b.buff&&b.buff.blocker)return true;
+    if(rb&&rb.hmBlocker&&b.hyper&&!isSealed(b)&&!isIgnored(b,op))return true;
     if(rb&&rb.cstCond&&rb.cstFx==="blocker"&&!isSealed(b)&&!isIgnored(b,op)&&zoneCondOk(rb.cstCond,op))return true;
     return false;
   };
@@ -4825,7 +4838,7 @@ async function execAttack(pi,id,tg){
   }
   else if(tg.kind==="shield"){
     const reg=getReg(c);
-    const bk=reg&&reg.breaks?reg.breaks:"1";
+    const bk=(c.hyper&&reg&&reg.hmBk)?reg.hmBk:(reg&&reg.breaks?reg.breaks:"1");
     let n;
     if(bk==="all")n="all";
     else if(bk==="powered"){
@@ -5311,6 +5324,9 @@ function renderFxEditor(){
   $("fxHyperNote").value=FXEDIT.hyperNote||"";
   $("fxHmPow").value=FXEDIT.hmPow||"";
   $("fxHmSA").checked=!!FXEDIT.hmSA;
+  $("fxHmBlocker").checked=!!FXEDIT.hmBlocker;
+  $("fxHmSlayer").checked=!!FXEDIT.hmSlayer;
+  $("fxHmBk").value=FXEDIT.hmBk||"";
   $("fxHmBK").checked=!!FXEDIT.hmBK;
   $("fxHmSL").checked=!!FXEDIT.hmSL;
   $("fxSInvade").value=FXEDIT.sInvade||"";
@@ -5506,6 +5522,9 @@ function openFxEditor(key){
     hyperNote:cur&&cur.hyperNote||"",
     hmPow:cur&&cur.hmPow||0,
     hmSA:cur?!!cur.hmSA:false,
+    hmBlocker:cur?!!cur.hmBlocker:false,
+    hmSlayer:cur?!!cur.hmSlayer:false,
+    hmBk:cur&&cur.hmBk||"",
     hmBK:cur?!!cur.hmBK:false,
     hmSL:cur?!!cur.hmSL:false,
     sInvade:cur&&cur.sInvade||"",
@@ -5700,6 +5719,9 @@ $("fxSave").addEventListener("click",async ()=>{
     hyperNote:$("fxHyperNote").value.trim(),
     hmPow:+$("fxHmPow").value||0,
     hmSA:$("fxHmSA").checked,
+    hmBlocker:$("fxHmBlocker").checked,
+    hmSlayer:$("fxHmSlayer").checked,
+    hmBk:$("fxHmBk").value||"",
     hmBK:$("fxHmBK").checked,
     hmSL:$("fxHmSL").checked,
     sInvade:$("fxSInvade").value||"",
@@ -5942,6 +5964,9 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.hyper)attrs.push("ハイパー化");
     if(v.hmPow)attrs.push(`HM時パワー${v.hmPow}`);
     if(v.hmSA)attrs.push("HM時SA");
+    if(v.hmBlocker)attrs.push("HM時ブロッカー");
+    if(v.hmSlayer)attrs.push("HM時スレイヤー");
+    if(v.hmBk)attrs.push(`HM時ブレイク${v.hmBk==="all"?"：ワールド":v.hmBk+"枚"}`);
     if(v.hmBK)attrs.push("HM時ブロッカー");
     if(v.hmSL)attrs.push("HM時スレイヤー");
     if(v.invadeZero)attrs.push("侵略ZERO");
@@ -6673,10 +6698,10 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     }
     emitEvent(pTo,"summon");
   }
-  if(S.expert&&fromZone==="battle"&&toZone==="grave"&&pi===pTo){
-    const cX=zonesOf(pi).battle.find(x=>x.id===id);
+  if(S.expert&&fromZone==="battle"&&toZone==="grave"&&pFrom===pTo){
+    const cX=zonesOf(pFrom).battle.find(x=>x.id===id);
     if(cX&&!cX._skipDestroy){
-      destroyCreature(pi,cX);
+      destroyCreature(pFrom,cX);
       return;
     }
   }
