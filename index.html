@@ -2414,19 +2414,39 @@ async function searchZone(pi,zone,kinds){
 }
 function revealMaxMin(op,spellOnly){
   const Z=zonesOf(op);
-  const cand=Z.hand.map(c=>({c,r:getReg(c)}))
-    .filter(x=>x.r&&x.r.cost!=null&&(!spellOnly||x.r.ctype==="spell"));
+  // 各カードの参照コスト集合を算出：ツインパクト/多面は全面のreg（コスト登録済み）を参照
+  const cand=[];
+  for(const c of Z.hand){
+    const keys=LINKS.get(normName(c.name))||[faceKeyOf(c)];
+    const regs=keys.map(k=>FXDB.get(k)).filter(r=>r&&r.cost!=null&&!isNaN(+r.cost));
+    if(!regs.length){
+      const r0=getReg(c);
+      if(r0&&r0.cost!=null&&!isNaN(+r0.cost))regs.push(r0);
+    }
+    // ガシュラ型：呪文面のみ参照（呪文面を1つでも持てば対象。参照コストは呪文面のもの）
+    const use=spellOnly?regs.filter(r=>r.ctype==="spell"):regs;
+    if(!use.length)continue;
+    const costs=use.map(r=>+r.cost);
+    cand.push({c,maxC:Math.max(...costs),minC:Math.min(...costs)});
+  }
   if(!cand.length){
     toast(spellOnly?"コスト登録済みの呪文が相手の手札にありません":"コスト登録済みのカードが相手の手札にありません（コスト/タイプの効果登録が必要）");
     return;
   }
-  let mx=cand[0],mn=cand[0];
-  for(const x of cand){
-    if(x.r.cost>mx.r.cost)mx=x;
-    if(x.r.cost<mn.r.cost)mn=x;
-  }
   snap();
-  const ids=[...new Set([mx.c.id,mn.c.id])];
+  // ①コストが最も大きいカードを選ぶ（同値はランダム）
+  const mxV=Math.max(...cand.map(x=>x.maxC));
+  const mxPool=cand.filter(x=>x.maxC===mxV);
+  const mx=mxPool[randInt(mxPool.length)];
+  // ②残りからコストが最も小さいカードを選ぶ（同値はランダム）
+  const rest=cand.filter(x=>x.c.id!==mx.c.id);
+  let mn=null;
+  if(rest.length){
+    const mnV=Math.min(...rest.map(x=>x.minC));
+    const mnPool=rest.filter(x=>x.minC===mnV);
+    mn=mnPool[randInt(mnPool.length)];
+  }
+  const ids=[mx.c.id,...(mn?[mn.c.id]:[])];
   for(const id of ids){
     const j=Z.hand.findIndex(c=>c.id===id);
     if(j<0)continue;
@@ -2435,7 +2455,7 @@ function revealMaxMin(op,spellOnly){
   }
   sfx("flip");renderAll();
   openRevealPanel(op,"reveal");
-  toast(`公開：最大コスト${mx.r.cost}／最小コスト${mn.r.cost}（パネルから墓地へ捨てられます）`);
+  toast(`公開：最大コスト${mxV}《${faceNameOf(mx.c)}》${mn?`／最小コスト${Math.min(...rest.map(x=>x.minC))}《${faceNameOf(mn.c)}》`:"（手札1枚のため1枚のみ）"}\n（パネルから墓地へ捨てられます）`);
 }
 
 /* ================= 汎用効果 ================= */
@@ -3171,16 +3191,10 @@ async function runFxList(pi,list,srcCard){
       renderAll();continue;
     }
     if(f.t==="draw"){
-      for(let i=0;i<n&&Z.deck.length;i++){
-        const c=Z.deck.shift();c.faceup=true;c.sideways=false;Z.hand.push(c);markArrive(c);
-        if(S.anim!==false&&n>1){sfx("draw");renderAll();await new Promise(r=>setTimeout(r,140));}
-      }
+      for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;Z.hand.push(c);markArrive(c);}
       sfx("draw");emitEvent(pi,"draw");
     }else if(f.t==="charge"){
-      for(let i=0;i<n&&Z.deck.length;i++){
-        const c=Z.deck.shift();c.faceup=true;c.sideways=false;Z.mana.push(c);markArrive(c);
-        if(S.anim!==false&&n>1){sfx("move");renderAll();await new Promise(r=>setTimeout(r,140));}
-      }
+      for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;Z.mana.push(c);markArrive(c);}
       sfx("move");
     }else if(f.t==="mill"){
       for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;Z.grave.push(c);}
@@ -7131,6 +7145,11 @@ function cardEl(pi,zone,c){
         setTimeout(()=>{const a2=ANIM_FX.get(c.id);if(a2&&a2.cls===zc)ANIM_FX.delete(c.id);},470);
       }
       else if(pv.tapped!==c.tapped)el.classList.add(c.tapped?"an-tap":"an-untap");
+    }else if(S.anim!==false&&arrived.has(c.id)&&!ANIM_FX.has(c.id)&&["hand","mana","battle"].includes(zone)&&S.turn>0){
+      const zc=zone==="hand"?"an-deal":(zone==="mana"?"an-charge":"an-pop");
+      el.classList.add(zc);
+      ANIM_FX.set(c.id,{cls:zc,until:Date.now()+460});
+      setTimeout(()=>{const a2=ANIM_FX.get(c.id);if(a2&&a2.cls===zc)ANIM_FX.delete(c.id);},470);
     }
     CARD_PREV.set(c.id,{tapped:!!c.tapped,faceup:!!c.faceup,zone,face:c.face||0});
   }
@@ -7271,7 +7290,7 @@ function cardEl(pi,zone,c){
       if(ics.length){
         const ib=document.createElement("span");
         ib.textContent=ics.join("");
-        ib.style.cssText="position:absolute;right:2px;top:2px;z-index:6;background:#000c;color:#fcd34d;font-size:10px;font-weight:900;border-radius:6px;padding:0 4px;line-height:1.5;pointer-events:none";
+        ib.style.cssText="position:absolute;right:2px;bottom:20px;z-index:7;background:#000d;color:#fcd34d;font-size:10px;font-weight:900;border-radius:6px;padding:0 4px;line-height:1.5;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.5)";
         el.appendChild(ib);
       }
     }
@@ -8320,7 +8339,7 @@ function dropTargetAt(x,y){
       const dx=Math.max(r.left-x,0,x-r.right);
       const dy=Math.max(r.top-y,0,y-r.bottom);
       const d=Math.hypot(dx,dy);
-      if(d>0&&d<bd){
+      if(d<bd){
         const pb=z.closest(".pboard");
         best={el:z,zone,p:pb?+pb.dataset.p:0};
         bd=d;
