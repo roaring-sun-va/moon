@@ -1009,6 +1009,10 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="">文明指定なし</option>
           <option value="light">光</option><option value="water">水</option><option value="dark">闇</option><option value="fire">火</option><option value="nature">自然</option>
         </select>
+        <select id="fxDDDOff" style="width:auto;flex:0 0 140px">
+          <option value="0">攻撃時踏み倒し型</option>
+          <option value="1">召喚コスト−1</option><option value="2">召喚コスト−2</option><option value="3">召喚コスト−3</option><option value="4">召喚コスト−4</option><option value="5">召喚コスト−5</option><option value="6">召喚コスト−6</option>
+        </select>
         <span style="font-size:12px;font-weight:700">裏ニンジャ・ストライク</span>
         <select id="fxUraNinja" style="width:auto;flex:0 0 76px">
           <option value="0">なし</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
@@ -1481,6 +1485,12 @@ function normName(s){
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
     .toLowerCase();
 }
+window.addEventListener("error",ev=>{
+  try{toast(`⚠ 内部エラー：${(ev.message||"不明").slice(0,80)}`);}catch(e){}
+});
+window.addEventListener("unhandledrejection",ev=>{
+  try{toast(`⚠ 非同期エラー：${String(ev.reason&&ev.reason.message||ev.reason||"不明").slice(0,80)}`);}catch(e){}
+});
 function randInt(n){
   if(n<=0)return 0;
   const max=Math.floor(0xFFFFFFFF/n)*n;
@@ -2875,6 +2885,17 @@ function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
   return list.map(f=>FX_LABEL[f.t].replace("n",f.n)).join(" → ");
 }
+function dddDiscount(r,pi){
+  if(!r||!r.ddd||!(r.dddOff>0))return 0;
+  const Z=zonesOf(pi);
+  const need=r.dddCost|0;
+  if(need&&Z.mana.length<need)return 0;
+  if(r.dddCiv){
+    const has=Z.mana.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(r.dddCiv);});
+    if(!has)return 0;
+  }
+  return r.dddOff;
+}
 async function autoTapCost(pi,c){
   const r=getReg(c);
   if(!r||(r.cost==null&&r.cost2==null))return;
@@ -2887,6 +2908,13 @@ async function autoTapCost(pi,c){
   }
   if(cost==null)return;
   const Z=zonesOf(pi);
+  {
+    const dd=dddDiscount(r,pi);
+    if(dd>0){
+      cost=Math.max(0,cost-dd);
+      toast(`🌀 D・D・D：召喚コスト−${dd}（残り${cost}）`);
+    }
+  }
   if(r.sympathy){
     const w=r.sympathy;
     const toks=String(w).split(/[／\/、,]/).map(x=>x.trim()).filter(Boolean);
@@ -3711,6 +3739,7 @@ function dispCost(c,pi){
       if(ok)cost-=rb.stCostM;
     }
     if(c.buff&&c.buff.costM>0)cost-=c.buff.costM;
+    cost-=dddDiscount(r,pi);
     if(S.nextPlay&&S.nextPlay[pi])for(const g of S.nextPlay[pi]){
       const wOK=!g.word||String(g.word).split(/[／\/、,]/).some(tk=>tk&&(raceMatch(r,tk)||faceNameOf(c).includes(tk)));
       if((!g.civ||(r.civs&&r.civs.includes(g.civ)))&&wOK)cost-=g.n;
@@ -5261,6 +5290,7 @@ function renderFxEditor(){
   $("fxDDD").checked=!!FXEDIT.ddd;
   $("fxDDDCost").value=String(FXEDIT.dddCost||0);
   $("fxDDDCiv").value=FXEDIT.dddCiv||"";
+  $("fxDDDOff").value=String(FXEDIT.dddOff||0);
   $("fxUraNinja").value=String(FXEDIT.uraNinja||0);
   $("fxUraCiv").value=FXEDIT.uraCiv||"";
   $("fxKirifuda").value=String(FXEDIT.kirifuda||0);
@@ -5455,6 +5485,7 @@ function openFxEditor(key){
     ddd:cur?!!cur.ddd:false,
     dddCost:cur&&(+cur.dddCost||0)||0,
     dddCiv:cur&&cur.dddCiv||"",
+    dddOff:cur&&(+cur.dddOff||0)||0,
     uraNinja:cur?((typeof cur.uraNinja==="number")?cur.uraNinja:(cur.uraNinja?(cur.ninja||0):0)):0,
     uraCiv:cur&&cur.uraCiv||"",
     kirifuda:cur&&cur.kirifuda||0,
@@ -5647,6 +5678,7 @@ $("fxSave").addEventListener("click",async ()=>{
     repShield:$("fxRepShield").checked,
     ddd:$("fxDDD").checked,
     dddCost:+$("fxDDDCost").value||0,
+    dddOff:+$("fxDDDOff").value||0,
     dddCiv:$("fxDDDCiv").value||"",
     uraNinja:+$("fxUraNinja").value||0,
     uraCiv:$("fxUraCiv").value||"",
@@ -8342,6 +8374,13 @@ function attachPointer(el,ctx){
           if(ctx.afterDrop)ctx.afterDrop();
           else if(ctx.viewer)closeViewer();
           renderAll();
+          setTimeout(()=>{
+            try{
+              renderAll();
+              const still=findCard(ctx.p,ctx.zone,ctx.id);
+              if(still&&tgt.zone!==ctx.zone)toast(`⚠ 移動が完了していません（${ctx.zone}→${tgt.zone}）`);
+            }catch(e){toast(`⚠ 再描画エラー：${String(e&&e.message||e).slice(0,60)}`);}
+          },120);
         }else if(ctx.viewer)renderAll();
       }else if(!wasMode){
         if(Date.now()-t0<450){
