@@ -1219,22 +1219,26 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="baiken">バイケン型（相手ターン中に捨てられたら出せる・自分の効果でもOK・ロック貫通）</option>
           <option value="eternal">永遠龍型（相手のハンデスのみ・どちらのターンでも・ロック貫通しない）</option>
         </select>
-        <span style="font-size:12px;font-weight:700">自分の召喚コスト −</span>
-        <input type="number" id="fxStCostM" style="width:70px" placeholder="0" min="0">
-        <input type="text" id="fxStCostF" list="raceList" placeholder="対象（種族/文明/名前・「／」区切り・空欄＝全て）" style="flex:1;min-width:150px">
-        <select id="fxStCostT" style="width:auto;flex:0 0 130px">
-          <option value="">タイプ不問</option>
-          <option value="creature">クリーチャーのみ</option>
-          <option value="spell">呪文のみ</option>
-        </select>
-        <span style="font-size:12px;font-weight:700">相手のコスト ＋</span>
-        <input type="number" id="fxStCostUp" style="width:70px" placeholder="0" min="0">
-        <input type="text" id="fxStCostUpF" list="raceList" placeholder="対象（種族/文明/名前・空欄＝全て）" style="flex:1;min-width:150px">
-        <select id="fxStCostUpT" style="width:auto;flex:0 0 130px">
-          <option value="">タイプ不問</option>
-          <option value="creature">クリーチャーのみ</option>
-          <option value="spell">呪文のみ</option>
-        </select>
+        <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
+          <span style="font-size:12px;font-weight:700;color:#4ade80">自分の召喚コスト −</span>
+          <input type="number" id="fxStCostM" style="width:70px" placeholder="0" min="0">
+          <select id="fxStCostT" style="width:auto;flex:0 0 130px">
+            <option value="">タイプ不問</option>
+            <option value="creature">クリーチャーのみ</option>
+            <option value="spell">呪文のみ</option>
+          </select>
+          <input type="text" id="fxStCostF" list="raceList" placeholder="対象（種族/文明/名前・「／」区切り・空欄＝全て）" style="flex:1;min-width:150px">
+        </div>
+        <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
+          <span style="font-size:12px;font-weight:700;color:#f87171">相手のコスト ＋</span>
+          <input type="number" id="fxStCostUp" style="width:70px" placeholder="0" min="0">
+          <select id="fxStCostUpT" style="width:auto;flex:0 0 130px">
+            <option value="">タイプ不問</option>
+            <option value="creature">クリーチャーのみ</option>
+            <option value="spell">呪文のみ</option>
+          </select>
+          <input type="text" id="fxStCostUpF" list="raceList" placeholder="対象（種族/文明/名前・空欄＝全て）" style="flex:1;min-width:150px">
+        </div>
         <label><input type="checkbox" id="fxShinkalize"> シンカライズ（この上に進化クリーチャーを置ける）</label>
         <label><input type="checkbox" id="fxSST"> スーパー・S・トリガー（盾0でトリガー時に追加能力）</label>
         <label><input type="checkbox" id="fxSTPlus"> S・トリガー・プラス（相手ターンに2枚以上ブレイクされていれば追加能力）</label>
@@ -4041,8 +4045,8 @@ function dispCost(c,pi){
     if(c.buff&&c.buff.costM>0)cost-=c.buff.costM;
     cost-=dddDiscount(r,pi);
     if(r.vtCost)cost=Math.max(1,cost-vtDiscount());
-    // ツインパクトは表示している上面（r.cost側）の種別で判定。上面=クリーチャーなら呪文限定の＋nは効かない
-    const topSide=(r.ctype==="twinpact"||r.twin)?(r.ctype==="spell"?"spell":"creature"):null;
+    // ツインパクトは表示している上面（r.cost側）で判定。このアプリの上面＝常にクリーチャー面（エディタ定義）
+    const topSide=(r.ctype==="twinpact"||r.twin)?"creature":null;
     cost+=oppCostUp(r,c,pi,topSide);
     if(S.nextPlay&&S.nextPlay[pi])for(const g of S.nextPlay[pi]){
       const wOK=!g.word||String(g.word).split(/[／\/、,]/).some(tk=>tk&&(raceMatch(r,tk)||faceNameOf(c).includes(tk)));
