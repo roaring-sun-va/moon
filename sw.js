@@ -1,5 +1,5 @@
 /* DM Re:Vault offline service worker */
-const CACHE="dmrevault-v102";
+const CACHE="dmrevault-v103";
 const CORE=["./","./index.html"];
 self.addEventListener("install",e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()));
