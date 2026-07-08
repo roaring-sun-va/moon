@@ -1271,7 +1271,7 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
         <span style="font-size:12px;font-weight:700">フシギバース</span>
         <select id="fxFushigi" style="width:auto;flex:0 0 76px">
-          <option value="0">なし</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+          <option value="0">なし</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option>
         </select>
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
@@ -5640,30 +5640,21 @@ function fxUiPolish(){
         if(lab)lab.after(sel);
       }
     }catch(e){console.warn("vtMode",e);}
-    // フシギバース：指定コスト（最大20＝14に余裕）＋対象色。盤面クリーチャー1体のコスト分を指定コストから引いて召喚
+    // フシギバース：既存セレクト(fxFushigi=指定コスト)の隣に「対象色」チェックを注入（軽減に使う盤面クリーチャーの色指定・単色/多色）
     try{
-      const vt=document.getElementById("fxVtCost");
-      const anchor=(vt&&(vt.closest("label")||vt.parentElement))||document.getElementById("fxGimmick");
-      if(anchor&&!document.getElementById("fxFushigi")){
-        const box=document.createElement("div");
-        box.className="row";box.style.cssText="gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px";
-        const lab=document.createElement("label");lab.style.cssText="font-size:12px";
-        const cb=document.createElement("input");cb.type="checkbox";cb.id="fxFushigi";
-        lab.appendChild(cb);lab.appendChild(document.createTextNode(" 🌀 フシギバース（不死樹王国）"));
-        const cl=document.createElement("label");cl.style.cssText="font-size:12px;display:inline-flex;align-items:center;gap:4px";
-        const ci=document.createElement("input");ci.type="number";ci.id="fxFushigiCost";ci.min="0";ci.max="20";ci.step="1";ci.style.cssText="width:64px";
-        cl.appendChild(document.createTextNode("指定コスト"));cl.appendChild(ci);
-        const cw=document.createElement("span");cw.id="fxFushigiCivWrap";cw.style.cssText="display:inline-flex;gap:6px;font-size:12px;align-items:center";
+      const ff=document.getElementById("fxFushigi");
+      if(ff&&!document.getElementById("fxFushigiCivWrap")){
+        const cw=document.createElement("span");cw.id="fxFushigiCivWrap";
+        cw.style.cssText="display:inline-flex;gap:6px;font-size:12px;align-items:center;margin-left:6px";
         cw.appendChild(document.createTextNode("対象色："));
         [["light","光"],["water","水"],["dark","闇"],["fire","火"],["nature","自然"]].forEach(([v,t])=>{
           const l=document.createElement("label");l.style.cssText="display:inline-flex;align-items:center;gap:2px";
           const i=document.createElement("input");i.type="checkbox";i.value=v;
           l.appendChild(i);l.appendChild(document.createTextNode(t));cw.appendChild(l);
         });
-        box.appendChild(lab);box.appendChild(cl);box.appendChild(cw);
-        anchor.after(box);
+        ff.after(cw);
       }
-    }catch(e){console.warn("fushigi",e);}
+    }catch(e){console.warn("fushigiCiv",e);}
     // COMPLEX：ARC REALITY型フラグを注入（NEO進化・タップインしない・下6枚以下で離れず攻撃不可・攻撃時に下を全部手札へ→W・ブレイカー→コスト9以下踏み倒し）
     try{
       const gm=document.getElementById("fxGimmick");
@@ -5969,9 +5960,7 @@ function renderFxEditor(){
   $("fxDDDMinus").checked=!!FXEDIT.dddMinus;
   $("fxVtCost").checked=!!FXEDIT.vtCost;
   {const e=document.getElementById("fxVtMode");if(e)e.value=FXEDIT.vtMode||"battle";}
-  {const e=document.getElementById("fxFushigi");if(e)e.checked=!!FXEDIT.fushigi;}
-  {const e=document.getElementById("fxFushigiCost");if(e)e.value=FXEDIT.fushigiCost!=null?FXEDIT.fushigiCost:"";}
-  {const w=document.getElementById("fxFushigiCivWrap");if(w){const set=new Set(FXEDIT.fushigiCivs||[]);w.querySelectorAll("input").forEach(x=>{x.checked=set.has(x.value);});}}
+  {const w=document.getElementById("fxFushigiCivWrap");if(w){const set=new Set(FXEDIT.fushigiCiv||[]);w.querySelectorAll("input").forEach(x=>{x.checked=set.has(x.value);});}}
   $("fxUraNinja").value=String(FXEDIT.uraNinja||0);
   $("fxUraCiv").value=FXEDIT.uraCiv||"";
   $("fxKirifuda").value=String(FXEDIT.kirifuda||0);
@@ -6194,9 +6183,7 @@ function openFxEditor(key){
     dddMinus:cur?!!cur.dddMinus:false,
     vtCost:cur?!!cur.vtCost:false,
     vtMode:cur&&cur.vtMode||"battle",
-    fushigi:cur&&!!cur.fushigi,
-    fushigiCost:cur&&cur.fushigiCost!=null?cur.fushigiCost:null,
-    fushigiCivs:cur&&cur.fushigiCivs?cur.fushigiCivs.slice():[],
+    fushigiCiv:cur&&cur.fushigiCiv?cur.fushigiCiv.slice():[],
     uraNinja:cur?((typeof cur.uraNinja==="number")?cur.uraNinja:(cur.uraNinja?(cur.ninja||0):0)):0,
     uraCiv:cur&&cur.uraCiv||"",
     kirifuda:cur&&cur.kirifuda||0,
@@ -6416,9 +6403,7 @@ $("fxSave").addEventListener("click",async ()=>{
     dddMinus:$("fxDDDMinus").checked,
     vtCost:$("fxVtCost").checked,
     vtMode:document.getElementById("fxVtMode")?$("fxVtMode").value:((FXEDIT&&FXEDIT.vtMode)||"battle"),
-    fushigi:document.getElementById("fxFushigi")?$("fxFushigi").checked:((FXEDIT&&FXEDIT.fushigi)||false),
-    fushigiCost:document.getElementById("fxFushigiCost")?(($("fxFushigiCost").value==="")?null:+$("fxFushigiCost").value):((FXEDIT&&FXEDIT.fushigiCost)!=null?FXEDIT.fushigiCost:null),
-    fushigiCivs:document.getElementById("fxFushigiCivWrap")?[...document.querySelectorAll("#fxFushigiCivWrap input:checked")].map(x=>x.value):((FXEDIT&&FXEDIT.fushigiCivs)||[]),
+    fushigiCiv:document.getElementById("fxFushigiCivWrap")?[...document.querySelectorAll("#fxFushigiCivWrap input:checked")].map(x=>x.value):((FXEDIT&&FXEDIT.fushigiCiv)||[]),
     dddCiv:$("fxDDDCiv").value||"",
     dddCivTxt:$("fxDDDCivTxt").value.trim(),
     uraNinja:+$("fxUraNinja").value||0,
@@ -6726,7 +6711,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.megaLB)attrs.push("メガLB");
     if(v.oniTime)attrs.push("鬼タイム");
     if(v.abyss)attrs.push("アビスラッシュ");
-    if(v.fushigi)attrs.push(`フシギバース${v.fushigi}`);
+    if(v.fushigi)attrs.push(`フシギバース${v.fushigi}${v.fushigiCiv&&v.fushigiCiv.length?"："+v.fushigiCiv.map(k=>({light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"}[k]||k)).join("/"):""}`);
     if(v.ryuArm)attrs.push(`龍マナ武装${v.ryuArm}`);
     if(v.mDrive)attrs.push(`マナドライブ${v.mDrive}`);
     if(v.yobinion)attrs.push("ヨビニオン");
@@ -6776,7 +6761,6 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.stNoHandes)attrs.push("常在：ハンデスされない");
     if(v.libWin)attrs.push("常在：山札0で勝利（シャコガイル型）");
     if(v.petensy)attrs.push("ペテンシー型（相手ターン終了時・3体以上で無料使用）");
-    if(v.fushigi)attrs.push(`フシギバース${v.fushigiCost!=null?v.fushigiCost:""}${v.fushigiCivs&&v.fushigiCivs.length?"："+v.fushigiCivs.map(k=>({light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"}[k]||k)).join("/"):""}`);
     if(v.repIn)attrs.push(`常在：置換ロック（${v.repInF||"相手全て"}${v.repInNC?"・召喚以外":""}→${v.repIn==="grave"?"墓地":"山下"}）`);
     if(v.madness)attrs.push(v.madness==="baiken"?"マッドネス（バイケン型）":"マッドネス（永遠型）");
     if(v.ignore)attrs.push(v.ignore==="cost"?`能力無視：コスト${v.ignoreN}以下`:"能力無視：名前指定");
@@ -9551,13 +9535,13 @@ function openCardSheet(ctx){
     const rF=getReg(c);
     if(rF&&rF.fushigi){
       const civT={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};
-      const fCost=rF.fushigiCost!=null?rF.fushigiCost:(rF.cost!=null?rF.cost:0);
+      const fCost=+rF.fushigi||0;
       box.appendChild(actBtn(`⚔ 通常召喚（コスト${rF.cost!=null?rF.cost:"?"}）`,()=>{
         closeSheet();moveCard(ctx.p,"hand",ctx.id,"battle");renderAll();
       },"primary"));
       box.appendChild(actBtn(`🌀 フシギバース召喚（指定${fCost}・盤面クリーチャーで軽減）`,async ()=>{
         closeSheet();
-        const civs=rF.fushigiCivs||[];
+        const civs=rF.fushigiCiv||[];
         const Zme=zonesOf(ctx.p);
         const cands=Zme.battle.filter(x=>{
           if(x.id===ctx.id)return false;
