@@ -5201,6 +5201,7 @@ async function execAttack(pi,id,tg){
   // 革命0トリガー（防御側・盾0）
   let rev0Asked=false;
   let rev0Used=false;
+  let oniEndAsked=false;
   async function offerRev0(){
     if(rev0Asked)return;
     rev0Asked=true;
@@ -5229,7 +5230,47 @@ async function execAttack(pi,id,tg){
       await waitFxIdle();renderAll();
     }
   }
+  async function offerOniEnd(){
+    if(oniEndAsked)return;
+    oniEndAsked=true;
+    if(!S.expert)return;
+    // 鬼エンド：クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいて、自分のマナに闇と火があれば手札から無料で唱える
+    if(!(zonesOf(0).shield.length===0||(S.vs&&zonesOf(1).shield.length===0)))return;
+    for(const pl of (S.vs?[0,1]:[0])){
+      const PZ=zonesOf(pl);
+      const oe=PZ.hand.filter(h=>{const r=getReg(h);return r&&r.oniEnd;});
+      if(!oe.length)continue;
+      const hasDark=PZ.mana.some(m=>{const r=getReg(m);return r&&r.civs&&r.civs.includes("dark");});
+      const hasFire=PZ.mana.some(m=>{const r=getReg(m);return r&&r.civs&&r.civs.includes("fire");});
+      for(const h of oe){
+        if(!(hasDark&&hasFire)){
+          const go=await ask(`👹 鬼エンド（${faceNameOf(h)}）\nマナの闇${hasDark?"○":"✕"}／火${hasFire?"○":"✕"}（各1枚以上必要）。それでも唱えますか？`);
+          if(!go)continue;
+        }
+        const yes=await ask(`👹 鬼エンド！\n${S.players[pl].label}：《${faceNameOf(h)}》を手札からコストを支払わずに唱えますか？`);
+        if(!yes)continue;
+        snap();
+        const hi=PZ.hand.findIndex(x=>x.id===h.id);
+        if(hi<0)continue;
+        PZ.hand.splice(hi,1);
+        const r2=getReg(h);
+        h.faceup=true;h.tapped=false;
+        if(r2&&r2.ctype==="spell"){
+          if(PZ.resolve.length){const olds=PZ.resolve.splice(0);olds.forEach(o=>resolveOut(PZ,o));}
+          PZ.resolve.push(h);
+        }else{
+          PZ.battle.push(h);emitEvent(pl,"summon");
+        }
+        markArrive(h);
+        enqueueFx(pl,h);
+        sfx("ok");renderAll();
+        toast(`👹 鬼エンド！ ${faceNameOf(h)}（手札から無料）`);
+        await waitFxIdle();renderAll();
+      }
+    }
+  }
   await offerRev0();
+  await offerOniEnd();
   if(rev0Used){
     toast(`🔥 革命0トリガーの処理中：効果を盤面で解決してください。攻撃が防がれなければ、攻撃クリーチャーからもう一度「攻撃する」→ダイレクトアタックで勝敗を記録できます`);
     renderAll();
@@ -5498,6 +5539,8 @@ async function execAttack(pi,id,tg){
     }
     rev0Asked=false;
     await offerRev0();
+    oniEndAsked=false;
+    await offerOniEnd();
     if(rev0Used){
       toast(`🔥 革命0トリガーの処理中：効果を盤面で解決してください。攻撃が防がれなければ、もう一度攻撃→ダイレクトアタックで勝敗を記録できます`);
       renderAll();
@@ -5666,7 +5709,7 @@ function fxUiPolish(){
       if(ff&&!document.getElementById("fxFushigiCivWrap")){
         const cw=document.createElement("span");cw.id="fxFushigiCivWrap";
         cw.style.cssText="display:inline-flex;gap:6px;font-size:12px;align-items:center;margin-left:6px";
-        cw.appendChild(document.createTextNode("対象色："));
+        cw.appendChild(document.createTextNode("必要文明(マナに各色1枚以上)："));
         [["light","光"],["water","水"],["dark","闇"],["fire","火"],["nature","自然"]].forEach(([v,t])=>{
           const l=document.createElement("label");l.style.cssText="display:inline-flex;align-items:center;gap:2px";
           const i=document.createElement("input");i.type="checkbox";i.value=v;
@@ -5675,6 +5718,19 @@ function fxUiPolish(){
         ff.after(cw);
       }
     }catch(e){console.warn("fushigiCiv",e);}
+    // 鬼エンド：クリーチャー攻撃時、盾0のプレイヤーがいて自分のマナに闇と火があれば、手札から無料で唱える（革命0トリガー型）
+    try{
+      const ot=document.getElementById("fxOniTime");
+      const anchor=(ot&&(ot.closest("label")||ot.parentElement))||document.getElementById("fxRev0");
+      if(anchor&&!document.getElementById("fxOniEnd")){
+        const lab=document.createElement("label");
+        lab.style.cssText="font-size:12px";
+        const cb=document.createElement("input");cb.type="checkbox";cb.id="fxOniEnd";
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(" 👹 鬼エンド（攻撃時・盾0のプレイヤーあり＆自分マナに闇+火で、手札から無料で唱える）"));
+        anchor.after(lab);
+      }
+    }catch(e){console.warn("oniEnd",e);}
     // COMPLEX：ARC REALITY型フラグを注入（NEO進化・タップインしない・下6枚以下で離れず攻撃不可・攻撃時に下を全部手札へ→W・ブレイカー→コスト9以下踏み倒し）
     try{
       const gm=document.getElementById("fxGimmick");
@@ -6019,6 +6075,7 @@ function renderFxEditor(){
   $("fxLastBurst").checked=!!FXEDIT.lastburst;
   $("fxMegaLB").checked=!!FXEDIT.megaLB;
   $("fxOniTime").checked=!!FXEDIT.oniTime;
+  {const e=document.getElementById("fxOniEnd");if(e)e.checked=!!FXEDIT.oniEnd;}
   $("fxAbyss").checked=!!FXEDIT.abyss;
   $("fxFushigi").value=String(FXEDIT.fushigi||0);
   $("fxRyuArm").value=String(FXEDIT.ryuArm||0);
@@ -6242,6 +6299,7 @@ function openFxEditor(key){
     lastburst:cur?!!cur.lastburst:false,
     megaLB:cur?!!cur.megaLB:false,
     oniTime:cur?!!cur.oniTime:false,
+    oniEnd:cur?!!cur.oniEnd:false,
     abyss:cur?!!cur.abyss:false,
     fushigi:cur&&(+cur.fushigi||0)||0,
     ryuArm:cur&&(+cur.ryuArm||0)||0,
@@ -6464,6 +6522,7 @@ $("fxSave").addEventListener("click",async ()=>{
     lastburst:$("fxLastBurst").checked,
     megaLB:$("fxMegaLB").checked,
     oniTime:$("fxOniTime").checked,
+    oniEnd:document.getElementById("fxOniEnd")?$("fxOniEnd").checked:((FXEDIT&&FXEDIT.oniEnd)||false),
     abyss:$("fxAbyss").checked,
     fushigi:+$("fxFushigi").value||0,
     ryuArm:+$("fxRyuArm").value||0,
@@ -6730,6 +6789,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.lastburst)attrs.push("ラストバースト");
     if(v.megaLB)attrs.push("メガLB");
     if(v.oniTime)attrs.push("鬼タイム");
+    if(v.oniEnd)attrs.push("鬼エンド");
     if(v.abyss)attrs.push("アビスラッシュ");
     if(v.fushigi)attrs.push(`フシギバース${v.fushigi}${v.fushigiCiv&&v.fushigiCiv.length?"："+v.fushigiCiv.map(k=>({light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"}[k]||k)).join("/"):""}`);
     if(v.ryuArm)attrs.push(`龍マナ武装${v.ryuArm}`);
@@ -9704,18 +9764,22 @@ function openCardSheet(ctx){
     if(rFB&&rFB.fushigi&&ctx.zone==="grave"){
       const civT={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};
       const civs=rFB.fushigiCiv||[];
-      box.appendChild(actBtn(`🌀 フシギバース${rFB.fushigi}（墓地から：盤面クリーチャー1体をタップしてマナへ→そのコスト分 軽減して出す）`,async ()=>{
+      const civLbl=civs.length?civs.map(k=>civT[k]||k).join("・"):"";
+      box.appendChild(actBtn(`🌀 フシギバース${rFB.fushigi}（墓地から：盤面クリーチャー1体をタップしてマナへ→そのコスト分 軽減して出す${civLbl?`／要：マナに${civLbl}`:""}）`,async ()=>{
         const Z2=zonesOf(ctx.p);
-        const cands=Z2.battle.filter(x=>{
-          if(!civs.length)return true;
-          const rx=getReg(x);
-          return rx&&rx.civs&&rx.civs.some(cv=>civs.includes(cv));
-        });
-        if(!cands.length){toast(`マナに置ける対象クリーチャーがいません${civs.length?"（対象色："+civs.map(k=>civT[k]||k).join("/")+"）":""}`);return;}
-        const j=cands.length===1?0:await askChoice(`マナゾーンにタップして置くクリーチャーを選択（指定${rFB.fushigi}から そのコスト分 軽減）`,cands.map(x=>`${faceNameOf(x)}（コスト${getReg(x).cost!=null?getReg(x).cost:"?"}）`));
+        if(!Z2.battle.length){toast("マナに置くクリーチャーがいません");return;}
+        // 使用条件：指定文明が各色1枚以上マナにあるか（黒緑なら黒1枚＋緑1枚、または黒緑の多色1枚でOK）
+        if(civs.length){
+          const missing=civs.filter(cv=>!Z2.mana.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}));
+          if(missing.length){
+            const go=await ask(`🌀 フシギバース：マナに ${missing.map(k=>civT[k]||k).join("・")} のカードがありません（${civLbl} が各色1枚以上必要）。\nそれでも実行しますか？`);
+            if(!go)return;
+          }
+        }
+        const j=Z2.battle.length===1?0:await askChoice(`マナゾーンにタップして置くクリーチャーを選択（指定${rFB.fushigi}から そのコスト分 軽減）`,Z2.battle.map(x=>`${faceNameOf(x)}（コスト${getReg(x).cost!=null?getReg(x).cost:"?"}）`));
         if(j===null)return;
         snap();
-        const t=cands[j];
+        const t=Z2.battle[j];
         const tCost=getReg(t).cost!=null?+getReg(t).cost:0;
         moveCardX(ctx.p,"battle",t.id,ctx.p,"mana",true);
         {const fm=findCard(ctx.p,"mana",t.id);if(fm)fm.card.tapped=true;}  // フシギバースでマナに送られたクリーチャーはタップ状態
@@ -9729,12 +9793,13 @@ function openCardSheet(ctx){
         const pay=Math.max(0,(+rFB.fushigi||0)-tCost);
         if(S.expert&&S.autoTap&&!S.freePlay){
           let n=0;
-          for(const m of Z2.mana){if(n>=pay)break;if(!m.tapped){m.tapped=true;n++;}}
+          for(const m of Z2.mana){if(n>=pay)break;if(!m.tapped){m.tapped=true;n++;}}  // 支払いは通常どおり（色は使用条件のみ）
+          if(n<pay)toast(`⚠ マナ不足：${n}/${pay} だけタップしました`);
         }
         emitEvent(ctx.p,"summon");
         enqueueFx(ctx.p,cc);
         closeSheet();closeSel();sfx("ok");renderAll();
-        toast(`🌀 フシギバース！ ${faceNameOf(cc)}（指定${rFB.fushigi}−${tCost}＝${pay} を支払い／${faceNameOf(t)}はタップしてマナへ）`);
+        toast(`🌀 フシギバース！ ${faceNameOf(cc)}（指定${rFB.fushigi}−${tCost}＝${pay}${civLbl?`／${civLbl}のマナで支払い`:""}／${faceNameOf(t)}はタップしてマナへ）`);
         await waitFxIdle();renderAll();
       },"primary",true));
     }
@@ -12634,7 +12699,7 @@ $("btnHelp").addEventListener("click",()=>{
       ・<code>マナ:ドラゴン>=3</code> … マナにドラゴンが3枚以上<br>
       ・<code>マナ:多色>=2</code> … マナに多色が2枚以上<br>
       ・<code>墓地合計>=13</code> … お互いの墓地の合計13枚以上（ガリュザーク型）<br>
-      ・<code>盾合計<=6</code> … お互いの盾の合計6枚以下（鬼タイム型）<br>
+      ・<code>盾合計<=6</code> … お互いの盾の合計6枚以下（鬼タイム型）※<code>鬼タイム</code>と書いても同じ<br>
       ・<code>盾>=5</code> … 自分の盾5枚以上の間有効（DG系など）<br>
       ・<code>手札<=1</code> … 手札1枚以下（G・G・G型）<br>
       ・<code>相手バトル>=3</code> … 相手のクリーチャー3体以上<br>
@@ -12692,7 +12757,8 @@ function zoneCondOk(expr,pi){
       .replace(/＞/g,">").replace(/＜/g,"<").replace(/＝/g,"=")
       .replace(/≧|≥/g,">=").replace(/≦|≤/g,"<=")
       .replace(/>=+/g,">=").replace(/<=+/g,"<=")
-      .replace(/　/g," ").replace(/\s+/g,"");
+      .replace(/　/g," ").replace(/\s+/g,"")
+      .replace(/鬼タイム/g,"盾合計<=6");  // 鬼タイム＝両者の盾合計6枚以下
     const terms=ex.split(/[＆&]/).map(t=>t.trim()).filter(Boolean);
     if(!terms.length)return false;
     const zoneCnt=(nm)=>{
@@ -12705,6 +12771,7 @@ function zoneCondOk(expr,pi){
     return terms.every(t=>{
       if(t==="相手ターン")return S.who!==pi;
       if(t==="自分ターン")return S.who===pi;
+      if(t==="盾0"||t==="鬼エンド")return Z.shield.length===0||OZ.shield.length===0;  // どちらかのプレイヤーの盾が0
       {
         const m2=t.match(/^((?:相手|自分の?)?(?:盾|墓地|手札|バトル|マナ|山札))(>=|<=|>|<|=)((?:相手|自分の?)?(?:盾|墓地|手札|バトル|マナ|山札))$/);
         if(m2){
