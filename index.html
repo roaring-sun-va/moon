@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>DM Re:Vault v10.3</title>
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="googlebot" content="noindex, nofollow, noarchive">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1053,7 +1055,6 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="all">HM時：ワールド</option>
         </select>
 
-        <label><input type="checkbox" id="fxHmSL"> HM時スレイヤー</label>
         <span style="font-size:12px;font-weight:700">キリフダッシュ</span>
         <select id="fxKirifuda" style="width:auto;flex:0 0 80px">
           <option value="0">なし</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
@@ -1130,8 +1131,10 @@ body.shake{animation:bodyShake .4s ease-out}
         <select id="fxGGG" style="width:auto;flex:0 0 180px">
           <option value="">なし</option>
           <option value="cost0">コスト0で召喚できる（轟轟轟型）</option>
-          <option value="noDestroy">破壊されない（レイド型）</option>
+          <option value="noDestroy">破壊されない（レイド型・自身のみ）</option>
+          <option value="noDestroyGrp">破壊されない（対象フィルタで指定）</option>
         </select>
+        <input type="text" id="fxGGGGrp" placeholder="対象（例：火／コスト7以下・「／」＝AND・空欄＝自身のみ）" style="flex:1;min-width:170px">
         <label><input type="checkbox" id="fxNoLose"> ゲームに負けない（このカードが場にある間、敗北確定時に警告）</label>
         <label><input type="checkbox" id="fxSoulShift"> ソウルシフト（進化時、進化元のコスト分軽減）</label>
         <label><input type="checkbox" id="fxGaiash"> 相手のターンの終わりに手札から出せる（ガイアッシュ型・条件はプレイヤー判断）</label>
@@ -3332,6 +3335,21 @@ async function destroyCreature(pi,c){
       toast(`🎸 G・G・G！ 手札${Z.hand.length}枚 → ${faceNameOf(c)} は破壊されない！`);
       return;
     }
+    // G・G・G（グループ効果）：盤面に「gggGrp="noDestroyGrp" かつ 手札1枚以下」のカードがあり、破壊対象がgggGrpのフィルタに合致するなら守る（発動元自身も対象に含む）
+    {
+      const grpSaver=Z.battle.find(x=>{
+        if(isSealed(x)||isIgnored(x,pi))return false;
+        const rx=getReg(x);
+        if(!rx||rx.ggg!=="noDestroyGrp")return false;
+        if(Z.hand.length>1)return false; // 手札1枚以下という発動条件
+        return lockFilterOk(rx.gggGrp||"",rCX,c);
+      });
+      if(!IGN&&grpSaver){
+        const self=(grpSaver.id===c.id);
+        toast(`🎸 G・G・G（グループ）！ ${self?"":faceNameOf(grpSaver)+" の効果 → "}${faceNameOf(c)} は破壊されない！`);
+        return;
+      }
+    }
     if(!IGN&&rCX&&rCX.gimmick==="complex"&&(c.under?c.under.length:0)<8){
       toast(`⬛ ${faceNameOf(c)} は離れない！（下が7枚以下）`);
       return;
@@ -4224,7 +4242,7 @@ function resolveOut(Z,o){
   if(rg&&rg.charger){Z.mana.push(o);return true;}
   Z.grave.push(o);return false;
 }
-function hasSlayer(c){const r=getReg(c);return !!((r&&r.slayer)||(c.buff&&c.buff.slayer)||(c.hyper&&r&&r.hmSL));}
+function hasSlayer(c){const r=getReg(c);return !!((r&&r.slayer)||(c.buff&&c.buff.slayer)||(c.hyper&&r&&(r.hmSlayer||r.hmSL)));}
 async function doBattle(pa,a,pd,d){
   for(const [pp,x] of [[pa,a],[pd,d]]){
     const rx=getReg(x);
@@ -5697,7 +5715,6 @@ function renderFxEditor(){
   $("fxHmSlayer").checked=!!FXEDIT.hmSlayer;
   $("fxHmBk").value=FXEDIT.hmBk||"";
 
-  $("fxHmSL").checked=!!FXEDIT.hmSL;
   $("fxSInvade").value=FXEDIT.sInvade||"";
   $("fxSympathy").value=FXEDIT.sympathy||"";
   $("fxGalaxy").value=String(FXEDIT.galaxy||0);
@@ -5741,6 +5758,7 @@ function renderFxEditor(){
   $("fxBAD").checked=!!FXEDIT.bad;
   $("fxBadBrand").checked=!!FXEDIT.badBrand;
   $("fxGGG").value=FXEDIT.ggg||"";
+  $("fxGGGGrp").value=FXEDIT.gggGrp||"";
   $("fxKizuna").value=FXEDIT.kizuna||"";
   $("fxTwice").value=FXEDIT.twice||"";
   $("fxAtkChance").value=FXEDIT.atkChance||"";
@@ -5913,10 +5931,9 @@ function openFxEditor(key){
     hmPow:cur&&cur.hmPow||0,
     hmSA:cur?!!cur.hmSA:false,
     hmBlocker:cur?!!(cur.hmBlocker||cur.hmBK):false,
-    hmSlayer:cur?!!cur.hmSlayer:false,
+    hmSlayer:cur?!!(cur.hmSlayer||cur.hmSL):false,
     hmBk:cur&&cur.hmBk||"",
 
-    hmSL:cur?!!cur.hmSL:false,
     sInvade:cur&&cur.sInvade||"",
     sympathy:cur&&cur.sympathy||"",
     galaxy:cur&&(+cur.galaxy||0)||0,
@@ -5960,6 +5977,7 @@ function openFxEditor(key){
     bad:cur?!!cur.bad:false,
     badBrand:cur?!!cur.badBrand:false,
     ggg:cur&&cur.ggg||"",
+    gggGrp:cur&&cur.gggGrp||"",
     kizuna:cur&&cur.kizuna||"",
     twice:cur&&cur.twice||"",
     atkChance:cur&&cur.atkChance||"",
@@ -6134,7 +6152,6 @@ $("fxSave").addEventListener("click",async ()=>{
     hmSlayer:$("fxHmSlayer").checked,
     hmBk:$("fxHmBk").value||"",
 
-    hmSL:$("fxHmSL").checked,
     sInvade:$("fxSInvade").value||"",
     sympathy:$("fxSympathy").value.trim(),
     galaxy:+$("fxGalaxy").value||0,
@@ -6178,6 +6195,7 @@ $("fxSave").addEventListener("click",async ()=>{
     bad:$("fxBAD").checked,
     badBrand:$("fxBadBrand").checked,
     ggg:$("fxGGG").value||"",
+    gggGrp:$("fxGGGGrp").value.trim(),
     kizuna:$("fxKizuna").value||"",
     twice:$("fxTwice").value||"",
     atkChance:$("fxAtkChance").value.trim(),
@@ -6396,7 +6414,6 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.hmSlayer)attrs.push("HM時スレイヤー");
     if(v.hmBk)attrs.push(`HM時ブレイク${v.hmBk==="all"?"：ワールド":v.hmBk+"枚"}`);
 
-    if(v.hmSL)attrs.push("HM時スレイヤー");
     if(v.invadeZero)attrs.push("侵略ZERO");
     if(v.rev0)attrs.push("革命0");
     if(v.silent)attrs.push("サイレントスキル");
@@ -6437,7 +6454,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.fieldKind)attrs.push({d2:"D2フィールド",dg:"DGフィールド",normal:"フィールド",kindan:"禁断フィールド",cho:"超フィールド"}[v.fieldKind]||"フィールド");
     if(v.bad)attrs.push("B・A・D");
     if(v.badBrand)attrs.push("マスターB・A・D");
-    if(v.ggg)attrs.push(v.ggg==="cost0"?"GGG：コスト0":"GGG：破壊されない");
+    if(v.ggg)attrs.push(v.ggg==="cost0"?"GGG：コスト0":v.ggg==="noDestroyGrp"?`GGG：${v.gggGrp||"全体"}が破壊されない`:"GGG：破壊されない");
     if(v.kizuna)attrs.push({k:"キズナ",plus:"キズナプラス",comp:"キズナコンプ"}[v.kizuna]);
     if(v.twice)attrs.push(v.twice==="onAtk"?"2回攻撃（攻撃時アンタップ）":"2回攻撃（攻撃後アンタップ）");
     if(v.atkChance)attrs.push(`アタック・チャンス：${v.atkChance}`);
