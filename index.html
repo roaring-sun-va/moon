@@ -228,6 +228,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
 .zpair .zone{flex:1 1 0;min-width:0}
 .zpair.mhpair .zone[data-zone="mana"]{flex:0 0 auto;min-width:0}
 .zpair.mhpair .zone[data-zone="hand"]{flex:1 1 auto;min-width:0}
+.zpair .zone.manaslim{flex:0 0 auto;min-width:0}
 .manaslim .zone-head{flex-wrap:wrap;gap:4px}
 .manaslim>.cards{justify-content:center;min-width:calc(var(--card-h)*.92)}
 .pboard>*{position:relative;z-index:1}
@@ -312,6 +313,12 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
   border-top:1px solid var(--line);flex-wrap:nowrap;overflow-x:auto;
 }
 #btnNextTurn{flex:1;font-size:15px;padding:12px;min-width:130px}
+@media (max-width:640px){
+  #bottombar{flex-wrap:wrap;overflow-x:visible}
+  #bottombar .btn.small{padding:6px 8px;font-size:11px}
+  #btnPause{order:98}
+  #btnNextTurn{flex:1 1 100%;order:99;min-width:0;padding:11px}
+}
 
 #sheet{
   position:fixed;left:0;right:0;bottom:0;z-index:80;
@@ -8053,6 +8060,22 @@ function buildBoards(){
         wrap.className="zpair";
         pb.insertBefore(wrap,first);
         wrap.appendChild(a);wrap.appendChild(b);
+      }
+      // コンパクトマナ：全幅の帯にせず、手札と同じ行（ペア内）の横に入れる
+      if(S.manaMode==="compact"){
+        const manaEl=pb.querySelector('[data-zone="mana"]');
+        let wrapEl=pb.querySelector('.zpair');
+        const handEl=pb.querySelector('[data-zone="hand"]');
+        if(manaEl&&handEl){
+          if(wrapEl&&wrapEl.contains(handEl)){
+            if(manaEl.parentNode!==wrapEl)wrapEl.appendChild(manaEl); // sys | 手札 | マナ
+          }else if(handEl.parentNode===pb){
+            // 手札が単独行のとき：手札とマナだけをペアにする
+            const w2=document.createElement("div");w2.className="zpair mhpair";
+            pb.insertBefore(w2,handEl);
+            w2.appendChild(handEl);w2.appendChild(manaEl);
+          }
+        }
       }
     }
     {
