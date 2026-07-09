@@ -39,6 +39,7 @@ body{
 }
 #board{flex:1;min-height:0;padding:5px 6px 3px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
 body.vs #board{gap:3px}
+body.vs.lay-wide #board{justify-content:space-between}
 body.vs .zone{padding:1px 6px 3px}
 body.vs .zone-head{min-height:15px;margin-bottom:1px}
 body.vs .pboard{gap:3px}
@@ -251,6 +252,7 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
 /* ワイド：マナ(左半分)｜手札(右半分)。手札は右半分に収める */
 .zpair.mhwide{gap:6px}
 .zpair.mhwide .zone{flex:1 1 0;min-width:0}
+.zpair.mhwide .zone.manaslim{flex:1 1 0;min-width:0}
 .zpair.mhwide .zone[data-zone="mana"]>.cards{justify-content:flex-end}
 body.lay-wide .zone[data-zone="hand"].wide-hand-half{width:50%;margin-left:auto;box-sizing:border-box}
 .zpair .zone.manaslim{flex:0 0 auto;min-width:0}
