@@ -258,12 +258,17 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
 .lbot>.zone[data-zone="sys"]{flex:0 1 auto;min-width:0}
 .lbot>.zone.manaslim{flex:0 0 auto}
 .rcol>.zone[data-zone="hand"]{flex:0 0 auto}
-/* スプレッド下段：左半分マナ／右半分手札 */
-.zpair.mhbot{display:flex;gap:8px;align-items:flex-start}
-.zpair.mhbot>.zone[data-zone="mana"]{flex:1 1 0;min-width:0}
-.zpair.mhbot>.zone[data-zone="hand"]{flex:1 1 0;min-width:0}
+/* ===== スプレッドマナ・ワイド専用：3段組（コンパクトと非共有） ===== */
+body.vs .pboard.spw{flex:1 1 0;min-height:0}
+.pboard.spw>.sprow{display:flex;gap:8px;align-items:stretch}
+.pboard.spw>.sprow.sp1{flex:1 1 auto;min-height:0}
+.pboard.spw>.sprow.sp2{flex:0 0 auto}
+.pboard.spw>.zone[data-zone="mana"]{flex:0 0 auto}
+.sprow>.zone.shieldz{flex:4 1 0;min-width:0}
+.sprow>.zone[data-zone="battle"]{flex:6 1 0;min-width:0;min-height:0}
+.sprow>.zone[data-zone="sys"]{flex:4 1 0;min-width:0}
+.sprow>.zone[data-zone="hand"]{flex:6 1 0;min-width:0}
 .pboard.cmw>.zpair.cmwide{flex:1 1 auto;min-height:0}
-.pboard.cmw>.zpair.mhbot{flex:0 0 auto}
 .zone.shieldz .zone-head .kanji{color:#7dd3fc}
 body.vs .pboard.cmw{flex:1 1 0;min-height:0}
 .zpair .zone.manaslim{flex:0 0 auto;min-width:0}
@@ -8133,7 +8138,7 @@ function buildBoards(){
           pb.classList.add("cmw");
         }
       }else{
-        // 従来（スプレッド）マナ専用：上=[盾/山札｜バトル]、下=左半分マナ/右半分手札
+        // 従来マナ置き・3段組：①盾｜バトル ②山札など｜手札 ③マナ全幅
         const sysEl=pb.querySelector('[data-zone="sys"]');
         const battleEl=pb.querySelector('[data-zone="battle"]');
         const manaEl=pb.querySelector('[data-zone="mana"]');
@@ -8142,19 +8147,14 @@ function buildBoards(){
           const shz=document.createElement("div");
           shz.className="zone shieldz";shz.setAttribute("data-zone","shieldz");
           shz.innerHTML=`<div class="zone-head"><span class="kanji">盾</span></div><div class="cards" id="shieldrow-${pi}"></div>`;
-          const lcol=document.createElement("div");lcol.className="lcol";
-          const rcol=document.createElement("div");rcol.className="rcol";
-          if(pi===seat){lcol.appendChild(shz);lcol.appendChild(sysEl);}
-          else{lcol.appendChild(sysEl);lcol.appendChild(shz);}
-          rcol.appendChild(battleEl);
-          const top=document.createElement("div");top.className="zpair cmwide";
-          top.appendChild(lcol);top.appendChild(rcol);
-          const bot=document.createElement("div");bot.className="zpair mhbot";
-          bot.appendChild(manaEl);bot.appendChild(handEl); // 左半分マナ｜右半分手札
+          const r1=document.createElement("div");r1.className="sprow sp1";
+          r1.appendChild(shz);r1.appendChild(battleEl);
+          const r2=document.createElement("div");r2.className="sprow sp2";
+          r2.appendChild(sysEl);r2.appendChild(handEl);
           pb.innerHTML="";
-          if(pi===seat){pb.appendChild(top);pb.appendChild(bot);}
-          else{pb.appendChild(bot);pb.appendChild(top);}
-          pb.classList.add("cmw");
+          if(pi===seat){pb.appendChild(r1);pb.appendChild(r2);pb.appendChild(manaEl);}
+          else{pb.appendChild(manaEl);pb.appendChild(r2);pb.appendChild(r1);}
+          pb.classList.add("spw");
         }
       }
     }
