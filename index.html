@@ -2110,6 +2110,7 @@ function draw(pi,n=1){
   renderAll();
 }
 let NEXT_TURN_HOLD=0;
+let NT_GUARD_T=0; // 直近のターン進行時刻（二重進行ガード用）
 let LABY_RUN=false;
 let GAME_PAUSE=false;
 function togglePause(){
@@ -2173,6 +2174,14 @@ function nextTurn(){
   if(NEXT_TURN_HOLD>0){
     toast("⏳ ターン終了時の処理中です");
     return;
+  }
+  // 二重進行ガード：連打・オート進行と手動クリックの競合などで nextTurn が短時間に2回走ると
+  // who が2回切り替わって先行側に戻り「もう一度ドロー」してしまうため、直近進行から一定時間はブロック。
+  // ラビリンス処理後の正規の再入（S._skipLaby）は除外する。
+  if(!S._skipLaby){
+    const _ntNow=Date.now();
+    if(NT_GUARD_T&&_ntNow-NT_GUARD_T<450)return;
+    NT_GUARD_T=_ntNow;
   }
   if(S.expert&&!S._skipLaby){
     const cur=S.vs?S.who:0;
@@ -8702,10 +8711,14 @@ function renderPlayer(pi){
   const swrap=document.createElement("div");swrap.className="pilewrap";
   if(S.shieldMode==="compact"){
     const faceUp=Z.shield.filter(s=>s.faceup).length;
+    const seenCnt=Z.shield.filter(s=>!s.faceup&&s.seen).length;
     const topImg=(()=>{const fu=Z.shield.find(s=>s.faceup);return fu?imgURL.get(faceKeyOf(fu)):null;})();
+    const bparts=[];
+    if(faceUp)bparts.push(`表${faceUp}`);
+    if(seenCnt)bparts.push(`👁${seenCnt}`);
     const sp=pileEl({n:Z.shield.length,label:"盾",dz:"shield",cls:"shieldpile",
       img:topImg,
-      badge:faceUp?`表${faceUp}`:null,
+      badge:bparts.length?bparts.join(" "):null,
       onTap:()=>openShieldViewer(pi)});
     swrap.appendChild(sp);
   }else{
@@ -11503,12 +11516,20 @@ function openShieldViewer(pi){
   $("vOk").style.display="none";$("vStatus").textContent="";
   const g=$("vGrid");g.innerHTML="";
   Z.shield.forEach((sh,i)=>{
-    const el=vCardEl(sh.faceup?sh.name:"（裏向きの盾）",{idx:i+1});
-    if(!sh.faceup){
+    const reveal=sh.faceup||sh.seen;
+    const el=vCardEl(reveal?sh.name:"（裏向きの盾）",{idx:i+1});
+    if(!reveal){
       const th=el.querySelector(".thumb");th.innerHTML="";
       const b=backURL(pi);
       if(b){const im=document.createElement("img");im.src=b;im.draggable=false;im.style.cssText="width:100%;height:100%;object-fit:cover";th.appendChild(im);}
       else{const np=document.createElement("div");np.className="nameplate";np.textContent="盾";th.appendChild(np);}
+    }
+    if(!sh.faceup&&sh.seen){
+      el.style.position="relative";
+      const ey=document.createElement("span");
+      ey.textContent="👁";
+      ey.style.cssText="position:absolute;left:4px;top:4px;z-index:6;font-size:13px;background:#000b;border-radius:6px;padding:1px 4px;pointer-events:none";
+      el.appendChild(ey);
     }
     if(sh.mark)el.style.outline="2px solid #ff9f43";
     el.addEventListener("click",()=>{
@@ -12223,6 +12244,9 @@ $("stPickFull").addEventListener("click",()=>{
 $("stCancel").addEventListener("click",()=>$("startOlay").classList.remove("open"));
 $("btnPause").addEventListener("click",togglePause);
 $("btnNextTurn").addEventListener("click",async function(){
+  if(NT_BTN_BUSY)return; // 二重タップで前処理（ペテンシー/dieEOT）が並行実行されるのを防ぐ
+  NT_BTN_BUSY=true;
+  try{
   // ペテンシー型：相手ターンの終わりに無料使用。着地数はカウンタで表示するが、最終判断はプレイヤー（数え漏れがあっても発動可能に）
   const landed=ENTERED_CNT;  // 今ターンの着地数（両者合算・場を離れた分も算入／undoスナップショット保存）
   if(S.expert&&S.vs){
@@ -12271,7 +12295,9 @@ $("btnNextTurn").addEventListener("click",async function(){
     }
   }
   return __nextTurnMain.apply(this,arguments);
+  }finally{NT_BTN_BUSY=false;}
 });
+let NT_BTN_BUSY=false;
 const __nextTurnMain=(nextTurn);
 $("btnEffects").addEventListener("click",openEffects);
 $("btnUndo").addEventListener("click",undo);
