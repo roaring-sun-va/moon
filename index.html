@@ -1097,7 +1097,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="text" id="fxRace4" list="raceList" placeholder="種族4" style="flex:1;min-width:110px">
         <input type="text" id="fxRace5" list="raceList" placeholder="種族5" style="flex:1;min-width:110px">
         <datalist id="raceList">
-          <option value="S級侵略者"><option value="アーク・セラフィム"><option value="アース・ドラゴン"><option value="アースイーター"><option value="アーマード"><option value="アーマード・ドラゴン"><option value="アーマード・ファイアーバード"><option value="アーマード・ワイバーン"><option value="アーマロイド"><option value="アイドル">
+          <option value="S級侵略者"><option value="アーク・セラフィム"><option value="アース・ドラゴン"><option value="アースイーター"><option value="アーマード"><option value="アーマード・ドラゴン"><option value="アーマード・ファイアー・バード"><option value="ファイアー・バードの集い"><option value="アーマード・ワイバーン"><option value="アーマロイド"><option value="アイドル">
           <option value="アウトレイジ"><option value="アウトレイジ・コマンドMAX"><option value="アウトレイジMAX"><option value="アビス"><option value="アビスへの誘い"><option value="アビスロイヤル"><option value="アポロニア・ドラゴン"><option value="アンノイズ"><option value="アンノウン"><option value="イニシエート"><option value="イニシャルズ">
           <option value="イニシャルズX"><option value="ウェーブストライカー"><option value="エイリアン"><option value="エグザイル・クリーチャー"><option value="エクストリーマー"><option value="エレメンタル"><option value="エンジェル・コマンド"><option value="エンジェル・コマンド・ドラゴン"><option value="オラクル"><option value="オリジン">
           <option value="ガーゴイル"><option value="ガーディアン"><option value="ガイア・コマンド"><option value="ガイア・コマンド・ドラゴン"><option value="カレンダー"><option value="キカイヒーロー"><option value="キマイラ"><option value="ギャング・ビート"><option value="グラディエーター"><option value="グランセクト">
@@ -1108,7 +1108,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="スペシャルズ"><option value="ゼニス"><option value="ゼノパーツ"><option value="セラフィム"><option value="ソニック・コマンド"><option value="ソルトルーパー"><option value="ダークロード"><option value="ダイナモ"><option value="チームACE"><option value="チームウェイブ">
           <option value="チームボンバー"><option value="チーム銀河"><option value="チーム切札"><option value="チーム零"><option value="ツリーフォーク"><option value="ディープ・マリーン"><option value="ディスタス"><option value="ディスペクター"><option value="ティラノ・ドレイク"><option value="デーモン・コマンド">
           <option value="デーモン・コマンド・ドラゴン"><option value="テクノ・サムライ"><option value="デスパペット"><option value="デビルマスク"><option value="デモニオ"><option value="デモンズ・レガシー"><option value="デリートロン"><option value="ドラグナー"><option value="ドラゴノイド"><option value="ドラゴノイド号">
-          <option value="ドラゴノイド爆"><option value="ドラゴン"><option value="ドラゴン・ゾンビ"><option value="ドラゴンギルド"><option value="ドリームメイト"><option value="トリックス"><option value="トリニティ・コマンド"><option value="ドルスザク"><option value="ナイト"><option value="バーサーカー">
+          <option value="ドラゴノイド爆"><option value="ドラゴン"><option value="ドラゴンの花嫁"><option value="ドラゴン・ゾンビ"><option value="ドラゴンギルド"><option value="ドリームメイト"><option value="トリックス"><option value="トリニティ・コマンド"><option value="ドルスザク"><option value="ナイト"><option value="バーサーカー">
           <option value="ハムカツ団"><option value="パラサイトワーム"><option value="バルーン・マッシュルーム"><option value="ハンター"><option value="パンドラボックス"><option value="ビーストフォーク"><option value="ビーストフォーク號"><option value="ビートジョッキー"><option value="ビックリーノ"><option value="ヒューマノイド">
           <option value="ヒューマノイド爆"><option value="ファイアー・バード"><option value="ファンキー・ナイトメア"><option value="ファントム・ビースト"><option value="フィッシュ"><option value="フェニックス"><option value="フュージョナー"><option value="ブラック・コマンド・ドラゴン"><option value="ブルー・コマンド・ドラゴン"><option value="ブレイブ・スピリット">
           <option value="フレイム・コマンド"><option value="ヘドリアン"><option value="ホーン・ビースト"><option value="ポセイディア・ドラゴン"><option value="ボルケーノ・ドラゴン"><option value="ホワイト・コマンド・ドラゴン"><option value="マーフォーク"><option value="マイナー・スピリット"><option value="マジック"><option value="マジック・アウトレイジMAX">
@@ -3952,19 +3952,25 @@ async function runFxList(pi,list,srcCard){
       renderAll();openOppHandViewer(op);
     }else if(f.t==="bounce"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
-      for(let i=0;i<n&&OZ.battle.length;i++){
-        const j=randInt(OZ.battle.length);
-        const c=OZ.battle.splice(j,1)[0];
+      const tp=await askChoice(`🎲 バウンス（ランダム${n}体）：対象プレイヤーを選択`,[S.players[0].label,S.players[1].label]);
+      if(tp===null)continue;
+      const TZ=zonesOf(tp);
+      for(let i=0;i<n&&TZ.battle.length;i++){
+        const j=randInt(TZ.battle.length);
+        const c=TZ.battle.splice(j,1)[0];
         c.tapped=false;c.faceup=true;c.rot=0;
-        OZ.hand.push(c);markArrive(c);
-        toast(`バウンス：${faceNameOf(c)} を手札へ`);
+        TZ.hand.push(c);markArrive(c);
+        toast(`バウンス：${faceNameOf(c)} を${S.players[tp].label}の手札へ`);
       }
       sfx("move");
     }else if(f.t==="destroyRnd"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
-      for(let i=0;i<n&&OZ.battle.length;i++){
-        const j=randInt(OZ.battle.length);
-        await destroyWithReplace(op,OZ.battle[j]);
+      const tp=await askChoice(`🎲 ランダム破壊（${n}体）：対象プレイヤーを選択`,[S.players[0].label,S.players[1].label]);
+      if(tp===null)continue;
+      const TZ=zonesOf(tp);
+      for(let i=0;i<n&&TZ.battle.length;i++){
+        const j=randInt(TZ.battle.length);
+        await destroyWithReplace(tp,TZ.battle[j]);
       }
     }else if(f.t==="tutor"){
       if(!Z.deck.length){toast("山札がありません");continue;}
@@ -4022,15 +4028,16 @@ async function runFxList(pi,list,srcCard){
       sfx("flip");renderAll();
       toast(`🔄 変身！ ${faceNameOf(tgtC)}`);
     }else if(f.t==="randMove"){
-      const zj=await askChoice(`🎲 ランダム移動（${n}枚）：対象ゾーンを選択`,
-        ["相手の手札","相手のマナ","相手のバトルゾーン","相手の墓地","自分の手札","自分のマナ","自分の墓地"]);
-      if(zj===null)continue;
-      const srcDef=[[op,"hand"],[op,"mana"],[op,"battle"],[op,"grave"],[pi,"hand"],[pi,"mana"],[pi,"grave"]][zj];
+      const tp=await askChoice(`🎲 ランダム移動（${n}枚）：対象プレイヤーを選択`,[S.players[0].label,S.players[1].label]);
+      if(tp===null)continue;
+      const zk=await askChoice(`🎲 ${S.players[tp].label}のどのゾーンから？`,["手札","マナ","バトルゾーン","墓地"]);
+      if(zk===null)continue;
+      const zoneKey=["hand","mana","battle","grave"][zk];
       const dj=await askChoice(`🎲 行き先を選択`,
         ["山札の下","山札の上","墓地","手札","マナ（タップなし）","シールド（裏向き）","移動しない（ランダムに選んで公開するだけ）"]);
       if(dj===null)continue;
-      const sp2=zonesOf(srcDef[0]);
-      const srcArr=sp2[srcDef[1]];
+      const sp2=zonesOf(tp);
+      const srcArr=sp2[zoneKey];
       if(!srcArr.length){toast("対象ゾーンにカードがありません");continue;}
       if(dj===6){
         const picks=[];
@@ -4048,11 +4055,11 @@ async function runFxList(pi,list,srcCard){
         const ri=Math.floor(Math.random()*srcArr.length);
         const cc=srcArr.splice(ri,1)[0];
         cc.tapped=false;
-        if(srcDef[1]==="battle"&&cc.gear&&cc.gear.length){const gs=cc.gear.splice(0);gs.forEach(g=>gearOut(sp2,g));}
-        if(srcDef[1]==="battle"&&cc.under&&cc.under.length){const us=cc.under.splice(0);us.forEach(u=>{u.faceup=true;sp2.grave.push(u);});}
+        if(zoneKey==="battle"&&cc.gear&&cc.gear.length){const gs=cc.gear.splice(0);gs.forEach(g=>gearOut(sp2,g));}
+        if(zoneKey==="battle"&&cc.under&&cc.under.length){const us=cc.under.splice(0);us.forEach(u=>{u.faceup=true;sp2.grave.push(u);});}
         if(dj===0){cc.faceup=false;sp2.deck.push(cc);}
         else if(dj===1){cc.faceup=false;sp2.deck.unshift(cc);}
-        else if(dj===2){cc.faceup=true;sp2.grave.push(cc);if(srcDef[1]==="hand")afterHandDiscard(srcDef[0],cc);}
+        else if(dj===2){cc.faceup=true;sp2.grave.push(cc);if(zoneKey==="hand")afterHandDiscard(tp,cc);}
         else if(dj===3){cc.faceup=true;sp2.hand.push(cc);}
         else if(dj===4){cc.faceup=true;sp2.mana.push(cc);}
         else{cc.faceup=false;sp2.shield.push(cc);}
@@ -4060,7 +4067,7 @@ async function runFxList(pi,list,srcCard){
       }
       sfx("move");renderAll();
       const dst=["山札の下","山札の上","墓地","手札","マナ","シールド"][dj];
-      toast(`🎲 ランダム：${moved.join("、")} を${dst}へ`);
+      toast(`🎲 ランダム：${S.players[tp].label}の${moved.join("、")} を${dst}へ`);
     }else if(f.t==="graveView"||f.t==="graveViewMy"){
       const gp=f.t==="graveView"?op:pi;
       if(!zonesOf(gp).grave.length){toast(`${S.players[gp].label}の墓地は空です`);continue;}
