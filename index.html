@@ -8835,7 +8835,12 @@ function baseCardH(){
   const lay=S.layout||"stack";
   let b;
   if(S.vs&&lay==="cols")b=Math.min(205,Math.max(56,(H-215)/4.5));
-  else if(lay==="wide")b=S.vs?Math.min(205,Math.max(56,(H-205)/4.4)):Math.min(200,Math.max(66,(H-170)/2.8));
+  else if(lay==="wide"){
+    if(S.vs) b=(S.manaMode==="compact")
+      ? Math.min(205,Math.max(56,(H-205)/4.4))      // パネル型（従来通り）
+      : Math.min(150,Math.max(44,(H-200)/6.8));      // 3段組スプレッド：小さめ
+    else b=Math.min(200,Math.max(66,(H-170)/2.8));
+  }
   else b=S.vs
     ? Math.min(175,Math.max(56,(H-230)/6.6))
     : Math.min(185,Math.max(66,(H-170)/3.5));
