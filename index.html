@@ -254,9 +254,12 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
 .zpair.cmwide>.rcol{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:4px}
 .lcol>.zone{flex:0 0 auto}
 .rcol>.zone[data-zone="battle"]{flex:1 1 auto;min-height:0}
-.rcol>.mhrow{display:flex;gap:8px;align-items:flex-start;flex:0 0 auto}
-.mhrow>.zone.manaslim{flex:0 0 auto}
-.mhrow>.zone[data-zone="hand"]{flex:1 1 0;min-width:0}
+.lcol>.lbot{display:flex;gap:8px;align-items:flex-start;flex:0 0 auto}
+.lbot>.zone[data-zone="sys"]{flex:0 1 auto;min-width:0}
+.lbot>.zone.manaslim{flex:0 0 auto}
+.rcol:not(.swide)>.zone[data-zone="hand"]{flex:0 0 auto}
+.rcol.swide>.zone[data-zone="hand"]{flex:0 0 auto}
+.rcol.swide>.zone[data-zone="mana"]{flex:0 0 auto}
 .zone.shieldz .zone-head .kanji{color:#7dd3fc}
 body.vs .pboard.cmw{flex:1 1 0;min-height:0}
 .zpair .zone.manaslim{flex:0 0 auto;min-width:0}
@@ -8111,14 +8114,14 @@ function buildBoards(){
           shz.innerHTML=`<div class="zone-head"><span class="kanji">盾</span></div><div class="cards" id="shieldrow-${pi}"></div>`;
           const lcol=document.createElement("div");lcol.className="lcol";
           const rcol=document.createElement("div");rcol.className="rcol";
-          const mh=document.createElement("div");mh.className="mhrow";
-          mh.appendChild(manaEl);mh.appendChild(handEl);
+          const lbot=document.createElement("div");lbot.className="lbot";
+          lbot.appendChild(sysEl);lbot.appendChild(manaEl); // 山札(左)｜マナ(右)
           if(pi===seat){
-            lcol.appendChild(shz);lcol.appendChild(sysEl);
-            rcol.appendChild(battleEl);rcol.appendChild(mh);
+            lcol.appendChild(shz);lcol.appendChild(lbot);
+            rcol.appendChild(battleEl);rcol.appendChild(handEl);
           }else{
-            lcol.appendChild(sysEl);lcol.appendChild(shz);
-            rcol.appendChild(mh);rcol.appendChild(battleEl);
+            lcol.appendChild(lbot);lcol.appendChild(shz);
+            rcol.appendChild(handEl);rcol.appendChild(battleEl);
           }
           const row=document.createElement("div");row.className="zpair cmwide";
           row.appendChild(lcol);row.appendChild(rcol);
@@ -8126,22 +8129,28 @@ function buildBoards(){
           pb.classList.add("cmw");
         }
       }else{
-        const pair=(S.widePair||"sys,battle").split(",");
-        const a=pb.querySelector(`[data-zone="${pair[0]}"]`);
-        const b=pb.querySelector(`[data-zone="${pair[1]}"]`);
-        if(a&&b){
-          const first=(Array.prototype.indexOf.call(pb.children,a)<Array.prototype.indexOf.call(pb.children,b))?a:b;
-          const wrap=document.createElement("div");
-          wrap.className="zpair";
-          pb.insertBefore(wrap,first);
-          wrap.appendChild(a);wrap.appendChild(b);
-        }
-        // スプレッドマナ：自分の盤面は [山札/盾｜バトル] → 手札 → マナ（手札をバトル直下、マナは最下段の全幅1列）
-        if(pi===seat){
-          const handB=pb.querySelector('[data-zone="hand"]');
-          const manaB=pb.querySelector('[data-zone="mana"]');
-          if(handB)pb.appendChild(handB);
-          if(manaB)pb.appendChild(manaB);
+        // 従来（スプレッド）マナ専用：左列=盾(上)/山札(下)、右列=バトル(上)/手札/マナ(全幅スプレッド,下)
+        const sysEl=pb.querySelector('[data-zone="sys"]');
+        const battleEl=pb.querySelector('[data-zone="battle"]');
+        const manaEl=pb.querySelector('[data-zone="mana"]');
+        const handEl=pb.querySelector('[data-zone="hand"]');
+        if(sysEl&&battleEl&&manaEl&&handEl){
+          const shz=document.createElement("div");
+          shz.className="zone shieldz";shz.setAttribute("data-zone","shieldz");
+          shz.innerHTML=`<div class="zone-head"><span class="kanji">盾</span></div><div class="cards" id="shieldrow-${pi}"></div>`;
+          const lcol=document.createElement("div");lcol.className="lcol";
+          const rcol=document.createElement("div");rcol.className="rcol swide";
+          if(pi===seat){
+            lcol.appendChild(shz);lcol.appendChild(sysEl);
+            rcol.appendChild(battleEl);rcol.appendChild(handEl);rcol.appendChild(manaEl);
+          }else{
+            lcol.appendChild(sysEl);lcol.appendChild(shz);
+            rcol.appendChild(manaEl);rcol.appendChild(handEl);rcol.appendChild(battleEl);
+          }
+          const row=document.createElement("div");row.className="zpair cmwide";
+          row.appendChild(lcol);row.appendChild(rcol);
+          pb.innerHTML="";pb.appendChild(row);
+          pb.classList.add("cmw");
         }
       }
     }
