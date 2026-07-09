@@ -665,6 +665,21 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
       </div>
       <div class="hint">コンパクト：丸いゲージにカードをスライドで置ける。ゲージをタップでマナパネルが開き、中でタップ/アンタップ・移動ができます。自動タップは両表示で有効です。</div>
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700">バトル：カード上のラベル</span>
+        <select id="setBattleLabels" style="flex:1">
+          <option value="on">表示</option>
+          <option value="off">隠す（長押しで確認）</option>
+        </select>
+      </div>
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700">バトル：カード上の操作ボタン</span>
+        <select id="setBattleBtns" style="flex:1">
+          <option value="on">表示</option>
+          <option value="off">隠す（長押しで操作）</option>
+        </select>
+      </div>
+      <div class="hint">スマホでカード画像が潰れる場合に。隠しても、カードを長押しすると能力・コスト・攻撃/タップ/効果登録/メニューが大きく表示されます。</div>
       <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
         <span style="font-size:12px;font-weight:700">ゾーンの縦幅（カードの大きさ）比率</span>
         <div id="zoneScaleList" style="display:flex;flex-direction:column;gap:3px"></div>
@@ -8103,6 +8118,8 @@ function gearSideEl(pi,host,g){
 function cardEl(pi,zone,c){
   const el=document.createElement("div");
   el.className="card";
+  const showBLab=!(zone==="battle"&&S.battleLabels===false); // バトルのラベル/タグ表示
+  const showBBtn=!(zone==="battle"&&S.battleBtns===false);    // バトルの操作ボタン表示
   const hidden=(S.vs&&S.hideOpp&&pi!==(S.seat|0)&&zone==="hand");
   const showFace=c.faceup&&!hidden;
   if(c.tapped)el.classList.add("tapped");
@@ -8209,7 +8226,7 @@ function cardEl(pi,zone,c){
       el.appendChild(at);
     }
   }
-  if(c.buff){
+  if(showBLab&&c.buff){
     const parts=[];
     if(c.buff.pa)parts.push("PA+"+c.buff.pa);
     if(c.buff.pm&&dispPower(c)==null)parts.push((c.buff.pm>0?"+":"")+c.buff.pm);
@@ -8221,7 +8238,7 @@ function cardEl(pi,zone,c){
       el.appendChild(bt);
     }
   }
-  if(c.gi){
+  if(showBLab&&c.gi){
     const gn=["te","bo","ha","fu"].filter(k=>c.gi[k]).length;
     const gt=document.createElement("span");gt.className="gitag";gt.textContent=`儀${gn}/4`;
     el.appendChild(gt);
@@ -8233,7 +8250,7 @@ function cardEl(pi,zone,c){
     ex.title="EXライフの専用シールド";
     el.appendChild(ex);
   }
-  if(c.frozen){
+  if(showBLab&&c.frozen){
     const ft=document.createElement("span");ft.className="frztag";ft.textContent="❄凍結";
     el.appendChild(ft);
   }
@@ -8264,28 +8281,28 @@ function cardEl(pi,zone,c){
       el.appendChild(cb2);
     }
   }
-  if(zone==="battle"&&(()=>{const r0=getReg(c);return r0&&r0.gimmick==="zeron";})()){
+  if(showBLab&&zone==="battle"&&(()=>{const r0=getReg(c);return r0&&r0.gimmick==="zeron";})()){
     const gd=["te","bo","ha","fu"].filter(k=>c.gi&&c.gi[k]).length;
     const zb=document.createElement("span");
     zb.textContent="🌙"+gd+"/4";
     zb.style.cssText=`position:absolute;left:2px;top:2px;z-index:6;background:#000d;color:${gd===4?"#e879f9":"#93c5fd"};font-size:11px;font-weight:900;border-radius:6px;padding:0 5px;line-height:1.5;pointer-events:none${gd===4?";box-shadow:0 0 8px 2px rgba(232,121,249,.6)":""}`;
     el.appendChild(zb);
   }
-  if(zone==="battle"&&c.cnt>0){
+  if(showBLab&&zone==="battle"&&c.cnt>0){
     const kb=document.createElement("span");
     kb.textContent="🔵×"+c.cnt;
     kb.style.cssText="position:absolute;left:2px;top:2px;z-index:6;background:#000d;color:#93c5fd;font-size:11px;font-weight:900;border-radius:6px;padding:0 5px;line-height:1.5;pointer-events:none";
     if((()=>{const r0=getReg(c);return r0&&r0.gimmick==="dormacore";})())kb.style.top="20px";
     el.appendChild(kb);
   }
-  if(zone==="battle"&&(()=>{const r0=getReg(c);return r0&&r0.gimmick==="dormacore";})()){
+  if(showBLab&&zone==="battle"&&(()=>{const r0=getReg(c);return r0&&r0.gimmick==="dormacore";})()){
     if(c.coreN==null)c.coreN=3;
     const cb=document.createElement("span");
     cb.textContent="⚫×"+c.coreN;
     cb.style.cssText="position:absolute;left:2px;top:2px;z-index:6;background:#000d;color:#e879f9;font-size:11px;font-weight:900;border-radius:6px;padding:0 5px;line-height:1.5;pointer-events:none";
     el.appendChild(cb);
   }
-  if(zone==="battle"&&!hidden&&c.faceup){
+  if(showBLab&&zone==="battle"&&!hidden&&c.faceup){
     const r0=getReg(c);
     if(r0){
       const ics=[];
@@ -8301,7 +8318,7 @@ function cardEl(pi,zone,c){
       }
     }
   }
-  if(zone==="battle"&&!hidden&&c.faceup&&S.showPower!==false){
+  if(showBLab&&zone==="battle"&&!hidden&&c.faceup&&S.showPower!==false){
     const pw=dispPower(c);
     if(pw!=null){
       const pb=document.createElement("span");
@@ -8313,7 +8330,7 @@ function cardEl(pi,zone,c){
       el.appendChild(pb);
     }
   }
-  if(zone!=="deck"&&!hidden&&c.faceup&&(!S.vs||pi===S.seat)){
+  if(zone!=="deck"&&!hidden&&c.faceup&&(!S.vs||pi===S.seat)&&showBBtn){
     const gb=document.createElement("button");
     gb.textContent="⚙";
     gb.title="効果を登録/編集";
@@ -8326,7 +8343,7 @@ function cardEl(pi,zone,c){
     gb.addEventListener("pointerdown",ev=>ev.stopPropagation());
     el.appendChild(gb);
   }
-  if((zone==="battle"||zone==="mana")&&!hidden&&(!S.vs||pi===S.seat)){
+  if((zone==="battle"||zone==="mana")&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn){
     const tb=document.createElement("button");
     tb.textContent=c.tapped?"⤴":"⤵";
     tb.title=c.tapped?"アンタップ":"タップ";
@@ -8340,7 +8357,7 @@ function cardEl(pi,zone,c){
     tb.addEventListener("pointerdown",ev=>ev.stopPropagation());
     el.appendChild(tb);
   }
-  if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden&&!isSealed(c)){
+  if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden&&!isSealed(c)&&showBBtn){
     const ab=document.createElement("button");
     ab.textContent="⚔";
     ab.title="攻撃";
@@ -8352,7 +8369,7 @@ function cardEl(pi,zone,c){
     ab.addEventListener("pointerdown",ev=>ev.stopPropagation());
     el.appendChild(ab);
   }
-  if(c.sick&&zone==="battle"&&(()=>{const r=getReg(c);return !(r&&r.sa);})()){
+  if(showBLab&&c.sick&&zone==="battle"&&(()=>{const r=getReg(c);return !(r&&r.sa);})()){
     const zz=document.createElement("span");
     zz.className="frztag";
     zz.style.cssText+=";background:#475569";
@@ -8360,7 +8377,7 @@ function cardEl(pi,zone,c){
     zz.title="召喚酔い（このターンに出た）";
     el.appendChild(zz);
   }
-  if(c.hyper&&zone==="battle"){
+  if(showBLab&&c.hyper&&zone==="battle"){
     const hp=document.createElement("span");
     hp.className="frztag";
     hp.style.cssText+=";background:linear-gradient(90deg,#f59e0b,#ef4444);color:#fff";
@@ -8368,7 +8385,7 @@ function cardEl(pi,zone,c){
     hp.title="ハイパーモード解放中";
     el.appendChild(hp);
   }
-  if(c.noAtkBlock&&zone==="battle"){
+  if(showBLab&&c.noAtkBlock&&zone==="battle"){
     const nb=document.createElement("span");nb.className="frztag";nb.style.background="#7c3aed";nb.textContent="🚫";
     nb.title="攻撃もブロックもできない";el.appendChild(nb);
   }
@@ -12084,6 +12101,8 @@ function openSettings(){
   $("setLayout").value=S.layout||"stack";
   $("setResolveSide").value=S.resolveSide||"left";
   $("setManaMode").value=S.manaMode||"spread";
+  $("setBattleLabels").value=(S.battleLabels===false)?"off":"on";
+  $("setBattleBtns").value=(S.battleBtns===false)?"off":"on";
   $("setWidePair").value=S.widePair||"sys,hand";
   renderZoneOrderEditor();
   renderZoneScaleEditor();
@@ -12153,6 +12172,16 @@ $("setResolveSide").addEventListener("change",async ()=>{
 $("setManaMode").addEventListener("change",async ()=>{
   S.manaMode=$("setManaMode").value||"spread";
   if(db)await idbPut("misc","manaMode",S.manaMode);
+  renderAll();
+});
+$("setBattleLabels").addEventListener("change",async ()=>{
+  S.battleLabels=$("setBattleLabels").value!=="off";
+  if(db)await idbPut("misc","battleLabels",S.battleLabels);
+  renderAll();
+});
+$("setBattleBtns").addEventListener("change",async ()=>{
+  S.battleBtns=$("setBattleBtns").value!=="off";
+  if(db)await idbPut("misc","battleBtns",S.battleBtns);
   renderAll();
 });
 $("setCardScale").addEventListener("input",async ()=>{
@@ -13066,6 +13095,10 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   if(rsd)S.resolveSide=rsd;
   const mmd=db?await idbGet("misc","manaMode"):null;
   if(mmd)S.manaMode=mmd;
+  const bl=db?await idbGet("misc","battleLabels"):null;
+  if(bl!==null&&bl!==undefined)S.battleLabels=!!bl;
+  const bbt=db?await idbGet("misc","battleBtns"):null;
+  if(bbt!==null&&bbt!==undefined)S.battleBtns=!!bbt;
   const nu=db?await idbGet("misc","noUntapMana"):null;
   if(nu!==null&&nu!==undefined)S.noUntapMana=!!nu;
   const tm=db?await idbGet("misc","tapMultiMana"):null;
