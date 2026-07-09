@@ -114,6 +114,8 @@ body.vs .pboard{gap:3px}
   border-radius:7px;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;
 }
 .zbtn:active{transform:translateY(1px)}
+.zbtn.hb .bi{margin-right:4px}
+@media (max-width:640px){.zbtn.hb .bi{margin-right:0}}
 body.compact-head .zone-head{min-height:13px;margin-bottom:1px;gap:5px}
 body.compact-head .zone-head .kanji{font-size:9px;letter-spacing:.08em}
 body.compact-head .zbtn{font-size:10px;padding:2px 7px;border-radius:6px}
@@ -124,6 +126,9 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   .zone-head{min-height:11px;margin-bottom:0;gap:4px}
   .zone-head .kanji{font-size:9px;letter-spacing:.04em}
   .zbtn{font-size:9px;padding:2px 6px;border-radius:6px;white-space:nowrap;line-height:1.3}
+  .zbtn.hb .bt{display:none}
+  .zbtn.hb{padding:3px 7px}
+  .zbtn.hb .bi{font-size:13px}
 }
 .cards{
   display:flex;gap:var(--cardgap,5px);row-gap:calc(var(--cardgap,5px) + 4px);min-height:var(--card-h);
@@ -159,6 +164,7 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   touch-action:none;
 }
 .card img{width:100%;height:100%;object-fit:cover;object-position:50% 22%;display:block;pointer-events:none;-webkit-user-drag:none;user-select:none}
+@media (max-width:640px){.pw-badge{display:none}}
 .card{user-select:none;-webkit-user-select:none}
 .card .nameplate{
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -8013,11 +8019,11 @@ function buildBoards(){
     const selBtn=z=>`<button class="zbtn" data-pi="${pi}" data-act="selall" data-z="${z}">全選択</button>`;
     const handBtns=(S.vs)
       ?`<span class="spacer"></span>
-        <button class="zbtn" data-pi="${pi}" data-act="hdraw">🃏 ドロー</button>
-        ${selBtn("hand")}
-        ${pi!==seat?`<button class="zbtn" data-pi="${pi}" data-act="peek">👁 見る</button>`:""}
-        <button class="zbtn" data-pi="${pi}" data-act="randdisc">ランダム捨て</button>`
-      :`<span class="spacer"></span><button class="zbtn" data-pi="${pi}" data-act="hdraw">🃏 ドロー</button>${selBtn("hand")}`;
+        <button class="zbtn hb" title="ドロー" data-pi="${pi}" data-act="hdraw"><span class="bi">🃏</span><span class="bt">ドロー</span></button>
+        <button class="zbtn hb" title="全選択" data-pi="${pi}" data-act="selall" data-z="hand"><span class="bi">☑</span><span class="bt">全選択</span></button>
+        ${pi!==seat?`<button class="zbtn hb" title="相手の手札を見る" data-pi="${pi}" data-act="peek"><span class="bi">👁</span><span class="bt">見る</span></button>`:""}
+        <button class="zbtn hb" title="ランダムに1枚捨てる" data-pi="${pi}" data-act="randdisc"><span class="bi">🎲</span><span class="bt">ランダム捨て</span></button>`
+      :`<span class="spacer"></span><button class="zbtn hb" title="ドロー" data-pi="${pi}" data-act="hdraw"><span class="bi">🃏</span><span class="bt">ドロー</span></button><button class="zbtn hb" title="全選択" data-pi="${pi}" data-act="selall" data-z="hand"><span class="bi">☑</span><span class="bt">全選択</span></button>`;
     const rows={
       sys:`
       <div class="zone" data-zone="sys">
@@ -8113,15 +8119,12 @@ function buildBoards(){
           }
         }
       }
-      // スプレッドマナ：自分の盤面はマナを最下段へ（手札をバトルの真下に近づける）
+      // スプレッドマナ：自分の盤面は [山札/盾｜バトル] → 手札 → マナ の順（手札をバトル直下、マナは最下段の全幅1列）
       if(S.manaMode!=="compact"&&pi===seat){
+        const handB=pb.querySelector('[data-zone="hand"]');
         const manaB=pb.querySelector('[data-zone="mana"]');
-        if(manaB&&manaB.parentNode===pb)pb.appendChild(manaB);
-      }
-      // スプレッドマナ等で手札が単独行のときは右半分に収める（マナは全幅の1列のまま）
-      const handSolo=pb.querySelector('[data-zone="hand"]');
-      if(handSolo&&handSolo.parentNode===pb){
-        handSolo.classList.add("wide-hand-half");
+        if(handB)pb.appendChild(handB);
+        if(manaB)pb.appendChild(manaB);
       }
     }
     {
