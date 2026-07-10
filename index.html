@@ -3971,6 +3971,8 @@ async function runFxList(pi,list,srcCard){
       toast(`条件未達（${f.cond}）：効果をスキップ`);
       continue;
     }
+    {const _lb=(typeof FX_TYPES!=="undefined")&&(FX_TYPES.find(x=>x[0]===f.t)||[])[1];
+     if(_lb)logOnly(`⚙ 自動処理（${S.players[pi].label}${srcCard?`・${faceNameOf(srcCard)}`:""}）：${_lb}${f.n?` ×${f.n}`:""}`);}
     if(f.hold){FX_HOLD=true;toast("⏸ この誘発の処理後、攻撃を保留します（▶再開で続行）");}
     if(f.t&&f.t.startsWith("sp:")){
       const nm=f.t.slice(3);
@@ -5897,6 +5899,7 @@ async function execAttack(pi,id,tg){
         renderAll();
       }
     }
+    emitEvent(pi,"atkP");
     await breakShields(op,n,c);
     if(S.expert&&brokeN>0&&Z.battle.find(x=>x.id===id)){
       const rBB=getReg(c);
@@ -5944,6 +5947,7 @@ async function execAttack(pi,id,tg){
     const cStill=Z.battle.find(x=>x.id===id);
     if(!cStill){toast("攻撃クリーチャーが場を離れたため、攻撃は中止されました");renderAll();return;}
     sfx("atk");
+    emitEvent(pi,"atkP");
     toast(`💥 ダイレクトアタック！`);
     if(S.expert){
       const DZ2=zonesOf(op);
@@ -6299,8 +6303,9 @@ function fxUiPolish(){
         const bar=document.createElement("div");
         bar.className="row";
         bar.style.cssText="position:sticky;top:0;z-index:5;background:var(--panel,#131a2a);padding:6px 0;margin:0";
-        bar.innerHTML='<input type="text" id="fxFinder" placeholder="🔎 項目をしぼり込み（例：マッドネス／常在／侵略／シールド…・空欄で全表示）" style="flex:1;min-width:180px"><button type="button" class="btn small primary" id="fxAutoBtn" style="white-space:nowrap">📋 テキストから自動設定</button><span id="fxFinderN" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>';
+        bar.innerHTML='<input type="text" id="fxFinder" placeholder="🔎 項目をしぼり込み（例：マッドネス／常在／侵略／シールド…・空欄で全表示）" style="flex:1;min-width:180px"><button type="button" class="btn small primary" id="fxAutoBtn" style="white-space:nowrap">📋 テキストから自動設定</button><button type="button" class="btn small" id="fxGuideBtn" style="white-space:nowrap;display:none">💡 案内</button><span id="fxFinderN" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>';
         bar.querySelector("#fxAutoBtn").addEventListener("click",autoFillFromText);
+        bar.querySelector("#fxGuideBtn").addEventListener("click",showFxGuide);
         firstH3.parentElement.insertBefore(bar,firstH3);
         const inp=bar.querySelector("#fxFinder");
         inp.placeholder="🔎 項目をしぼり込み（略称OK：SA/cip/pig/バウンス/ハンデス…・スペースでAND）";
@@ -6677,30 +6682,75 @@ function renderFxEditor(){
 function parseCardText(txt,mode){
   const out={set:{},fx:[],notes:[],twinHint:false};
   const t=txt.replace(/\s+/g," ");
+  // 「〜を与える」系の付与テキストを除外した本文（キーワード誤検出防止：I amのワールド・ブレイカー付与など）
+  const tSelf=t.replace(/「[^」]*」を与え[^。■]*[。]?/g,"").replace(/[^■。]*ブレイカー」?を与える[^。■]*[。]?/g,"");
   // ツインパクトの手掛かり：コスト「7/3」形式、カードタイプ「クリーチャー/呪文」
   if(/コスト\s*\d{1,2}\s*[\/／]\s*\d{1,2}/.test(t)||/クリーチャー\s*[\/／]\s*呪文/.test(t))out.twinHint=true;
-  // 数値：パワー・コスト（ツインパクト「7/3」は上/下に振り分け）
-  let m=t.match(/パワー\s*(\d{3,6})/); if(m)out.set.power=+m[1];
+  // カードタイプ：単体NEO/進化（ツインパクト時はtwinTop側で扱うためmode未指定時のみ）
+  if(mode!=="spell"){
+    if(/NEO進化[：:]/.test(t)||/NEOクリーチャー/.test(t))out.set.ctype="neoevo";
+    else if(/スター進化/.test(t))out.set.ctype="starevo";
+    else if(/G・?NEO進化/.test(t))out.set.ctype="gneo";
+    else if(/進化クリーチャー/.test(t)&&/進化[：:]/.test(t))out.set.ctype="evo";
+  }
+  // 数値：パワー（「パワー 15000+」／公式コピペ「コスト9 15000+ マナ1」／表形式「コスト パワー 6 9000」に対応）
+  let m=t.match(/パワー\s*(\d{3,6})\+?/);
+  if(!m)m=t.match(/コスト\s*\d{1,2}(?:\s*[\/／]\s*\d{1,2})?\s+(\d{4,6})\+?\s*マナ/);
+  if(!m)m=t.match(/コスト\s*パワー\s*\d{1,2}\s+(\d{3,6})\+?/);
+  if(m)out.set.power=+m[1];
+  // コスト（ツインパクト「7/3」・表形式「コスト パワー 6 -」に対応）
   m=t.match(/コスト\s*(\d{1,2})\s*[\/／]\s*(\d{1,2})/);
   if(m){out.set.cost=+m[1];out.set.cost2=+m[2];}
-  else{m=t.match(/コスト\s*(\d{1,2})/); if(m){if(mode==="spell")out.set.cost2=+m[1];else out.set.cost=+m[1];}}
-  // キーワード能力（チェックボックス系）
+  else{
+    m=t.match(/コスト\s*パワー\s*(\d{1,2})/)||t.match(/コスト\s*(\d{1,2})/);
+    if(m){if(mode==="spell")out.set.cost2=+m[1];else out.set.cost=+m[1];}
+  }
+  // タイプ（表形式）：D2フィールド／クロスギア／タマシード等
+  if(/D2フィールド/.test(t))out.set.ctype="d2";
+  else if(/クロスギア/.test(t))out.set.ctype="crossgear";
+  else if(/タマシード/.test(t))out.set.ctype="tamaseed";
+  // キーワード能力（付与文を除外したtSelfで判定）
   const KW=[
     [/スピードアタッカー/,"sa"],[/ブロッカー/,"blocker"],[/スレイヤー/,"slayer"],
     [/G・?ストライク/,"gs"],[/S・?トリガー/,"st"],[/ガードマン/,"guardman"],
     [/マッハファイター/,"mach"],[/ジャストダイバー/,"jdiver"],[/EXライフ/,"exlife"],
-    [/エスケープ/,"agEsc"],[/ラストバースト/,"lastburst"],
+    [/エスケープ/,"escape"],[/ラストバースト/,"lastburst"],
+    [/侵略/,"invade"],[/革命チェンジ/,"kakumei"],[/P革命チェンジ/,"pkakumei"],
   ];
-  for(const [re,k] of KW)if(re.test(t))out.set[k]=true;
-  // ブレイカー
-  if(/ワールド・?ブレイカー/.test(t))out.set.breaks="all";
-  else if(/Q・?ブレイカー/.test(t))out.set.breaks="4";
-  else if(/T・?ブレイカー/.test(t))out.set.breaks="3";
-  else if(/W・?ブレイカー/.test(t))out.set.breaks="2";
+  for(const [re,k] of KW)if(re.test(tSelf))out.set[k]=true;
+  // マナ武装（数値）
+  m=tSelf.match(/マナ武装\s*(\d+)/); if(m)out.set.manaArm=+m[1];
+  // キリフダッシュ（コストn）／フシギバース（コストn）
+  m=tSelf.match(/キリフダッシュ[（(]?コスト?[-−]?(\d+)/)||tSelf.match(/キリフダッシュ\s*(\d+)/); if(m)out.set.kirifuda=+m[1];
+  m=tSelf.match(/フシギバース[（(]?コスト?(\d+)/)||tSelf.match(/フシギバース\s*(\d+)/); if(m)out.set.fushigi=+m[1];
+  // Dスイッチ持ちは D2フィールド 扱い（横向き設置・Dスイッチ操作が使えるように）
+  if(/Dスイッチ/.test(t)&&!out.set.ctype)out.set.ctype="d2";
+  // ニンジャ・ストライク（数字つき）
+  m=tSelf.match(/ニンジャ・?ストライク\s*(\d+)/); if(m)out.set.ninja=+m[1];
+  // ムゲンクライム（コストn）
+  m=tSelf.match(/ムゲンクライム[（(]?コスト?(\d+)/)||tSelf.match(/ムゲンクライム\s*(\d+)/); if(m)out.set.mugen=+m[1];
+  // マッドネス
+  if(/マッドネス/.test(tSelf))out.set.madness="on";
+  // 侵略の条件（種族・コスト）
+  m=t.match(/侵略[：: ]?〔?([^〕（(0-9]{1,12}?)(?:コスト)?(\d+)?[以上]*〕?/);
+  if(/侵略/.test(t)){
+    m=t.match(/侵略[：:〔]?([一-龠ぁ-んァ-ヶ・]{2,12})/);
+    if(m&&m[1]&&!/クリーチャー/.test(m[1]))out.set.invRace=m[1];
+    m=t.match(/コスト\s*(\d+)\s*以上/); if(m)out.set.invCost=+m[1];
+  }
+  // ブレイカー（付与文除外・OCR/コピペ誤認「エ・ブレイカー」→Tとして扱う）
+  if(/ワールド・?ブレイカー/.test(tSelf))out.set.breaks="all";
+  else if(/Q・?ブレイカー/.test(tSelf))out.set.breaks="4";
+  else if(/[TＴエ]・?ブレイカー/.test(tSelf))out.set.breaks="3";
+  else if(/W・?ブレイカー/.test(tSelf))out.set.breaks="2";
   // シンパシー
   m=t.match(/シンパシー[：: ]?([^（(。■]+)/); if(m)out.set.sympathy=m[1].trim();
-  // G・ゼロ
+  // G・ゼロ（明示型＋条件踏み倒し型「〜あれば、このクリーチャーをコストを支払わずに召喚してもよい」）
   m=t.match(/G・?ゼロ[-ー－]?[：: ]?([^（(。■]+)/); if(m)out.set.gzero=m[1].trim();
+  if(!out.set.gzero){
+    m=t.match(/■?([^■。]{2,40}?)(?:あれば|いれば|なら)[、,]?この(?:クリーチャー|呪文)を[、,]?コストを支払わずに(?:召喚|使用|唱え)てもよい/);
+    if(m)out.set.gzero=m[1].trim();
+  }
   // 各ターン制限（一音の妖精型）
   m=t.match(/相手は各ターン(\d+)回しか呪文を唱えられない/); if(m)out.set.stSpellPT=+m[1];
   m=t.match(/相手は各ターン(\d+)体しかクリーチャーを(?:バトルゾーンに)?出せない/); if(m)out.set.stCrePT=+m[1];
@@ -6723,7 +6773,45 @@ function parseCardText(txt,mode){
     if((mm=seg.match(/相手の手札を(\d+)枚.{0,6}?捨て/)))out.fx.push({t:"handes",n:+mm[1]});
     if(/手札に戻す/.test(seg))out.notes.push("バウンス系は効果プルダウンから対象指定で追加してください");
   }
+  // 条件付き強化（「これがNEO進化クリーチャーなら〜」等）は自動化しない旨を通知
+  if(/これが.{0,8}進化クリーチャーなら/.test(t))out.notes.push("💡「進化しているなら〜」の条件付き強化は『条件常在』欄で手動設定してください");
+  // 検出のみ（誤設定を避けるため自動チェックせず、該当欄への案内＋ジャンプ用クエリを出す）
+  const DETECT=[
+    [/侵略/,"侵略：ON済み → 侵略元の種族／コスト条件があれば『侵略元』欄で追記を","侵略元"],
+    [/革命チェンジ/,"革命チェンジ：ON済み → チェンジ元の条件（文明/種族/コスト）があれば追記を","チェンジ"],
+    [/無月の門/,"無月の門 → 誘発処理＋覚え書きで運用（専用実装は今後対応予定）","誘発"],
+    [/(?:自分|相手)のターン終了時/,"ターン終了時の誘発 → 『誘発処理』欄（ターン終了時）＋効果で設定","誘発"],
+    [/攻撃する時[、,]/,"攻撃時の誘発 → 『誘発処理』欄（攻撃時）で設定","誘発"],
+    [/パワード・?ブレイカー/,"パワード・ブレイカー → ブレイカー欄で選択","ブレイカー"],
+    [/シールド・?セイバー|セイバー[：:]/,"セイバー → セイバー欄","セイバー"],[/メテオバーン/,"メテオバーン → 覚え書き欄","覚え書き"],
+    [/Dスイッチ/,"Dスイッチ：D2フィールド設定済み → 反転後の効果は覚え書き＋手動で","覚え書き"],
+  ];
+  for(const [re,msg,q] of DETECT)if(re.test(t))out.notes.push({msg:"💡 "+msg,q});
   return out;
+}
+/* 解析で検出した案内リストを表示し、選ぶと該当欄に絞り込みジャンプ */
+function showFxGuide(){
+  const g=(FXEDIT&&FXEDIT._guide)||[];
+  if(!g.length){toast("案内はありません（📋自動設定を実行すると検出結果が入ります）");return;}
+  (async()=>{
+    const j=await askChoice("💡 検出された能力（選ぶと該当欄に絞り込み）",g.map(x=>x.msg||String(x)));
+    if(j===null)return;
+    const q=g[j]&&g[j].q;
+    const inp=document.getElementById("fxFinder");
+    if(q&&inp){inp.value=q;inp.dispatchEvent(new Event("input"));toast(`🔎 「${q}」で絞り込みました（空欄に戻すと全表示）`);}
+    else toast(g[j].msg||String(g[j]));
+  })();
+}
+function noteMsg(x){return (x&&x.msg)||String(x);}
+function fxKeyLabel(k){
+  const M={sa:"SA",blocker:"ブロッカー",slayer:"スレイヤー",gs:"G・ストライク",st:"S・トリガー",
+    guardman:"ガードマン",mach:"マッハF",jdiver:"ジャストダイバー",exlife:"EXライフ",escape:"エスケープ",
+    lastburst:"ラストバースト",invade:"侵略",ninja:"ニンジャ",mugen:"ムゲンクライム",madness:"マッドネス",
+    manaArm:"マナ武装",breaks:"ブレイカー",power:"パワー",cost:"コスト",cost2:"下面コスト",
+    kakumei:"革命チェンジ",pkakumei:"P革命チェンジ",kirifuda:"キリフダッシュ",fushigi:"フシギバース",
+    sympathy:"シンパシー",gzero:"G・ゼロ",ctype:"タイプ",stSpellPT:"呪文回数制限",stCrePT:"召喚数制限",
+    stLockSpell:"呪文ロック",stLockCre:"召喚ロック",invRace:"侵略元種族",invCost:"侵略元コスト"};
+  return M[k]||k;
 }
 async function autoFillFromText(){
   const grab=async(label)=>{
@@ -6746,11 +6834,15 @@ async function autoFillFromText(){
     if(!txt)return;
     const r=parseCardText(txt);
     let cnt=applySet(r.set)+applyFx(r.fx,0);
+    FXEDIT._guide=r.notes.filter(x=>x&&x.q);
     renderFxEditor();
-    const msg=[`📋 自動設定：${cnt}項目を反映しました`];
+    {const gb=document.getElementById("fxGuideBtn");if(gb)gb.style.display=FXEDIT._guide.length?"":"none";}
+    const setKeys=Object.keys(r.set);
+    const msg=[`📋 自動設定：${cnt}項目（${setKeys.slice(0,8).map(fxKeyLabel).join("・")}${setKeys.length>8?"…":""}）`];
     if(r.twinHint)msg.push("💡 コスト表記が「n/m」でした。ツインパクトの可能性があります（ツインパクトにチェックして再取り込みできます）");
     msg.push("⚠ 必ず内容を確認してから保存してください（解析は定型文のみ対応）");
-    if(r.notes.length)msg.push(...r.notes);
+    if(r.notes.length)msg.push(...r.notes.map(noteMsg));
+    if(FXEDIT._guide.length)msg.push(`💡 「案内」ボタンから該当欄へジャンプできます（${FXEDIT._guide.length}件）`);
     toast(msg.join("\n"));
     return;
   }
@@ -6775,10 +6867,13 @@ async function autoFillFromText(){
     total+=applyFx(r2.fx,1);
     notes.push(...r2.notes);
   }
+  FXEDIT._guide=notes.filter(x=>x&&x.q);
   renderFxEditor();
+  {const gb=document.getElementById("fxGuideBtn");if(gb)gb.style.display=FXEDIT._guide.length?"":"none";}
   const msg=[`📋 ツインパクト自動設定：${total}項目を反映しました（上面→効果1／下面→効果2に振り分け）`];
   msg.push("⚠ 上面種別・下面コスト・各効果を確認してから保存してください");
-  if(notes.length)msg.push(...notes);
+  if(notes.length)msg.push(...notes.map(noteMsg));
+  if(FXEDIT._guide.length)msg.push(`💡 「案内」ボタンから該当欄へジャンプできます（${FXEDIT._guide.length}件）`);
   toast(msg.join("\n"));
 }
 /* 公式サイト等のスクショから効果テキストをOCRで抽出（白文字×暗背景を反転して精度向上） */
@@ -8877,11 +8972,8 @@ function buildBoards(){
       }else if(act==="hdraw"){
         if(!Z.deck.length){toast("山札がありません");return;}
         snap();
-        const c=Z.deck.shift();
-        c.faceup=true;
-        Z.hand.push(c);
-        sfx("draw");renderAll();
-        toast(`ドロー（${S.players[pi].label}）`);
+        draw(pi,1);
+        renderAll();
       }else if(act==="randdisc"){
         if(!Z.hand.length){toast(`${S.players[pi].label}の手札がありません`);return;}
         const hb=handesBlockedBy(pi);
@@ -10035,7 +10127,7 @@ function flyGhost(srcRect,c,dstSel){
     }
     g.style.left=srcRect.left+"px";g.style.top=srcRect.top+"px";
     g.style.width=srcRect.width+"px";g.style.height=srcRect.height+"px";
-    g.style.transition="transform .28s cubic-bezier(.22,.9,.3,1),opacity .28s ease";
+    g.style.transition="transform .34s cubic-bezier(.3,.7,.25,1),opacity .34s ease";
     document.body.appendChild(g);
     // 二重表示防止：飛行中は着地先の実カードを隠す（再レンダされても隠れ続けるようIDで管理）
     if(hideDst){
@@ -10046,7 +10138,7 @@ function flyGhost(srcRect,c,dstSel){
       setTimeout(()=>{
         FLY_HIDE.delete(did);
         document.querySelectorAll(`[data-cid="${did}"]`).forEach(e2=>{e2.style.visibility="";});
-      },290);
+      },350);
     }
     const dx=dr.left-srcRect.left, dy=dr.top-srcRect.top;
     const sx=dr.width/srcRect.width, sy=dr.height/srcRect.height;
@@ -10059,7 +10151,7 @@ function flyGhost(srcRect,c,dstSel){
       if(rot)g.style.transformOrigin="center";
       g.style.opacity=".92";
     });
-    setTimeout(()=>{g.remove();},300);
+    setTimeout(()=>{g.remove();},360);
   }));
 }
 function rectOfCard(id){
@@ -11635,6 +11727,19 @@ function openDeckMenu(pi){
   $("sheetDesc").style.display="none";
   const box=$("sheetActions");box.innerHTML="";
   box.appendChild(actBtn("1枚ドロー",()=>{draw(pi,1);closeSheet();},"primary"));
+  box.appendChild(actBtn("👁 公開領域を確認（確認済み/表向き/横差しのみ）",()=>{
+    const rows=[];
+    Z.deck.forEach((c,i)=>{
+      if(c.seen||c.faceup||c.sideways||c.qqxSide||c.qqqxSide){
+        const tags=[c.faceup?"表向き":null,(c.sideways||c.qqqxSide)?"横差し":null,(!c.faceup&&c.seen)?"確認済み":null].filter(Boolean).join("・");
+        rows.push(`上から${i+1}枚目：${c.faceup||c.seen?c.name:"（裏向き）"}${tags?`〔${tags}〕`:""}`);
+      }
+    });
+    closeSheet();
+    if(!rows.length){toast("山札に公開情報はありません");return;}
+    toast(`📖 ${S.players[pi].label}の山札・公開領域\n`+rows.join("\n"));
+    logOnly(`📖 ${S.players[pi].label}の山札公開領域を確認（${rows.length}件）`);
+  }));
   box.appendChild(actBtn("シャッフル（横差し解除）",()=>{
     if(qqqxBlock(pi,"シャッフル"))return;
     shuffleDeck(Z);renderAll();toast("シャッフルしました（横差しは解除）");closeSheet();
