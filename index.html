@@ -6378,9 +6378,10 @@ function fxUiPolish(){
         window.__applyFxFinder=()=>{const inp=document.getElementById("fxFinder");if(!inp)return;
           const toks=inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
           const cnt=document.getElementById("fxFinderN");
+          const w2h=(s)=>s.replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0));
           const matchTxt=(txt)=>{
-            const low=txt.toLowerCase();
-            return toks.every(t=>low.includes(t)||((FX_ALIAS[t]||[]).some(a=>txt.includes(a))));
+            const low=w2h(txt).toLowerCase();
+            return toks.every(t=>{const tt=w2h(t);return low.includes(tt)||((FX_ALIAS[t]||[]).some(a=>w2h(txt).includes(a)));});
           };
           const inFx=(el)=>el.closest(".fxrow")||bar.contains(el);
           const labels=[...panel.querySelectorAll("label")].filter(l=>!inFx(l));
@@ -6399,18 +6400,17 @@ function fxUiPolish(){
             l.style.display=ok?"":"none";
             if(ok)hit++;
           });
-          // ② 行の表示：配下にラベルがあればその表示状況で、無ければ行テキストで判定
+          // ② 行の表示：配下ラベルが一致 or 行テキスト（span等の項目名含む）が一致なら表示
           rows.forEach(r=>{
             const ls=[...r.querySelectorAll("label")].filter(l=>!inFx(l));
+            let rowTxt=r.textContent||"";
+            r.querySelectorAll("input[placeholder]").forEach(x=>{rowTxt+=" "+x.placeholder;});
+            const rowMatch=matchTxt(rowTxt);
             if(ls.length){
-              r.style.display=ls.some(l=>l.style.display!=="none")?"":"none";
+              r.style.display=(ls.some(l=>l.style.display!=="none")||rowMatch)?"":"none";
             }else{
-              let txt=r.textContent||"";
-              r.querySelectorAll("input[placeholder]").forEach(x=>{txt+=" "+x.placeholder;});
-              r.querySelectorAll("input[type=text],input[type=number]").forEach(x=>{txt+=" "+(x.value||"");});
-              const ok=matchTxt(txt);
-              r.style.display=ok?"":"none";
-              if(ok)hit++;
+              r.style.display=rowMatch?"":"none";
+              if(rowMatch)hit++;
             }
           });
           if(cnt)cnt.textContent=hit?`${hit}件`:"0件 — 見つからない能力は「誘発処理」＋汎用効果の組み合わせ、または覚え書き欄で代用できます";
