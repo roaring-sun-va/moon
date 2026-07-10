@@ -6784,6 +6784,8 @@ function extractEffects(text,mode){
     if(/山札の上から4枚目.*?横向き/.test(cl)||/横向き.*?山札の上から4枚目/.test(cl))fx.push({t:"deckPin4",n:1});
     // 墓地/山札を見る
     if(/相手の墓地を見る/.test(cl))fx.push({t:"graveView",n:1});
+    // 手札を山札の上/下に置く（ボトム/トップ調整）→ randMoveで手動対象指定を案内
+    if(/手札を.{0,6}?山札の(?:一番)?(?:上|下)/.test(cl))fx.push({t:"randMove",n:numOf(cl,/(\d+)枚/)});
     if(/山札の上から(\d+)枚を?見る/.test(cl)){const n=numOf(cl,/(\d+)枚/);fx.push({t:"look",n});}
     if(/山札の上から(\d+)枚を?(?:表向きに|公開)/.test(cl)){const n=numOf(cl,/(\d+)枚/);fx.push({t:"reveal",n});}
   }
@@ -6830,6 +6832,19 @@ function parseCardText(txt,mode){
     [/侵略/,"invade"],[/革命チェンジ/,"kakumei"],[/P革命チェンジ/,"pkakumei"],
   ];
   for(const [re,k] of KW)if(re.test(tSelf))out.set[k]=true;
+  // 条件付きキーワード付与（「〜あれば/なら、『ブロッカー』を得る」等）→ 条件常在(cstFx/cstCond)に。無条件フラグは外す
+  {
+    const CST=[[/ブロッカー/,"blocker","blocker"],[/スピードアタッカー/,"sa","sa"],[/スレイヤー/,"slayer","slayer"]];
+    for(const [kre,fx,setKey] of CST){
+      const cm=t.match(new RegExp("([^■。、]{3,40}?)(?:あれば|いれば|なら)[、,]?[^。]*?[「『]?"+kre.source+"[」』]?を(?:得る|与える)"));
+      if(cm){
+        const cond=condExprFrom(cm[1]);
+        if(cond){out.set.cstFx=fx;out.set.cstCond=cond;delete out.set[setKey];
+          out.notes.push({msg:`⭐ 条件常在：${cond} なら${fx==="blocker"?"ブロッカー":fx==="sa"?"SA":"スレイヤー"}（条件常在欄に設定）`,q:""});}
+        else out.notes.push({msg:"💡 条件付きキーワードです。『条件常在』欄で設定してください",q:"条件常在"});
+      }
+    }
+  }
   // マナ武装（数値）
   m=tSelf.match(/マナ武装\s*(\d+)/); if(m)out.set.manaArm=+m[1];
   // キリフダッシュ（コストn）／フシギバース（コストn）
