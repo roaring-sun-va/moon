@@ -6869,15 +6869,16 @@ function parseCardText(txt,mode){
   // 常在ロック
   if(/相手は呪文を唱えられない/.test(t))out.set.stLockSpell=true;
   if(/相手は(?:クリーチャーを)?(?:バトルゾーンに)?クリーチャーを出せない/.test(t))out.set.stLockCre=true;
-  // 条件付きS・トリガー付与（「〜あれば/なら、…S・トリガーを与える」）→ STをON＋条件式を推定
+  // 条件付きS・トリガー付与（「〜あれば/なら、…S・トリガーを与える」）→ 条件ST欄のみ設定（無条件STはONにしない）
   if(/S・?トリガー」?を与える/.test(t)){
-    out.set.st=true;
-    // 直前の条件節から zoneCondOk 用の式を組み立てる
     const cm=t.match(/([^■。、]{3,40}?)(?:あれば|いれば|なら)[、,]?[^。]*?S・?トリガー」?を与える/);
     if(cm){
       const cond=condExprFrom(cm[1]);
-      if(cond){out.set.stCond=cond;out.notes.push({msg:`⭐ 条件付きS・トリガーを設定（${cond}）`,q:""});}
-      else out.notes.push({msg:"💡 S・トリガーは条件付きです。条件式は『条件ST』欄で調整してください","q":"トリガー"});
+      if(cond){out.set.stCond=cond;out.notes.push({msg:`⭐ 条件付きS・トリガーを設定（${cond}）※無条件STではありません`,q:""});}
+      else out.notes.push({msg:"💡 条件付きS・トリガーです。条件式を『条件ST』欄で設定してください",q:"トリガー"});
+    }else{
+      // 条件節が読めない場合のみ無条件ST扱い
+      out.set.st=true;
     }
   }
   // 効果の定型文：クリーチャー面は「出た時」以降、呪文面は本文全体を対象
@@ -6895,14 +6896,8 @@ function parseCardText(txt,mode){
   {
     let mm;const s2=seg;
     if(s2){
-    if((mm=seg.match(/カードを(\d+)枚引く/))||(mm=seg.match(/(\d+)枚引く/)))out.fx.push({t:"draw",n:+mm[1]});
-    if((mm=seg.match(/山札の上から(\d+)枚を?マナゾーンに置/)))out.fx.push({t:"charge",n:+mm[1]});
-    if((mm=seg.match(/相手のクリーチャーを(\d+)体.{0,10}?破壊/)))out.fx.push({t:"destroyRnd",n:+mm[1]});
-    if((mm=seg.match(/相手の手札を(\d+)枚.{0,6}?捨て/)))out.fx.push({t:"handes",n:+mm[1]});
-    if(/山札の上から4枚目.{0,8}?横向きに(?:刺す|差す|差し込む)/.test(seg)||/横向きに(?:刺す|差す).{0,20}?山札の上から4枚目/.test(seg))out.fx.push({t:"deckPin4",n:1});
-    if(/手札に戻す/.test(seg))out.notes.push("バウンス系は効果プルダウンから対象指定で追加してください");
+    if(/手札に戻す/.test(seg)&&!out.fx.some(f=>f.t==="bounce"))out.notes.push("バウンス系は効果プルダウンから対象指定で追加してください");
     }
-    {const seen=new Set();out.fx=out.fx.filter(f=>{const k=f.t+":"+(f.n||"");if(seen.has(k))return false;seen.add(k);return true;});}
   }
   // 条件付き強化（「これがNEO進化クリーチャーなら〜」等）は自動化しない旨を通知
   if(/これが.{0,8}進化クリーチャーなら/.test(t))out.notes.push("💡「進化しているなら〜」の条件付き強化は『条件常在』欄で手動設定してください");
