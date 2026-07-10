@@ -6329,20 +6329,20 @@ function fxUiPolish(){
         bar.innerHTML='<input type="text" id="fxFinder" placeholder="🔎 項目をしぼり込み（例：マッドネス／常在／侵略／シールド…・空欄で全表示）" style="flex:1;min-width:180px"><button type="button" class="btn small primary" id="fxAutoBtn" style="white-space:nowrap">📋 テキストから自動設定</button><button type="button" class="btn small" id="fxGuideBtn" style="white-space:nowrap;display:none">💡 案内</button><span id="fxFinderN" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>';
         bar.querySelector("#fxAutoBtn").addEventListener("click",autoFillFromText);
         bar.querySelector("#fxGuideBtn").addEventListener("click",showFxGuide);
-        // 編集中カードが名前辞書に該当するなら「⭐ 名前から設定」ボタンを出す
+        // 「⭐ 名前から設定」を常時表示（該当がなければ押した時に案内）
         {
-          const nm=(typeof FXEDIT!=="undefined")&&(FXEDIT.name||FXEDIT.key)||"";
-          if(typeof applyNamedCard==="function"&&applyNamedCard(nm)){
-            const nb=document.createElement("button");
-            nb.type="button";nb.className="btn small";nb.style.whiteSpace="nowrap";
-            nb.textContent="⭐ 名前から設定";
-            nb.addEventListener("click",()=>{
-              const hit=autoApplyNamed();
-              renderFxEditor();
-              if(hit)toast(`⭐ ${nm} の固有効果を反映しました。${hit.note||""}\n⚠ 確認してから保存してください`);
-            });
-            bar.insertBefore(nb,bar.querySelector("#fxGuideBtn"));
-          }
+          const nb=document.createElement("button");
+          nb.type="button";nb.className="btn small";nb.style.whiteSpace="nowrap";
+          nb.textContent="⭐ 名前から設定";
+          nb.addEventListener("click",()=>{
+            const nm=(typeof FXEDIT!=="undefined")&&(FXEDIT.name||FXEDIT.key)||"";
+            const hit=(typeof applyNamedCard==="function")&&applyNamedCard(nm);
+            if(!hit){toast(`「${nm}」は固有カード辞書に登録がありません（📚登録一覧の⭐固有辞書で対応カードを確認できます）`);return;}
+            autoApplyNamed();
+            renderFxEditor();
+            toast(`⭐ ${nm} の固有効果を反映しました。${hit.note||""}\n⚠ 確認してから保存してください`);
+          });
+          bar.insertBefore(nb,bar.querySelector("#fxGuideBtn"));
         }
         firstH3.parentElement.insertBefore(bar,firstH3);
         const inp=bar.querySelector("#fxFinder");
@@ -6369,26 +6369,49 @@ function fxUiPolish(){
           "アンタップキラー":["アンタップ攻撃"],"タップキル":["アンタップ攻撃"],
           "セイバー":["身代わり","セイバー"],"身代わり":["セイバー"],
           "ドロソ":["引く","ドロー"],"ルーター":["引","捨て"],
-          "呪文横取り":["唱え"],"メタ":["ロック","タップイン","コスト＋"]
+          "呪文横取り":["唱え"],"メタ":["ロック","タップイン","コスト＋"],
+          "センノー":["召喚以外"],"メタクリーチャー":["召喚以外","ロック"],"シャコガイル":["山札が0"],
+          "ヤドック":["置換ロック","マナ"],"マバユキ":["山札の下","置換"],"アルカディアス":["置換","墓地"],
+          "5000vt":["ターン限定ロック"],"vt":["ターン限定ロック"],"ボルメテウス":["焼却"],
+          "マンハッタン":["ターン限定","何体"],"横差し":["4枚目","Q.Q.QX"],"qqqx":["Q.Q.QX","4枚目"]
         };
         inp.addEventListener("input",()=>{
           const toks=inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
           const cnt=document.getElementById("fxFinderN");
-          const rows=[...panel.querySelectorAll(".row,.fxrow")].filter(r=>r!==bar&&!r.contains(bar)&&!r.closest(".fxrow, .row .row"));
-          if(!toks.length){rows.forEach(r=>{r.style.display="";});if(cnt)cnt.textContent="";return;}
-          let hit=0;
-          rows.forEach(r=>{
-            let txt=r.textContent||"";
-            r.querySelectorAll("input[placeholder]").forEach(x=>{txt+=" "+x.placeholder;});
-            r.querySelectorAll("input[type=text],input[type=number]").forEach(x=>{txt+=" "+(x.value||"");});
+          const matchTxt=(txt)=>{
             const low=txt.toLowerCase();
-            const ok=toks.every(t=>{
-              if(low.includes(t))return true;
-              const al=FX_ALIAS[t];
-              return al?al.some(a=>txt.includes(a)):false;
-            });
-            r.style.display=ok?"":"none";
+            return toks.every(t=>low.includes(t)||((FX_ALIAS[t]||[]).some(a=>txt.includes(a))));
+          };
+          const inFx=(el)=>el.closest(".fxrow")||bar.contains(el);
+          const labels=[...panel.querySelectorAll("label")].filter(l=>!inFx(l));
+          const rows=[...panel.querySelectorAll(".row")].filter(r=>r!==bar&&!inFx(r));
+          if(!toks.length){
+            labels.forEach(l=>l.style.display="");
+            rows.forEach(r=>r.style.display="");
+            if(cnt)cnt.textContent="";return;
+          }
+          let hit=0;
+          // ① ラベルを個別に絞り込み
+          labels.forEach(l=>{
+            let txt=l.textContent||"";
+            l.querySelectorAll("input[placeholder]").forEach(x=>{txt+=" "+x.placeholder;});
+            const ok=matchTxt(txt);
+            l.style.display=ok?"":"none";
             if(ok)hit++;
+          });
+          // ② 行の表示：配下にラベルがあればその表示状況で、無ければ行テキストで判定
+          rows.forEach(r=>{
+            const ls=[...r.querySelectorAll("label")].filter(l=>!inFx(l));
+            if(ls.length){
+              r.style.display=ls.some(l=>l.style.display!=="none")?"":"none";
+            }else{
+              let txt=r.textContent||"";
+              r.querySelectorAll("input[placeholder]").forEach(x=>{txt+=" "+x.placeholder;});
+              r.querySelectorAll("input[type=text],input[type=number]").forEach(x=>{txt+=" "+(x.value||"");});
+              const ok=matchTxt(txt);
+              r.style.display=ok?"":"none";
+              if(ok)hit++;
+            }
           });
           if(cnt)cnt.textContent=hit?`${hit}件`:"0件 — 見つからない能力は「誘発処理」＋汎用効果の組み合わせ、または覚え書き欄で代用できます";
         });
