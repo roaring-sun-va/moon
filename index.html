@@ -6983,16 +6983,22 @@ async function autoFillFromText(){
   const applyFx=(fx,face)=>{FXEDIT.faces[face]=FXEDIT.faces[face]||[];for(const f of fx)FXEDIT.faces[face].push({t:f.t,n:f.n});return fx.length;};
   // ツインパクトかどうか（既にチェック済みなら自動でツインパクトフロー）
   let isTwin=FXEDIT.twin;
+  let twinOnly=null; // "up"=上面だけ / "dn"=下面だけ
   if(!isTwin){
-    const kind=await askChoice("📋 カードの種類",["通常カード（1回で取り込み）","ツインパクト（上面→下面の順に取り込み）"]);
+    const kind=await askChoice("📋 カードの種類",["通常カード（1回で取り込み）","ツインパクト（上面→下面の順）","ツインパクトの下面（呪文）だけ","ツインパクトの上面（クリーチャー）だけ"]);
     if(kind===null)return;
-    isTwin=(kind===1);
+    isTwin=(kind>=1);
+    if(kind===2)twinOnly="dn";
+    if(kind===3)twinOnly="up";
   }
   if(!isTwin){
     const txt=await grab("カード");
     if(!txt)return;
-    const r=parseCardText(txt);
-    let cnt=applySet(r.set)+applyFx(r.fx,0);
+    // 呪文テキスト（クリーチャー要素なし）は呪文モードで解析＝本文全体を効果対象にする
+    const looksSpell=/(?:^|\n|　| )呪文(?:\n|　| |$)/.test(txt)||(/呪文/.test(txt)&&!/クリーチャー/.test(txt));
+    const r=parseCardText(txt,looksSpell?"spell":undefined);
+    if(looksSpell&&!r.set.ctype)r.set.ctype="spell";
+    let cnt=applySet(r.set)+applyFx(r.fx,looksSpell?0:0);
     const named=autoApplyNamed();
     if(named){cnt++;if(named.note)r.notes.push({msg:"⭐ "+named.note,q:""});}
     FXEDIT._guide=r.notes.filter(x=>x&&x.q);
@@ -7007,10 +7013,10 @@ async function autoFillFromText(){
     toast(msg.join("\n"));
     return;
   }
-  // ツインパクト：上面（クリーチャー）→ 下面（呪文）を順に取り込み
+  // ツインパクト：上面（クリーチャー）→ 下面（呪文）を順に取り込み（twinOnlyで片面のみ）
   FXEDIT.twin=true;
   let total=0,notes=[];
-  const up=await grab("上面（クリーチャー面）");
+  const up=(twinOnly==="dn")?null:await grab("上面（クリーチャー面）");
   if(up){
     const r1=parseCardText(up,"creature");
     // 上面の進化/NEO進化を検出
@@ -7019,12 +7025,13 @@ async function autoFillFromText(){
     total+=applySet(r1.set)+applyFx(r1.fx,0);
     notes.push(...r1.notes);
   }
-  const dn=await grab("下面（呪文面）");
+  const dn=(twinOnly==="up")?null:await grab("下面（呪文面）");
   if(dn){
     const r2=parseCardText(dn,"spell");
-    // 下面から拾うのは cost2・ST・呪文効果のみ（パワー等は上面優先で上書きしない）
+    // 下面から拾うのは cost2・ST・条件ST・呪文効果（パワー等は上面優先で上書きしない）
     if(r2.set.cost2!=null)FXEDIT.cost2=r2.set.cost2;
     if(r2.set.st)FXEDIT.st=true;
+    if(r2.set.stCond)FXEDIT.stCond=r2.set.stCond;
     total+=applyFx(r2.fx,1);
     notes.push(...r2.notes);
   }
