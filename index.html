@@ -1569,6 +1569,10 @@ body.shake{animation:bodyShake .4s ease-out}
 <div class="olay" id="regOlay">
   <div class="panelbox">
     <h2>登録一覧</h2>
+    <div class="row" style="position:sticky;top:0;z-index:5;background:var(--panel,#131a2a);padding:6px 0;margin:0">
+      <input type="text" id="regSearch" placeholder="🔎 カード名・能力で検索（スペース区切りでAND・例：侵略 SA）" style="flex:1;min-width:180px;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
+      <span id="regSearchN" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
+    </div>
     <h3 style="margin-top:4px">⚡ 効果登録</h3>
     <div id="regFxBody"></div>
     <h3 style="margin-top:10px">🔁 多面カード</h3>
@@ -2129,6 +2133,24 @@ function startGame(picks){
   closeSheet();renderAll();
   sfx("ok");
   toast(S.vs?`対戦開始！ 先行：${S.players[S.who].label}`:"対戦開始！");
+  // 登録漏れ警告：ロック/シンパシー等の自動判定がすり抜ける原因になるため、開始時に知らせる
+  if(S.expert){
+    const miss=new Set(), noPC=new Set();
+    for(const P of S.players){
+      if(!P)continue;
+      for(const z of ["deck","hand","shield"]){
+        for(const c of (P.zones[z]||[])){
+          const r=getReg(c);
+          if(!r){miss.add(c.name);continue;}
+          if(r.ctype!=="spell"&&(r.power==null||r.power==="")&&(r.cost==null||r.cost===""))noPC.add(c.name);
+        }
+      }
+    }
+    const msgs=[];
+    if(miss.size)msgs.push(`効果未登録 ${miss.size}種`);
+    if(noPC.size)msgs.push(`パワー/コスト未登録 ${noPC.size}種`);
+    if(msgs.length)toast(`📋 ${msgs.join("・")} があります。ロック等の自動判定が確認式になる場合があります（登録画面から追記できます）`);
+  }
 }
 function draw(pi,n=1){
   const Z=S.players[pi].zones;
@@ -2689,7 +2711,7 @@ async function findByCond(pi){
   const c=Z.deck.splice(idx,1)[0];
   const dst=await askChoice(`《${c.name}》の行き先`,["手札へ","バトルへ","マナへ","墓地へ","シールドへ（表向き）"]);
   c.faceup=true;c.tapped=false;
-  if(dst===1){Z.battle.push(c);markArrive(c);emitEvent(pi,"summon");enqueueFx(pi,c);}
+  if(dst===1){if(!battleEntryOk(pi,c)){Z.hand.push(c);markArrive(c);toast(`（出せないため手札へ）`);}else{Z.battle.push(c);markArrive(c);emitEvent(pi,"summon");enqueueFx(pi,c);}}
   else if(dst===2)Z.mana.push(c);
   else if(dst===3)Z.grave.push(c);
   else if(dst===4){c.mark=S.turn>0;Z.shield.push(c);}
@@ -2740,7 +2762,7 @@ async function searchZone(pi,zone,kinds){
   const c=src.splice(idx,1)[0];
   const dst=await askChoice(`《${c.name}》の行き先`,["手札へ","バトルへ","マナへ","墓地へ","シールドへ（表向き）"]);
   c.faceup=true;c.tapped=false;
-  if(dst===1){Z.battle.push(c);markArrive(c);emitEvent(pi,"summon");enqueueFx(pi,c);}
+  if(dst===1){if(!battleEntryOk(pi,c)){Z.hand.push(c);markArrive(c);toast(`（出せないため手札へ）`);}else{Z.battle.push(c);markArrive(c);emitEvent(pi,"summon");enqueueFx(pi,c);}}
   else if(dst===2)Z.mana.push(c);
   else if(dst===3)Z.grave.push(c);
   else if(dst===4){c.mark=S.turn>0;Z.shield.push(c);}
@@ -2857,6 +2879,31 @@ async function mekureidoRun(count){
 // 効果のコントローラー（カード登録効果はrunFxListから設定。手札メニュー等はnull＝ターンプレイヤー基準）
 let FX_PI=null;
 function fxActor(){return (FX_PI!=null)?FX_PI:(S.vs?S.who:0);}
+/* 踏み倒し・サーチ等でバトルゾーンへ出す前の共通ロック判定（常在＋ターン限定＋未登録）
+   戻り値: true=出してOK / false=ブロック（呼び出し側は出すのを中止） */
+function battleEntryOk(pi,c){
+  if(!S.expert||S.freePlay||S.turn<=0)return true;
+  const r=getReg(c);
+  const lk=stLockerOf(pi,"stLockCre","stLockCreF",r,c);
+  const tl=lk?null:turnLockHit(pi,"creature",r);
+  const tlU=(lk||tl)?null:turnLockUnknown(pi,"creature",r);
+  if(lk||tl){
+    sfx("flip");
+    toast(`⛔ ロック：${faceNameOf(c)} は出せない！（${lk?`常在：${faceNameOf(lk)}`:turnLockLabel(tl)}）\n※例外的に通す場合は「踏倒:ON」で`);
+    return false;
+  }
+  if(tlU){
+    sfx("flip");
+    const pw=tlU.prop==="power"?"パワー":"コスト";
+    toast(`⛔ ロック（要確認）：${turnLockLabel(tlU)}。\n《${faceNameOf(c)}》は${pw}未登録のため安全側でブロックしました。\n${pw}を登録するか「踏倒:ON」で通してください。`);
+    return false;
+  }
+  // 置換ロック（マバユキ/アルカディアス/ヤドック型）は注意喚起のみ（この経路では手動判断）
+  const foe=pi===0?1:0;
+  const rep=zonesOf(foe).battle.find(x=>{const rx=getReg(x);return rx&&rx.repIn;});
+  if(rep)toast(`⚠ ${faceNameOf(rep)} の置換ロックが場にあります。条件に該当する場合は手動で置換してください`);
+  return true;
+}
 const EFFECTS=[
   {name:"🔢 数字を宣言（ラッキーナンバー／シャッフ型）",cat:"✨ その他",
    desc:"宣言者と数字を選び、画面上部に常時表示（宣言者の次のターン開始まで）。効果の強制はなし・手動運用。該当コストのカード使用時に警告を表示",
@@ -3320,7 +3367,16 @@ function openEffects(){
       b.className="btn small";
       b.innerHTML=`<b>${ef.name}</b><br><span style="font-size:10px;color:var(--muted);font-weight:400">${ef.desc}</span>`;
       b.style.flex="1 1 100%";b.style.textAlign="left";b.style.lineHeight="1.5";
-      b.onclick=()=>ef.run();
+      b.onclick=async()=>{
+        let api=0;
+        if(S.vs){
+          const j=await askChoice(`⚡「${ef.name}」を誰の効果として使いますか？`,[S.players[0].label,S.players[1].label]);
+          if(j===null)return;
+          api=j;
+        }
+        const _fp=FX_PI;FX_PI=api;
+        try{await ef.run();}finally{FX_PI=_fp;}
+      };
       box.appendChild(b);
     }
   }
@@ -6105,17 +6161,18 @@ function fxUiPolish(){
         bar.innerHTML='<input type="text" id="fxFinder" placeholder="🔎 項目をしぼり込み（例：マッドネス／常在／侵略／シールド…・空欄で全表示）" style="flex:1;min-width:180px"><span id="fxFinderN" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>';
         firstH3.parentElement.insertBefore(bar,firstH3);
         const inp=bar.querySelector("#fxFinder");
+        inp.placeholder="🔎 項目をしぼり込み（スペース区切りでAND検索・例：常在 ロック／空欄で全表示）";
         inp.addEventListener("input",()=>{
-          const q=inp.value.trim();
+          const toks=inp.value.trim().split(/\s+/).filter(Boolean);
           const cnt=document.getElementById("fxFinderN");
           const rows=[...panel.querySelectorAll(".row,.fxrow")].filter(r=>r!==bar&&!r.contains(bar)&&!r.closest(".fxrow, .row .row"));
-          if(!q){rows.forEach(r=>{r.style.display="";});if(cnt)cnt.textContent="";return;}
+          if(!toks.length){rows.forEach(r=>{r.style.display="";});if(cnt)cnt.textContent="";return;}
           let hit=0;
           rows.forEach(r=>{
             let txt=r.textContent||"";
             r.querySelectorAll("input[placeholder]").forEach(x=>{txt+=" "+x.placeholder;});
             r.querySelectorAll("input[type=text],input[type=number]").forEach(x=>{txt+=" "+(x.value||"");});
-            const ok=txt.includes(q);
+            const ok=toks.every(t=>txt.includes(t));
             r.style.display=ok?"":"none";
             if(ok)hit++;
           });
@@ -6946,7 +7003,8 @@ $("btnLinkReg").addEventListener("click",async ()=>{
 $("btnRegList").addEventListener("click",()=>{
   const fxBody=$("regFxBody");fxBody.innerHTML="";
   if(!FXDB.size)fxBody.innerHTML="<div class='hint'>効果登録はありません</div>";
-  for(const [k,v] of FXDB){
+  const fxEntries=[...FXDB.entries()].sort((a,b)=>String(dispName.get(a[0])||a[0]).localeCompare(String(dispName.get(b[0])||b[0]),"ja"));
+  for(const [k,v] of fxEntries){
     const item=document.createElement("div");item.className="dl-item";
     const nm=document.createElement("div");nm.className="dl-name";
     const attrs=[];
@@ -7123,6 +7181,26 @@ $("btnRegList").addEventListener("click",()=>{
     lkBody.appendChild(item);
   }
   $("regOlay").classList.add("open");
+  // 検索フィルタ：カード名＋能力バッジ＋効果要約をスペース区切りAND検索
+  {
+    const inp=$("regSearch");
+    const apply=()=>{
+      const toks=inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      let hit=0,total=0;
+      for(const body of [$("regFxBody"),$("regLinkBody")]){
+        for(const it of body.querySelectorAll(".dl-item")){
+          total++;
+          const txt=(it.textContent||"").toLowerCase();
+          const ok=toks.every(t=>txt.includes(t));
+          it.style.display=ok?"":"none";
+          if(ok)hit++;
+        }
+      }
+      $("regSearchN").textContent=toks.length?`${hit}件`:`全${total}件`;
+    };
+    inp.oninput=apply;
+    apply();
+  }
 });
 $("regClose").addEventListener("click",()=>$("regOlay").classList.remove("open"));
 
@@ -9007,6 +9085,19 @@ function renderAll(){
       if(d&&d.ns&&d.ns.length)parts.push(`🔢 ${S.players[k].label} 宣言：${d.ns.join("・")}`);
     }
     if(S.turnLock&&S.turnLock.length)parts.push(...S.turnLock.map(L=>`⛔ ${turnLockLabel(L)}`));
+    // 常在系ロックも常時表示（場にある間ずっと有効なもの）
+    if(S.expert&&S.vs)for(const k of [0,1]){
+      for(const x of zonesOf(k).battle){
+        const rx=getReg(x);
+        if(!rx)continue;
+        if(typeof isSealed==="function"&&isSealed(x))continue;
+        const foe=k?0:1;
+        if(rx.stLockCre)parts.push(`🔒 ${faceNameOf(x)}：${S.players[foe].label}はクリーチャーを出せない${rx.stLockCreF?`（${rx.stLockCreF}）`:""}`);
+        if(rx.stLockSpell)parts.push(`🔒 ${faceNameOf(x)}：${S.players[foe].label}は呪文を唱えられない${rx.stLockSpellF?`（${rx.stLockSpellF}）`:""}`);
+        if(rx.repIn)parts.push(`🔁 ${faceNameOf(x)}：置換ロック（${rx.repIn==="manaOverMax"?"最大マナ超→マナ":rx.repIn==="grave"?"→墓地":"→山下"}）`);
+        if(rx.qqqx)parts.push(`🔀 ${faceNameOf(x)}：Q.Q.QX（${S.players[foe].label}は山札シャッフル/確認/公開不可）`);
+      }
+    }
     if(parts.length){bn.textContent=parts.join("　｜　");bn.style.display="";}
     else bn.style.display="none";
   }
@@ -9487,7 +9578,7 @@ function openShieldStack(pi,id){
       x.tapped=false;
       if(j===0){x.faceup=true;Z.hand.push(x);}
       else if(j===1){x.faceup=true;Z.grave.push(x);}
-      else if(j===2){x.faceup=true;Z.battle.push(x);markArrive(x);emitEvent(pi,"summon");enqueueFx(pi,x);}
+      else if(j===2){if(!battleEntryOk(pi,x)){x.faceup=true;Z.hand.push(x);markArrive(x);toast(`（出せないため手札へ）`);}else{x.faceup=true;Z.battle.push(x);markArrive(x);emitEvent(pi,"summon");enqueueFx(pi,x);}}
       else if(j===3){x.faceup=true;Z.mana.push(x);}
       else if(j===4){x.faceup=false;Z.deck.unshift(x);}
       else{x.faceup=false;Z.deck.push(x);}
