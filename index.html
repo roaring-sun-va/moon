@@ -983,7 +983,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <option value="creatureAll">クリーチャー（進化含む）</option>
         <option value="creature">通常クリーチャー</option>
         <option value="evo">進化</option>
-        <option value="neoevo">NEO進化</option>
+        <option value="neoevo">NEOクリーチャー</option>
         <option value="starevo">スター進化</option>
         <option value="spell">呪文</option>
         <option value="crossgear">クロスギア</option><option value="gigaaura">ギガオレガオーラ</option>
@@ -1046,7 +1046,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <select id="fxTwinTop" style="width:auto;flex:0 0 210px">
           <option value="creature">通常クリーチャー</option>
           <option value="evo">進化クリーチャー</option>
-          <option value="neoevo">NEO進化クリーチャー</option>
+          <option value="neoevo">NEOクリーチャー</option>
         </select>
       </div>
       <div id="fxList0"></div>
@@ -1110,7 +1110,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="">（未設定）</option>
           <option value="creature">クリーチャー</option>
           <option value="evo">進化クリーチャー</option>
-          <option value="neoevo">NEO進化クリーチャー</option>
+          <option value="neoevo">NEOクリーチャー</option>
           <option value="starevo">スター進化</option>
           <option value="smaxevo">S-MAX進化</option>
           <option value="onismaxevo">鬼S-MAX進化</option>
@@ -1880,7 +1880,9 @@ function markArrive(c){
       if(pOwn!=null){S.playedTurn=S.playedTurn||{};S.playedTurn[pOwn]=(S.playedTurn[pOwn]||0)+1;
         if(typeof turnLockCountUp==="function")turnLockCountUp(pOwn);}
       const r=getReg(c);
-      const evo=isEvoReg(r);
+      let evo=isEvoReg(r);
+      // NEOクリーチャー：NEO進化として出していない（下に進化元が無く・neoEvoフラグ無し）なら非進化＝召喚酔いあり
+      if(evo&&isNeoReg(r)&&!(c.neoEvo||(c.under&&c.under.length)))evo=false;
       c.sick=!evo&&!(r&&r.sa);
     }
   }catch(e){}
@@ -1893,6 +1895,64 @@ function isEvoReg(r){
   if(EVO_CTYPES.includes(r.ctype))return true;
   if((r.twin||r.ctype==="twinpact")&&r.twinTop&&EVO_CTYPES.includes(r.twinTop))return true;
   return false;
+}
+/* NEOクリーチャー判定（単体neoevo or ツインパクト上面neoevo） */
+function isNeoReg(r){
+  if(!r)return false;
+  if(r.ctype==="neoevo")return true;
+  if((r.twin||r.ctype==="twinpact")&&r.twinTop==="neoevo")return true;
+  return false;
+}
+/* 現在この場のカードがNEO進化として扱われているか（進化元を持つ or フラグ） */
+function isNeoEvoInstance(c){return !!(c&&(c.neoEvo||(c.under&&c.under.length)));}
+/* NEOクリーチャーを手札等からバトルへ：出し方を確認パネルで選ぶ */
+async function playNeoCreature(p,zone,id){
+  const f0=findCard(p,zone,id);
+  if(!f0){renderAll();return;}
+  const nm=faceNameOf(f0.card);
+  const mode=await askChoice(`《${nm}》はNEOクリーチャー。出し方を選択`,
+    ["NEOクリーチャーとして出す（通常召喚・召喚酔いあり）","NEO進化として出す（自分のクリーチャーに重ねる）"]);
+  if(mode===null){renderAll();return;}
+  if(mode===0){
+    const f=findCard(p,zone,id); if(f)f.card.neoEvo=false;
+    closeSel();
+    moveCard(p,zone,id,"battle");
+    renderAll();
+    return;
+  }
+  // NEO進化：バトルゾーンの自分クリーチャーを進化元に
+  const Z=zonesOf(p);
+  const pool=Z.battle.filter(x=>x.id!==id);
+  if(!pool.length){
+    toast("進化元になるクリーチャーがいません。NEOクリーチャーとして通常召喚します");
+    const f=findCard(p,zone,id); if(f)f.card.neoEvo=false;
+    closeSel();
+    moveCard(p,zone,id,"battle");
+    renderAll();
+    return;
+  }
+  const k=pool.length===1?0:await askChoice("進化元を選択（自分のクリーチャー）",pool.map(x=>faceNameOf(x)+(x.tapped?"（タップ）":"")));
+  if(k===null){renderAll();return;}
+  const host=pool[k];
+  const f=findCard(p,zone,id);
+  if(!f){renderAll();return;}
+  snap();
+  f.arr.splice(f.idx,1);
+  const evc=f.card;
+  evc.faceup=true;evc.tapped=host.tapped;evc.neoEvo=true;
+  evc.under=[host,...(host.under?host.under.splice(0):[]),...(evc.under||[])];
+  if(host.gear&&host.gear.length){evc.gear=host.gear.splice(0);}
+  const bi=Z.battle.findIndex(x=>x.id===host.id);
+  Z.battle[bi]=evc;
+  markArrive(evc);
+  emitEvent(p,"summon");
+  if(S.expert&&S.autoTap&&!S.freePlay){
+    MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(p,evc)).catch(()=>{});
+  }
+  enqueueFx(p,evc);
+  closeSel();
+  sfx("ok");renderAll();
+  toast(`⤴ NEO進化！ ${faceNameOf(evc)}（進化元：${faceNameOf(host)}）`);
 }
 /* Q.Q.QX：相手が場に持つ時、pi は自分の山札をシャッフル/確認/表向きにできない */
 function qqqxOwnerOpp(pi){
@@ -1943,6 +2003,8 @@ function restoreState(st){
   S.sel=null;S.msel=[];PENDING=null;
   $("revealOlay").classList.remove("open");
   $("stackOlay").classList.remove("open");
+  // ターンを跨いで戻った場合は視点（座席）も現在のターンプレイヤーへ切り替える（nextTurnと同じ挙動）
+  if(S.vs&&S.autoSeat&&!(ONLINE.conn&&ONLINE.conn.open)&&(S.seat|0)!==S.who){S.seat=S.who;buildBoards();}
   closeSheet();renderAll();
 }
 function normalizeCard(c){
@@ -1957,9 +2019,16 @@ function normalizeCard(c){
 }
 function undo(){
   if(!HIST.length){toast("戻れる操作がありません");return;}
-  REDO.push(serializeState());
-  restoreState(JSON.parse(HIST.pop()));
-  toast("1手戻しました（⌘⇧Zでやり直し）");
+  const curStr=serializeState();
+  const cur=JSON.parse(curStr);
+  REDO.push(curStr);
+  const st=JSON.parse(HIST.pop());
+  restoreState(st);
+  if(st.t!==cur.t||st.w!==cur.w){
+    toast(`⟲ 前のターンへ戻しました（ターン${st.t}${S.vs?"・"+S.players[st.w].label:""}／⌘⇧Zでやり直し）`);
+  }else{
+    toast("1手戻しました（⌘⇧Zでやり直し）");
+  }
 }
 function redo(){
   if(!REDO.length){toast("やり直す操作がありません");return;}
@@ -4089,8 +4158,9 @@ async function runFxList(pi,list,srcCard){
       renderAll();openOppHandViewer(op);
     }else if(f.t==="bounce"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
-      const tp=await askChoice(`🎲 バウンス（ランダム${n}体）：対象プレイヤーを選択`,[S.players[0].label,S.players[1].label]);
-      if(tp===null)continue;
+      const pc=await askChoice(`🎲 バウンス（ランダム${n}体）：対象プレイヤーを選択`,[`相手（${S.players[op].label}）`,`自分（${S.players[pi].label}）`]);
+      if(pc===null)continue;
+      const tp=(pc===0?op:pi);
       const TZ=zonesOf(tp);
       for(let i=0;i<n&&TZ.battle.length;i++){
         const j=randInt(TZ.battle.length);
@@ -4102,8 +4172,9 @@ async function runFxList(pi,list,srcCard){
       sfx("move");
     }else if(f.t==="deckPin4"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
-      const tp=await askChoice("🔀 山札4枚目に横差し：どのプレイヤーのクリーチャーを対象にしますか？",[S.players[0].label,S.players[1].label]);
-      if(tp===null)continue;
+      const pc=await askChoice("🔀 山札4枚目に横差し：どのプレイヤーのクリーチャーを対象にしますか？",[`相手（${S.players[op].label}）`,`自分（${S.players[pi].label}）`]);
+      if(pc===null)continue;
+      const tp=(pc===0?op:pi);
       const TZ=zonesOf(tp);
       if(!TZ.battle.length){toast(`${S.players[tp].label}のバトルゾーンにクリーチャーがいません`);continue;}
       for(let i=0;i<n&&TZ.battle.length;i++){
@@ -4123,8 +4194,9 @@ async function runFxList(pi,list,srcCard){
       }
     }else if(f.t==="destroyRnd"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
-      const tp=await askChoice(`🎲 ランダム破壊（${n}体）：対象プレイヤーを選択`,[S.players[0].label,S.players[1].label]);
-      if(tp===null)continue;
+      const pc=await askChoice(`🎲 ランダム破壊（${n}体）：対象プレイヤーを選択`,[`相手（${S.players[op].label}）`,`自分（${S.players[pi].label}）`]);
+      if(pc===null)continue;
+      const tp=(pc===0?op:pi);
       const TZ=zonesOf(tp);
       for(let i=0;i<n&&TZ.battle.length;i++){
         const j=randInt(TZ.battle.length);
@@ -4186,8 +4258,12 @@ async function runFxList(pi,list,srcCard){
       sfx("flip");renderAll();
       toast(`🔄 変身！ ${faceNameOf(tgtC)}`);
     }else if(f.t==="randMove"){
-      const tp=await askChoice(`🎲 ランダム移動（${n}枚）：対象プレイヤーを選択`,[S.players[0].label,S.players[1].label]);
-      if(tp===null)continue;
+      let tp=pi;
+      if(S.vs){
+        const pc=await askChoice(`🎲 ランダム移動（${n}枚）：対象プレイヤーを選択`,[`相手（${S.players[op].label}）`,`自分（${S.players[pi].label}）`]);
+        if(pc===null)continue;
+        tp=(pc===0?op:pi);
+      }
       const zk=await askChoice(`🎲 ${S.players[tp].label}のどのゾーンから？`,["手札","マナ","バトルゾーン","墓地"]);
       if(zk===null)continue;
       const zoneKey=["hand","mana","battle","grave"][zk];
@@ -5634,6 +5710,7 @@ async function execAttack(pi,id,tg){
           if(evMode===null){arr0.splice(hi,0,h);renderAll();return;}
           dddAsEvo=(evMode===0);
         }
+        if(isNeoReg(r2))h.neoEvo=dddAsEvo;
         if(r2&&r2.ctype==="spell"){
           if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
           Z.resolve.push(h);
@@ -7844,7 +7921,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.seiba)attrs.push(v.seibaF?`セイバー：${v.seibaF}`:"セイバー");
     if(v.watchFx&&v.watchFx.length)attrs.push(`誘発処理${v.watchFx.length}`);
     if(v.modeN)attrs.push(`選択効果${v.modeN}回`);
-    nm.textContent=(dispName.get(k)||k)+(v.twin?(v.twinTop==="evo"?"（ツインパクト・進化）":v.twinTop==="neoevo"?"（ツインパクト・NEO進化）":"（ツインパクト）"):"")+(attrs.length?" ["+attrs.join("/")+"]":"");
+    nm.textContent=(dispName.get(k)||k)+(v.twin?(v.twinTop==="evo"?"（ツインパクト・進化）":v.twinTop==="neoevo"?"（ツインパクト・NEOクリーチャー）":"（ツインパクト）"):"")+(attrs.length?" ["+attrs.join("/")+"]":"");
     if(imgURL.has(k)){
       const th=document.createElement("img");
       th.src=imgURL.get(k);
@@ -9455,6 +9532,14 @@ function cardEl(pi,zone,c){
     zb.textContent="🌙"+gd+"/4";
     zb.style.cssText=`position:absolute;left:2px;top:2px;z-index:6;background:#000d;color:${gd===4?"#e879f9":"#93c5fd"};font-size:11px;font-weight:900;border-radius:6px;padding:0 5px;line-height:1.5;pointer-events:none${gd===4?";box-shadow:0 0 8px 2px rgba(232,121,249,.6)":""}`;
     el.appendChild(zb);
+  }
+  if(showBLab&&zone==="battle"&&!hidden&&c.faceup&&isNeoReg(getReg(c))){
+    const isEv=isNeoEvoInstance(c);
+    const nb=document.createElement("span");
+    nb.textContent=isEv?"NEO進化":"NEO";
+    nb.title=isEv?"NEO進化クリーチャーとして出た":"NEOクリーチャー（通常召喚）として出た";
+    nb.style.cssText=`position:absolute;left:2px;bottom:2px;z-index:6;background:${isEv?"#4c1d95":"#134e4a"};color:${isEv?"#c4b5fd":"#5eead4"};font-size:10px;font-weight:900;border-radius:6px;padding:0 5px;line-height:1.5;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.5)`;
+    el.appendChild(nb);
   }
   if(showBLab&&zone==="battle"&&c.cnt>0){
     const kb=document.createElement("span");
@@ -11843,6 +11928,10 @@ function openCardSheet(ctx){
         await destroyWithReplace(ctx.p,f2.card);
         renderAll();
       }));
+      continue;
+    }
+    if(tz==="battle"&&ctx.zone!=="battle"&&isNeoReg(getReg(c))){
+      box.appendChild(actBtn("バトルへ（NEOクリーチャー：出し方を確認）",()=>{playNeoCreature(ctx.p,ctx.zone,ctx.id);},"primary"));
       continue;
     }
     box.appendChild(actBtn(label,()=>{moveCard(ctx.p,ctx.zone,ctx.id,tz);closeSel();renderAll();}));
