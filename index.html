@@ -1189,6 +1189,14 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <label><input type="checkbox" id="fxInvade"> 侵略（攻撃時、手札から重ねて進化）</label>
+        <label>🌑 無月の門（ドルスザク・魔導具の種族で条件を自動判定）：
+          <select id="fxMugetsu" style="width:auto">
+            <option value="">なし</option>
+            <option value="normal">無月の門（場に魔導具2＋墓地2・揃った時）</option>
+            <option value="kyomu">虚無月の門（場+墓の魔導具 計4・揃った時）</option>
+            <option value="zetsu">無月の門・絶（場+墓 計6・各ターン終了時／手札・墓地から）</option>
+          </select>
+          <input type="number" id="fxMugetsuN" min="1" style="width:52px" placeholder="下敷" value="6" title="門の下に敷く目安枚数（任意）"></label>
         <label><input type="checkbox" id="fxKakumei"> 革命チェンジ（攻撃時、手札と入れ替え）</label>
         <label><input type="checkbox" id="fxJChange"> J・チェンジ（攻撃時、手札と入れ替え）：自分のコスト<input type="number" id="fxJChangeN" min="0" style="width:60px" placeholder="以上">以上のクリーチャーが攻撃した時</label>
         <span style="font-size:12px;font-weight:700">ニンジャ・ストライク</span>
@@ -1627,6 +1635,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <div class="row" style="position:sticky;top:0;z-index:5;background:var(--panel,#131a2a);padding:6px 0;margin:0">
       <input type="text" id="regSearch" placeholder="🔎 カード名・能力で検索（スペース区切りでAND・例：侵略 SA）" style="flex:1;min-width:180px;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
       <button type="button" class="btn small" id="regNamedBtn" style="white-space:nowrap">⭐ 固有辞書</button>
+      <button type="button" class="btn small" id="regBulkRaceBtn" style="white-space:nowrap">🏷 種族一括付与</button>
       <span id="regSearchN" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
     </div>
     <h3 style="margin-top:4px">⚡ 効果登録</h3>
@@ -2536,6 +2545,8 @@ function nextTurn(){
       }
     }
   }
+  // 🌑 無月の門（ドルスザク）：絶＝各ターンの終わりに判定。通常/虚無は「揃ったタイミング」でrenderAllから判定
+  checkMugetsu(true);
   for(const P of S.players)P.zones.battle.forEach(c=>{c.buff=null;c.tmpWB=false;});
   let extra=false;
   if(S.extra[cur]>0){S.extra[cur]--;extra=true;S.turn++;}
@@ -6674,6 +6685,8 @@ function renderFxEditor(){
   $("fxCastle").checked=!!FXEDIT.castle;
   $("fxInvade").checked=!!FXEDIT.invade;
   $("fxKakumei").checked=!!FXEDIT.kakumei;
+  $("fxMugetsu").value=FXEDIT.mugetsu||"";
+  $("fxMugetsuN").value=FXEDIT.mugetsuN||6;
   $("fxJChange").checked=!!FXEDIT.jchange;
   $("fxJChangeN").value=FXEDIT.jchangeN||"";
   $("fxNinja").value=String(FXEDIT.ninja||0);
@@ -7097,6 +7110,15 @@ function parseCardText(txt,mode){
   // マナ回復制限（ガ・リュザーク型：相手ターン開始時、相手のマナのアンタップをn枚に制限）
   m=t.match(/使用可能マナは(\d+)しか回復しない/)||t.match(/マナ(?:ゾーンのカード)?を(\d+)枚までしか(?:アンタップ|回復)(?:できない|しない)/);
   if(m)out.set.manaUntapN=+m[1];
+  // 無月の門（ドルスザク）：無月の門・絶＞虚無月の門＞無月の門 の順で判定、門の数を取得
+  {
+    let mg=null,mgm=null;
+    if(/無月の門[・･]?絶/.test(t)){mg="zetsu";mgm=t.match(/無月の門[・･]?絶\s*[〔〈［\[（(]?\s*(\d+)/);}
+    else if(/虚無月の門/.test(t)){mg="kyomu";mgm=t.match(/虚無月の門\s*[〔〈［\[（(]?\s*(\d+)/);}
+    else if(/無月の門/.test(t)){mg="normal";mgm=t.match(/無月の門\s*[〔〈［\[（(]?\s*(\d+)/);}
+    if(mg){out.set.mugetsu=mg;out.set.mugetsuN=mgm?+mgm[1]:6;
+      out.notes.push({msg:`🌑 ${mg==="zetsu"?"無月の門・絶（場+墓の魔導具6・各ターン終了時／手札・墓地から）":mg==="kyomu"?"虚無月の門（場+墓の魔導具4・揃った時）":"無月の門（場2+墓2の魔導具・揃った時）"}を設定。魔導具は種族「魔導具」で登録すると自動カウントされます`,q:""});}
+  }
   // 常在ロック
   if(/相手は呪文を唱えられない/.test(t))out.set.stLockSpell=true;
   if(/相手は(?:クリーチャーを)?(?:バトルゾーンに)?クリーチャーを出せない/.test(t))out.set.stLockCre=true;
@@ -7136,7 +7158,7 @@ function parseCardText(txt,mode){
   const DETECT=[
     [/侵略/,"侵略：ON済み → 侵略元の種族／コスト条件があれば『侵略元』欄で追記を","侵略元"],
     [/革命チェンジ/,"革命チェンジ：ON済み → チェンジ元の条件（文明/種族/コスト）があれば追記を","チェンジ"],
-    [/無月の門/,"無月の門 → 誘発処理＋覚え書きで運用（専用実装は今後対応予定）","誘発"],
+    [/無月の門/,"無月の門：ON済み → 各ターン終了時に手札/墓地から召喚を自動確認。門の下に敷くカードはビューアで選択","誘発"],
     [/(?:自分|相手)のターン終了時/,"ターン終了時の誘発 → 『誘発処理』欄（ターン終了時）＋効果で設定","誘発"],
     [/攻撃する時[、,]/,"攻撃時の誘発 → 『誘発処理』欄（攻撃時）で設定","誘発"],
     [/パワード・?ブレイカー/,"パワード・ブレイカー → ブレイカー欄で選択","ブレイカー"],
@@ -7339,6 +7361,8 @@ function openFxEditor(key){
     castle:cur?!!cur.castle:false,
     invade:cur?!!cur.invade:false,
     kakumei:cur?!!cur.kakumei:false,
+    mugetsu:cur&&cur.mugetsu||"",
+    mugetsuN:cur?(cur.mugetsuN||6):6,
     jchange:cur?!!cur.jchange:false,
     jchangeN:cur?(cur.jchangeN||0):0,
     ninja:cur&&cur.ninja||0,
@@ -7592,6 +7616,8 @@ $("fxSave").addEventListener("click",async ()=>{
     castle:$("fxCastle").checked,
     invade:$("fxInvade").checked,
     kakumei:$("fxKakumei").checked,
+    mugetsu:$("fxMugetsu").value,
+    mugetsuN:(parseInt($("fxMugetsuN").value,10)||6),
     jchange:$("fxJChange").checked,
     jchangeN:(parseInt($("fxJChangeN").value,10)||0),
     ninja:+$("fxNinja").value||0,
@@ -7889,6 +7915,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.castle)attrs.push("城/要塞");
     if(v.invade)attrs.push("侵略");
     if(v.kakumei)attrs.push("革命チェンジ");
+    if(v.mugetsu)attrs.push((v.mugetsu==="zetsu"?"無月の門・絶":v.mugetsu==="kyomu"?"虚無月の門":"無月の門")+`〔${v.mugetsuN||6}〕`);
     if(v.jchange)attrs.push(`J・チェンジ${v.jchangeN?`（コスト${v.jchangeN}以上）`:""}`);
     if(v.ninja)attrs.push(`NS${v.ninja}`);
     if(v.escape)attrs.push("エスケープ");
@@ -8055,6 +8082,71 @@ $("btnRegList").addEventListener("click",()=>{
   {const nb=document.getElementById("regNamedBtn");if(nb)nb.onclick=showNamedList;}
 });
 $("regClose").addEventListener("click",()=>$("regOlay").classList.remove("open"));
+/* 種族を複数カードにまとめて付与（例：魔導具）。呪文/タマシード等に種族欄を1枚ずつ書く手間を省く */
+async function bulkTagRace(){
+  if(!FXDB.size){toast("登録カードがありません");return;}
+  const race=await askText("まとめて付与する種族を入力（例：魔導具）","魔導具");
+  if(race===null||!race.trim())return;
+  const rc=race.trim();
+  const entries=[...FXDB.entries()].sort((a,b)=>String(dispName.get(a[0])||a[0]).localeCompare(String(dispName.get(b[0])||b[0]),"ja"));
+  const has=v=>((v.races||[]).some(x=>x===rc)||(v.races2||[]).some(x=>x===rc));
+  $("regOlay").classList.remove("open");
+  $("vTitle").textContent=`🏷 種族「${rc}」を付与するカードを選択`;
+  $("vHint").textContent=`タップで選択/解除。⭐＝既に「${rc}」付き。呪文/タマシードなどまとめて選べます →「決定」`;
+  $("vSearch").style.display="";
+  $("vSearch").value="";
+  $("vStatus").textContent="";
+  const sel=new Set();
+  const g=$("vGrid");g.innerHTML="";
+  const okTxt=()=>`🏷 決定（${sel.size}枚に「${rc}」を付与）`;
+  const render=(filter)=>{
+    g.innerHTML="";
+    for(const [k,v] of entries){
+      const nm=dispName.get(k)||k;
+      if(filter&&!String(nm).toLowerCase().includes(filter))continue;
+      const el=vCardEl(nm);
+      el.style.position="relative";
+      if(has(v)){
+        const mb=document.createElement("span");
+        mb.style.cssText="position:absolute;top:2px;right:2px;background:#f59e0b;color:#111;font-size:10px;font-weight:900;padding:1px 5px;border-radius:5px;z-index:5";
+        mb.textContent="⭐";
+        el.appendChild(mb);
+      }
+      if(sel.has(k))el.classList.add("picked");
+      el.addEventListener("click",()=>{
+        if(sel.has(k))sel.delete(k);else sel.add(k);
+        el.classList.toggle("picked",sel.has(k));
+        $("vOk").textContent=okTxt();
+      });
+      g.appendChild(el);
+    }
+  };
+  render("");
+  $("vSearch").oninput=e=>render(e.target.value.trim().toLowerCase());
+  const ok=$("vOk");
+  ok.style.display="";
+  ok.textContent=okTxt();
+  ok.onclick=async()=>{
+    if(!sel.size){toast("カードを選択してください");return;}
+    let cnt=0;
+    for(const k of sel){
+      const v=FXDB.get(k);if(!v)continue;
+      v.races=v.races||["","","","",""];
+      if(!v.races.some(x=>x===rc)&&!((v.races2||[]).some(x=>x===rc))){
+        const idx=v.races.findIndex(x=>!x);
+        if(idx>=0)v.races[idx]=rc; else {v.races2=v.races2||[];v.races2.push(rc);}
+        cnt++;
+      }
+      FXDB.set(k,v);
+    }
+    await persistFx();
+    ok.onclick=null;ok.style.display="none";$("vSearch").oninput=null;
+    closeViewer();
+    toast(`🏷 種族「${rc}」を${cnt}枚に付与しました`);
+  };
+  $("viewerOlay").classList.add("open");
+}
+{const bt=document.getElementById("regBulkRaceBtn");if(bt)bt.onclick=bulkTagRace;}
 
 /* ================= card ops ================= */
 function zonesOf(pi){return S.players[pi].zones;}
@@ -9951,6 +10043,67 @@ function renderPlayer(pi){
   if(peekBtn)peekBtn.textContent=S.hideOpp?"👁 見る":"🙈 隠す";
 }
 let LIBWIN_ASKED=[false,false];
+let MUGETSU_ASKED={};
+let MUGETSU_BUSY=false;
+/* 無月の門（ドルスザク）：魔導具（種族）を数えて条件成立を判定し、召喚を確認する
+   条件： 無月の門(normal)＝場に魔導具2以上 かつ 墓地に魔導具2以上
+          虚無月の門(kyomu)＝場+墓地の魔導具 合計4以上
+          無月の門・絶(zetsu)＝場+墓地の魔導具 合計6以上
+   タイミング： normal/kyomu＝条件が揃った時（renderAllから随時）／zetsu＝各ターンの終わり */
+async function checkMugetsu(atTurnEnd){
+  if(!S.expert||MUGETSU_BUSY)return;
+  // 描画駆動時は他のダイアログ/ビューアが開いていれば見送る（多重表示防止）
+  if(!atTurnEnd&&(($("askOlay")&&$("askOlay").classList.contains("open"))||($("viewerOlay")&&$("viewerOlay").classList.contains("open"))))return;
+  for(const pi of (S.vs?[0,1]:[0])){
+    const Z=zonesOf(pi);
+    const isMad=x=>{const r=getReg(x);return r&&raceMatch(r,"魔導具");};
+    const battleMad=Z.battle.filter(isMad).length;
+    const graveMad=Z.grave.filter(isMad).length;
+    const total=battleMad+graveMad;
+    const cands=[];
+    for(const zn of ["hand","grave"]){
+      for(const h of Z[zn]){
+        const r=getReg(h);
+        if(!r||!r.mugetsu)continue;
+        if(zn==="grave"&&r.mugetsu!=="zetsu")continue; // 墓地から召喚できるのは絶のみ
+        cands.push({h,zn,r});
+      }
+    }
+    for(const {h,zn,r} of cands){
+      const type=r.mugetsu;
+      if(type==="zetsu"&&!atTurnEnd)continue;   // 絶はターン終了時のみ
+      const met=type==="normal"?(battleMad>=2&&graveMad>=2):type==="kyomu"?(total>=4):(total>=6);
+      const key=pi+":"+h.id+":"+zn;
+      if(!met){delete MUGETSU_ASKED[key];continue;}   // 条件が崩れたら再確認できるようリセット
+      if(MUGETSU_ASKED[key])continue;                 // 成立中に一度断ったら再確認しない
+      MUGETSU_ASKED[key]=true;
+      MUGETSU_BUSY=true;
+      const label=type==="zetsu"?"無月の門・絶":type==="kyomu"?"虚無月の門":"無月の門";
+      const condTxt=type==="normal"?`場${battleMad}・墓${graveMad}（各2以上）`:`場+墓 計${total}（${type==="kyomu"?4:6}以上）`;
+      const yes=await ask(`🌑 ${label}：条件成立！ 魔導具 ${condTxt}\n《${faceNameOf(h)}》を${zn==="grave"?"墓地":"手札"}からコストを支払わずに召喚しますか？`);
+      if(yes){
+        snap();
+        const arr=Z[zn];
+        const hi=arr.findIndex(x=>x.id===h.id);
+        if(hi>=0){
+          arr.splice(hi,1);
+          h.faceup=true;h.tapped=false;h.sideways=false;
+          Z.battle.push(h);
+          markArrive(h);
+          emitEvent(pi,"summon");
+          enqueueFx(pi,h);
+          sfx("ok");renderAll();
+          toast(`🌑 ${label}！ ${faceNameOf(h)}（${zn==="grave"?"墓地":"手札"}から召喚）`);
+          await waitFxIdle();
+          const needN=type==="zetsu"?6:4;
+          await mugetsuGate(pi,h.id,needN);
+        }
+      }
+      MUGETSU_BUSY=false;
+      return; // 1回につき1体
+    }
+  }
+}
 function checkLibWin(){
   if(!S.expert)return;
   for(const pi of (S.vs?[0,1]:[0])){
@@ -9968,6 +10121,7 @@ function checkLibWin(){
 }
 function renderAll(){
   checkLibWin();
+  checkMugetsu(false);
   const order=S.vs?[1,0]:[0];
   for(const pi of order)renderPlayer(pi);
   $("turnBadge").textContent=`ターン ${S.turn}${S.vs?"・"+S.players[S.who].label:""}${S.vs&&(SCORE[0]||SCORE[1])?`　🏆${SCORE[0]}-${SCORE[1]}`:""}`;
@@ -12502,7 +12656,7 @@ function stackDragAttach(el,u){
     window.addEventListener("pointercancel",cancel);
   });
 }
-async function mugetsuGate(pi,hostId){
+async function mugetsuGate(pi,hostId,needN){
   const Z=zonesOf(pi);
   const host=Z.battle.find(x=>x.id===hostId);
   if(!host){toast("カードが見つかりません");return;}
@@ -12511,12 +12665,14 @@ async function mugetsuGate(pi,hostId){
     ...Z.grave.map(c=>({c,src:"grave",tag:"墓"})),
   ];
   if(!pool.length){toast("下に敷けるカードがありません");return;}
-  $("vTitle").textContent=`🌑 無月の門：${faceNameOf(host)} の下に敷くカードを選択`;
-  $("vHint").textContent="タップで選択/解除（墓地とバトルゾーンから同時に選べます）→「決定」";
+  const needTxt=needN?`（魔導具など${needN}枚）`:"";
+  $("vTitle").textContent=`🌑 無月の門：${faceNameOf(host)} の下に敷くカードを選択${needTxt}`;
+  $("vHint").textContent="タップで選択/解除（墓地とバトルゾーンから同時に選べます）。⭐＝魔導具（種族） →「決定」";
   $("vSearch").style.display="none";
   $("vStatus").textContent="";
   const sel=new Set();
   const g=$("vGrid");g.innerHTML="";
+  const okTxt=()=>needN?`🌑 決定（${sel.size}/${needN}枚を下に敷く）`:`🌑 決定（${sel.size}枚を下に敷く）`;
   for(const {c,src,tag} of pool){
     const el=vCardEl(faceNameOf(c));
     const badge=document.createElement("span");
@@ -12524,16 +12680,23 @@ async function mugetsuGate(pi,hostId){
     badge.textContent=tag;
     el.style.position="relative";
     el.appendChild(badge);
+    const rc=getReg(c);
+    if(rc&&raceMatch(rc,"魔導具")){
+      const mb=document.createElement("span");
+      mb.style.cssText="position:absolute;top:2px;right:2px;background:#f59e0b;color:#111;font-size:10px;font-weight:900;padding:1px 5px;border-radius:5px;z-index:5";
+      mb.textContent="⭐魔導具";
+      el.appendChild(mb);
+    }
     el.addEventListener("click",()=>{
       if(sel.has(c.id))sel.delete(c.id);else sel.add(c.id);
       el.classList.toggle("picked",sel.has(c.id));
-      $("vOk").textContent=`🌑 決定（${sel.size}枚を下に敷く）`;
+      $("vOk").textContent=okTxt();
     });
     g.appendChild(el);
   }
   const ok=$("vOk");
   ok.style.display="";
-  ok.textContent="🌑 決定（0枚を下に敷く）";
+  ok.textContent=okTxt();
   ok.onclick=()=>{
     if(!sel.size){toast("カードを選択してください");return;}
     snap();
