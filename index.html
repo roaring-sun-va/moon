@@ -885,6 +885,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <option value="crossgear">クロスギア</option><option value="gigaaura">ギガオレガオーラ</option>
       <option value="tamaseed">タマシード</option>
       <option value="psychic">サイキック</option>
+      <option value="psyevo">進化サイキック</option>
       <option value="dragheart">ドラグハート</option>
       <option value="aura">オレガオーラ</option>
       <option value="d2">D2フィールド</option>
@@ -1000,6 +1001,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <option value="crossgear">クロスギア</option><option value="gigaaura">ギガオレガオーラ</option>
         <option value="tamaseed">タマシード</option>
         <option value="psychic">サイキック</option>
+        <option value="psyevo">進化サイキック</option>
         <option value="dragheart">ドラグハート</option>
         <option value="aura">オレガオーラ</option>
         <option value="d2">D2フィールド</option>
@@ -1144,6 +1146,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="crossgear">クロスギア</option><option value="gigaaura">ギガオレガオーラ</option>
           <option value="d2">D2フィールド</option>
           <option value="psychic">サイキック</option>
+          <option value="psyevo">進化サイキック・クリーチャー（超無限進化・召喚酔いなし・離れると超次元へ）</option>
           <option value="tamaseed">タマシード</option>
           <option value="dragheart">ドラグハート</option>
           <option value="castle">城</option>
@@ -1991,7 +1994,7 @@ function markArrive(c){
 }
 function getReg(c){return FXDB.get(faceKeyOf(c))||FXDB.get(normName(c.name))||null;}
 /* 進化系タイプの共通判定。ツインパクトは上面＝クリーチャー面なので twinTop（進化/NEO進化）で判定に含める */
-const EVO_CTYPES=["evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodream","gneodream","lunatic","ultimate"];
+const EVO_CTYPES=["evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","lunatic","ultimate"];
 function isEvoReg(r){
   if(!r)return false;
   if(EVO_CTYPES.includes(r.ctype))return true;
@@ -2014,7 +2017,7 @@ function dreamDupOf(pi,c){
   return zonesOf(pi).battle.find(x=>x.id!==c.id&&normName(x.name)===nm)||null;
 }
 /* クリーチャー種別判定（呪文/クロスギア/タマシード/D2フィールド/城/オーラ等は非クリーチャー）。未設定は通常クリーチャー扱い */
-const CRE_CTYPES=["creature","dream","evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodream","gneodream","twinpact","lunatic","ultimate","exile"];
+const CRE_CTYPES=["creature","dream","evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","twinpact","lunatic","ultimate","exile"];
 function isCreatureReg(r){
   if(!r||!r.ctype)return true;
   return CRE_CTYPES.includes(r.ctype);
@@ -2989,7 +2992,7 @@ function emitEvent(actor,type){
             const rh=getReg(hc);
             const sendBottom=x=>{
               const rx=getReg(x);
-              if(x.isPsy||(rx&&rx.ctype==="psychic")){
+              if(x.isPsy||(rx&&(rx.ctype==="psychic"||rx.ctype==="psyevo"))){
                 x.face=0;x.rot=0;x.tapped=false;x.faceup=true;x.isPsy=false;
                 AZ0.hyper.push(x);
                 toast(`🌌 サイキック：${x.name} は超次元ゾーンへ（通常処理）`);
@@ -4323,7 +4326,7 @@ async function destroyCreature(pi,c){
   }
   const r=getReg(c);
   if(r&&r.ctype==="exile"&&(c.face||0)>0)c.face=0;
-  if(c.isPsy||(r&&r.ctype==="psychic")){
+  if(c.isPsy||(r&&(r.ctype==="psychic"||r.ctype==="psyevo"))){
     c.face=0;c.rot=0;c.tapped=false;c.faceup=true;c.isPsy=false;
     Z.hyper.push(c);
     sfx("grave");
@@ -5282,13 +5285,20 @@ async function offerSoulRaid(pi,c){
   }else{
     toast(`🔥 超魂レイド：下に置かなかった（進化元なし）`);
   }
-  // 残りを好きな順序で山札の下に置く（2枚なら順序選択）
+  // 残りを好きな順序で山札の下に置く（1枚ずつ選択・選んだ順に上→下へ積む）
   if(look.length>=2){
-    const jo=await askChoice(`🔥 残り${look.length}枚を山札の下に置きます（順序を選択）`,
-      [`${look.map(x=>faceNameOf(x)).join(" → ")}（この順で下へ）`,
-       `${look.slice().reverse().map(x=>faceNameOf(x)).join(" → ")}（逆順で下へ）`]);
-    const order=(jo===1)?look.slice().reverse():look;
-    order.forEach(x=>{x.faceup=false;Z.deck.push(x);});
+    const rest=look.slice();
+    let step=0;
+    while(rest.length>1){
+      step++;
+      const k=await pickCard(`🔥 残り${rest.length}枚：山札の下に置く順番を選択（${step}番目に下へ／上から順に積みます）`,rest,
+        {hint:"タップで次に下へ置くカードを選択（順に山札の下へ積まれます）"});
+      const idx=(k===null)?0:k; // キャンセル時は先頭から
+      const csel=rest.splice(idx,1)[0];
+      csel.faceup=false;Z.deck.push(csel);
+    }
+    if(rest.length){rest[0].faceup=false;Z.deck.push(rest[0]);}
+    toast(`🔥 超魂レイド：残りを選んだ順で山札の下に置いた`);
   }else{
     look.forEach(x=>{x.faceup=false;Z.deck.push(x);});
   }
@@ -7906,7 +7916,8 @@ function parseCardText(txt,mode){
   if(/コスト\s*\d{1,2}\s*[\/／]\s*\d{1,2}/.test(t)||/クリーチャー\s*[\/／]\s*呪文/.test(t))out.twinHint=true;
   // カードタイプ：単体NEO/進化（ツインパクト時はtwinTop側で扱うためmode未指定時のみ）
   if(mode!=="spell"){
-    if(/G[・‐\-]?\s*NEOドリーム/.test(t))out.set.ctype="gneodream";
+    if(/進化サイキック・?クリーチャー/.test(t))out.set.ctype="psyevo";
+    else if(/G[・‐\-]?\s*NEOドリーム/.test(t))out.set.ctype="gneodream";
     else if(/NEOドリーム/.test(t))out.set.ctype="neodream";
     else if(/ドリーム・?クリーチャー|ナイトメア・?クリーチャー/.test(t))out.set.ctype="dream";
     else if(/NEO進化[：:]/.test(t)||/NEOクリーチャー/.test(t))out.set.ctype="neoevo";
@@ -8866,7 +8877,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gimmick==="dorma")attrs.push("ドルマゲドン型");
     if(v.gimmick==="zeron")attrs.push("零龍型");
     if(v.cost!=null)attrs.push(`コスト${v.cost}${v.cost2!=null?"/"+v.cost2:""}`);
-    if(v.ctype){const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",d2:"D2",psychic:"サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",neodream:"NEOドリーム",gneodream:"G-NEOドリーム",aura:"オレガオーラ",other:"その他"};attrs.push(CT[v.ctype]||v.ctype);}
+    if(v.ctype){const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",d2:"D2",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",neodream:"NEOドリーム",gneodream:"G-NEOドリーム",aura:"オレガオーラ",other:"その他"};attrs.push(CT[v.ctype]||v.ctype);}
     if(v.civs&&v.civs.length){const CV={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};attrs.push(v.civs.map(x=>CV[x]||x).join("/"));}
     if(v.st)attrs.push("⚡ST");
     if(v.sback)attrs.push("Sバック");
@@ -9983,7 +9994,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   }
   if(toZone==="battle"&&fromZone==="hyper"){
     const rP=getReg(c);
-    if(!rP||rP.ctype!=="dragheart")c.isPsy=true;
+    if(!rP||rP.ctype!=="dragheart")c.isPsy=true;  // サイキック/進化サイキックは離れると超次元へ
   }
   if(toZone==="battle"&&S.turn>0){
     const rS=getReg(c);
@@ -10142,7 +10153,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       c.sfMark=null;c.sfBy=null;
     }
   }
-  if((c.isPsy||(()=>{const rp=getReg(c);return rp&&rp.ctype==="psychic";})())&&fromZone==="battle"&&toZone!=="battle"&&toZone!=="hyper"){
+  if((c.isPsy||(()=>{const rp=getReg(c);return rp&&(rp.ctype==="psychic"||rp.ctype==="psyevo");})())&&fromZone==="battle"&&toZone!=="battle"&&toZone!=="hyper"){
     const ZT=zonesOf(pTo);
     const key=(toZone==="deckTop"||toZone==="deckBottom")?"deck":(toZone==="shieldUp"?"shield":toZone);
     const arrT=ZT[key];
