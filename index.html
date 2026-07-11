@@ -867,7 +867,10 @@ body.shake{animation:bodyShake .4s ease-out}
 
 <div class="olay" id="viewerOlay">
   <div class="panelbox" id="viewerBox">
-    <h2 id="vTitle">-</h2>
+    <div class="row" style="margin:0 0 4px 0;justify-content:space-between;align-items:center">
+      <h2 id="vTitle" style="margin:0">-</h2>
+      <button class="btn small ghost" id="vPeek" style="padding:4px 10px;flex:0 0 auto">👁 盤面を見る</button>
+    </div>
     <div class="hint" id="vHint"></div>
     <input type="text" id="vSearch" placeholder="カード名で絞り込み" style="display:none">
     <select id="vTypeFilter" style="display:none;width:100%;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px;font-size:12px;margin:4px 0">
@@ -1035,7 +1038,10 @@ body.shake{animation:bodyShake .4s ease-out}
 
 <div class="olay" id="fxOlay">
   <div class="panelbox">
-    <h2 id="fxTitle">カード効果を登録</h2>
+    <div class="row" style="margin:0 0 4px 0;justify-content:space-between;align-items:center">
+      <h2 id="fxTitle" style="margin:0">カード効果を登録</h2>
+      <button class="btn small ghost" id="fxPeek" style="padding:4px 10px;flex:0 0 auto">👁 盤面を見る</button>
+    </div>
     <div class="row" style="margin-top:0">
       <div id="fxThumb" style="width:72px;flex:0 0 auto"></div>
       <div class="hint" style="flex:1">EX中、バトルゾーン/解決中に置いた時に自動処理。戦闘属性は攻撃ボタンの処理に使われます。</div>
@@ -1150,6 +1156,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="text" id="fxRace5" list="raceList" placeholder="種族5" style="flex:1;min-width:110px">
         <button type="button" class="btn small" id="fxBulkRaceBtn" style="white-space:nowrap">🏷 種族一括付与</button>
         <datalist id="raceList">
+          <option value="ヒーロー・ドラゴン"><option value="ヒーロードラゴン">
           <option value="S級侵略者"><option value="アーク・セラフィム"><option value="アース・ドラゴン"><option value="アースイーター"><option value="アーマード"><option value="アーマード・ドラゴン"><option value="アーマード・ファイアー・バード"><option value="ファイアー・バードの集い"><option value="アーマード・ワイバーン"><option value="アーマロイド"><option value="アイドル">
           <option value="アウトレイジ"><option value="アウトレイジ・コマンドMAX"><option value="アウトレイジMAX"><option value="アビス"><option value="アビスへの誘い"><option value="アビスロイヤル"><option value="アポロニア・ドラゴン"><option value="アンノイズ"><option value="アンノウン"><option value="イニシエート"><option value="イニシャルズ">
           <option value="イニシャルズX"><option value="ウェーブストライカー"><option value="エイリアン"><option value="エグザイル・クリーチャー"><option value="エクストリーマー"><option value="エレメンタル"><option value="エンジェル・コマンド"><option value="エンジェル・コマンド・ドラゴン"><option value="オラクル"><option value="オリジン">
@@ -1287,8 +1294,9 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
 
         <span style="font-size:12px;font-weight:700">キリフダッシュ</span>
-        <select id="fxKirifuda" style="width:auto;flex:0 0 80px">
-          <option value="0">なし</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+        <select id="fxKirifuda" style="width:auto;flex:0 0 120px">
+          <option value="0">なし</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+          <optgroup label="文明参照コスト"><option value="rg">赤緑</option><option value="r">赤</option><option value="g">緑</option></optgroup>
         </select>
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
@@ -1960,6 +1968,13 @@ function isCreatureReg(r){
   if(!r||!r.ctype)return true;
   return CRE_CTYPES.includes(r.ctype);
 }
+/* バトルゾーンのクリーチャーのみ（D2フィールド/タマシード/クロスギア等を除外）。exceptIdは除外するカードID */
+function battleCreatures(pi,exceptId){
+  return zonesOf(pi).battle.filter(x=>{
+    if(exceptId!=null&&x.id===exceptId)return false;
+    return isCreatureReg(getReg(x));
+  });
+}
 /* 現在この場のカードがNEO進化として扱われているか（進化元を持つ or フラグ） */
 function isNeoEvoInstance(c){return !!(c&&(c.neoEvo||(c.under&&c.under.length)));}
 /* NEOクリーチャーを手札等からバトルへ：出し方を確認パネルで選ぶ */
@@ -1988,7 +2003,7 @@ async function playNeoCreature(p,zone,id){
     renderAll();
     return;
   }
-  const k=pool.length===1?0:await askChoice("進化元を選択（自分のクリーチャー）",pool.map(x=>faceNameOf(x)+(x.tapped?"（タップ）":"")));
+  const k=pool.length===1?0:await pickCard("進化元を選択（自分のクリーチャー）",pool,{sub:x=>x.tapped?"タップ":""});
   if(k===null){renderAll();return;}
   const host=pool[k];
   const f=findCard(p,zone,id);
@@ -3542,7 +3557,7 @@ const EFFECTS=[
    async run(){
      const Z=zonesOf(fxActor());
      if(!Z.hand.length){toast("手札がありません");closeSheet();return;}
-     const j=await askChoice("見せるカードを選択",Z.hand.map(c=>faceNameOf(c)));
+     const j=await pickCard("見せるカードを選択",Z.hand);
      if(j===null){closeSheet();return;}
      const c=Z.hand[j];
      c.faceup=true;
@@ -3710,8 +3725,11 @@ const FX_TYPES=[
   ["deckPin4","選んだクリーチャーを山札の上から4枚目に横向きで刺す（終葬/Q.Q.QX型・引くと特殊敗北）"],
   ["destroyRnd","相手クリーチャーをランダムn体 破壊"],
   ["destroyPick","相手クリーチャーをn体選んで破壊（対象選択）"],
+  ["destroyElemPick","相手エレメントをn個選んで破壊（対象選択・クリーチャー/タマシード/フィールド等）"],
   ["manaPick","相手クリーチャーをn体選んでマナ送り（対象選択）"],
+  ["manaElemPick","相手エレメントをn個選んでマナ送り（対象選択）"],
   ["bouncePick","相手クリーチャーをn体選んで手札に戻す（対象選択）"],
+  ["bounceElemPick","相手エレメントをn個選んで手札に戻す（対象選択）"],
   ["shieldPickNew","相手クリーチャーをn体選んで新しいシールドに追加（対象選択・表向き）"],
   ["shieldPickTuck","相手クリーチャーをn体選んで既存のシールドに表向きで重ねる（対象選択）"],
   ["grsummon","GR召喚 n体（超GRの上から）"],
@@ -3869,10 +3887,10 @@ async function autoTapCost(pi,c){
     }
   }
   {
-    const dd=(paySide==="creature")?dddDiscount(r,pi):0;
+    let dd=(paySide==="creature")?dddDiscount(r,pi):0;
     if(dd>0){
-      cost=Math.max(0,cost-dd);
-      toast(`🌀 D・D・D：召喚コスト−${dd}（残り${cost}）`);
+      const useIt=await ask(`🌀 D・D・D：召喚コスト−${dd} を適用しますか？\n（通常召喚で軽減を使わない場合は「いいえ」）`);
+      if(useIt){cost=Math.max(0,cost-dd);toast(`🌀 D・D・D：召喚コスト−${dd}（残り${cost}）`);}
     }
     if(paySide==="creature"&&r.vtCost){
       const vd=vtDiscount({mode:r.vtMode||"battle",exceptId:c.id,pi});
@@ -4323,7 +4341,7 @@ async function runFxList(pi,list,srcCard){
       // 自分の手札からn枚選んで捨てる（fxチェーン内で完結＝捨て終わるまで解決完了扱いにならない）
       for(let i=0;i<n;i++){
         if(!Z.hand.length){toast("手札がありません");break;}
-        const j=await askChoice(`🗑 手札から捨てるカードを選択（${i+1}/${n}枚目）`,Z.hand.map(h=>faceNameOf(h)));
+        const j=await pickCard(`🗑 手札から捨てるカードを選択（${i+1}/${n}枚目）`,Z.hand,{hint:"タップで捨てる　／　👁 盤面を見る で盤面を確認"});
         if(j===null)break;
         const cc=Z.hand.splice(j,1)[0];
         cc.faceup=true;cc.tapped=false;Z.grave.push(cc);
@@ -4345,7 +4363,7 @@ async function runFxList(pi,list,srcCard){
       const isSp=r0=>r0&&(r0.ctype==="spell"||r0.twin);
       const cands=src.map((x,ix)=>({x,ix,r:getReg(x)})).filter(o=>wantSpell?isSp(o.r):isCre(o.r));
       if(!cands.length){toast(`${zoneOpts[zj][1]}に対象がありません`);continue;}
-      const cj=await askChoice(`${wantSpell?"唱える呪文":"召喚するクリーチャー"}を選択（${zoneOpts[zj][1]}）`,cands.map(o=>faceNameOf(o.x)));
+      const cj=await pickCard(`${wantSpell?"唱える呪文":"召喚するクリーチャー"}を選択（${zoneOpts[zj][1]}）`,cands.map(o=>o.x),{hint:"タップで選択　／　👁 盤面を見る で盤面を確認"});
       if(cj===null)continue;
       const chosen=cands[cj].x;
       snap();
@@ -4443,34 +4461,38 @@ async function runFxList(pi,list,srcCard){
         const j=randInt(TZ.battle.length);
         await destroyWithReplace(tp,TZ.battle[j]);
       }
-    }else if(f.t==="destroyPick"||f.t==="manaPick"||f.t==="bouncePick"){
+    }else if(f.t==="destroyPick"||f.t==="manaPick"||f.t==="bouncePick"||f.t==="destroyElemPick"||f.t==="manaElemPick"||f.t==="bounceElemPick"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
-      const act=f.t==="destroyPick"?"破壊":f.t==="manaPick"?"マナ送り":"手札に戻す";
-      const pc=await askChoice(`🎯 ${act}（${n}体）：対象プレイヤーを選択`,[`相手（${S.players[op].label}）`,`自分（${S.players[pi].label}）`]);
+      const isElem=f.t.includes("Elem");
+      const isDestroy=f.t.startsWith("destroy");
+      const isMana=f.t.startsWith("mana");
+      const act=isDestroy?"破壊":isMana?"マナ送り":"手札に戻す";
+      const unit=isElem?"エレメント":"クリーチャー";
+      const pc=await askChoice(`🎯 ${act}（${n}${isElem?"個":"体"}）：対象プレイヤーを選択`,[`相手（${S.players[op].label}）`,`自分（${S.players[pi].label}）`]);
       if(pc===null)continue;
       const tp=(pc===0?op:pi);
       const TZ=zonesOf(tp);
       for(let i=0;i<n;i++){
-        if(!TZ.battle.length){toast("対象のクリーチャーがいません");break;}
-        const j=await askChoice(`🎯 ${act}するクリーチャーを選択（${i+1}/${n}体目・キャンセルで終了）`,TZ.battle.map(x=>faceNameOf(x)+(x.tapped?"（タップ）":"")));
+        const pool=isElem?TZ.battle.slice():TZ.battle.filter(x=>isCreatureReg(getReg(x)));
+        if(!pool.length){toast(`対象の${unit}がいません`);break;}
+        const j=await pickCard(`🎯 ${act}する${unit}を選択（${i+1}/${n}${isElem?"個":"体"}目・キャンセルで終了）`,pool,{sub:x=>x.tapped?"タップ":""});
         if(j===null)break;
-        const tgt=TZ.battle[j];
-        if(f.t==="destroyPick"){
+        const tgt=pool[j];
+        if(isDestroy){
           await destroyWithReplace(tp,tgt);
         }else{
           const idx=TZ.battle.findIndex(x=>x.id===tgt.id);
           if(idx<0)continue;
           const removed=TZ.battle.splice(idx,1)[0];
-          // 進化元・下敷きは墓地へ（本体のみ移動）
           if(removed.under&&removed.under.length){removed.under.splice(0).forEach(u=>{u.faceup=true;TZ.grave.push(u);});}
           if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>{gg.faceup=true;TZ.grave.push(gg);});}
           removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;
-          if(f.t==="manaPick"){TZ.mana.push(removed);toast(`💎 ${faceNameOf(removed)} をマナゾーンへ`);}
+          if(isMana){TZ.mana.push(removed);toast(`💎 ${faceNameOf(removed)} をマナゾーンへ`);}
           else{removed.mark=false;TZ.hand.push(removed);toast(`↩ ${faceNameOf(removed)} を手札に戻した`);}
         }
         renderAll();
       }
-      sfx(f.t==="destroyPick"?"grave":"move");
+      sfx(isDestroy?"grave":"move");
     }else if(f.t==="shieldPickNew"||f.t==="shieldPickTuck"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
       const isTuck=f.t==="shieldPickTuck";
@@ -4482,9 +4504,9 @@ async function runFxList(pi,list,srcCard){
       for(let i=0;i<n;i++){
         // 対象クリーチャー（相手/自分どちらの場からでも選べるよう両方提示）
         const pool=[];
-        for(const owp of [op,pi]){for(const x of zonesOf(owp).battle)pool.push({x,owp});}
+        for(const owp of [op,pi]){for(const x of zonesOf(owp).battle){if(isCreatureReg(getReg(x)))pool.push({x,owp});}}
         if(!pool.length){toast("対象のクリーチャーがいません");break;}
-        const j=await askChoice(`🛡 ${act}：クリーチャーを選択（${i+1}/${n}体目・キャンセルで終了）`,pool.map(o=>`${faceNameOf(o.x)}（${S.players[o.owp].label}）`));
+        const j=await pickCard(`🛡 ${act}：クリーチャーを選択（${i+1}/${n}体目・キャンセルで終了）`,pool.map(o=>o.x),{sub:(c,ix)=>S.players[pool[ix].owp].label});
         if(j===null)break;
         const {x:tgt,owp}=pool[j];
         const OZ2=zonesOf(owp);
@@ -4691,13 +4713,14 @@ async function runFxList(pi,list,srcCard){
       sfx("draw");
     }else if(f.t==="battleAsk"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
-      if(!OZ.battle.length){toast("相手のバトルゾーンにクリーチャーがいません");continue;}
+      if(!battleCreatures(op).length){toast("相手のバトルゾーンにクリーチャーがいません");continue;}
       let src=srcCard&&Z.battle.find(x=>x.id===srcCard.id)?srcCard:null;
       if(!src){
-        if(!Z.battle.length){toast("自分のクリーチャーがいません");continue;}
-        const k=Z.battle.length===1?0:await askChoice("バトルする自分のクリーチャーを選択",Z.battle.map(x=>faceNameOf(x)));
+        const myCre=battleCreatures(pi);
+        if(!myCre.length){toast("自分のクリーチャーがいません");continue;}
+        const k=myCre.length===1?0:await pickCard("バトルする自分のクリーチャーを選択",myCre);
         if(k===null)continue;
-        src=Z.battle[k];
+        src=myCre[k];
       }
       const j=await askChoice(`⚔ ${faceNameOf(src)} で相手クリーチャーとバトルしますか？`,
         [...OZ.battle.map(x=>faceNameOf(x)),"バトルしない"]);
@@ -5032,7 +5055,7 @@ async function offerInvadeZeroPrompt(def){
     [...izCands.map(h=>faceNameOf(h)),"発動しない"]);
   if(j===null||j>=izCands.length)return;
   const h=izCands[j];
-  const k=DZ.battle.length===1?0:await askChoice("重ねる自分のクリーチャーを選択",DZ.battle.map(x=>faceNameOf(x)));
+  const _dzc=battleCreatures(def);const k=_dzc.length===1?0:await pickCard("重ねる自分のクリーチャーを選択",_dzc);
   if(k===null)return;
   snap();
   const hi=DZ.hand.findIndex(x=>x.id===h.id);
@@ -5222,7 +5245,7 @@ async function destroyWithReplace(pi,c){
           sfx("ok");renderAll();return;
         }else if(kind==="seiba"){
           const sabers=Z.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&r2.seiba;})());
-          const k=sabers.length===1?0:await askChoice("身代わりにするセイバーを選択",sabers.map(x=>faceNameOf(x)));
+          const k=sabers.length===1?0:await pickCard("身代わりにするセイバーを選択",sabers);
           if(k!==null){
             snap();
             destroyCreature(pi,sabers[k]);
@@ -5238,18 +5261,19 @@ async function destroyWithReplace(pi,c){
 async function offerKirifudash(pi){
   if(!S.expert)return;
   const Z=zonesOf(pi);
-  const kd=Z.hand.filter(h=>{const r=getReg(h);return r&&r.kirifuda&&Z.mana.length>=r.kirifuda;});
+  const kd=Z.hand.filter(h=>{const r=getReg(h);return r&&r.kirifuda;});
   if(!kd.length)return;
-  const j=await askChoice(`⚡ キリフダッシュ発動？（自分の盾ブレイク後・マナ${Z.mana.length}枚）`,
-    [...kd.map(h=>{const r=getReg(h);return `キリフダッシュ${r.kirifuda}：${faceNameOf(h)}`;}),"発動しない"]);
+  const costLbl=v=>({rg:"赤緑",r:"赤",g:"緑"}[v]||`コスト${v}`);
+  const j=await askChoice(`⚡ キリフダッシュ発動？（自分の盾がブレイク／手札に加わった後・マナ${Z.mana.length}枚）\nコストを支払って手札から召喚できます（コストは手動でタップ）`,
+    [...kd.map(h=>{const r=getReg(h);return `キリフダッシュ〔${costLbl(r.kirifuda)}〕：${faceNameOf(h)}`;}),"発動しない"]);
   if(j===null||j>=kd.length)return;
   snap();
   const h=kd[j];
   const hi=Z.hand.findIndex(x=>x.id===h.id);
   Z.hand.splice(hi,1);
   h.faceup=true;h.tapped=false;
-  Z.battle.push(h);
-  markArrive(h);emitEvent(pi,"summon");enqueueFx(pi,h);
+  if(!enterBattleOrGrave(pi,h)){renderAll();return;}
+  emitEvent(pi,"summon");enqueueFx(pi,h);
   sfx("ok");renderAll();
   toast(`⚡ キリフダッシュ！ ${faceNameOf(h)}`);
   await waitFxIdle();
@@ -5680,9 +5704,9 @@ async function dormaChoice(pi,c){
   const key=all[pick][0];
   c.gused.push(key);
   const pickCreature=async (tp,msg)=>{
-    const arr=zonesOf(tp).battle.filter(x=>x.id!==c.id);
+    const arr=battleCreatures(tp,c.id);
     if(!arr.length){toast("対象クリーチャーがいません");return null;}
-    const j=await askChoice(msg,arr.map(x=>faceNameOf(x)));
+    const j=await pickCard(msg,arr);
     return j===null?null:arr[j];
   };
   if(key==="pa"){
@@ -5733,6 +5757,7 @@ async function startAttack(pi,id){
   OZ.battle.forEach(t=>{
     const tr=getReg(t);
     if(tr&&tr.noAtked)return;
+    if(!isCreatureReg(tr))return; // クリーチャー以外（D2フィールド/タマシード/クロスギア等）は攻撃対象外
     if(t.tapped||atkAll)targets.push({kind:"creature",cid:t.id,label:`⚔ ${faceNameOf(t)}${t.tapped?"（タップ中）":"（アンタップ）"}`});
   });
   if(OZ.shield.length)targets.push({kind:"shield",label:`🛡 シールドをブレイク（残り${OZ.shield.length}枚）`});
@@ -6116,7 +6141,7 @@ async function execAttack(pi,id,tg){
           if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
           Z.resolve.push(h);
         }else if(dddAsEvo){
-          const k=Z.battle.length===1?0:await askChoice(`進化元を選択（攻撃中のクリーチャーにも進化できます）`,Z.battle.map(x=>faceNameOf(x)+(x.id===c.id?"（攻撃中）":"")));
+          const _evc=Z.battle.filter(x=>isCreatureReg(getReg(x)));const k=_evc.length===1?0:await pickCard(`進化元を選択（攻撃中のクリーチャーにも進化できます）`,_evc,{sub:x=>x.id===c.id?"攻撃中":""});
           if(k===null){arr0.splice(hi,0,h);renderAll();return;}
           const host=Z.battle[k];
           h.tapped=host.tapped;
@@ -6322,7 +6347,7 @@ async function execAttack(pi,id,tg){
     });
     const alreadyTaunt=tg.kind==="creature"&&taunts.some(x=>x.id===tg.cid);
     if(taunts.length&&!alreadyTaunt){
-      const j=taunts.length===1?0:await askChoice(`🧲 攻撃誘導！ 攻撃先は以下のクリーチャーに変更されます（選択）`,taunts.map(x=>faceNameOf(x)));
+      const j=taunts.length===1?0:await pickCard(`🧲 攻撃誘導！ 攻撃先は以下のクリーチャーに変更されます（選択）`,taunts);
       if(j!==null){
         const t=taunts[j];
         tg={kind:"creature",cid:t.id};
@@ -7971,7 +7996,7 @@ $("fxSave").addEventListener("click",async ()=>{
     dddCivTxt:$("fxDDDCivTxt").value.trim(),
     uraNinja:+$("fxUraNinja").value||0,
     uraCiv:$("fxUraCiv").value||"",
-    kirifuda:+$("fxKirifuda").value||0,
+    kirifuda:(()=>{const v=$("fxKirifuda").value;return (v==="rg"||v==="r"||v==="g")?v:(+v||0);})(),
     hyper:$("fxHyper").checked,
     invadeZero:$("fxInvadeZero").checked,
     rev0:$("fxRev0").checked,
@@ -8257,7 +8282,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.repLeave)attrs.push(`離脱置換：${({deck:"山札の上",hand:"手札",mana:"マナ",shield:"盾",grave:"墓地"}[v.repLeaveZone]||v.repLeaveZone)}から${v.repLeaveN||1}枚→墓地`);
     if(v.ddd)attrs.push(`DDD${v.dddPay>0?`：攻撃時[${v.dddPay}${v.dddMinus?"−攻撃コスト":""}]支払い`:(v.dddOff>0?`：召喚−${v.dddOff}`:"（攻撃時踏み倒し）")}`);
     if(v.uraNinja)attrs.push(`裏NS${v.uraNinja}${v.uraCiv?"("+({light:"光",water:"水",dark:"闇",fire:"火",nature:"自然"}[v.uraCiv]||"")+")":""}`);
-    if(v.kirifuda)attrs.push(`キリフダッシュ${v.kirifuda}`);
+    if(v.kirifuda)attrs.push(`キリフダッシュ${({rg:"赤緑",r:"赤",g:"緑"}[v.kirifuda])||v.kirifuda}`);
     if(v.hyper)attrs.push("ハイパー化");
     if(v.hmPow)attrs.push(`HM時パワー${v.hmPow}`);
     if(v.hmSA)attrs.push("HM時SA");
@@ -12176,7 +12201,8 @@ function openCardSheet(ctx){
       box.appendChild(actBtn(`🌀 フシギバース${rFB.fushigi}（墓地から：盤面クリーチャー1体をタップしてマナへ→そのコスト分 軽減し${civLbl?`${civLbl}のマナで`:""}出す）`,async ()=>{
         const Z2=zonesOf(ctx.p);
         if(!Z2.battle.length){toast("マナに置くクリーチャーがいません");return;}
-        const j=Z2.battle.length===1?0:await askChoice(`マナゾーンにタップして置くクリーチャーを選択（指定${rFB.fushigi}から そのコスト分 軽減）`,Z2.battle.map(x=>`${faceNameOf(x)}（コスト${getReg(x).cost!=null?getReg(x).cost:"?"}）`));
+        const fbPool=battleCreatures(ctx.p);
+        const j=fbPool.length===1?0:await pickCard(`マナゾーンにタップして置くクリーチャーを選択（指定${rFB.fushigi}から そのコスト分 軽減）`,fbPool,{sub:x=>`コスト${getReg(x)&&getReg(x).cost!=null?getReg(x).cost:"?"}`});
         if(j===null)return;
         snap();
         const t=Z2.battle[j];
@@ -12433,7 +12459,7 @@ function openCardSheet(ctx){
       const Z2=zonesOf(ctx.p);
       const pool=Z2.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return !r2||r2.ctype!=="crossgear";})());
       if(!pool.length){toast("クロスできるクリーチャーがいません");return;}
-      const j=pool.length===1?0:await askChoice("クロスする対象を選択（コストは手動で支払ってください）",pool.map(x=>faceNameOf(x)));
+      const j=pool.length===1?0:await pickCard("クロスする対象を選択（コストは手動で支払ってください）",pool);
       if(j===null)return;
       snap();
       const i2=Z2.battle.findIndex(x=>x.id===c.id);
@@ -12450,7 +12476,7 @@ function openCardSheet(ctx){
     box.appendChild(actBtn(isAura?"⚙ クリーチャーに装備（オレガオーラ）":"⚙ クリーチャーに装備（ドラグハート）",async ()=>{
       const arr=zonesOf(ctx.p).battle.filter(x=>x.id!==ctx.id);
       if(!arr.length){toast("自分のバトルゾーンにクリーチャーがいません");return;}
-      const j=arr.length===1?0:await askChoice("装備するクリーチャーを選択",arr.map(x=>faceNameOf(x)));
+      const j=arr.length===1?0:await pickCard("装備するクリーチャーを選択",arr);
       if(j===null)return;
       snap();
       const f=findCard(ctx.p,ctx.zone,ctx.id);
@@ -12471,7 +12497,7 @@ function openCardSheet(ctx){
   if(c.gear&&c.gear.some(g=>g.isCross)&&ctx.zone==="battle"){
     box.appendChild(actBtn("⚙ クロスギアを外す（単体でバトルゾーンへ）",async ()=>{
       const crosses=c.gear.filter(g=>g.isCross);
-      const j=crosses.length===1?0:await askChoice("外すクロスギアを選択",crosses.map(g=>faceNameOf(g)));
+      const j=crosses.length===1?0:await pickCard("外すクロスギアを選択",crosses);
       if(j===null)return;
       snap();
       const g=crosses[j];
@@ -12485,7 +12511,7 @@ function openCardSheet(ctx){
   }
   if(c.gear&&c.gear.length&&ctx.zone==="battle"){
     box.appendChild(actBtn(`⚙ 装備を確認/龍解（${c.gear.length}）`,async ()=>{
-      const j=await askChoice("装備中のドラグハート",c.gear.map(x=>faceNameOf(x)));
+      const j=await pickCard("装備中のドラグハート",c.gear);
       if(j===null)return;
       const g=c.gear[j];
       const link2=LINKS.get(normName(g.name));
@@ -12632,16 +12658,16 @@ function openCardSheet(ctx){
             toast(`GR召喚：${g2.name}`);
           }else toast("超GRが空のためGR召喚はスキップ");
         }else if(k==="bo"){
-          const arr=zonesOf(op2).battle;
+          const arr=battleCreatures(op2);
           if(arr.length){
-            const j=await askChoice("パワー-3000する相手クリーチャーを選択",arr.map(x=>faceNameOf(x)));
+            const j=await pickCard("パワー-3000する相手クリーチャーを選択",arr);
             if(j!==null){const t=arr[j];t.buff=t.buff||{};t.buff.pm=(t.buff.pm||0)-3000;toast(`${faceNameOf(t)} のパワー-3000（このターン）`);}
           }else toast("相手クリーチャーがいません");
         }else if(k==="ha"){
           const gv=Z2.grave;
           if(gv.length){
             const view=[...gv].reverse();
-            const j=await askChoice("墓地から手札に戻す闇のカードを選択",view.map(x=>x.name));
+            const j=await pickCard("墓地から手札に戻す闇のカードを選択",view);
             if(j!==null){
               const real=gv.length-1-j;
               const t=gv.splice(real,1)[0];
@@ -12789,9 +12815,9 @@ function openCardSheet(ctx){
         if(rH.hyper){
           box.appendChild(actBtn("⚡ ハイパー化（自分の他クリーチャー1体タップ→HM解放）",async ()=>{
             const Z2=zonesOf(ctx.p);
-            const pool=Z2.battle.filter(x=>x.id!==c.id&&!x.tapped);
+            const pool=Z2.battle.filter(x=>x.id!==c.id&&!x.tapped&&isCreatureReg(getReg(x)));
             if(!pool.length){toast("タップできる他のクリーチャーがいません");return;}
-            const j=pool.length===1?0:await askChoice("タップするクリーチャーを選択",pool.map(x=>faceNameOf(x)));
+            const j=pool.length===1?0:await pickCard("タップするクリーチャーを選択",pool);
             if(j===null)return;
             snap();
             pool[j].tapped=true;
@@ -13594,6 +13620,38 @@ function vCardEl(name,opts={}){
 function closeViewer(){$("viewerOlay").classList.remove("open");}
 const defaultVCancel=closeViewer;
 $("vCancel").onclick=defaultVCancel;
+/* 🃏 カードを画像グリッドで1枚選ぶ（askChoiceの画像版）。selectでindexをresolve・キャンセルでnull。
+   選択中も「👁 盤面を見る」で盤面確認できる（ビューア共通のピーク） */
+function pickCard(title,cards,opts={}){
+  return new Promise(res=>{
+    if(!cards||!cards.length){res(null);return;}
+    const g=$("vGrid");g.innerHTML="";
+    $("vTitle").textContent=title;
+    $("vHint").textContent=opts.hint||"タップで選択　／　👁 盤面を見る で盤面を確認できます";
+    $("vSearch").style.display="none";
+    {const tf=document.getElementById("vTypeFilter");if(tf)tf.style.display="none";}
+    $("vStatus").textContent="";
+    $("vOk").style.display="none";
+    let done=false;
+    const finish=v=>{if(done)return;done=true;$("vCancel").onclick=defaultVCancel;$("viewerOlay").classList.remove("open");res(v);};
+    cards.forEach((c,i)=>{
+      const nm=faceNameOf(c);
+      const el=vCardEl(nm,{cnt:""});
+      el.style.cursor="pointer";el.style.position="relative";
+      const sub=opts.sub?opts.sub(c,i):"";
+      if(sub){
+        const b=document.createElement("span");
+        b.textContent=sub;
+        b.style.cssText="position:absolute;top:2px;left:2px;background:rgba(10,14,22,.85);color:#fbbf24;font-size:10px;font-weight:800;padding:1px 5px;border-radius:5px;z-index:5";
+        el.appendChild(b);
+      }
+      el.addEventListener("click",()=>finish(i));
+      g.appendChild(el);
+    });
+    $("vCancel").onclick=()=>finish(null);
+    $("viewerOlay").classList.add("open");
+  });
+}
 function openExileViewer(pi){
   const Z=zonesOf(pi);
   $("vTitle").textContent=`ゲーム外ゾーン（${Z.exile.length}枚）　[${S.players[pi].label}]`;
@@ -14598,6 +14656,12 @@ $("peekChip").addEventListener("click",()=>{
   PEEK=null;
   $("peekChip").classList.remove("show");
 });
+{const fp=document.getElementById("fxPeek");if(fp)fp.addEventListener("click",()=>{
+  $("fxOlay").classList.remove("open");PEEK="fxOlay";$("peekChip").classList.add("show");
+});}
+{const vp=document.getElementById("vPeek");if(vp)vp.addEventListener("click",()=>{
+  $("viewerOlay").classList.remove("open");PEEK="viewerOlay";$("peekChip").classList.add("show");
+});}
 
 /* ================= settings ================= */
 function openSettings(){
