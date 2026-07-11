@@ -734,7 +734,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row">
         <span style="font-size:12px;font-weight:700">ルール</span>
         <select id="setMode" style="width:auto;flex:1">
-          <option value="dmps">デュエプレモード（手札10枚：超過は墓地へ／盾10枚：追加不可／盤面7面超で警告）</option>
+          <option value="dmps">デュエプレモード（手札10枚:超過は墓地へ／盾10枚:追加不可／バトルゾーン7体:超過は出せない・効果は墓地へ）</option>
           <option value="tcg">TCGモード（上限なし）</option>
         </select>
       </div>
@@ -2992,7 +2992,7 @@ async function findByCond(pi){
   const c=Z.deck.splice(idx,1)[0];
   const dst=await askChoice(`《${c.name}》の行き先`,["手札へ","バトルへ","マナへ","墓地へ","シールドへ（裏）","シールドへ（表向き）"]);
   c.faceup=true;c.tapped=false;
-  if(dst===1){if(!battleEntryOk(pi,c)){Z.hand.push(c);markArrive(c);toast(`（出せないため手札へ）`);}else{Z.battle.push(c);markArrive(c);emitEvent(pi,"summon");enqueueFx(pi,c);}}
+  if(dst===1){if(!battleEntryOk(pi,c)){Z.hand.push(c);markArrive(c);toast(`（出せないため手札へ）`);}else if(enterBattleOrGrave(pi,c)){emitEvent(pi,"summon");enqueueFx(pi,c);}}
   else if(dst===2)Z.mana.push(c);
   else if(dst===3)Z.grave.push(c);
   else if(dst===4||dst===5){
@@ -3046,7 +3046,7 @@ async function searchZone(pi,zone,kinds){
   const c=src.splice(idx,1)[0];
   const dst=await askChoice(`《${c.name}》の行き先`,["手札へ","バトルへ","マナへ","墓地へ","シールドへ（裏）","シールドへ（表向き）"]);
   c.faceup=true;c.tapped=false;
-  if(dst===1){if(!battleEntryOk(pi,c)){Z.hand.push(c);markArrive(c);toast(`（出せないため手札へ）`);}else{Z.battle.push(c);markArrive(c);emitEvent(pi,"summon");enqueueFx(pi,c);}}
+  if(dst===1){if(!battleEntryOk(pi,c)){Z.hand.push(c);markArrive(c);toast(`（出せないため手札へ）`);}else if(enterBattleOrGrave(pi,c)){emitEvent(pi,"summon");enqueueFx(pi,c);}}
   else if(dst===2)Z.mana.push(c);
   else if(dst===3)Z.grave.push(c);
   else if(dst===4||dst===5){
@@ -3168,6 +3168,25 @@ let FX_PI=null;
 function fxActor(){return (FX_PI!=null)?FX_PI:(S.vs?S.who:0);}
 /* 踏み倒し・サーチ等でバトルゾーンへ出す前の共通ロック判定（常在＋ターン限定＋未登録）
    戻り値: true=出してOK / false=ブロック（呼び出し側は出すのを中止） */
+/* 🟥 デュエプレモード：バトルゾーンは7体まで。8体目以降は出せない（TCG/フリープレイは無制限） */
+function battleSlotFull(pi){
+  return S.gameMode!=="tcg"&&S.expert&&!S.freePlay&&zonesOf(pi).battle.length>=7;
+}
+/* 効果でクリーチャーを出す時：7体埋まっていればバトルゾーンを経由せず直接墓地へ。
+   出せた場合はtrue（呼び出し側でmarkArrive済み）、墓地に送った場合はfalse */
+function enterBattleOrGrave(pi,c){
+  const Z=zonesOf(pi);
+  if(battleSlotFull(pi)){
+    c.faceup=true;c.tapped=false;c.sideways=false;
+    Z.grave.push(c);
+    sfx("grave");
+    toast(`🟥 バトルゾーン上限（7体）：${faceNameOf(c)} はバトルゾーンに出るかわりに墓地へ`);
+    return false;
+  }
+  Z.battle.push(c);
+  markArrive(c);
+  return true;
+}
 function battleEntryOk(pi,c){
   if(!S.expert||S.freePlay||S.turn<=0)return true;
   const r=getReg(c);
@@ -3690,6 +3709,11 @@ const FX_TYPES=[
   ["bounce","相手クリーチャーをランダムn体 手札に戻す"],
   ["deckPin4","選んだクリーチャーを山札の上から4枚目に横向きで刺す（終葬/Q.Q.QX型・引くと特殊敗北）"],
   ["destroyRnd","相手クリーチャーをランダムn体 破壊"],
+  ["destroyPick","相手クリーチャーをn体選んで破壊（対象選択）"],
+  ["manaPick","相手クリーチャーをn体選んでマナ送り（対象選択）"],
+  ["bouncePick","相手クリーチャーをn体選んで手札に戻す（対象選択）"],
+  ["shieldPickNew","相手クリーチャーをn体選んで新しいシールドに追加（対象選択・表向き）"],
+  ["shieldPickTuck","相手クリーチャーをn体選んで既存のシールドに表向きで重ねる（対象選択）"],
   ["grsummon","GR召喚 n体（超GRの上から）"],
   ["tutor","山札から好きなカードをn枚 手札に加える（TCG式・全部見える）"],
   ["tutorDMPS","山札から条件に合うカードをn枚 手札へ（デュエプレ式・候補のみ表示／無ければ不発）"],
@@ -4342,11 +4366,11 @@ async function runFxList(pi,list,srcCard){
         toast(`✨ ${faceNameOf(chosen)} をコストを支払わず唱えた（${zoneOpts[zj][1]}から）`);
       }else{
         if(!battleEntryOk(pi,chosen)){arr.splice(hi,0,chosen);toast("（置換ロック等で出せませんでした）");renderAll();continue;}
-        Z.battle.push(chosen);
-        markArrive(chosen);
-        emitEvent(pi,"summon");
-        enqueueFx(pi,chosen);
-        toast(`⚡ ${faceNameOf(chosen)} をコストを支払わず召喚した（${zoneOpts[zj][1]}から）`);
+        if(enterBattleOrGrave(pi,chosen)){
+          emitEvent(pi,"summon");
+          enqueueFx(pi,chosen);
+          toast(`⚡ ${faceNameOf(chosen)} をコストを支払わず召喚した（${zoneOpts[zj][1]}から）`);
+        }
       }
       sfx("ok");renderAll();
     }else if(f.t==="handesAllOp"||f.t==="handesAllMe"||f.t==="handesAllBoth"){
@@ -4419,6 +4443,80 @@ async function runFxList(pi,list,srcCard){
         const j=randInt(TZ.battle.length);
         await destroyWithReplace(tp,TZ.battle[j]);
       }
+    }else if(f.t==="destroyPick"||f.t==="manaPick"||f.t==="bouncePick"){
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const act=f.t==="destroyPick"?"破壊":f.t==="manaPick"?"マナ送り":"手札に戻す";
+      const pc=await askChoice(`🎯 ${act}（${n}体）：対象プレイヤーを選択`,[`相手（${S.players[op].label}）`,`自分（${S.players[pi].label}）`]);
+      if(pc===null)continue;
+      const tp=(pc===0?op:pi);
+      const TZ=zonesOf(tp);
+      for(let i=0;i<n;i++){
+        if(!TZ.battle.length){toast("対象のクリーチャーがいません");break;}
+        const j=await askChoice(`🎯 ${act}するクリーチャーを選択（${i+1}/${n}体目・キャンセルで終了）`,TZ.battle.map(x=>faceNameOf(x)+(x.tapped?"（タップ）":"")));
+        if(j===null)break;
+        const tgt=TZ.battle[j];
+        if(f.t==="destroyPick"){
+          await destroyWithReplace(tp,tgt);
+        }else{
+          const idx=TZ.battle.findIndex(x=>x.id===tgt.id);
+          if(idx<0)continue;
+          const removed=TZ.battle.splice(idx,1)[0];
+          // 進化元・下敷きは墓地へ（本体のみ移動）
+          if(removed.under&&removed.under.length){removed.under.splice(0).forEach(u=>{u.faceup=true;TZ.grave.push(u);});}
+          if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>{gg.faceup=true;TZ.grave.push(gg);});}
+          removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;
+          if(f.t==="manaPick"){TZ.mana.push(removed);toast(`💎 ${faceNameOf(removed)} をマナゾーンへ`);}
+          else{removed.mark=false;TZ.hand.push(removed);toast(`↩ ${faceNameOf(removed)} を手札に戻した`);}
+        }
+        renderAll();
+      }
+      sfx(f.t==="destroyPick"?"grave":"move");
+    }else if(f.t==="shieldPickNew"||f.t==="shieldPickTuck"){
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const isTuck=f.t==="shieldPickTuck";
+      const act=isTuck?"シールドに重ねる":"新しいシールドに追加";
+      const pc=await askChoice(`🛡 ${act}（${n}体）：どちらのシールドゾーンへ？`,[`相手（${S.players[op].label}）のシールドへ`,`自分（${S.players[pi].label}）のシールドへ`]);
+      if(pc===null)continue;
+      const sp=(pc===0?op:pi);   // シールドの持ち主
+      const SZ=zonesOf(sp);
+      for(let i=0;i<n;i++){
+        // 対象クリーチャー（相手/自分どちらの場からでも選べるよう両方提示）
+        const pool=[];
+        for(const owp of [op,pi]){for(const x of zonesOf(owp).battle)pool.push({x,owp});}
+        if(!pool.length){toast("対象のクリーチャーがいません");break;}
+        const j=await askChoice(`🛡 ${act}：クリーチャーを選択（${i+1}/${n}体目・キャンセルで終了）`,pool.map(o=>`${faceNameOf(o.x)}（${S.players[o.owp].label}）`));
+        if(j===null)break;
+        const {x:tgt,owp}=pool[j];
+        const OZ2=zonesOf(owp);
+        const idx=OZ2.battle.findIndex(y=>y.id===tgt.id);
+        if(idx<0)continue;
+        const removed=OZ2.battle.splice(idx,1)[0];
+        if(removed.under&&removed.under.length){removed.under.splice(0).forEach(u=>{u.faceup=true;OZ2.grave.push(u);});}
+        if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>{gg.faceup=true;OZ2.grave.push(gg);});}
+        removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;removed.mark=S.turn>0;
+        if(isTuck){
+          if(!SZ.shield.length){SZ.shield.push(removed);toast(`🛡 重ねる盾が無いため ${faceNameOf(removed)} を新しい盾に（表向き）`);}
+          else{
+            const k=await askChoice("どの盾に重ねる？",SZ.shield.map((s,si)=>`盾${si+1}${s.faceup?`（表：${faceNameOf(s)}）`:""}${s.under&&s.under.length?` +${s.under.length}`:""}`));
+            if(k===null){OZ2.battle.splice(idx,0,removed);break;}
+            const base=SZ.shield[k];
+            removed.under=[base,...(base.under?base.under.splice(0):[])];
+            SZ.shield[k]=removed;
+            toast(`🛡 ${faceNameOf(removed)} を盾${k+1}に表向きで重ねた`);
+          }
+        }else{
+          // 新しいシールドとして追加：デュエプレは10枚上限。11枚目に加わる場合は墓地へ
+          if(S.gameMode!=="tcg"&&SZ.shield.length>=10){
+            SZ.grave.push(removed);
+            toast(`🛡 シールド上限（10枚）：${faceNameOf(removed)} はシールドに追加されず墓地へ`);
+          }else{
+            SZ.shield.push(removed);
+            toast(`🛡 ${faceNameOf(removed)} を新しいシールドに追加（表向き）`);
+          }
+        }
+        renderAll();
+      }
+      sfx("move");
     }else if(f.t==="tutor"){
       if(!Z.deck.length){toast("山札がありません");continue;}
       for(let i=0;i<n;i++){
@@ -8772,6 +8870,12 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     // 効果未登録（rQ=null）も、バトルゾーンに出す以上クリーチャー扱いにしてロック対象とする
     const isCre=!rQ||["creature","evo","neoevo","starevo","smaxevo","onismaxevo","gneo","twinpact","lunatic","ultimate"].includes(rQ.ctype)||rQ.twin||!rQ.ctype;
     if(isCre){
+      // 🟥 デュエプレ：バトルゾーン7体上限。手動召喚（8体目）はブロック（効果での踏み倒しはenterBattleOrGraveで墓地へ）
+      if(battleSlotFull(pTo)){
+        sfx("flip");
+        toast(`🟥 バトルゾーン上限（7体）：${S.players[pTo].label} はこれ以上クリーチャーを出せません`);
+        MOVE_BLOCKED=true;return;
+      }
       const cap=perTurnCapHit(pTo,"creature");
       if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[pTo].label}はこのターン、クリーチャーを${cap.limit}体しか出せない（既に${cap.used}体）`);MOVE_BLOCKED=true;return;}
       const lk=stLockerOf(pTo,"stLockCre","stLockCreF",rQ,f.card);
@@ -10351,8 +10455,11 @@ async function doMugetsuSummon(pi,zn,id){
   snap();
   arr.splice(hi,1);
   h.faceup=true;h.tapped=false;h.sideways=false;
-  Z.battle.push(h);
-  markArrive(h);
+  if(!enterBattleOrGrave(pi,h)){
+    renderAll();
+    toast(`🌑 ${label}：${faceNameOf(h)} は盤面上限のため墓地へ（下に敷く処理は行いません）`);
+    return;
+  }
   emitEvent(pi,"summon");
   enqueueFx(pi,h);
   sfx("ok");renderAll();
@@ -10492,7 +10599,7 @@ function renderAll(){
         if(cond&&!lw[key]){lw[key]=true;toast(msg);sfx("flip");}
         else if(!cond)lw[key]=false;
       };
-      chk(Z.battle.length>=8,"b",`⚠ ${S.players[pi].label}：バトルゾーンが8体以上（デュエプレは7面まで）`);
+      chk(S.gameMode==="tcg"&&Z.battle.length>=8,"b",`⚠ ${S.players[pi].label}：バトルゾーンが8体以上（TCGモードは無制限）`);
     }
   }
   const mb=$("multiBar");
@@ -11309,7 +11416,7 @@ function openShieldStack(pi,id){
       x.tapped=false;
       if(j===0){x.faceup=true;Z.hand.push(x);}
       else if(j===1){x.faceup=true;Z.grave.push(x);}
-      else if(j===2){if(!battleEntryOk(pi,x)){x.faceup=true;Z.hand.push(x);markArrive(x);toast(`（出せないため手札へ）`);}else{x.faceup=true;Z.battle.push(x);markArrive(x);emitEvent(pi,"summon");enqueueFx(pi,x);}}
+      else if(j===2){if(!battleEntryOk(pi,x)){x.faceup=true;Z.hand.push(x);markArrive(x);toast(`（出せないため手札へ）`);}else{x.faceup=true;if(enterBattleOrGrave(pi,x)){emitEvent(pi,"summon");enqueueFx(pi,x);}}}
       else if(j===3){x.faceup=true;Z.mana.push(x);}
       else if(j===4){x.faceup=false;Z.deck.unshift(x);}
       else{x.faceup=false;Z.deck.push(x);}
@@ -14541,7 +14648,7 @@ $("setSpellAuto").addEventListener("change",async ()=>{
 $("setMode").addEventListener("change",async ()=>{
   S.gameMode=$("setMode").value;
   if(db)await idbPut("misc","gameMode",S.gameMode);
-  toast(S.gameMode==="tcg"?"TCGモード：手札・シールドの上限なし":"デュエプレモード：手札10枚（超過は墓地へ）・シールド10枚（追加不可）");
+  toast(S.gameMode==="tcg"?"TCGモード：上限なし":"デュエプレモード：手札10枚（超過は墓地へ）・シールド10枚（追加不可）・バトルゾーン7体（超過は墓地へ）");
 });
 $("zoneOrderTarget").addEventListener("change",renderZoneOrderEditor);
 $("setWidePair").addEventListener("change",async ()=>{
