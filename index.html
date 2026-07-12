@@ -2027,6 +2027,8 @@ function isCreatureReg(r){
 }
 /* ✨ 次の自分のターン開始まで持続する付与を記録（ターン境界のc.buff=nullを乗り越えて残す）。
    owner=付与先クリーチャーの持ち主。owner の次のターン開始時に解除される。 */
+/* プリン（攻撃もブロックもできない）：旧c.noAtkBlockと付与c.buff.noAtkBlockの両対応 */
+function noAtkBlkOf(c){return !!(c&&(c.noAtkBlock||(c.buff&&c.buff.noAtkBlock)));}
 function markBuffNext(c,keys,owner){
   if(!c.buff)c.buff={};
   c.buff._n=c.buff._n||[];
@@ -3385,7 +3387,7 @@ const EFFECTS=[
      if(modeKey==="shuff"){
        const foe=pi?0:1;
        let cnt=0;
-       for(const x of zonesOf(foe).battle){const rx=getReg(x);if(rx&&rx.cost!=null&&+rx.cost===+n&&isCreatureReg(rx)){x.noAtkBlock=true;cnt++;}}
+       for(const x of zonesOf(foe).battle){const rx=getReg(x);if(rx&&rx.cost!=null&&+rx.cost===+n&&isCreatureReg(rx)){x.buff=x.buff||{};x.buff.noAtkBlock=true;markBuffNext(x,["noAtkBlock"],pi);cnt++;}}
        if(cnt)toast(`🎲 シャッフ：${S.players[foe].label}のコスト${n}クリーチャー${cnt}体を攻撃/ブロック不可に（既存個体のみ）`);
      }
      if(modeKey==="tenshi"){
@@ -4837,6 +4839,7 @@ async function runFxList(pi,list,srcCard){
         if(j===null)break;
         const {x:tgt,owp}=pool[j];
         const OZ2=zonesOf(owp);
+        if(await offerTrueEscape(owp,tgt)){renderAll();continue;} // 🛡 盾送りも真・エスケープで離場キャンセル可
         const idx=OZ2.battle.findIndex(y=>y.id===tgt.id);
         if(idx<0)continue;
         const removed=OZ2.battle.splice(idx,1)[0];
@@ -5377,6 +5380,32 @@ async function pumpFx(){
 async function offerSoulRaid(pi,c){
   if(!S.expert)return;
   const Z=zonesOf(pi);
+  // 🌱 バトルゾーンのシンカライズ持ちカード／クリーチャーを進化元（土台）にできる。
+  const bzBases=Z.battle.filter(x=>x.id!==c.id&&(()=>{const r=getReg(x);return r&&(r.shinkalize||isCreatureReg(r));})());
+  if(bzBases.length){
+    const sj=await askChoice(`🔥 超魂レイド（${faceNameOf(c)}）：進化元をどこから置きますか？`,
+      ["🌱 バトルゾーンのシンカライズ／クリーチャーを下に置く","🎴 山札の上3枚から選ぶ","置かない"]);
+    if(sj===null||sj===2){toast("🔥 超魂レイド：進化元を置かなかった");return;}
+    if(sj===0){
+      const k=bzBases.length===1?0:await pickCard(`🔥 超魂レイド：下に置く進化元を選択（シンカライズ／クリーチャー）`,bzBases,
+        {sub:x=>{const r=getReg(x);return r&&r.shinkalize?"シンカライズ":(isCreatureReg(r)?"クリーチャー":"");}});
+      if(k===null){toast("🔥 超魂レイド：進化元を置かなかった");return;}
+      snap();
+      const base=bzBases[k];
+      const bidx=Z.battle.findIndex(x=>x.id===base.id);
+      if(bidx<0)return;
+      const b=Z.battle.splice(bidx,1)[0];
+      b.faceup=true;b.tapped=false;
+      if(b.gear&&b.gear.length){c.gear=[...(c.gear||[]),...b.gear.splice(0)];}
+      c.under=[b,...(b.under?b.under.splice(0):[]),...(c.under||[])];
+      c.sick=false;
+      if(isNeoReg(getReg(c)))c.neoEvo=true;
+      toast(`🔥 超魂レイド：バトルゾーンの ${faceNameOf(b)} を ${faceNameOf(c)} の下に置いた（進化状態・召喚酔い解除）`);
+      sfx("ok");renderAll();
+      return;
+    }
+    // sj===1 の場合は下の山上3枚処理へ続く
+  }
   if(!Z.deck.length){toast("🔥 超魂レイド：山札がありません");return;}
   snap();
   const look=Z.deck.splice(0,Math.min(3,Z.deck.length));
@@ -6306,11 +6335,11 @@ async function breakShields(op,count,attacker,forceIdx){
         const stopOpts=stopPool.map((x,k)=>`${(attacker&&x.id===attacker.id)?"⚔攻撃中 ":""}${faceNameOf(x)} を止める`);
         const sj=await askChoice(`🚫 G・ストライクで攻撃を止めるクリーチャーを選択\n（既定は攻撃中のクリーチャー。他のクリーチャーにも付与できます）`,[...stopOpts,"止めない（効果のみ）"]);
         if(sj!==null&&sj<stopPool.length){
-          stopPool[sj].noAtkBlock=true;
+          stopPool[sj].buff=stopPool[sj].buff||{};stopPool[sj].buff.noAtkBlock=true;
           toast(`🚫 ${faceNameOf(stopPool[sj])} の攻撃を止めた（🚫は各カードメニューから解除可）`);
         }
       }else if(attacker){
-        attacker.noAtkBlock=true;
+        attacker.buff=attacker.buff||{};attacker.buff.noAtkBlock=true;
       }
       sfx("flip");renderAll();
       enqueueFx(op,gc);      // GSカードの登録効果（追加能力）を処理
@@ -6395,6 +6424,7 @@ async function startAttack(pi,id){
   if(S.expert){
     const rA=getReg(c);
     if(rA&&rA.cantAtk&&!isIgnored(c,pi)){toast(`⛔ ${faceNameOf(c)} は攻撃できない`);return;}
+    if(noAtkBlkOf(c)){toast(`🚫 ${faceNameOf(c)} は攻撃もブロックもできない`);return;}
     if(rA&&rA.civil){
       const cc=civilCount(rA,pi);
       toast(cc.ok?`🎨 シビルカウント${cc.need}達成（${cc.cnt}体）：攻撃時の能力が使えます`:`🎨 シビルカウント${cc.need}未達（現在${cc.cnt}体）：攻撃時の能力は使えません`);
@@ -6912,7 +6942,7 @@ async function execAttack(pi,id,tg){
     if(rb&&rb.cstCond&&rb.cstFx==="blocker"&&!isSealed(b)&&!isIgnored(b,op)&&zoneCondOk(rb.cstCond,op))return true;
     return false;
   };
-  const blockers=(aregNB&&aregNB.noBlock)?[]:OZ.battle.filter(b=>!b.tapped&&!b.noAtkBlock&&isBlk(b));
+  const blockers=(aregNB&&aregNB.noBlock)?[]:OZ.battle.filter(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b));
   if(aregNB&&aregNB.noBlock&&OZ.battle.some(b=>!b.tapped&&isBlk(b)))
     toast(`${faceNameOf(c)} はブロックされない`);
   let defender=null;
@@ -7046,11 +7076,15 @@ async function execAttack(pi,id,tg){
     if(S.expert){
       const rT2=getReg(c);
       if(rT2&&rT2.twice==="afterAtk"&&!c._twiceUsed&&Z.battle.find(x=>x.id===c.id)){
-        c._twiceUsed=true;
-        c.tapped=false;
-        sfx("ok");
-        toast(`⚡⚡ 2回攻撃：${faceNameOf(c)} は攻撃の後アンタップ！`);
-        renderAll();
+        if(noAtkBlkOf(c)){
+          toast(`🚫 ${faceNameOf(c)} は攻撃を止められているため、2回攻撃のアンタップはしない`);
+        }else{
+          c._twiceUsed=true;
+          c.tapped=false;
+          sfx("ok");
+          toast(`⚡⚡ 2回攻撃：${faceNameOf(c)} は攻撃の後アンタップ！`);
+          renderAll();
+        }
       }
     }
   }
@@ -7118,11 +7152,15 @@ async function execAttack(pi,id,tg){
     if(S.expert){
       const rT2=getReg(c);
       if(rT2&&rT2.twice==="afterAtk"&&!c._twiceUsed&&Z.battle.find(x=>x.id===c.id)){
-        c._twiceUsed=true;
-        c.tapped=false;
-        sfx("ok");
-        toast(`⚡⚡ 2回攻撃：${faceNameOf(c)} は攻撃の後アンタップ！`);
-        renderAll();
+        if(noAtkBlkOf(c)){
+          toast(`🚫 ${faceNameOf(c)} は攻撃を止められているため、2回攻撃のアンタップはしない`);
+        }else{
+          c._twiceUsed=true;
+          c.tapped=false;
+          sfx("ok");
+          toast(`⚡⚡ 2回攻撃：${faceNameOf(c)} は攻撃の後アンタップ！`);
+          renderAll();
+        }
       }
     }
   }
@@ -9878,7 +9916,6 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   // buffは通常リセットするが、手札→バトルゾーンの召喚時はautoTapCostが消費するため残す
   if(!(fromZone==="hand"&&toZone==="battle"))c.buff=null;
   c.faceup=(toZone!=="shield")?true:(fromZone==="battle"&&c.faceup);
-  markArrive(c);
   if((toZone==="shield"||toZone==="shieldUp")&&S.turn>0)c.mark=true;
   if(toZone==="resolve"){
     if(S.spellAutoGrave!==false){
@@ -9922,6 +9959,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     // ♾ フォーエバー・プリンセス：墓地に置かれるかわりに墓地＋自身を山札へシャッフル（手札を捨てる/山札を削る等）
   }
   else placeCard(Z,toZone,c);
+  markArrive(c); // 🔧 配置後に呼ぶ（バトルゾーンに入ってから召喚数カウント/召喚酔い判定を行う）
   if(toZone==="mana"&&S.tapMultiMana){
     const rgm=getReg(c);
     if(rgm&&rgm.civs&&rgm.civs.length>=2){
@@ -11157,7 +11195,7 @@ function cardEl(pi,zone,c){
     hp.title="ハイパーモード解放中";
     el.appendChild(hp);
   }
-  if(showBLab&&c.noAtkBlock&&zone==="battle"){
+  if(showBLab&&noAtkBlkOf(c)&&zone==="battle"){
     const nb=document.createElement("span");nb.className="frztag";nb.style.background="#7c3aed";nb.textContent="🚫";
     nb.title="攻撃もブロックもできない";el.appendChild(nb);
   }
@@ -13161,9 +13199,18 @@ function openCardSheet(ctx){
       if(pick===null)return;
       snap();
       if(pick===8){
-        c.noAtkBlock=!c.noAtkBlock;
+        if(c.buff&&c.buff.noAtkBlock){
+          delete c.buff.noAtkBlock;
+          if(c.buff._n)c.buff._n=c.buff._n.filter(k=>k!=="noAtkBlock");
+          c.noAtkBlock=false;
+          closeSel();renderAll();toast("🚫 解除しました");return;
+        }
+        const durP=await askChoice("持続はどこまで？（現代カードは「次の自分のターン開始まで」が多い）",["このターン（終了時に解除）","次の自分のターン開始まで"]);
+        if(durP===null)return;
+        c.buff=c.buff||{};c.buff.noAtkBlock=true;
+        if(durP===1)markBuffNext(c,["noAtkBlock"],ctx.p);
         closeSel();renderAll();
-        toast(c.noAtkBlock?`🚫 ${faceNameOf(c)} は攻撃もブロックもできない`:"解除しました");
+        toast(`🚫 ${faceNameOf(c)} は攻撃もブロックもできない（${durP===1?"次の自分のターン開始まで":"このターン"}）`);
         return;
       }
       if(pick===6){
