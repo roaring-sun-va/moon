@@ -1449,6 +1449,17 @@ body.shake{animation:bodyShake .4s ease-out}
         <div style="flex:1 1 100%;font-size:12px;font-weight:900;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:2px;margin-top:6px">常在効果（場にある間）</div>
         <label><input type="checkbox" id="fxStManaTap"> 相手のマナはタップして置かれる</label>
         <label><input type="checkbox" id="fxStAllSA"> 自分のクリーチャー全てスピードアタッカー</label>
+        <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;flex:1 1 100%">
+          <span style="font-size:12px;font-weight:700">🔢 数だけパワー</span>
+          <span style="font-size:12px">パワー</span>
+          <input type="number" id="fxPowPer" placeholder="±例1000" step="500" style="width:90px">
+          <span style="font-size:12px">×</span>
+          <select id="fxPowPerWho" style="width:auto;flex:0 0 80px"><option value="self">自分の</option><option value="opp">相手の</option><option value="both">両者の</option></select>
+          <select id="fxPowPerZone" style="width:auto;flex:0 0 110px">
+            <option value="mana">マナ</option><option value="grave">墓地</option><option value="hand">手札</option><option value="battle">バトルゾーン</option><option value="shield">シールド</option><option value="deck">山札</option>
+          </select>
+          <span style="font-size:12px">の枚数だけ（空欄=なし）</span>
+        </div>
         <div class="row" style="gap:6px 12px;flex-wrap:wrap;align-items:center">
           <span style="font-size:12px;font-weight:700">常在付与（自分のクリーチャー全員）：</span>
           <label><input type="checkbox" id="fxAGMach"> マッハF</label>
@@ -2110,7 +2121,38 @@ async function playNeoCreature(p,zone,id){
   sfx("ok");renderAll();
   toast(`⤴ NEO進化！ ${faceNameOf(evc)}（進化元：${faceNameOf(host)}）`);
 }
-/* Q.Q.QX：相手が場に持つ時、pi は自分の山札をシャッフル/確認/表向きにできない */
+/* 踏み倒しでクリーチャーを場に出す（NEOクリーチャーなら通常/NEO進化を選択可）。出せたらtrue。
+   emitEvent("summon")とenqueueFxまで行う。呼び出し側はsfx/toast/waitFxIdleのみ。
+   opts.excludeId：進化元候補から除外するクリーチャーID（攻撃中効果で「攻撃中のクリーチャー」を除外する等）。 */
+async function summonCreatureNeoAware(pi,t,opts){
+  opts=opts||{};
+  const Z=zonesOf(pi);
+  const r=getReg(t);
+  t.neoEvo=false;
+  if(isNeoReg(r)){
+    const bases=Z.battle.filter(x=>x.id!==t.id&&x.id!==opts.excludeId&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize);})());
+    if(bases.length){
+      const m=await askChoice(`《${faceNameOf(t)}》はNEOクリーチャー。出し方を選択${opts.excludeId?"\n（攻撃中のクリーチャーには進化できません）":""}`,
+        ["NEOクリーチャーとして出す（通常召喚・召喚酔いあり）","NEO進化として出す（自分のクリーチャー／シンカライズに重ねる）"]);
+      if(m===1){
+        const k=bases.length===1?0:await pickCard("進化元を選択（自分のクリーチャー／シンカライズ）",bases,{sub:x=>{const rr=getReg(x);return rr&&rr.shinkalize?"シンカライズ":(rr&&isCreatureReg(rr)?"クリーチャー":"");}});
+        if(k!==null){
+          const host=bases[k];const bi=Z.battle.findIndex(x=>x.id===host.id);
+          if(bi>=0){
+            t.faceup=true;t.tapped=host.tapped;t.neoEvo=true;
+            t.under=[host,...(host.under?host.under.splice(0):[]),...(t.under||[])];
+            if(host.gear&&host.gear.length)t.gear=[...(t.gear||[]),...host.gear.splice(0)];
+            Z.battle[bi]=t;markArrive(t);
+            emitEvent(pi,"summon");enqueueFx(pi,t);
+            return true;
+          }
+        }
+      }
+    }
+  }
+  if(enterBattleOrGrave(pi,t)){emitEvent(pi,"summon");enqueueFx(pi,t);return true;}
+  return false;
+}
 function qqqxOwnerOpp(pi){
   if(!S.vs)return false;
   const foe=pi?0:1;
@@ -4231,20 +4273,20 @@ async function autoTapCost(pi,c){
   if(r.buzz>0){
     const bz=r.buzz;
     const untappedB=Z.mana.filter(m=>!m.tapped).length;
-    const maxK=Math.floor(untappedB/bz);
+    const perNeed=(S.manaX2&&S.manaX2[pi])?Math.ceil(bz/2):bz;
+    const maxK=perNeed>0?Math.floor(untappedB/perNeed):0;
     if(maxK>0){
-      const opts=[];
-      for(let k=0;k<=Math.min(maxK,8);k++)opts.push(k===0?"追加しない（効果1回）":`追加${k}回（＋${bz*k}マナ・効果${k+1}回）`);
-      const j=await askChoice(`💥 バズレンダ〔${bz}〕（${faceNameOf(c)}）\n追加コストを何回支払いますか？（アンタップマナ${untappedB}枚）`,opts);
+      const j=await askNumber(`💥 バズレンダ〔${bz}〕（${faceNameOf(c)}）\n追加で[無色${bz}]を何回支払いますか？（好きな回数・1回につき${bz}マナ／アンタップ${untappedB}枚＝最大${maxK}回・0=追加なし）\nBR能力を「1回＋この回数」使います。`,0,maxK);
       if(j!=null&&j>0){
-        let needB=bz*j;
+        const useK=Math.max(0,Math.min(j,maxK));
+        let needB=bz*useK;
         if(S.manaX2&&S.manaX2[pi])needB=Math.ceil(needB/2);
         let n2=0;
         for(const m of Z.mana){if(n2>=needB)break;if(!m.tapped){m.tapped=true;n2++;}}
-        c._buzzK=j;
+        c._buzzK=useK;
         sfx("ok");renderAll();
         if(n2<needB)toast(`⚠ マナ不足：${n2}/${needB} だけタップしました`);
-        toast(`💥 バズレンダ×${j}：追加${n2}マナをタップ（登録効果を計${j+1}回処理します）`);
+        toast(`💥 バズレンダ×${useK}：追加${n2}マナをタップ（BR能力を計${useK+1}回処理します）`);
       }
     }
   }
@@ -5580,6 +5622,19 @@ function dispCost(c,pi){
   cost=Math.max(floor,cost);
   return cost!==base?{cost,base,up:cost>base}:null;
 }
+function powPerBonus(c,r){
+  if(!r||!r.powPer)return 0;
+  const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle.includes(c));
+  if(own==null)return 0;
+  const foe=own?0:1;
+  const cnt=(pi)=>{const z=zonesOf(pi);return z&&z[r.powPerZone]?z[r.powPerZone].length:0;};
+  let n=0;
+  const who=r.powPerWho||"self";
+  if(who==="self")n=cnt(own);
+  else if(who==="opp")n=S.vs?cnt(foe):0;
+  else n=cnt(own)+(S.vs?cnt(foe):0);
+  return (+r.powPer||0)*n;
+}
 function dispPower(c){
   const r=getReg(c);
   if(!r||r.power===""||r.power==null||isNaN(+r.power))return null;
@@ -5587,6 +5642,7 @@ function dispPower(c){
   if(c.hyper&&r.hmPow)p=+r.hmPow;
   if(c.buff)p+=(+c.buff.pm||0)+(+c.buff.pw||0);
   if(c.sfActive&&r.sforceFx==="pw"&&r.sforceN)p+=(+r.sforceN||0);
+  p+=powPerBonus(c,r);
   return p;
 }
 async function effPower(c,attacking,inBattle){
@@ -5610,6 +5666,7 @@ async function effPower(c,attacking,inBattle){
   if(inBattle&&r&&r.pb)p+=(+r.pb||0);
   if(c.sfActive&&r&&r.sforceFx==="pw"&&r.sforceN)p+=(+r.sforceN||0);
   if(c.buff)p+=(c.buff.pa||0)+(c.buff.pm||0);
+  if(r)p+=powPerBonus(c,r);
   return p;
 }
 /* 🛡 真・エスケープ：破壊に限らずバトルゾーンを離れる時に発動できる。
@@ -5794,9 +5851,7 @@ async function doMagibomber(pi,atk,r){
     if(fromDeck.has(t.id)){const di=Z.deck.findIndex(x=>x.id===t.id);if(di>=0)Z.deck.splice(di,1);usedDeck.add(t.id);}
     else{const hi=Z.hand.findIndex(x=>x.id===t.id);if(hi>=0)Z.hand.splice(hi,1);}
     t.faceup=true;t.tapped=false;
-    if(enterBattleOrGrave(pi,t)){
-      emitEvent(pi,"summon");
-      enqueueFx(pi,t);
+    if(await summonCreatureNeoAware(pi,t,{excludeId:atk&&atk.id})){
       sfx("ok");
       toast(`💣 ${lbl}：${faceNameOf(t)}（${fromDeck.has(t.id)?"山札の上":"手札"}）を出した！`);
       await waitFxIdle();
@@ -6228,11 +6283,13 @@ async function breakShields(op,count,attacker,forceIdx){
         continue;
       }
       sh.tapped=false;sh.mark=false;
-      // 🌙 G城の下に重なっているカード（ザ・ラムーン等）は、シールドの重なりとして手札へ（G城本体のみ墓地）
+      // 🌙 G城の下に重なっているカード（ザ・ラムーン等）は、シールドの重なりとして通常のブレイク処理へ
+      //    （stackに入れる＝S・トリガー／G・ストライク判定を通り、最終的に手札へ）。G城本体のみ墓地。
       if(sh.under&&sh.under.length){
         const kids=sh.under.splice(0);
-        kids.forEach(u=>{u.faceup=true;u.tapped=false;OZ.hand.push(u);});
-        toast(`🌙 《${faceNameOf(sh)}》の下の${kids.length}枚は手札に加わった`);
+        kids.forEach(u=>{u.faceup=true;u.tapped=false;u.mark=false;});
+        stack.push(...kids);
+        toast(`🌙 《${faceNameOf(sh)}》の下の${kids.length}枚はシールドの重なりとしてブレイク（S・トリガー／G・ストライク判定へ）`);
       }
       OZ.grave.push(sh);
       sfx("grave");
@@ -7882,6 +7939,9 @@ function renderFxEditor(){
   $("fxGrantDS").checked=!!FXEDIT.grantDS;
   $("fxStManaTap").checked=!!FXEDIT.stManaTap;
   $("fxStAllSA").checked=!!FXEDIT.stAllSA;
+  $("fxPowPer").value=(FXEDIT.powPer!=null&&FXEDIT.powPer!==0)?FXEDIT.powPer:"";
+  $("fxPowPerWho").value=FXEDIT.powPerWho||"self";
+  $("fxPowPerZone").value=FXEDIT.powPerZone||"mana";
   $("fxAGMach").checked=!!FXEDIT.agMach;
   $("fxAGBlocker").checked=!!FXEDIT.agBlocker;
   $("fxAGSlayer").checked=!!FXEDIT.agSlayer;
@@ -8637,6 +8697,9 @@ function openFxEditor(key){
     grantDS:cur?!!cur.grantDS:false,
     stManaTap:cur?!!cur.stManaTap:false,
     stAllSA:cur?!!cur.stAllSA:false,
+    powPer:cur&&(+cur.powPer||0)||0,
+    powPerWho:cur&&cur.powPerWho||"self",
+    powPerZone:cur&&cur.powPerZone||"mana",
     agMach:cur?!!cur.agMach:false,
     agBlocker:cur?!!cur.agBlocker:false,
     agSlayer:cur?!!cur.agSlayer:false,
@@ -8902,6 +8965,9 @@ $("fxSave").addEventListener("click",async ()=>{
     grantDS:$("fxGrantDS").checked,
     stManaTap:$("fxStManaTap").checked,
     stAllSA:$("fxStAllSA").checked,
+    powPer:+$("fxPowPer").value||0,
+    powPerWho:$("fxPowPerWho").value||"self",
+    powPerZone:$("fxPowPerZone").value||"mana",
     agMach:$("fxAGMach").checked,
     agBlocker:$("fxAGBlocker").checked,
     agSlayer:$("fxAGSlayer").checked,
@@ -9180,6 +9246,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.grantDS)attrs.push("手札にシンパシー付与");
     if(v.stManaTap)attrs.push("常在：相手マナはタップイン");
     if(v.stAllSA)attrs.push("常在：全員SA");
+    if(v.powPer)attrs.push(`パワー${v.powPer>0?"+":""}${v.powPer}×${({self:"自分の",opp:"相手の",both:"両者の"})[v.powPerWho||"self"]}${({mana:"マナ",grave:"墓地",hand:"手札",battle:"場",shield:"盾",deck:"山"})[v.powPerZone||"mana"]}数`);
     {
       const gs=[];
       if(v.agMach)gs.push("マッハF");
@@ -9915,6 +9982,8 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   c.tapped=false;c.sideways=false;c.rot=0;
   // buffは通常リセットするが、手札→バトルゾーンの召喚時はautoTapCostが消費するため残す
   if(!(fromZone==="hand"&&toZone==="battle"))c.buff=null;
+  // 🔧 NEO進化フラグは移動でリセット（進化状態は下の進化元 under で判定。踏み倒し/バウンス後の残留を防ぐ）
+  c.neoEvo=false;
   c.faceup=(toZone!=="shield")?true:(fromZone==="battle"&&c.faceup);
   if((toZone==="shield"||toZone==="shieldUp")&&S.turn>0)c.mark=true;
   if(toZone==="resolve"){
