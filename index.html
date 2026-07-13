@@ -572,6 +572,54 @@ body.shake{animation:bodyShake .4s ease-out}
 #multiBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(66px + env(safe-area-inset-bottom));z-index:70;background:#232d44;border:1px solid var(--tap);border-radius:20px;padding:6px 10px;display:none;align-items:center;gap:8px;font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.5)}
 #multiBar.show{display:flex}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ===== v10.3 UI 洗練パック（追加のみ／モバイルレイアウト不変・寸法非依存） ===== */
+/* 1) キーボード操作時のフォーカスリング（a11y・デスクトップ） */
+.btn:focus-visible,.zbtn:focus-visible,.pmenu:focus-visible,.zbtn.hb:focus-visible,
+.panelbox input:focus-visible,.panelbox select:focus-visible,.panelbox textarea:focus-visible,
+.panelbox label:focus-within,.vcard:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+.panelbox input:focus,.panelbox select:focus,.panelbox textarea:focus{
+  border-color:var(--accent);box-shadow:0 0 0 2px rgba(245,197,66,.16);
+}
+/* 2) テーマに合わせた細スクロールバー（オーバーレイ表示のためレイアウトに影響しない） */
+*{scrollbar-color:#33405e transparent}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2c3856;border:2px solid transparent;background-clip:padding-box;border-radius:8px}
+::-webkit-scrollbar-thumb:hover{background:#42527a;background-clip:padding-box}
+/* 3) デスクトップ（マウス）のみのホバー反応。タッチ端末には一切適用されない */
+@media (hover:hover) and (pointer:fine){
+  .btn{transition:transform .14s ease,box-shadow .14s ease,background .14s ease,border-color .14s ease,filter .14s ease}
+  .btn:hover{border-color:#3d4d73;background:linear-gradient(180deg,#2d3a58,#222b42)}
+  .btn.primary:hover{filter:brightness(1.06);box-shadow:0 0 16px rgba(245,197,66,.35)}
+  .btn.warn:hover{background:rgba(224,106,85,.12)}
+  .btn.on:hover,.btn.ex.on:hover{filter:brightness(1.06)}
+  .zbtn,.pmenu{transition:background .14s ease,border-color .14s ease}
+  .zbtn:hover,.pmenu:hover{border-color:#3d4d73;background:#2b3652}
+  .pile{transition:filter .14s ease}
+  .pile:hover{filter:brightness(1.08)}
+  .vcard .thumb{transition:box-shadow .14s ease}
+  .vcard:hover .thumb{box-shadow:0 0 0 1px var(--accent)}
+}
+/* 4) オーバーレイ／パネルの上品な登場（終了状態はtransform:noneで寸法に残らない） */
+.olay.open{animation:olayIn .16s ease-out}
+.olay.open .panelbox,.olay.open #viewerBox{animation:panelIn .2s cubic-bezier(.2,.8,.3,1.05)}
+@keyframes olayIn{from{opacity:0}to{opacity:1}}
+@keyframes panelIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+/* 5) トースト種別カラー（既定＝金。ロック/破壊=赤・情報=シアン・付与=紫） */
+#toast.t-danger{background:linear-gradient(180deg,#f3927f,var(--danger));color:#2c0d07}
+#toast.t-info{background:linear-gradient(180deg,#72d9e7,var(--tap));color:#04222a}
+#toast.t-buff{background:linear-gradient(180deg,#cba6ff,var(--resolve));color:#1b0a2b}
+/* 6) 手番プレイヤーの盤面強調（縁のアクセントリング＋淡いグロー・子要素の下に描画・寸法不変） */
+.pboard.activeturn{
+  box-shadow:0 0 0 1.5px rgba(245,197,66,.45), 0 0 18px rgba(245,197,66,.12);
+  border-radius:12px;
+  transition:box-shadow .2s ease;
+}
+.pboard.activeturn>.zone,.pboard.activeturn .zone{border-color:var(--accent-dim)}
+.pboard.opp.activeturn{box-shadow:0 0 0 1.5px rgba(245,197,66,.4), 0 0 18px rgba(245,197,66,.1)}
 </style>
 </head>
 <body>
@@ -1779,8 +1827,19 @@ body.shake{animation:bodyShake .4s ease-out}
 /* ================= util ================= */
 const $ = id => document.getElementById(id);
 const GAMELOG=[];
-function toast(m){
-  const t=$("toast");t.textContent=m;t.classList.add("show");
+function toastKind(m){
+  const s=String(m||"").trimStart();
+  if(/^(⛔|🚫|🔒|🚯|⚠)/.test(s))return "danger";
+  if(/^(🛡|🔗|🃏|📥|📤|👁|🔍|♻|⚓)/.test(s))return "info";
+  if(/付与|バフ|💜|🌌/.test(s))return "buff";
+  return "good";
+}
+function toast(m,kind){
+  const t=$("toast");t.textContent=m;
+  t.classList.remove("t-danger","t-info","t-buff");
+  const k=kind||toastKind(m);
+  if(k&&k!=="good")t.classList.add("t-"+k);
+  t.classList.add("show");
   clearTimeout(t._tm);
   t._tm=setTimeout(()=>t.classList.remove("show"),4200);
   const d=new Date();
@@ -3938,6 +3997,7 @@ const FX_TYPES=[
   ["manaElemPick","相手エレメントをn個選んでマナ送り（対象選択）"],
   ["bouncePick","相手クリーチャーをn体選んで手札に戻す（対象選択）"],
   ["bounceElemPick","相手エレメントをn個選んで手札に戻す（対象選択）"],
+  ["bounceFilt","条件で指定したカードをn枚 手札に戻す（条件欄でコスト/種族/名前/文明を指定・陣営は実行時選択）"],
   ["selfDestroy","自分のクリーチャーをn体選んで破壊する（自分で選ぶ）"],
   ["selfMana","自分のクリーチャーをn体選んでマナ送り（自分で選ぶ）"],
   ["selfBounce","自分のクリーチャーをn体選んで手札に戻す（自分で選ぶ）"],
@@ -3949,6 +4009,7 @@ const FX_TYPES=[
   ["grsummon","GR召喚 n体（超GRの上から）"],
   ["tutor","山札から好きなカードをn枚 手札に加える（TCG式・全部見える）"],
   ["tutorDMPS","山札から条件に合うカードをn枚 手札へ（デュエプレ式・候補のみ表示／無ければ不発）"],
+  ["retrieveHand","マナ/墓地/シールド等からn枚 手札に戻す（回収・ゾーンは実行時選択・条件欄で対象指定可）"],
   ["battleAsk","相手のクリーチャーとバトルする（対象選択・確認つき）"],
   ["hold","⏸ 処理中にする（攻撃を保留して手動で解決。もう一度攻撃で続行）"],
   ["oriotis1","このターン（次の相手ターン）オリオティス効果を得る（真悠I）"],
@@ -4488,7 +4549,7 @@ async function runFxList(pi,list,srcCard){
   for(const f of list){
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
-    if(f.cond&&f.t!=="nextCost"&&!zoneCondOk(f.cond,pi)){
+    if(f.cond&&f.t!=="nextCost"&&f.t!=="bounceFilt"&&f.t!=="retrieveHand"&&!zoneCondOk(f.cond,pi)){
       toast(`条件未達（${f.cond}）：効果をスキップ`);
       continue;
     }
@@ -4868,6 +4929,69 @@ async function runFxList(pi,list,srcCard){
         renderAll();
       }
       sfx(isDestroy?"grave":"move");
+    }else if(f.t==="bounceFilt"){
+      // 条件（f.cond）で対象を絞り、n枚を手札に戻す。条件はコスト/パワー/文明/多色/単色/種族/名前・「X以外」対応、空欄＝全て
+      const filt=String(f.cond||"").trim();
+      let sides;
+      if(!S.vs){sides=[pi];}
+      else{
+        const sc=await askChoice(`↩ ${filt?filt+"の":""}カードを${n}枚 手札に戻す：対象の陣営`,[`相手（${S.players[op].label}）`,`自分（${S.players[pi].label}）`,"両方"]);
+        if(sc===null)continue;
+        sides=sc===0?[op]:sc===1?[pi]:[0,1];
+      }
+      for(let i=0;i<n;i++){
+        const pool=[];
+        for(const owp of sides){for(const x of zonesOf(owp).battle){const rx=getReg(x);if(!filt||lockFilterOk(filt,rx,x))pool.push({x,owp});}}
+        if(!pool.length){toast(filt?`該当カードなし（${filt}）`:"対象がいません");break;}
+        const j=await pickCard(`↩ 手札に戻すカードを選択（${i+1}/${n}枚目・キャンセルで終了${filt?`／条件：${filt}`:""}）`,pool.map(o=>o.x),{sub:(c,ix)=>S.players[pool[ix].owp].label+(c.tapped?"・タップ":"")});
+        if(j===null)break;
+        const {x:tgt,owp}=pool[j];
+        if(await offerTrueEscape(owp,tgt)){renderAll();continue;}
+        const TZ=zonesOf(owp);
+        const idx=TZ.battle.findIndex(x=>x.id===tgt.id);
+        if(idx<0)continue;
+        const removed=TZ.battle.splice(idx,1)[0];
+        if(removed.under&&removed.under.length){removed.under.splice(0).forEach(u=>{u.faceup=true;TZ.grave.push(u);});}
+        if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>{gg.faceup=true;TZ.grave.push(gg);});}
+        removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;removed.mark=false;
+        TZ.hand.push(removed);
+        toast(`↩ ${faceNameOf(removed)} を${S.players[owp].label}の手札に戻した`);
+        renderAll();
+      }
+      sfx("move");
+    }else if(f.t==="retrieveHand"){
+      // 回収：マナ/墓地/シールド/山札から条件に合うカードをn枚、そのゾーンの持ち主の手札へ戻す
+      const filt=String(f.cond||"").trim();
+      const zoneOpts=[
+        ["self","mana","自分のマナゾーン"],
+        ["self","grave","自分の墓地"],
+        ["self","shield","自分のシールド"],
+        ["self","deck","自分の山札（中を見て選ぶ）"],
+      ];
+      if(S.vs){zoneOpts.push(["opp","mana","相手のマナゾーン"],["opp","grave","相手の墓地"]);}
+      const zj=await askChoice(`↩ ${filt?filt+"の":""}カードを${n}枚 手札に戻す：どのゾーンから？`,zoneOpts.map(o=>o[2]));
+      if(zj===null)continue;
+      const side=zoneOpts[zj][0], zn=zoneOpts[zj][1];
+      const owp=side==="self"?pi:op;
+      const OZ=zonesOf(owp);
+      let did=0;
+      for(let i=0;i<n;i++){
+        const pool=OZ[zn].filter(x=>{const rx=getReg(x);return !filt||lockFilterOk(filt,rx,x);});
+        if(!pool.length){toast(filt?`該当カードなし（${filt}）`:`${ZLOG[zn]||zn}にカードがありません`);break;}
+        const j=await pickCard(`↩ 手札に戻すカードを選択（${i+1}/${n}枚目・キャンセルで終了${filt?`／条件：${filt}`:""}）`,pool,{sub:x=>ZLOG[zn]||""});
+        if(j===null)break;
+        const tgt=pool[j];
+        const idx=OZ[zn].findIndex(x=>x.id===tgt.id);
+        if(idx<0)continue;
+        const removed=OZ[zn].splice(idx,1)[0];
+        removed.faceup=true;removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.mark=false;removed.seen=false;
+        OZ.hand.push(removed);
+        did++;
+        toast(`↩ ${faceNameOf(removed)} を${S.players[owp].label}の手札に戻した（${ZLOG[zn]||zn}）`);
+        renderAll();
+      }
+      if(zn==="deck"&&did)shuffle(OZ.deck);
+      sfx("move");
     }else if(f.t==="shieldPickNew"||f.t==="shieldPickTuck"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
       const isTuck=f.t==="shieldPickTuck";
@@ -11662,6 +11786,10 @@ function renderAll(){
   checkMugetsu(false);
   const order=S.vs?[1,0]:[0];
   for(const pi of order)renderPlayer(pi);
+  document.querySelectorAll(".pboard").forEach(pb=>{
+    const pi=+pb.dataset.p;
+    pb.classList.toggle("activeturn", !!(S.vs&&S.turn>0&&pi===(S.who|0)));
+  });
   $("turnBadge").textContent=`ターン ${S.turn}${S.vs?"・"+S.players[S.who].label:""}${S.vs&&(SCORE[0]||SCORE[1])?`　🏆${SCORE[0]}-${SCORE[1]}`:""}`;
   // 数字宣言・ターン限定ロックの常時表示バナー
   {
