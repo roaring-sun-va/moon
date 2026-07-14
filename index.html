@@ -1554,6 +1554,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <input type="text" id="fxStLockCreF" placeholder="対象条件（例：コスト5以下／パワー5000以下／光以外・空欄＝全て）" style="flex:1;min-width:170px">
           <label style="display:flex;align-items:center;gap:6px">相手は各ターン<input type="number" id="fxStSpellPT" min="0" placeholder="0" style="width:56px"> 回しか呪文を唱えられない（0=制限なし・一音の妖精型）</label>
           <label style="display:flex;align-items:center;gap:6px">相手は各ターン<input type="number" id="fxStCrePT" min="0" placeholder="0" style="width:56px"> 体しかクリーチャーを出せない（0=制限なし）</label>
+          <label style="display:flex;align-items:center;gap:6px">相手は各ターン合計<input type="number" id="fxStPlayPT" min="0" placeholder="0" style="width:56px"> 回までしかクリーチャーと呪文を実行できない（0=制限なし・ペルフェクト型）</label>
           <label><input type="checkbox" id="fxStCrePTevo"> ↑は自身が進化クリーチャーの時のみ有効（一音の妖精④型）</label>
         </div>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -3234,7 +3235,21 @@ function emitEvent(actor,type){
     sfx("flip");
     toast(`⚡誘発確認（${WATCH_LABEL[type]}時）：${names.join("、")}`);
   }
-  if(S.vs)runWatchFx(actor===0?1:0,type);
+  if(S.vs){
+    if(type==="spell"){
+      // 呪文はエレメントでもある。spell監視を優先し、無ければelem監視を、1カードにつき1回だけ確実に発火。
+      const watcher=actor===0?1:0;
+      for(const wc of zonesOf(watcher).battle){
+        const wr=getReg(wc);
+        if(!wr||!wr.watchFx||!wr.watchFx.length||isSealed(wc)||isIgnored(wc,watcher))continue;
+        let wfx=wr.watchFx.filter(w=>w.ev==="spell");
+        if(!wfx.length)wfx=wr.watchFx.filter(w=>w.ev==="elem");
+        if(wfx.length){toast(`⚡誘発処理：${faceNameOf(wc)}`);runFxList(watcher,wfx,wc);}
+      }
+    }else{
+      runWatchFx(actor===0?1:0,type);
+    }
+  }
   if(type==="summon"){
     const AZ0=zonesOf(actor);
     const news0=AZ0.battle.filter(x=>arrived.has(x.id)&&!x._pfAsked);
@@ -3553,7 +3568,7 @@ function battleEntryOk(pi,c){
     if(dd){sfx("flip");toast(`🌟 ドリーム（DMR）：同名の《${faceNameOf(dd)}》が自分のバトルゾーンにあるため、${faceNameOf(c)} は出ない`);return false;}
   }
   const cap=perTurnCapHit(pi,"creature");
-  if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[pi].label}はこのターン、クリーチャーを${cap.limit}体しか出せない（既に${cap.used}体）`);return false;}
+  if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[pi].label}はこのターン、${cap.kind==="play"?`クリーチャーと呪文を合計${cap.limit}回まで`:`クリーチャーを${cap.limit}体まで`}しか実行できない（既に${cap.used}${cap.kind==="play"?"回":"体"}）`);return false;}
   const lk=stLockerOf(pi,"stLockCre","stLockCreF",r,c);
   const tl=lk?null:turnLockHit(pi,"creature",r);
   const tlU=(lk||tl)?null:turnLockUnknown(pi,"creature",r);
@@ -5476,22 +5491,22 @@ function turnLockCountUp(pi){
 function perTurnCapHit(pi,kind){
   if(!S.expert||!S.vs)return null;
   const foe=pi?0:1;
+  const usedSpell=(S.spellTurn&&S.spellTurn[pi])||0;
+  const usedCre=(S.playedTurn&&S.playedTurn[pi])||0;
+  const usedPlay=usedSpell+usedCre;
   let best=null;
   for(const x of zonesOf(foe).battle){
     const r=getReg(x);
     if(!r||isSealed(x)||isIgnored(x,foe))continue;
-    let lim=null;
-    if(kind==="spell"&&r.stSpellPT>0)lim=+r.stSpellPT;
-    if(kind==="creature"&&r.stCrePT>0){
-      // stCrePTevo（進化時のみ）：そのカードが今、進化状態（NEO進化フラグ or 下に進化元）である場合のみ有効
-      if(!r.stCrePTevo||isNeoEvoInstance(x))lim=+r.stCrePT;
-    }
-    if(lim==null)continue;
-    if(best==null||lim<best.limit)best={limit:lim,by:x};
+    // 種別ごとの上限（呪文だけ／クリーチャーだけ）
+    let lim=null, used=0;
+    if(kind==="spell"&&r.stSpellPT>0){lim=+r.stSpellPT;used=usedSpell;}
+    else if(kind==="creature"&&r.stCrePT>0&&(!r.stCrePTevo||isNeoEvoInstance(x))){lim=+r.stCrePT;used=usedCre;}
+    if(lim!=null&&used>=lim&&(best==null||lim<best.limit))best={limit:lim,used,by:x,kind};
+    // 合計上限（クリーチャー＋呪文の合計・ペルフェクト型）
+    if(r.stPlayPT>0&&usedPlay>=+r.stPlayPT&&(best==null||+r.stPlayPT<best.limit))best={limit:+r.stPlayPT,used:usedPlay,by:x,kind:"play"};
   }
-  if(!best)return null;
-  const used=kind==="spell"?((S.spellTurn&&S.spellTurn[pi])||0):((S.playedTurn&&S.playedTurn[pi])||0);
-  return used>=best.limit?{limit:best.limit,used,by:best.by,kind}:null;
+  return best;
 }
 function turnLockLabel(L){
   if(L.kind==="creatureCount")return `${S.players[L.pi].label}はクリーチャーを${L.limit}体以上出せない（このターン${L.cnt|0}/${(L.limit|0)-1}体）`;
@@ -8273,6 +8288,7 @@ function renderFxEditor(){
   $("fxStLockCreF").value=FXEDIT.stLockCreF||"";
   $("fxStSpellPT").value=FXEDIT.stSpellPT||"";
   $("fxStCrePT").value=FXEDIT.stCrePT||"";
+  $("fxStPlayPT").value=FXEDIT.stPlayPT||"";
   $("fxStCrePTevo").checked=!!FXEDIT.stCrePTevo;
   $("fxInvCiv").value=FXEDIT.invCiv||"";
   $("fxSymX").value=String(FXEDIT.symX||1);
@@ -8836,6 +8852,8 @@ function parseCardText(txt,mode){
   else if(/[2２]枚目以降の呪文を唱えられない|各ターン(?:、)?(?:最初の)?[1１]回しか呪文を唱えられない/.test(t))out.set.stSpellPT=1;
   m=t.match(/相手は各ターン(\d+)体しかクリーチャーを(?:バトルゾーンに)?出せない/); if(m)out.set.stCrePT=+m[1];
   else if(/[2２]体目以降(?:の)?クリーチャーを(?:バトルゾーンに)?出せない|各ターン(?:、)?(?:最初の)?[1１]回しか(?:.{0,4})?クリーチャーを(?:バトルゾーンに)?出せない/.test(t))out.set.stCrePT=1;
+  // 合計制限（ペルフェクト型）：相手は各ターン合計N回までしかクリーチャーと呪文を実行できない
+  {const mP=t.match(/相手は各ターン(?:合計)?(\d+)回(?:まで)?しか(?:クリーチャーと呪文|呪文とクリーチャー)を(?:実行|プレイ)できない/);if(mP)out.set.stPlayPT=+mP[1];}
   // NEO進化/進化クリーチャーなら…の条件付きクリーチャー制限（一音の妖精型）＝進化状態のみ有効
   if(out.set.stCrePT&&/(?:NEO)?進化クリーチャー(?:なら|であれば|の場合)/.test(t))out.set.stCrePTevo=true;
   // マナ回復制限（ガ・リュザーク型：相手ターン開始時、相手のマナのアンタップをn枚に制限）
@@ -9186,6 +9204,7 @@ function openFxEditor(key){
     stLockSpell:cur?!!cur.stLockSpell:false,
     stSpellPT:cur&&cur.stSpellPT||0,
     stCrePT:cur&&cur.stCrePT||0,
+    stPlayPT:cur&&cur.stPlayPT||0,
     stCrePTevo:cur?!!cur.stCrePTevo:false,
     stLockSpellF:cur&&cur.stLockSpellF||"",
     stLockCre:cur?!!cur.stLockCre:false,
@@ -9465,6 +9484,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stLockSpell:$("fxStLockSpell").checked,
     stSpellPT:+$("fxStSpellPT").value||0,
     stCrePT:+$("fxStCrePT").value||0,
+    stPlayPT:+$("fxStPlayPT").value||0,
     stCrePTevo:$("fxStCrePTevo").checked,
     stLockSpellF:$("fxStLockSpellF").value.trim(),
     stLockCre:$("fxStLockCre").checked,
@@ -10444,7 +10464,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if(S.expert&&!S.freePlay&&toZone==="resolve"&&S.turn>0){
     const rQ=getReg(f.card);
     const cap=perTurnCapHit(pTo,"spell");
-    if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[pTo].label}はこのターン、呪文を${cap.limit}回しか唱えられない（既に${cap.used}回）`);MOVE_BLOCKED=true;return;}
+    if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[pTo].label}はこのターン、${cap.kind==="play"?`クリーチャーと呪文を合計${cap.limit}回まで`:`呪文を${cap.limit}回まで`}しか実行できない（既に${cap.used}回）`);MOVE_BLOCKED=true;return;}
     const lk=stLockerOf(pTo,"stLockSpell","stLockSpellF",rQ,f.card);
     const tl=lk?null:turnLockHit(pTo,"spell",rQ);
     if(lk||tl){
@@ -10481,7 +10501,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         }
       }
       const cap=perTurnCapHit(pTo,"creature");
-      if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[pTo].label}はこのターン、クリーチャーを${cap.limit}体しか出せない（既に${cap.used}体）`);MOVE_BLOCKED=true;return;}
+      if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[pTo].label}はこのターン、${cap.kind==="play"?`クリーチャーと呪文を合計${cap.limit}回まで`:`クリーチャーを${cap.limit}体まで`}しか実行できない（既に${cap.used}${cap.kind==="play"?"回":"体"}）`);MOVE_BLOCKED=true;return;}
       const lk=stLockerOf(pTo,"stLockCre","stLockCreF",rQ,f.card);
       const tl=lk?null:turnLockHit(pTo,"creature",rQ);
       const tlU=(lk||tl)?null:turnLockUnknown(pTo,"creature",rQ);
@@ -12228,6 +12248,7 @@ function renderAll(){
         const foe=k?0:1;
         if(rx.stLockCre)parts.push(`🔒 ${faceNameOf(x)}：${S.players[foe].label}はクリーチャーを出せない${rx.stLockCreF?`（${rx.stLockCreF}）`:""}`);
         if(rx.stSpellPT>0)parts.push(`🔒 ${faceNameOf(x)}：${S.players[foe].label}は呪文 各ターン${rx.stSpellPT}回まで（今${(S.spellTurn&&S.spellTurn[foe])||0}回）`);
+        if(rx.stPlayPT>0)parts.push(`🔒 ${faceNameOf(x)}：${S.players[foe].label}はクリーチャー＋呪文 各ターン合計${rx.stPlayPT}回まで（今${((S.spellTurn&&S.spellTurn[foe])||0)+((S.playedTurn&&S.playedTurn[foe])||0)}回）`);
         if(rx.stCrePT>0){
           if(!rx.stCrePTevo||isNeoEvoInstance(x))parts.push(`🔒 ${faceNameOf(x)}：${S.players[foe].label}はクリーチャー 各ターン${rx.stCrePT}体まで（今${(S.playedTurn&&S.playedTurn[foe])||0}体）`);
           else parts.push(`⏸ ${faceNameOf(x)}：クリーチャー制限は進化状態のみ有効（現在は進化していないため無効）`);
@@ -14251,7 +14272,7 @@ function openCardSheet(ctx){
       if(S.expert&&!S.freePlay&&S.turn>0){
         const rQ=getReg(c);
         const cap=perTurnCapHit(ctx.p,"creature");
-        if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[ctx.p].label}はこのターン、クリーチャーを${cap.limit}体しか出せない（既に${cap.used}体）`);return;}
+        if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[ctx.p].label}はこのターン、${cap.kind==="play"?`クリーチャーと呪文を合計${cap.limit}回まで`:`クリーチャーを${cap.limit}体まで`}しか実行できない（既に${cap.used}${cap.kind==="play"?"回":"体"}）`);return;}
         const lk=stLockerOf(ctx.p,"stLockCre","stLockCreF",rQ,c);
         const tl=lk?null:turnLockHit(ctx.p,"creature",rQ);
         const tlU=(lk||tl)?null:turnLockUnknown(ctx.p,"creature",rQ);
