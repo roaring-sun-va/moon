@@ -1341,6 +1341,14 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxZRush"> Zラッシュ（いずれかの盾が離れるとHM解放）</label>
         <label><input type="checkbox" id="fxInvadeZero"> 侵略ZERO（相手がクリーチャーを出した時、手札/墓地/マナから自分のクリーチャーに重ねる）</label>
         <label><input type="checkbox" id="fxRev0"> 革命0トリガー（自分の盾0で相手の攻撃時、手札から無料使用）</label>
+        <label style="display:flex;align-items:center;gap:6px">🚩 革命（盾N枚以下で追加能力が有効）
+          <select id="fxRevoN" style="width:auto">
+            <option value="-1">なし</option>
+            <option value="0">革命0（盾0枚）</option>
+            <option value="1">革命1（盾1枚以下）</option>
+            <option value="2">革命2（盾2枚以下）</option>
+          </select>
+        </label>
         <label><input type="checkbox" id="fxSilent"> サイレントスキル（アンタップの代わりに効果発動）</label>
         <label><input type="checkbox" id="fxGuardman"> ガードマン（味方が攻撃された時、タップして身代わり）</label>
         <label><input type="checkbox" id="fxSA"> スピードアタッカー（召喚酔いしない）</label>
@@ -1700,6 +1708,10 @@ body.shake{animation:bodyShake .4s ease-out}
         <span class="hint" style="margin:0">開始時に山札の上から封印として付きます</span>
       </div>
       <div class="row">
+        <label><input type="checkbox" id="fxSealSummonOnly"> 封印はずしは召喚（通常召喚/S・トリガー）と侵略ZEROのみ（ドルマゲドンX型）</label>
+        <span class="hint" style="margin:0">未チェック＝コマンドが出れば方法問わず外せる（ドキンダムX型）</span>
+      </div>
+      <div class="row">
         <span style="font-size:12px;font-weight:700">特殊ギミック</span>
         <select id="fxGimmick" style="width:auto;flex:1;min-width:160px">
           <option value="">なし</option>
@@ -1709,6 +1721,12 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="complex">COMPLEX型（タップイン・下に8枚でアンタップ・7枚以下は離れない）</option>
           <option value="phoenixfield">フェニックス・フィールド型（火のドラゴンが出た時に下へ格納→3枚で進化）</option>
         </select>
+      </div>
+      <div class="row">
+        <span style="font-size:12px;font-weight:700">🌙 ルナティック進化</span>
+        <input type="text" id="fxLunaTarget" placeholder="究極進化させる先のカード名（例：神羅ボルシャック・ライジング・NEX）" style="flex:1;min-width:200px">
+        <input type="number" id="fxLunaCost" style="width:70px" value="0" min="0" placeholder="コスト">
+        <span class="hint" style="margin:0">このクリーチャーの上に指定カードを重ねて究極進化（コスト分マナをタップ）</span>
       </div>
     </section>
     <section>
@@ -1738,7 +1756,8 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
         <label style="font-size:11px"><input type="checkbox" id="fxModeDup"> 同じ項目を重複選択可</label>
       </div>
-      <textarea id="fxModeOpts" rows="3" style="width:100%;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;font-size:12px;padding:6px;box-sizing:border-box" placeholder="選択肢を1行に1つ（ガレックの例）&#10;山上2枚を墓地へ（墓地肥やし）&#10;墓地のクリーチャーを出す（蘇生）&#10;相手1体に-3000"></textarea>
+      <textarea id="fxModeOpts" rows="4" style="width:100%;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;font-size:12px;padding:6px;box-sizing:border-box" placeholder="選択肢を1行に1つ。行末に「＠コマンドN」を付けると、その選択肢を選んだ時に自動処理します（省略可）。&#10;例）&#10;山上2枚を墓地へ ＠墓地肥やし2&#10;1枚ドローする ＠ドロー1&#10;山上1枚をマナ ＠マナ加速1&#10;相手1体に-3000（自動化なし）&#10;※コマンド例：墓地肥やし/ドロー/マナ加速/相手墓地肥やし/公開/見る＋数字。複数は「＋」で連結"></textarea>
+      <div class="hint" style="margin-top:2px">選んだ選択肢に「＠コマンド」があればエキスパート時に自動実行。無い選択肢は宣言のみ（従来どおり手動処理）。</div>
       </div>
     </section>
     <div class="row" style="justify-content:flex-end">
@@ -3116,6 +3135,54 @@ function runWatchFxCond(pi,cond){
     }
   }
 }
+const CIV_JP_SEAL={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};
+function cardCivsOf(x){const r=getReg(x);return (r&&r.civs)||[];}
+/* 🔓 コマンドが出た時：文明が一致する封印を1つ外せるなら案内（1体につき1枚）。
+   通常（ドキンダムX型）＝方法問わず／sealSummonOnly（ドルマゲドンX型）＝召喚・S/T・侵略ZEROのみ */
+async function offerSealPeel(actor){
+  if(!S.expert)return;
+  const AZ=zonesOf(actor);
+  const cmds=AZ.battle.filter(x=>arrived.has(x.id)&&!x._sealPeelDone&&(()=>{const r=getReg(x);return r&&raceMatch(r,"コマンド");})());
+  for(const cmd of cmds){
+    cmd._sealPeelDone=true;
+    const cmdCivs=cardCivsOf(cmd);
+    if(!cmdCivs.length)continue;
+    const match=(sealCard,sealedCre)=>{let sc=cardCivsOf(sealCard);if(!sc.length)sc=cardCivsOf(sealedCre);return sc.some(cv=>cmdCivs.includes(cv));};
+    const sealed=[];
+    // 反応対象は、そのコマンドを出したプレイヤー自身の封印クリーチャーのみ
+    for(const pp of [actor]){
+      for(const sc of zonesOf(pp).battle){
+        if(sc.id===cmd.id||!sc.seals||!sc.seals.length)continue;
+        const sealIdx=sc.seals.findIndex(s=>match(s,sc));
+        if(sealIdx<0)continue;
+        const rsc=getReg(sc);
+        sealed.push({owner:pp,sc,sealIdx,summonOnly:!!(rsc&&rsc.sealSummonOnly)});
+      }
+    }
+    if(!sealed.length)continue;
+    let methodOk=true;
+    if(sealed.some(o=>o.summonOnly)){
+      const mj=await askChoice(`🔓 コマンド《${faceNameOf(cmd)}》が出ました。\nこのコマンドは「召喚（通常召喚／S・トリガー）」または「侵略ZERO」で出ましたか？\n（ドルマゲドンX型の封印はこの場合のみ外せます）`,["はい（召喚／侵略ZERO）","いいえ（踏み倒し等）"]);
+      methodOk=(mj===0);
+    }
+    const cand=sealed.filter(o=>!o.summonOnly||methodOk);
+    if(!cand.length)continue;
+    const civLbl=cmdCivs.map(c=>CIV_JP_SEAL[c]||c).join("・");
+    const labels=cand.map(o=>`《${faceNameOf(o.sc)}》の封印を1つ外す（${S.players[o.owner].label}・残${o.sc.seals.length}）`);
+    const j=await askChoice(`🔓 コマンド《${faceNameOf(cmd)}》（文明：${civLbl}）が出ました。\n文明が一致する封印を1つ外せます（1体につき1枚）。`,[...labels,"外さない"]);
+    if(j===null||j>=cand.length)continue;
+    const pick=cand[j];
+    snap();
+    const seal=pick.sc.seals.splice(pick.sealIdx,1)[0];
+    seal.faceup=true;zonesOf(pick.owner).grave.push(seal);
+    sfx("grave");
+    const rsc=getReg(pick.sc);
+    if(rsc&&rsc.gimmick==="dorma")await dormaChoice(pick.owner,pick.sc);
+    if(!pick.sc.seals.length)toast(`🔥 ${faceNameOf(pick.sc)} の封印がすべて外れた！（禁断解放）`);
+    else toast(`🔓 ${faceNameOf(pick.sc)} の封印を1つ外した（残り${pick.sc.seals.length}）`);
+    renderAll();
+  }
+}
 function emitEvent(actor,type){
   if(type==="summon")bumpEv("summons",actor);
   if(type==="spell")bumpEv("spells",actor);
@@ -3132,6 +3199,7 @@ function emitEvent(actor,type){
     const AZ0=zonesOf(actor);
     const news0=AZ0.battle.filter(x=>arrived.has(x.id)&&!x._pfAsked);
     for(const nc of news0)offerPhoenixStore(actor,nc);
+    offerSealPeel(actor);
     if(S.expert&&S.vs){
       const defO=actor===0?1:0;
       if(zonesOf(defO).battle.some(b=>{const rb=getReg(b);return rb&&rb.stOriotis;})||(S.oriotisTurn&&S.oriotisTurn[defO])){
@@ -4544,6 +4612,34 @@ async function destroyCreature(pi,c){
   if(S.expert&&r&&r.megaLB)toast(`💥 メガ・ラストバースト：呪文側を唱えられます（${faceNameOf(c)}）`);
 }
 let FX_HOLD=false;
+/* 選択肢（モード）に自動処理を紐づける：
+   1行の書式「表示ラベル ＠コマンドN（＋コマンドN…）」。＠の左が表示、右が自動処理。
+   友好的な別名（墓地肥やし/ドロー/マナ加速…）→ 内部の自動処理型に変換。生の型キーも可。*/
+const MODE_FX_ALIAS={
+  "墓地肥やし":"mill","ミル":"mill","山札墓地":"mill","自分墓地肥やし":"mill","山上墓地":"mill",
+  "相手墓地肥やし":"millOpp","相手ミル":"millOpp",
+  "ドロー":"draw","引く":"draw",
+  "マナ加速":"charge","ブースト":"charge","チャージ":"charge","マナブースト":"charge",
+  "タップマナ":"chargeTap","タップイン加速":"chargeTap",
+  "公開":"reveal","見る":"look","のぞき見":"look",
+};
+function parseModeChoice(line){
+  const s=String(line||"");
+  const at=s.search(/[@＠]/);
+  if(at<0)return {label:s.trim(),fx:[]};
+  const label=s.slice(0,at).trim();
+  const cmd=s.slice(at+1).trim();
+  const fx=[];
+  for(const part of cmd.split(/[+＋]/).map(x=>x.trim()).filter(Boolean)){
+    const m=part.match(/^([^\d:：\s]+)[\s:：]*([0-9０-９]*)$/);
+    if(!m)continue;
+    const key=m[1].trim();
+    const n=+String(m[2]||"1").replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))||1;
+    const mapped=MODE_FX_ALIAS[key]||key;
+    if(typeof FX_TYPES!=="undefined"&&FX_TYPES.some(t=>t[0]===mapped))fx.push({t:mapped,n});
+  }
+  return {label:label||s.trim(),fx};
+}
 async function runFxList(pi,list,srcCard){
   const op=pi===0?1:0;
   for(const f of list){
@@ -5506,6 +5602,16 @@ async function pumpFx(){
   while(fxQueue.length){
     const {pi,c,reg}=fxQueue.shift();
     snap();
+    // 🚩 革命N：自分の盾がN枚以下でのみ追加能力が有効。未達なら発動しない（他の効果があれば選択）
+    if(reg&&reg.revoN!=null&&reg.revoN>=0){
+      const sh=zonesOf(pi).shield.length;
+      if(sh>reg.revoN){
+        const go=await ask(`🚩 革命${reg.revoN}未達（自分の盾${sh}枚／${reg.revoN}枚以下で有効）：${faceNameOf(c)}\n革命の効果は発動しません。それでも他の効果を処理しますか？\n（出た時効果が革命だけなら「いいえ」）`);
+        if(!go)continue;
+      }else{
+        toast(`🚩 革命${reg.revoN}達成（自分の盾${sh}枚）：${faceNameOf(c)}`);
+      }
+    }
     // 🎨 シビルカウント：未達なら効果を発動しない（達成なら通知して続行）
     if(reg&&reg.civil){
       const cc=civilCount(reg,pi);
@@ -5536,17 +5642,18 @@ async function pumpFx(){
     }
     const md=reg?reg.modeN|0:0;
     if(md>0){
-      const opts=String(reg.modeOpts||"").split("\n").map(x=>x.trim()).filter(Boolean);
-      const rest=opts.slice();
+      const parsed=String(reg.modeOpts||"").split("\n").map(x=>x.trim()).filter(Boolean).map(parseModeChoice);
+      const rest=parsed.slice();
       for(let i=0;i<md;i++){
-        const list2=reg.modeDup?opts:rest;
+        const list2=reg.modeDup?parsed:rest;
         if(!list2.length)break;
-        const j=await askChoice(`《${faceNameOf(c)}》選択効果（${i+1}/${md}回目）`,[...list2,"以降選ばない"]);
+        const j=await askChoice(`《${faceNameOf(c)}》選択効果（${i+1}/${md}回目）`,[...list2.map(o=>o.label),"以降選ばない"]);
         if(j===null||j>=list2.length)break;
-        const lb=list2[j];
+        const chosen=list2[j];
         if(!reg.modeDup)rest.splice(j,1);
-        toast(`✅ 効果宣言：${lb}`);
+        toast(`✅ 効果宣言：${chosen.label}`);
         renderAll();
+        if(chosen.fx&&chosen.fx.length)await runFxList(pi,chosen.fx,c);
       }
     }
     // 🔗 超魂X：下に超魂Xカードがあれば、その出た時(CIP)効果を上のクリーチャーの能力として自動処理
@@ -8036,6 +8143,7 @@ function renderFxEditor(){
   $("fxHyper").checked=!!FXEDIT.hyper;
   $("fxInvadeZero").checked=!!FXEDIT.invadeZero;
   $("fxRev0").checked=!!FXEDIT.rev0;
+  $("fxRevoN").value=String(FXEDIT.revoN==null?-1:FXEDIT.revoN);
   $("fxSilent").checked=!!FXEDIT.silent;
   $("fxGuardman").checked=!!FXEDIT.guardman;
   $("fxSA").checked=!!FXEDIT.sa;
@@ -8173,6 +8281,9 @@ function renderFxEditor(){
   }
   $("fxD2").checked=!!FXEDIT.d2;
   $("fxSeal").value=FXEDIT.seal||0;
+  $("fxSealSummonOnly").checked=!!FXEDIT.sealSummonOnly;
+  $("fxLunaTarget").value=FXEDIT.lunaTarget||"";
+  $("fxLunaCost").value=FXEDIT.lunaCost||0;
   $("fxWatchAtkC").checked=!!FXEDIT.watch.atkC;
   $("fxWatchAtkP").checked=!!FXEDIT.watch.atkP;
   $("fxWatchDraw").checked=!!FXEDIT.watch.draw;
@@ -8338,10 +8449,29 @@ function parseCardText(txt,mode){
     else if(/G[・‐\-]?\s*NEOドリーム/.test(t))out.set.ctype="gneodream";
     else if(/NEOドリーム/.test(t))out.set.ctype="neodream";
     else if(/ドリーム・?クリーチャー|ナイトメア・?クリーチャー/.test(t))out.set.ctype="dream";
+    else if(/究極進化[：:]/.test(t))out.set.ctype="ultimate";
     else if(/NEO進化[：:]/.test(t)||/NEOクリーチャー/.test(t))out.set.ctype="neoevo";
     else if(/スター進化/.test(t))out.set.ctype="starevo";
     else if(/G・?NEO進化/.test(t))out.set.ctype="gneo";
+    else if(/ルナティック進化/.test(t))out.set.ctype="lunatic";
     else if(/進化クリーチャー/.test(t)&&/進化[：:]/.test(t))out.set.ctype="evo";
+    // 🌙 ルナティック進化：能力「このクリーチャーを《X》に究極進化させる」＋起動コスト（丸数字⑦等に対応）
+    if(/ルナティック進化/.test(t)){
+      const circ="①②③④⑤⑥⑦⑧⑨⑩⑪⑫";
+      const tn=t.replace(/[①-⑫]/g,c=>String(circ.indexOf(c)+1));
+      const mL=tn.match(/ルナティック進化[\s\S]*?このクリーチャーを《([^》]+)》に(?:究極)?進化/);
+      if(mL)out.set.lunaTarget=mL[1].trim();
+      const mc=tn.match(/ルナティック進化[^0-9]*?(\d+)/);
+      if(mc)out.set.lunaCost=+mc[1];
+    }
+  }
+  // 🚩 革命N（盾N枚以下で追加能力）。「革命0トリガー」「革命チェンジ」は除外。
+  {
+    const mR=t.match(/革命([0-9０-９])(?!トリガー)/);
+    if(mR){
+      const v=+String(mR[1]).replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0));
+      if(v>=0&&v<=2)out.set.revoN=v;
+    }
   }
   // 数値：パワー（「パワー 15000+」／公式コピペ「コスト9 15000+ マナ1」／表形式「コスト パワー 6 9000」に対応）
   let m=t.match(/パワー\s*(\d{3,6})\+?/);
@@ -8808,6 +8938,7 @@ function openFxEditor(key){
     hyper:cur?!!cur.hyper:false,
     invadeZero:cur?!!cur.invadeZero:false,
     rev0:cur?!!cur.rev0:false,
+    revoN:cur&&cur.revoN!=null?cur.revoN:-1,
     silent:cur?!!cur.silent:false,
     guardman:cur?!!cur.guardman:false,
     sa:cur?!!cur.sa:false,
@@ -8939,6 +9070,9 @@ function openFxEditor(key){
     watchFx:cur&&cur.watchFx?cur.watchFx.map(x=>({...x})):[],
     d2:cur?!!cur.d2:false,
     seal:cur&&cur.seal||0,
+    sealSummonOnly:cur?!!cur.sealSummonOnly:false,
+    lunaTarget:cur&&cur.lunaTarget||"",
+    lunaCost:cur&&cur.lunaCost||0,
     pa:cur&&cur.pa||null,
     pb:cur&&cur.pb||null,
     breaks:cur&&cur.breaks||"1",
@@ -9078,6 +9212,7 @@ $("fxSave").addEventListener("click",async ()=>{
     hyper:$("fxHyper").checked,
     invadeZero:$("fxInvadeZero").checked,
     rev0:$("fxRev0").checked,
+    revoN:parseInt($("fxRevoN").value,10),
     silent:$("fxSilent").checked,
     guardman:$("fxGuardman").checked,
     sa:$("fxSA").checked,
@@ -9209,6 +9344,9 @@ $("fxSave").addEventListener("click",async ()=>{
     watchFx:FXEDIT.watchFx,
     d2:$("fxD2").checked,
     seal:Math.max(0,parseInt($("fxSeal").value,10)||0),
+    sealSummonOnly:$("fxSealSummonOnly").checked,
+    lunaTarget:$("fxLunaTarget").value.trim(),
+    lunaCost:+$("fxLunaCost").value||0,
     pa:$("fxPA").value.trim()===""?null:Math.max(0,+$("fxPA").value||0),
     pb:$("fxPB").value.trim()===""?null:Math.max(0,+$("fxPB").value||0),
     breaks:$("fxBreaks").value,
@@ -9332,14 +9470,15 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.cantAtk)attrs.push("攻撃できない");
     if(v.cantAtkP)attrs.push("プレイヤー攻撃不可");
     if(v.d2)attrs.push("D2");
-    if(v.seal)attrs.push(`封印${v.seal}`);
+    if(v.seal)attrs.push(`封印${v.seal}${v.sealSummonOnly?"(召喚/侵略ZEROで解除)":""}`);
     if(v.pa)attrs.push(v.pa>=999999999?"PA+∞":v.pa>=1000000?`PA+${Math.floor(v.pa/10000)}万`:`PA+${v.pa}`);
     if(v.pb)attrs.push(`バトル中+${v.pb}`);
     if(v.breaks&&v.breaks!=="1")attrs.push(v.breaks==="all"?"ワールドB":v.breaks==="inf"?"∞ブレイカー":v.breaks==="2"?"W・ブレイカー":v.breaks==="3"?"T・ブレイカー":v.breaks==="4"?"Q・ブレイカー":`${v.breaks}ブレイク`);
     if(v.gimmick==="dorma")attrs.push("ドルマゲドン型");
     if(v.gimmick==="zeron")attrs.push("零龍型");
     if(v.cost!=null)attrs.push(`コスト${v.cost}${v.cost2!=null?"/"+v.cost2:""}`);
-    if(v.ctype){const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",d2:"D2",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",neodream:"NEOドリーム",gneodream:"G-NEOドリーム",aura:"オレガオーラ",other:"その他"};attrs.push(CT[v.ctype]||v.ctype);}
+    if(v.ctype){const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",d2:"D2",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",neodream:"NEOドリーム",gneodream:"G-NEOドリーム",aura:"オレガオーラ",evo:"進化",neoevo:"NEOクリーチャー",ultimate:"究極進化",lunatic:"ルナティック進化",other:"その他"};attrs.push(CT[v.ctype]||v.ctype);}
+    if(v.lunaTarget)attrs.push(`🌙ルナティック進化→《${v.lunaTarget}》${v.lunaCost?`(コスト${v.lunaCost})`:""}`);
     if(v.civs&&v.civs.length){const CV={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};attrs.push(v.civs.map(x=>CV[x]||x).join("/"));}
     if(v.st)attrs.push("⚡ST");
     if(v.sback)attrs.push("Sバック");
@@ -9382,7 +9521,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.hmLockSpell)attrs.push(`HM時：相手は${v.hmLockSpellF?v.hmLockSpellF+"の":""}呪文を唱えられない`);
 
     if(v.invadeZero)attrs.push("侵略ZERO");
-    if(v.rev0)attrs.push("革命0");
+    if(v.rev0)attrs.push("革命0トリガー");
+    if(v.revoN!=null&&v.revoN>=0)attrs.push(`🚩革命${v.revoN}（盾${v.revoN}枚以下で有効）`);
     if(v.silent)attrs.push("サイレントスキル");
     if(v.guardman)attrs.push("ガードマン");
     if(v.sa)attrs.push("SA");
@@ -10178,6 +10318,20 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if(!(fromZone==="hand"&&toZone==="battle"))c.buff=null;
   // 🔧 NEO進化フラグは移動でリセット（進化状態は下の進化元 under で判定。踏み倒し/バウンス後の残留を防ぐ）
   c.neoEvo=false;
+  // 🔗 重ね（進化元／無月の門で敷いた魔導具／超魂クロス等）を持つカードがバトルゾーンを離れる時：
+  //   最上段（このカード）だけが移動先へ。下に重なっていたカード・クロスギア・封印は持ち主の墓地へ（デュエプレ標準）。
+  //   ※バトル内移動（battle→battle）では剥がさない。破壊経路・一部バウンスパネルは各自で処理済みだが、
+  //     シールド送り/マナ送り/手札戻し等 moveCardX 経由の全経路をここで統一する。
+  if(fromZone==="battle"&&toZone!=="battle"){
+    const OWZ=zonesOf(pFrom);
+    if(c.under&&c.under.length){
+      const r0=getReg(c);
+      const d0=(r0&&r0.dest)||"grave";
+      c.under.splice(0).forEach(u=>{u.tapped=false;u.faceup=true;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;(OWZ[d0]||OWZ.grave).push(u);});
+    }
+    if(c.gear&&c.gear.length){c.gear.splice(0).forEach(g=>gearOut(OWZ,g));}
+    if(c.seals&&c.seals.length){c.seals.splice(0).forEach(x=>{x.faceup=true;OWZ.grave.push(x);});}
+  }
   c.faceup=(toZone!=="shield")?true:(fromZone==="battle"&&c.faceup);
   if((toZone==="shield"||toZone==="shieldUp")&&S.turn>0)c.mark=true;
   if(toZone==="resolve"){
@@ -10808,18 +10962,20 @@ function runHotkey(act){
   const op=pi===0?1:0;
   if(act==="draw"){
     if(!Z.deck.length){toast("山札がありません");return;}
-    snap();const c=Z.deck.shift();c.faceup=true;Z.hand.push(c);markArrive(c);
-    sfx("move");renderAll();toast(`ドロー：${S.players[pi].label}`);
+    snap();draw(pi,1);
+    toast(`ドロー：${S.players[pi].label}`);
   }else if(act==="boost"){
     if(!Z.deck.length){toast("山札がありません");return;}
     snap();const c=Z.deck.shift();c.faceup=true;c.tapped=false;
     const tp=manaTapIn(c);
     Z.mana.push(c);markArrive(c);
+    if(S.anim!==false){const pe=document.querySelector(`#sysrow-${pi} [data-zone="deckTop"]`);if(pe&&typeof flyGhost==="function")flyGhost(pe.getBoundingClientRect(),c,null);}
     sfx("move");renderAll();toast(tp?`ブースト（多色・タップイン）：${faceNameOf(c)} をマナへ`:`ブースト：${faceNameOf(c)} をマナへ`);
   }else if(act==="shield"){
     if(!Z.deck.length){toast("山札がありません");return;}
     if(!shieldCapOk(Z)){toast("🛡 シールド上限（10枚）：追加できません");return;}
-    snap();const c=Z.deck.shift();c.faceup=false;Z.shield.push(c);
+    snap();const c=Z.deck.shift();c.faceup=false;Z.shield.push(c);markArrive(c);
+    if(S.anim!==false){const pe=document.querySelector(`#sysrow-${pi} [data-zone="deckTop"]`);if(pe&&typeof flyGhost==="function")flyGhost(pe.getBoundingClientRect(),c,null);}
     sfx("move");renderAll();toast(`盾追加：${S.players[pi].label}（裏向き）`);
   }else if(act==="gr"){
     if(!Z.gr||!Z.gr.length){toast("超GRゾーンがありません/空です");return;}
@@ -13536,11 +13692,26 @@ function openCardSheet(ctx){
     box.appendChild(actBtn("✨ 唱える（墓地から・解決中へ）",()=>{moveCard(ctx.p,ctx.zone,ctx.id,"resolve");closeSel();renderAll();},"primary"));
   }
   if(link&&link.length>1&&!masked&&c.faceup){
-    box.appendChild(actBtn(`変形（${((c.face||0)+1)%link.length+1}/${link.length}面へ）`,()=>{
+    box.appendChild(actBtn(`変形（${((c.face||0)+1)%link.length+1}/${link.length}面へ）`,async ()=>{
       c.face=((c.face||0)+1)%link.length;
       const fr=FXDB.get(link[c.face]);
       if(ctx.zone==="battle")c.rot=(fr&&(fr.wide||fr.d2))?90:0;
-      sfx("flip");rerender();
+      sfx("flip");
+      // 覚醒/龍解/究極進化など「裏返った時」の効果：変形後の面の出た時効果を発動できる
+      if(ctx.zone==="battle"){
+        const fire=await ask(`🔄 《${faceNameOf(c)}》へ変形しました。\n変形後（覚醒／龍解／究極進化など）の効果を発動しますか？`);
+        if(fire){
+          c.tapped=false;
+          markArrive(c);
+          closeSheet();closeSel();
+          emitEvent(ctx.p,"summon");
+          enqueueFx(ctx.p,c);
+          renderAll();
+          toast(`🔄 変形！ 《${faceNameOf(c)}》の効果を発動`);
+          return;
+        }
+      }
+      rerender();
     },"primary"));
   }
   if(c.gl&&ctx.zone==="battle"){
@@ -14254,6 +14425,48 @@ function openCardSheet(ctx){
       c.rot=((c.rot||0)+90)%360;
       sfx("flip");rerender();
     }));
+  }
+  if(ctx.zone==="battle"&&reg&&reg.lunaTarget){
+    box.appendChild(actBtn(`🌙 ルナティック進化：《${reg.lunaTarget}》へ究極進化${reg.lunaCost?`（コスト${reg.lunaCost}）`:""}`,async ()=>{
+      const Z2=zonesOf(ctx.p);
+      const f2=findCard(ctx.p,"battle",ctx.id);
+      if(!f2){toast("対象が見つかりません");return;}
+      const base=f2.card;
+      const cost=reg.lunaCost|0;
+      if(S.expert&&cost>0&&!S.freePlay){
+        const untapped=Z2.mana.filter(m=>!m.tapped);
+        if(untapped.length<cost){
+          const go=await ask(`マナが足りません（未タップ${untapped.length}／必要${cost}）。それでも実行しますか？`);
+          if(!go)return;
+        }
+        snap();
+        for(let i=0;i<cost&&i<untapped.length;i++)untapped[i].tapped=true;
+      }else snap();
+      closeSheet();closeSel();
+      // 多面カード登録があり対象がその面なら「変形（裏返し）」で究極進化面へ。無ければ対象を生成して上に重ねる。
+      const lk=LINKS.get(normName(base.name));
+      const tf=lk?lk.indexOf(normName(reg.lunaTarget)):-1;
+      if(lk&&tf>=0){
+        base.face=tf;base.tapped=false;
+        const fr=FXDB.get(lk[tf]); if(fr&&(fr.wide||fr.d2))base.rot=90;
+        markArrive(base);
+        emitEvent(ctx.p,"summon");enqueueFx(ctx.p,base);
+        sfx("flip");renderAll();
+        toast(`🌙 ルナティック進化！ → 《${faceNameOf(base)}》（究極進化面）`);
+        return;
+      }
+      const top=makeCard(reg.lunaTarget);
+      top.faceup=true;top.tapped=base.tapped;
+      top.under=[base,...(base.under?base.under.splice(0):[]),...(top.under||[])];
+      if(base.gear&&base.gear.length)top.gear=[...(top.gear||[]),...base.gear.splice(0)];
+      const bi=Z2.battle.findIndex(x=>x.id===ctx.id);
+      if(bi<0)return;
+      Z2.battle[bi]=top;
+      markArrive(top);
+      emitEvent(ctx.p,"summon");enqueueFx(ctx.p,top);
+      sfx("ok");renderAll();
+      toast(`🌙 ルナティック進化！ ${faceNameOf(base)} → 《${faceNameOf(top)}》に究極進化`);
+    },"primary",true));
   }
   if(!masked&&["hand","mana","grave","deck"].includes(ctx.zone)){
     if((()=>{const r0=getReg(c);return r0&&raceMatch(r0,"ドルスザク");})()){
@@ -16860,6 +17073,7 @@ function zoneCondOk(expr,pi){
       .replace(/>=+/g,">=").replace(/<=+/g,"<=")
       .replace(/　/g," ").replace(/\s+/g,"")
       .replace(/鬼タイム/g,"盾合計<=6")  // 鬼タイム＝両者の盾合計6枚以下
+      .replace(/革命(\d+)/g,"盾<=$1")   // 革命N＝自分の盾N枚以下
       .replace(/(\d+)(?:体|枚|つ|個)?以上/g,">=$1")
       .replace(/(\d+)(?:体|枚|つ|個)?以下/g,"<=$1")
       .replace(/(\d+)(?:体|枚|つ|個)ちょうど/g,"=$1");
