@@ -8437,6 +8437,30 @@ function extractEffects(text,mode){
   const seen=new Set();
   return fx.filter(f=>{const k=f.t+":"+(f.n||"");if(seen.has(k))return false;seen.add(k);return true;});
 }
+// 自然文の「[ゾーン]に自分の[X]がN枚以上/以下」→ 条件式（zoneCondOk書式）へ変換
+function condFromPhrase(seg){
+  if(!seg)return "";
+  seg=String(seg).replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0));
+  const hasB=/バトルゾーン/.test(seg), hasM=/マナゾーン/.test(seg);
+  let zone="";
+  if(hasB&&hasM)zone="バトルマナ";
+  else if(hasM)zone="マナ";
+  else if(/墓地/.test(seg))zone="墓地";
+  else if(hasB)zone="バトル";
+  else if(/シールド/.test(seg)||/盾/.test(seg))zone="盾";
+  else if(/手札/.test(seg))zone="手札";
+  else if(/山札/.test(seg))zone="山札";
+  if(!zone)return "";
+  const mn=seg.match(/(\d+)\s*(?:枚|体|つ|個)?\s*(以上|以下)/);
+  if(!mn)return "";
+  const n=+mn[1], op=mn[2]==="以上"?">=":"<=";
+  let filt="";
+  const mf=seg.match(/自分の([ァ-ヶ一-龠ーヴ\u30fc・A-Za-z0-9]{2,20}?)が/)||seg.match(/に([ァ-ヶ一-龠ーヴ\u30fc・A-Za-z0-9]{2,20}?)が/);
+  if(mf)filt=mf[1].replace(/自分の?/,"");
+  // 「クリーチャー」「カード」等の一般語はフィルタなし扱い
+  if(/^(カード|クリーチャー|それ)$/.test(filt))filt="";
+  return zone+(filt?":"+filt:"")+op+n;
+}
 function parseCardText(txt,mode){
   const out={set:{},fx:[],notes:[],twinHint:false};
   const t=txt.replace(/\s+/g," ").replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0));
@@ -8528,6 +8552,62 @@ function parseCardText(txt,mode){
         }else races=[rseg];
         if(races.length)out.set.races=races.slice(0,5).concat(["","","","",""]).slice(0,5);
       }
+    }
+  }
+  // ── コンパクト表記のフォールバック（例：「無色[ジョーカーズ] (9)」「呪文：ジョーカーズ」「光水[種族]」）──
+  // カードタイプ：「呪文：」形式
+  if(!out.set.ctype&&/呪文\s*[：:]/.test(t))out.set.ctype="spell";
+  // コスト：ラベルが無く「(9)」形式のみ
+  if(out.set.cost==null&&out.set.cost2==null){
+    const mc=t.match(/[（(](\d{1,2})[）)]/);
+    if(mc)out.set.cost=+mc[1];
+  }
+  // 文明：ラベルが無く「無色[種族]」「光水[種族]」「文明(コスト)」形式
+  if(!out.set.civs){
+    let seg="";
+    let mv=t.match(/([光水闇火自然無色ゼロ／\/]{1,12})\s*[\[［]/);
+    if(!mv)mv=t.match(/([光水闇火自然無色ゼロ／\/]{1,12})\s*[（(]\s*\d/);
+    if(mv)seg=mv[1];
+    if(seg){
+      const cvs=[];
+      if(/無色|ゼロ/.test(seg))cvs.push("zero");
+      else for(const [jp,en] of [["自然","nature"],["光","light"],["水","water"],["闇","dark"],["火","fire"]])if(seg.includes(jp)&&!cvs.includes(en))cvs.push(en);
+      if(cvs.length)out.set.civs=cvs;
+    }
+  }
+  // 種族：ラベルが無く「[ジョーカーズ]」「呪文：ジョーカーズ」形式
+  if(!out.set.races){
+    let rr=null;
+    const mb=t.match(/[\[［]([ァ-ヶ一-龠ーヴ\u30fc・／\/A-Za-z0-9]{2,24})[\]］]/);
+    if(mb)rr=mb[1];
+    if(!rr){const ms=t.match(/(?:呪文|NEOクリーチャー|進化クリーチャー|クリーチャー)[：:]\s*([ァ-ヶ一-龠ーヴ\u30fc・／\/]{2,30})/);if(ms)rr=ms[1];}
+    if(rr){
+      rr=rr.replace(/[\s　]/g,"");
+      const races=/[／\/]/.test(rr)?rr.split(/[／\/]/).map(s=>s.trim()).filter(Boolean):[rr];
+      if(races.length)out.set.races=races.slice(0,5).concat(["","","","",""]).slice(0,5);
+    }
+  }
+  // ── 代替コスト / G・ゼロ の条件式を自動設定 ──
+  if(/G・?ゼロ/.test(t)){
+    if(out.set.altCost==null)out.set.altCost=0;
+    const seg=(t.split(/G・?ゼロ[：:]?/)[1]||"").split(/あれば|なら/)[0];
+    const cond=condFromPhrase(seg);
+    if(cond&&!out.set.altCond)out.set.altCond=cond;
+    out.notes.push(`💡 G・ゼロ：代替コスト0${cond?`＋条件式「${cond}」`:""}を自動設定しました`);
+  }else if(/コストを支払(?:わず|わないで|うかわり)/.test(t)&&out.set.altCost==null){
+    const seg=(t.split(/あれば|なら/)[0]||"");
+    const cond=condFromPhrase(seg);
+    if(cond){out.set.altCond=cond;out.notes.push(`💡 代替コストの条件式「${cond}」を自動設定（支払い数は代替コスト欄で指定）`);}
+  }
+  // ── 本文中の「[ゾーン]に〜がN枚以上/以下」条件を候補として通知（該当効果の条件欄に貼れる）──
+  {
+    const seen=new Set();
+    const re=/(?:バトルゾーン|マナゾーン|墓地|シールド|手札|山札)[^。■]*?[ァ-ヶ一-龠ーヴ\u30fc・A-Za-z0-9]{2,20}?が[^。■]*?\d+\s*(?:枚|体|つ|個)?(?:以上|以下)/g;
+    let mm;
+    while((mm=re.exec(t))){
+      const cond=condFromPhrase(mm[0]);
+      if(cond&&!seen.has(cond)){seen.add(cond);out.notes.push(`💡 条件式候補：${cond}`);}
+      if(seen.size>=4)break;
     }
   }
   // キーワード能力（付与文を除外したtSelfで判定）
@@ -17106,10 +17186,10 @@ function zoneCondOk(expr,pi){
           return op3===">="?a>=b:op3==="<="?a<=b:op3===">"?a>b:op3==="<"?a<b:a===b;
         }
       }
-      const m=t.match(/^(マナ|墓地合計|相手墓地|墓地|盾合計|相手盾|盾|相手バトル|バトル|相手手札|手札|山札)(?:：|:)?([^<>=]*)(>=|<=|=)(\d+)$/);
+      const m=t.match(/^(マナ|墓地合計|相手墓地|墓地|盾合計|相手盾|盾|相手バトル|バトルマナ|バトル|相手手札|手札|山札)(?:：|:)?([^<>=]*)(>=|<=|=)(\d+)$/);
       if(!m)return false;
       const zn=m[1],filt=(m[2]||"").trim().replace(/^[のにはがを、]+/,"").replace(/[のにはがを、]+$/,""),opr=m[3],n=+m[4];
-      const arrs={"マナ":Z.mana,"墓地":Z.grave,"相手墓地":OZ.grave,"墓地合計":[...Z.grave,...OZ.grave],"盾":Z.shield,"相手盾":OZ.shield,"盾合計":[...Z.shield,...OZ.shield],"バトル":Z.battle,"相手バトル":OZ.battle,"手札":Z.hand,"相手手札":OZ.hand,"山札":Z.deck}[zn];
+      const arrs={"マナ":Z.mana,"墓地":Z.grave,"相手墓地":OZ.grave,"墓地合計":[...Z.grave,...OZ.grave],"盾":Z.shield,"相手盾":OZ.shield,"盾合計":[...Z.shield,...OZ.shield],"バトル":Z.battle,"バトルマナ":[...Z.battle,...Z.mana],"相手バトル":OZ.battle,"手札":Z.hand,"相手手札":OZ.hand,"山札":Z.deck}[zn];
       if(!arrs)return false;
       let cnt;
       if(!filt)cnt=arrs.length;
