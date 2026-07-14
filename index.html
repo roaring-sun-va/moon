@@ -3235,21 +3235,7 @@ function emitEvent(actor,type){
     sfx("flip");
     toast(`⚡誘発確認（${WATCH_LABEL[type]}時）：${names.join("、")}`);
   }
-  if(S.vs){
-    if(type==="spell"){
-      // 呪文はエレメントでもある。spell監視を優先し、無ければelem監視を、1カードにつき1回だけ確実に発火。
-      const watcher=actor===0?1:0;
-      for(const wc of zonesOf(watcher).battle){
-        const wr=getReg(wc);
-        if(!wr||!wr.watchFx||!wr.watchFx.length||isSealed(wc)||isIgnored(wc,watcher))continue;
-        let wfx=wr.watchFx.filter(w=>w.ev==="spell");
-        if(!wfx.length)wfx=wr.watchFx.filter(w=>w.ev==="elem");
-        if(wfx.length){toast(`⚡誘発処理：${faceNameOf(wc)}`);runFxList(watcher,wfx,wc);}
-      }
-    }else{
-      runWatchFx(actor===0?1:0,type);
-    }
-  }
+  if(S.vs)runWatchFx(actor===0?1:0,type);
   if(type==="summon"){
     const AZ0=zonesOf(actor);
     const news0=AZ0.battle.filter(x=>arrived.has(x.id)&&!x._pfAsked);
@@ -16428,8 +16414,8 @@ $("btnNextTurn").addEventListener("click",async function(){
       const cands=Zp.hand.filter(h=>{const r=getReg(h);return r&&r.petensy;});
       for(const h of [...cands]){
         const rH=getReg(h);
-        const met=landed>=3;
-        const go=await ask(`🌀 ペテンシー型（${faceNameOf(h)}）\nこのターンの着地数：${landed}体（発動条件：3体以上）${met?"":"\n※カウントが実際と違う場合も、盤面を見てご自身で判断できます"}\nコストを支払わずに${rH.ctype==="spell"?"唱え":"使い"}ますか？`);
+        if(landed<3)continue; // 発動条件：そのターン クリーチャーが3体以上出ていれば。0〜2体では反応しない
+        const go=await ask(`🌀 ペテンシー型（${faceNameOf(h)}）\nこのターンの着地数：${landed}体（発動条件：3体以上・成立）\nコストを支払わずに${rH.ctype==="spell"?"唱え":"使い"}ますか？`);
         if(!go)continue;
         snap();
         const hi=Zp.hand.findIndex(x=>x.id===h.id);
