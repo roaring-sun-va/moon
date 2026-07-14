@@ -4120,6 +4120,7 @@ const FX_TYPES=[
   ["foeSelfBounce","相手は自身のクリーチャーをn体選んで手札に戻す（相手が選ぶ）"],
   ["shieldPickNew","相手クリーチャーをn体選んで新しいシールドに追加（対象選択・表向き）"],
   ["shieldPickTuck","相手クリーチャーをn体選んで既存のシールドに表向きで重ねる（対象選択）"],
+  ["foeShieldGrave","相手のシールドをn枚選んで持ち主の墓地に置く（ブレイクせず直接墓地）"],
   ["grsummon","GR召喚 n体（超GRの上から）"],
   ["tutor","山札から好きなカードをn枚 手札に加える（TCG式・全部見える）"],
   ["tutorDMPS","山札から条件に合うカードをn枚 手札へ（デュエプレ式・候補のみ表示／無ければ不発）"],
@@ -4668,6 +4669,7 @@ const MODE_FX_ALIAS={
   "マナ加速":"charge","ブースト":"charge","チャージ":"charge","マナブースト":"charge",
   "タップマナ":"chargeTap","タップイン加速":"chargeTap",
   "公開":"reveal","見る":"look","のぞき見":"look",
+  "相手盾墓地におく":"foeShieldGrave","相手盾墓地":"foeShieldGrave","相手シールド墓地":"foeShieldGrave",
 };
 function parseModeChoice(line){
   const s=String(line||"");
@@ -4856,6 +4858,21 @@ async function runFxList(pi,list,srcCard){
         afterHandDiscard(op,cD);
         sfx("grave");renderAll();
       }
+    }else if(f.t==="foeShieldGrave"){
+      // 🛡→墓地：相手のシールドをn枚選んで持ち主の墓地に直接置く（ブレイクしない）
+      if(!S.vs){toast("（ソロのためスキップ：相手のシールドがありません）");continue;}
+      for(let i=0;i<n;i++){
+        if(!OZ.shield.length){toast("相手のシールドがありません");break;}
+        const j=OZ.shield.length===1?0:await pickCard(`🛡→墓地：相手のシールドを1つ選ぶ（${i+1}/${n}）`,OZ.shield,{});
+        if(j===null)break;
+        const sh=OZ.shield.splice(j,1)[0];
+        if(sh.under&&sh.under.length){sh.under.splice(0).forEach(u=>{u.faceup=true;OZ.grave.push(u);});}
+        sh.faceup=true;sh.tapped=false;sh.mark=false;
+        OZ.grave.push(sh);
+        toast(`🛡→墓地：${S.players[op].label}のシールドを1つ墓地へ`);
+        renderAll();
+      }
+      sfx("grave");
     }else if(f.t==="peepShield"){
       // 🛡 パクリオ型：相手の手札を見てn枚選び、裏向きの新しいシールドとして加える
       if(!S.vs){toast("（ソロのためスキップ：相手の手札がありません）");continue;}
@@ -6934,15 +6951,33 @@ async function execAttack(pi,id,tg){
       if(!rsx)continue;
       const atkFx=(rsx.watchFx||[]).filter(w=>["selfAtk","selfAtkC","selfAtkP"].includes(w.ev)&&w.fx&&w.fx.length).flatMap(w=>w.fx);
       const cipFx=(rsx.faces&&rsx.faces[0]&&rsx.faces[0].length)?rsx.faces[0]:null;
-      if(!atkFx.length&&!cipFx)continue;
+      const md=(rsx.modeN|0);
+      if(!atkFx.length&&!cipFx&&md<=0)continue;
       const opts=[];
       if(atkFx.length)opts.push("⚡ 攻撃時の能力を実行");
-      if(cipFx)opts.push("✨ 登録効果を実行（任意）");
+      if(md>0)opts.push("🎯 選択効果を実行");
+      if(cipFx)opts.push("✨ 登録効果(出た時)を実行（任意）");
       opts.push("使わない");
       const j=await askChoice(`🔗 超魂X（攻撃時）：下の《${faceNameOf(sx)}》の能力（攻撃：${faceNameOf(c)}）`,opts);
       if(j===null||opts[j]==="使わない")continue;
       snap();
-      if(opts[j].startsWith("⚡")){toast(`🔗 超魂X 攻撃時：${faceNameOf(sx)}`);await runFxList(pi,atkFx,c);}
+      const lbl=opts[j];
+      if(lbl.startsWith("⚡")){toast(`🔗 超魂X 攻撃時：${faceNameOf(sx)}`);await runFxList(pi,atkFx,c);}
+      else if(lbl.startsWith("🎯")){
+        const parsed=String(rsx.modeOpts||"").split("\n").map(x=>x.trim()).filter(Boolean).map(parseModeChoice);
+        const rest=parsed.slice();
+        for(let i=0;i<md;i++){
+          const list2=rsx.modeDup?parsed:rest;
+          if(!list2.length)break;
+          const jj=await askChoice(`《${faceNameOf(sx)}》選択効果（${i+1}/${md}回目）`,[...list2.map(o=>o.label),"以降選ばない"]);
+          if(jj===null||jj>=list2.length)break;
+          const chosen=list2[jj];
+          if(!rsx.modeDup)rest.splice(jj,1);
+          toast(`✅ 効果宣言：${chosen.label}`);
+          renderAll();
+          if(chosen.fx&&chosen.fx.length)await runFxList(pi,chosen.fx,c);
+        }
+      }
       else{toast(`🔗 超魂X：${faceNameOf(sx)} の登録効果を実行`);await runFxList(pi,cipFx,c);}
       if(!Z.battle.find(x=>x.id===id)){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
     }
