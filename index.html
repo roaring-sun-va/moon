@@ -4126,9 +4126,9 @@ const FX_TYPES=[
   ["tapOpN","相手のクリーチャーをn体まで選んでタップ（「〜体までタップ」型）"],
   ["turnLock","⛔ ターン限定ロックを設定（実行時に対象/種別/条件/期間を指定・5000VT後半効果型）"],
   ["foeAtkLockP","⚔ 今バトルゾーンにいる相手クリーチャーは、次の自分のターン開始時までプレイヤーを攻撃できない（ドギラゴールデン型・後から出た分は対象外）"],
+  ["lockFoeAtkP","🚫 相手クリーチャーをn体まで選び、次の自分のターン開始時までプレイヤーを攻撃できなくする"],
   ["charge","n枚マナ加速（山上→マナ）"],
-  ["graveToMana","⚰→🔷 自分の墓地から条件に合うカードをn枚マナゾーンに置く（条件欄で対象を指定）"],
-  ["zoneMove","↔ 自分の〔元〕から条件に合うカードをn枚〔先〕へ移動（条件欄に「墓地→マナ:スノーフェアリー」のように元→先:対象を指定）"],
+  ["zoneMove","↔ 自分の〔元〕から条件に合うカードをn枚〔先〕へ移動（条件欄に「墓地→マナ:スノーフェアリー」のように元→先:対象を指定・墓地→マナもこれで）"],
   ["chargeTap","n枚マナ加速（山上→タップしてマナに置く）"],
   ["mill","山上n枚を墓地へ"],
   ["millOpp","相手の山札の上からn枚を墓地へ"],
@@ -5363,6 +5363,21 @@ async function runFxList(pi,list,srcCard){
       }
       sfx("ok");renderAll();
       toast(`⚔ ${srcCard?faceNameOf(srcCard):"効果"}：相手のクリーチャー${cnt}体は次の自分のターンまでプレイヤーを攻撃できない（今バトルゾーンにいる分のみ・後から出た分は対象外）`);
+    }else if(f.t==="lockFoeAtkP"){
+      // 🚫 相手クリーチャーをn体まで選び、次の自分のターン開始時までプレイヤーを攻撃できなくする
+      let cnt=0;
+      for(let i=0;i<n;i++){
+        const pool=OZ.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&!(x.buff&&x.buff.cantAtkP);});
+        if(!pool.length){if(i===0)toast("対象にできる相手クリーチャーがいません");break;}
+        const j=await pickCard(`🚫 相手プレイヤーを攻撃できなくする相手クリーチャーを選択（${i+1}/${n}）`,pool,{hint:"タップで選択・キャンセルで終了"});
+        if(j===null)break;
+        const x=pool[j];
+        x.buff=x.buff||{};x.buff.cantAtkP=true;
+        markBuffNext(x,["cantAtkP"],pi);
+        cnt++;renderAll();
+      }
+      if(cnt>0){sfx("ok");toast(`🚫 相手クリーチャー${cnt}体は次の自分のターンまでプレイヤーを攻撃できない`);}
+      renderAll();
     }else if(f.t==="deckRecruit"){
       await deckRecruitCore(pi,String(f.cond||"").trim(),n,5,"超探索");
     }else if(f.t==="deckSearch"){
@@ -5647,11 +5662,26 @@ function handesBlockedBy(owner){
   return zonesOf(owner).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoHandes&&!isSealed(x);})||null;
 }
 /* ---- 常在ロック（呪文/クリーチャー制限）＆ターン限定ロック ---- */
-function lockFilterOk(filt,r,c){
+/* ゾーンの対象枚数（動的コストロック用）：zn例「マナ」、filt例「スノーフェアリー」 */
+function zoneCountSimple(zn,filt,pi){
+  const zmap={"マナ":"mana","墓地":"grave","手札":"hand","盾":"shield","シールド":"shield","バトル":"battle","山札":"deck"};
+  const Z=zonesOf(pi);const arr=(Z&&Z[zmap[zn]])||[];
+  if(!filt)return arr.length;
+  return arr.filter(x=>{const rr=getReg(x);return (rr&&raceMatch(rr,filt))||String(x.name||"").includes(filt);}).length;
+}
+function lockFilterOk(filt,r,c,lockPi){
   // ロック対象条件：「／」区切り＝すべて満たすものだけを禁止（AND）。「X以外」で否定（例：光以外）
   if(!filt)return true;
   const civMap={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature","ゼロ":"zero"};
   const one=tk=>{
+    // 動的コスト：「コスト<=マナ:スノーフェアリー」＝ロック元(lockPi)のそのゾーンの対象枚数以下のコスト
+    const mDyn=tk.match(/^コスト(<=|>=|以下|以上)?(マナ|墓地|手札|盾|シールド|バトル|山札)[：:](.*)$/)||tk.match(/^コスト<=(マナ|墓地|手札|盾|シールド|バトル|山札)[：:]?(.*)$/);
+    if(mDyn&&lockPi!=null){
+      const cv=r&&r.cost!=null?+r.cost:null;if(cv==null)return false;
+      const zn=mDyn[mDyn.length-2]||mDyn[1], fl=(mDyn[mDyn.length-1]||"").trim();
+      const need=zoneCountSimple(zn,fl,lockPi);
+      return cv<=need;
+    }
     const mC=tk.match(/^コスト(\d+)(以下|以上)$/);
     if(mC){const cv=r&&r.cost!=null?+r.cost:null;if(cv==null)return false;return mC[2]==="以下"?cv<=+mC[1]:cv>=+mC[1];}
     const mP=tk.match(/^パワー(\d+)(以下|以上)$/);
@@ -5681,7 +5711,7 @@ function stLockerOf(pi,key,filtKey,r,c){
   for(const b of zonesOf(op2).battle){
     const rb=getReg(b);
     if(!rb||isSealed(b)||isIgnored(b,op2))continue;
-    if(rb[key]&&lockFilterOk(rb[filtKey],r,c))return b;
+    if(rb[key]&&lockFilterOk(rb[filtKey],r,c,op2))return b;
     if(b.hyper&&rb[hmKey]&&lockFilterOk(rb[hmFiltKey],r,c))return b;
   }
   return null;
@@ -9161,10 +9191,12 @@ function parseCardText(txt,mode){
   if(out.set.pKakumei)delete out.set.kakumei;
   // 「相手プレイヤーを攻撃できない」は cantAtkP のみ（全攻撃不可の cantAtk は外す）
   if(out.set.cantAtkP)delete out.set.cantAtk;
-  // 「相手のクリーチャー1体を選ぶ…そのクリーチャーは相手プレイヤーを攻撃できない」は相手への一時付与＝自身の常在ではないので外す
+  // 「相手のクリーチャー1体を選ぶ…そのクリーチャーは相手プレイヤーを攻撃できない」は相手への一時付与＝自身の常在ではないので外し、効果として登録
   if((out.set.cantAtkP||out.set.cantAtk)&&/(?:相手の)?クリーチャー\d*体?を選/.test(t)&&!/このクリーチャーは/.test(t)){
     delete out.set.cantAtkP;delete out.set.cantAtk;
-    out.notes.push("💡「相手クリーチャー1体を選んで攻撃できなくする」型は、効果で相手クリーチャーに一時ロックを付ける処理です（自身の常在ではありません）。極限ファイナル革命P'S型の相手攻撃ロックか手動で設定してください");
+    const nn=(t.match(/クリーチャー(\d+)体?を選/)||[])[1];
+    out.fx.push({t:"lockFoeAtkP",n:nn?+nn:1});
+    out.notes.push("💡「相手クリーチャーを選んで相手プレイヤーを攻撃できなくする」効果として登録しました（次の自分のターン開始時まで）");
   }
   // 条件付きキーワード付与（「〜あれば/なら、『ブロッカー』を得る」等）→ 条件常在(cstFx/cstCond)に。無条件フラグは外す
   {
@@ -9284,14 +9316,18 @@ function parseCardText(txt,mode){
   }
   // 常在ロック
   {
-    const mSL=t.match(/相手は(?:、)?(?:コスト(\d+)以下の)?呪文を(?:唱えられない|唱えることができない)/);
+    const mSL=t.match(/相手は[、,]?[^。■]*?呪文を(?:唱えられない|唱えることができない)/);
     if(mSL){
       // 「攻撃中」「攻撃する時」「このターン」等の一時的ロックは常在にしない（手動運用）
       const ctx=t.slice(Math.max(0,mSL.index-26),mSL.index);
       if(/攻撃中|攻撃する時|攻撃している|このターン|その(?:クリーチャーの)?攻撃|バトル中/.test(ctx)){
         out.notes.push("💡「攻撃中は相手は呪文を唱えられない」等の一時的ロックは常在ではありません。常在の呪文ロックはOFFのまま、攻撃時に手動でロック運用してください");
       }else{
-        const filt=mSL[1]?`コスト${mSL[1]}以下`:"";
+        const mFix=t.match(/コスト(\d+)以下の?呪文を(?:唱えられない|唱えることができない)/);
+        let filt=mFix?`コスト${mFix[1]}以下`:"";
+        // 動的コスト：「〔ゾーン〕にある〔対象〕の枚数以下のコストの呪文」→ コスト<=ゾーン:対象
+        const mDynC=t.match(/(マナ(?:ゾーン)?|墓地|手札|シールド|山札)に(?:ある)?([ァ-ヶー・ｦ-ﾟ一-龠]{2,12})?の?枚数以下のコスト/);
+        if(mDynC){const zn={"マナ":"マナ","墓地":"墓地","手札":"手札","シールド":"盾","山札":"山札"}[mDynC[1].replace(/ゾーン/,"")]||"マナ";filt=`コスト<=${zn}:${mDynC[2]||""}`;}
         // ハイパーモード/Zラッシュのカードは、その呪文ロックをHM連動（解放中のみ）として登録
         if(/ハイパーモード|Ｚラッシュ|Zラッシュ/.test(t)){
           out.set.hmLockSpell=true; if(filt)out.set.hmLockSpellF=filt;
