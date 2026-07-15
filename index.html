@@ -1158,6 +1158,21 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="number" id="fxCstPow" style="width:100px" placeholder="0" min="0">
         <input type="text" id="fxCstPowCond" style="flex:1;min-width:160px" placeholder="条件（例：マナ:ボルシャック／ルピア>=3・空欄＝常時）">
       </div>
+      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;flex:1 1 100%">
+        <span style="font-size:12px;font-weight:700">🔢 数だけパワー</span>
+        <span style="font-size:12px">パワー</span>
+        <input type="number" id="fxPowPer" placeholder="±例1000" step="500" style="width:90px">
+        <span style="font-size:12px">×</span>
+        <select id="fxPowPerWho" style="width:auto;flex:0 0 80px"><option value="self">自分の</option><option value="opp">相手の</option><option value="both">両者の</option></select>
+        <select id="fxPowPerZone" style="width:auto;flex:0 0 110px">
+          <option value="mana">マナ</option><option value="grave">墓地</option><option value="hand">手札</option><option value="battle">バトルゾーン</option><option value="shield">シールド</option><option value="deck">山札</option>
+        </select>
+        <span style="font-size:12px">の枚数だけ（空欄=なし）</span>
+        <input type="text" id="fxPowPerFilt" list="raceList" placeholder="対象条件（種族/文明/コスト等・「／」区切り・空欄＝全部）" style="flex:1;min-width:150px">
+        <label style="font-size:12px"><input type="checkbox" id="fxPowPerExSelf"> このカード自身は数えない</label>
+        <label style="font-size:12px"><input type="checkbox" id="fxPowPerAtk"> 攻撃している時だけ</label>
+        <label style="font-size:12px"><input type="checkbox" id="fxPowPerBattle"> バトル中だけ</label>
+      </div>
       <div class="row">
         <span style="font-size:12px;font-weight:700">パワーアタッカー ＋</span>
         <input type="number" id="fxPA" style="width:100px" placeholder="0" min="0">
@@ -1404,11 +1419,6 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
-        <span style="font-size:12px;font-weight:700">💠 各ターン最初の召喚を軽減</span>
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px">コスト−<input type="number" id="fxFirstRed" min="0" placeholder="0" style="width:56px"></label>
-        <input type="text" id="fxFirstRedF" list="raceList" placeholder="対象（種族/名前・「／」区切り・空欄＝すべてのクリーチャー）・コッコ・ルピア型" style="flex:1;min-width:150px">
-      </div>
-      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;font-weight:700">シンパシー</span>
         <input type="text" id="fxSympathy" list="raceList" placeholder="種族/名前／12000以上／コスト5以上（「／」区切り複数OK）" style="flex:1;min-width:130px">
         <select id="fxSymX" style="width:auto;flex:0 0 96px">
@@ -1527,21 +1537,6 @@ body.shake{animation:bodyShake .4s ease-out}
         <div style="flex:1 1 100%;font-size:12px;font-weight:900;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:2px;margin-top:6px">常在効果（場にある間）</div>
         <label><input type="checkbox" id="fxStManaTap"> 相手のマナはタップして置かれる</label>
         <label><input type="checkbox" id="fxStAllSA"> 自分のクリーチャー全てスピードアタッカー</label>
-        <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;flex:1 1 100%">
-          <span style="font-size:12px;font-weight:700">🔢 数だけパワー</span>
-          <span style="font-size:12px">パワー</span>
-          <input type="number" id="fxPowPer" placeholder="±例1000" step="500" style="width:90px">
-          <span style="font-size:12px">×</span>
-          <select id="fxPowPerWho" style="width:auto;flex:0 0 80px"><option value="self">自分の</option><option value="opp">相手の</option><option value="both">両者の</option></select>
-          <select id="fxPowPerZone" style="width:auto;flex:0 0 110px">
-            <option value="mana">マナ</option><option value="grave">墓地</option><option value="hand">手札</option><option value="battle">バトルゾーン</option><option value="shield">シールド</option><option value="deck">山札</option>
-          </select>
-          <span style="font-size:12px">の枚数だけ（空欄=なし）</span>
-          <input type="text" id="fxPowPerFilt" list="raceList" placeholder="対象条件（種族/文明/コスト等・「／」区切り・空欄＝全部）" style="flex:1;min-width:150px">
-          <label style="font-size:12px"><input type="checkbox" id="fxPowPerExSelf"> このカード自身は数えない</label>
-          <label style="font-size:12px"><input type="checkbox" id="fxPowPerAtk"> 攻撃している時だけ</label>
-          <label style="font-size:12px"><input type="checkbox" id="fxPowPerBattle"> バトル中だけ</label>
-        </div>
         <div class="row" style="gap:6px 12px;flex-wrap:wrap;align-items:center">
           <span style="font-size:12px;font-weight:700">常在付与（自分のクリーチャー全員）：</span>
           <label><input type="checkbox" id="fxAGMach"> マッハF</label>
@@ -1618,6 +1613,11 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="spell">呪文のみ</option>
           </select>
           <input type="text" id="fxStCostF" list="raceList" placeholder="対象（種族/文明/名前・「／」区切り・空欄＝全て）" style="flex:1;min-width:150px">
+        </div>
+        <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
+          <span style="font-size:12px;font-weight:700;color:#4ade80">💠 各ターン最初の召喚 −</span>
+          <input type="number" id="fxFirstRed" min="0" placeholder="0" style="width:70px">
+          <input type="text" id="fxFirstRedF" list="raceList" placeholder="対象（種族/名前・「／」区切り・空欄＝すべてのクリーチャー）・コッコ・ルピア型" style="flex:1;min-width:150px">
         </div>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
           <span style="font-size:12px;font-weight:700;color:#f87171">相手のコスト ＋</span>
@@ -4175,6 +4175,9 @@ const FX_TYPES=[
   ["freeSummon","コストを支払わずにクリーチャーを召喚（実行時に元ゾーンとカードを選択・踏み倒し）"],
   ["deckRecruit","🔎 山札から条件に合うカードをn体バトルゾーンへ（超探索踏み倒し・5種提示・条件欄で対象を指定・ボルシャック・NEX型）→山札シャッフル"],
   ["deckSearch","🔎 山札から条件に合うカードをn体バトルゾーンへ（探索踏み倒し・3種提示のランダム・条件欄で対象を指定）→山札シャッフル"],
+  ["graveRecruit","⚰ 墓地から条件に合うクリーチャーをn体バトルゾーンへ（蘇生・条件欄で対象を指定）"],
+  ["handRecruit","✋ 手札から条件に合うクリーチャーをn体バトルゾーンへ（踏み倒し・条件欄で対象を指定）"],
+  ["destroyFilt","💥 条件に合う相手クリーチャーをすべて破壊（条件欄でパワー/コスト等を指定・空欄＝全部）"],
   ["freeCast","コストを支払わずに呪文を唱える（実行時に元ゾーンとカードを選択・解決中へ）"],
   ["underDeck","山札の上からn枚を裏向きでこのカードの下に置く（G城/クリーチャーの下・ザ・ラムーン型）"],
   ["atkNoLeaveSelf","攻撃中のクリーチャーは離れない（このターン・味方攻撃時付与allyAtkと併用）"],
@@ -4738,23 +4741,27 @@ function parseModeChoice(line){
   const cmd=s.slice(at+1).trim();
   const fx=[];
   for(const part of cmd.split(/[+＋]/).map(x=>x.trim()).filter(Boolean)){
-    const m=part.match(/^([^\d:：\s]+)[\s:：]*([0-9０-９]*)$/);
+    const m=part.match(/^([^\d:：|｜\s]+)[\s:：]*([0-9０-９]*)(?:\s*[|｜]\s*(.+))?$/);
     if(!m)continue;
     const key=m[1].trim();
     const n=+String(m[2]||"1").replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))||1;
+    const cond=m[3]?m[3].trim():"";
     const mapped=MODE_FX_ALIAS[key]||key;
-    if(typeof FX_TYPES!=="undefined"&&FX_TYPES.some(t=>t[0]===mapped))fx.push({t:mapped,n});
+    if(typeof FX_TYPES!=="undefined"&&FX_TYPES.some(t=>t[0]===mapped))fx.push(cond?{t:mapped,n,cond}:{t:mapped,n});
   }
   return {label:label||s.trim(),fx};
 }
 /* 🔎 探索/超探索の踏み倒し共通処理：山札から条件に合うカードをn体バトルゾーンへ。
    searchN=3（探索）/5（超探索）＝候補をカード名でユニーク化し、種類が多ければランダムにsearchN種だけ提示（デュエプレ仕様）。searchN=0＝全部提示（確定）。 */
-async function deckRecruitCore(pi,filt,n,searchN,labelJa){
+async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone){
+  zone=zone||"deck";
   const Z=zonesOf(pi);
+  const src=Z[zone]||Z.deck;
+  const zoneJa={deck:"山札",grave:"墓地",hand:"手札",mana:"マナ"}[zone]||"山札";
   let put=0;
   for(let i=0;i<n;i++){
-    let pool=Z.deck.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x));});
-    if(!pool.length){if(i===0)toast(`山札に該当カードなし${filt?`（${filt}）`:""}`);break;}
+    let pool=src.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x));});
+    if(!pool.length){if(i===0)toast(`${zoneJa}に該当カードなし${filt?`（${filt}）`:""}`);break;}
     if(searchN>0){
       const byName=new Map();
       for(const x of pool){const nm=faceNameOf(x);if(!byName.has(nm))byName.set(nm,x);}
@@ -4762,18 +4769,18 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa){
       if(reps.length>searchN){for(let k=reps.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[reps[k],reps[j]]=[reps[j],reps[k]];}reps=reps.slice(0,searchN);}
       pool=reps;
     }
-    const j=await pickCard(`🔎 ${labelJa}（${i+1}/${n}）：出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:searchN>0?`${searchN}種まで提示／タップで選択・キャンセルで終了`:"タップで選択・キャンセルで終了"});
+    const j=await pickCard(`🔎 ${labelJa}（${i+1}/${n}）：${zoneJa}から出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:searchN>0?`${searchN}種まで提示／タップで選択・キャンセルで終了`:"タップで選択・キャンセルで終了"});
     if(j===null)break;
     const tgt=pool[j];
-    const di=Z.deck.findIndex(x=>x.id===tgt.id);
+    const di=src.findIndex(x=>x.id===tgt.id);
     if(di<0)continue;
-    const cc=Z.deck.splice(di,1)[0];cc.faceup=true;cc.tapped=false;
+    const cc=src.splice(di,1)[0];cc.faceup=true;cc.tapped=false;
     Z.battle.push(cc);markArrive(cc);
     emitEvent(pi,"summon");enqueueFx(pi,cc);
     put++;toast(`🔎 ${labelJa}：${faceNameOf(cc)} をバトルゾーンへ`);
     renderAll();await waitFxIdle();
   }
-  if(put>0){shuffle(Z.deck);toast("🔀 山札をシャッフル");}
+  if(put>0&&zone==="deck"){shuffle(Z.deck);toast("🔀 山札をシャッフル");}
   renderAll();
 }
 async function runFxList(pi,list,srcCard){
@@ -4781,7 +4788,7 @@ async function runFxList(pi,list,srcCard){
   for(const f of list){
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
-    if(f.cond&&f.t!=="nextCost"&&f.t!=="bounceFilt"&&f.t!=="retrieveHand"&&f.t!=="diaBliz"&&f.t!=="deckRecruit"&&f.t!=="deckSearch"&&!zoneCondOk(f.cond,pi)){
+    if(f.cond&&f.t!=="nextCost"&&f.t!=="bounceFilt"&&f.t!=="retrieveHand"&&f.t!=="diaBliz"&&f.t!=="deckRecruit"&&f.t!=="deckSearch"&&f.t!=="graveRecruit"&&f.t!=="handRecruit"&&f.t!=="destroyFilt"&&!zoneCondOk(f.cond,pi)){
       toast(`条件未達（${f.cond}）：効果をスキップ`);
       continue;
     }
@@ -5310,6 +5317,21 @@ async function runFxList(pi,list,srcCard){
       await deckRecruitCore(pi,String(f.cond||"").trim(),n,5,"超探索");
     }else if(f.t==="deckSearch"){
       await deckRecruitCore(pi,String(f.cond||"").trim(),n,3,"探索");
+    }else if(f.t==="graveRecruit"){
+      await deckRecruitCore(pi,String(f.cond||"").trim(),n,0,"蘇生","grave");
+    }else if(f.t==="handRecruit"){
+      await deckRecruitCore(pi,String(f.cond||"").trim(),n,0,"踏み倒し","hand");
+    }else if(f.t==="destroyFilt"){
+      // 💥 条件(f.cond)に合う相手クリーチャーをすべて破壊
+      const filt=String(f.cond||"").trim();
+      const OZt=zonesOf(op);
+      const targets=OZt.battle.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x));});
+      if(!targets.length){toast(`該当する相手クリーチャーなし${filt?`（${filt}）`:""}`);}
+      else{
+        for(const x of targets.slice()){await destroyCreature(op,x);}
+        toast(`💥 相手の${filt?filt+"の":""}クリーチャー${targets.length}体を破壊`);
+        renderAll();
+      }
     }else if(f.t==="shieldPickNew"||f.t==="shieldPickTuck"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
       const isTuck=f.t==="shieldPickTuck";
@@ -8770,7 +8792,15 @@ function extractEffects(text,mode){
     }
     // 破壊
     if(/破壊する/.test(cl)&&/相手|すべて|全て/.test(cl)){
-      const n=numOf(cl,/(\d+)体/); fx.push({t:"destroyRnd",n});
+      // 「パワーN以下/コストN以下のクリーチャーをすべて破壊」は条件付き全破壊、それ以外はランダム破壊
+      const mPw=cl.match(/パワー(\d+)(以下|以上)/);
+      const mCo=cl.match(/コスト(\d+)(以下|以上)/);
+      if((mPw||mCo)&&/すべて|全て/.test(cl)){
+        const dcond=mPw?`パワー${mPw[1]}${mPw[2]}`:`コスト${mCo[1]}${mCo[2]}`;
+        fx.push({t:"destroyFilt",n:1,cond:dcond});
+      }else{
+        const n=numOf(cl,/(\d+)体/); fx.push({t:"destroyRnd",n});
+      }
     }
     // バウンス
     if(/手札に戻す/.test(cl)&&/相手/.test(cl)){
@@ -8789,10 +8819,21 @@ function extractEffects(text,mode){
     // 🔎 探索/超探索踏み倒し（山札から条件に合うカードをバトルゾーンへ・ボルシャック・NEX型）
     if(/山札(?:から|を見て|を見る)/.test(cl)&&/バトルゾーンに出/.test(cl)&&!/相手/.test(cl)){
       let filt="";
-      const mN=cl.match(/名前に《([^》]+)》とある/);
-      if(mN)filt=mN[1];
+      const names=[...cl.matchAll(/《([^》]+)》/g)].map(m=>m[1]);
+      if(names.length)filt=names.join("／");
       else{const mR=cl.match(/([ァ-ヶー・ｦ-ﾟ一-龠]{2,12})を(?:超)?探索/);if(mR&&!/山札/.test(mR[1]))filt=mR[1];}
       fx.push({t:/超探索/.test(cl)?"deckRecruit":"deckSearch",n:numOf(cl,/(\d+)(?:枚|体)/),cond:filt});
+    }
+    // ⚰ 墓地から蘇生 / ✋ 手札から踏み倒し（バトルゾーンに出す）。対象条件（種族/名前/コスト）を読み取る
+    else if(/(?:自分の)?(墓地|手札)から[^。■]*?バトルゾーンに出/.test(cl)&&!/相手/.test(cl)){
+      const fromGrave=/墓地から/.test(cl);
+      let filt="";
+      const names=[...cl.matchAll(/《([^》]+)》/g)].map(m=>m[1]);
+      if(names.length)filt=names.join("／");
+      const mC=cl.match(/コスト(\d+)(以下|以上)/);
+      if(mC){const cc=`コスト${mC[1]}${mC[2]}`;filt=filt?filt+"／"+cc:cc;}
+      if(!filt){const mR=cl.match(/([ァ-ヶー・ｦ-ﾟ一-龠]{2,12})(?:1?枚|1?体|を)[^。■]{0,8}バトルゾーンに出/);if(mR&&!/墓地|手札|クリーチャー/.test(mR[1]))filt=mR[1];}
+      fx.push({t:fromGrave?"graveRecruit":"handRecruit",n:numOf(cl,/(\d+)(?:枚|体)/),cond:filt});
     }
     // ↩ 回収（マナ/墓地/シールドから手札に戻す）。バトルゾーンからのバウンスは除外。ゾーンと対象タイプ/種族を読み取る
     if(/(?:マナ(?:ゾーン)?|墓地|シールド)から[^。■]{0,24}?手札に(?:戻す|加える)/.test(cl)&&!/バトルゾーン/.test(cl)&&!/相手/.test(cl)){
@@ -9037,7 +9078,8 @@ function parseCardText(txt,mode){
     const re=/(?:バトルゾーン|マナゾーン|墓地|シールド|手札|山札)[^。■]*?[ァ-ヶ一-龠ーヴ\u30fc・A-Za-z0-9]{2,20}?が[^。■]*?\d+\s*(?:枚|体|つ|個)?(?:以上|以下)/g;
     let mm;
     while((mm=re.exec(t))){
-      const cond=condFromPhrase(mm[0]);
+      if(/コストの?合計/.test(mm[0]))continue; // 「コスト合計N以下」は枚数条件ではないので候補にしない
+      const cond=condExprFrom(mm[0]);
       if(cond&&!seen.has(cond)){seen.add(cond);out.notes.push(`💡 条件式候補：${cond}`);}
       if(seen.size>=4)break;
     }
@@ -9225,9 +9267,9 @@ function parseCardText(txt,mode){
      tForFx=t.replace(/破壊された時[、,]?[\s\S]*?(?=[■●]|$)/,"");
    }}
   // ▶ モード選択（「次のうちいずれか〜選ぶ」＋▶で始まる選択肢）を検出して選択式(modeN/modeOpts)へ。
-  //    検出時は個別効果(faces)に振り分けない。各モードは可能な範囲で@記法に変換、無理ならラベルのみ（手動）。
-  const modeLines=t.split(/[\n]/).map(x=>x.trim()).filter(x=>/^[▶▷➤]/.test(x));
-  if(modeLines.length>=2){
+  //    改行が無く1行に▶が並ぶ場合もあるため、改行ではなく▶の直前で区切る。
+  const modeLines=t.split(/(?=[▶▷➤])/).map(x=>x.trim()).filter(x=>/^[▶▷➤]/.test(x));
+  if(modeLines.length>=2&&/いずれか|次の(?:うち|中から)/.test(t)){
     const mN=t.match(/いずれか\s*([0-9０-９]+|[1１一]つ|ひとつ|[2２二]つ)/);
     out.set.modeN=(mN&&/[2２二]/.test(mN[1]))?2:1;
     out.set.modeOpts=modeLines.map(line=>{
@@ -9235,13 +9277,13 @@ function parseCardText(txt,mode){
       const efx=extractEffects(body,mode);
       const label=body.length>22?body.slice(0,22)+"…":body;
       if(efx.length){
-        const cmd=efx.map(f=>`${f.t}${(f.n&&!FX_NO_N.has(f.t))?":"+f.n:""}`).join("+");
+        const cmd=efx.map(f=>`${f.t}${(f.n&&!FX_NO_N.has(f.t))?":"+f.n:""}${f.cond?"|"+f.cond:""}`).join("+");
         return `${label} @${cmd}`;
       }
       return label;
     }).join("\n");
-    if(/両方選ぶ|すべて選ぶ|全て選ぶ/.test(t))
-      out.notes.push("💡「〜があれば両方選ぶ」型：条件を満たす時は選択回数を手動で増やしてください（選択式の回数）");
+    if(/両方(?:を)?選ぶ|すべて選ぶ|全て選ぶ/.test(t))
+      out.notes.push("💡「〜があれば両方選ぶ」型：条件を満たす時は選択回数を手動で2にしてください（選択式の回数）");
     out.notes.push("💡 モード選択として登録しました。@記法が付かなかったモードは効果欄で対象や数値を手直ししてください");
     out._modeDetected=true;
   }
