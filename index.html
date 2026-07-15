@@ -5577,6 +5577,9 @@ function lockFilterOk(filt,r,c){
     if(mP){const pv=r&&r.power!=null?+r.power:null;if(pv==null)return false;return mP[2]==="以下"?pv<=+mP[1]:pv>=+mP[1];}
     if(tk==="多色")return !!(r&&r.civs&&r.civs.length>=2);
     if(tk==="単色")return !!(r&&r.civs&&r.civs.length===1&&r.civs[0]!=="zero");
+    if(tk==="クリーチャー")return !!(r&&r.ctype!=="spell");
+    if(tk==="呪文")return !!(r&&r.ctype==="spell");
+    if(tk==="ツインパクト")return !!(r&&(r.twin||r.ctype==="twinpact"));
     if(civMap[tk])return !!(r&&r.civs&&r.civs.includes(civMap[tk]));
     return !!((r&&raceMatch(r,tk))||String(faceNameOf(c)||c.name||"").includes(tk));
   };
@@ -8778,6 +8781,14 @@ function extractEffects(text,mode){
       else{const mR=cl.match(/([ァ-ヶー・ｦ-ﾟ一-龠]{2,12})を(?:超)?探索/);if(mR&&!/山札/.test(mR[1]))filt=mR[1];}
       fx.push({t:/超探索/.test(cl)?"deckRecruit":"deckSearch",n:numOf(cl,/(\d+)(?:枚|体)/),cond:filt});
     }
+    // ↩ 回収（マナ/墓地/シールドから手札に戻す）。バトルゾーンからのバウンスは除外。対象タイプ/種族も読み取る
+    if(/(?:マナ(?:ゾーン)?|墓地|シールド)から[^。■]{0,24}?手札に(?:戻す|加える)/.test(cl)&&!/バトルゾーン/.test(cl)&&!/相手/.test(cl)){
+      let rfilt="";
+      if(/クリーチャー(?!の効果)/.test(cl))rfilt="クリーチャー";
+      else if(/呪文/.test(cl))rfilt="呪文";
+      else{const mR=cl.match(/([ァ-ヶー・ｦ-ﾟ一-龠]{2,12})(?:を|\d*枚|1枚)[^。■]{0,6}手札に(?:戻す|加える)/);if(mR&&!/マナ|墓地|シールド|山札/.test(mR[1]))rfilt=mR[1];}
+      fx.push({t:"retrieveHand",n:numOf(cl,/(\d+)枚/),cond:rfilt});
+    }
     // 🛡 山札の上を自分のシールドに加える（シールド追加・シールド化）
     if(/山札の上から.{0,6}?(?:シールド化|シールド(?:ゾーン)?に(?:加え|置)|盾(?:に(?:加え|置)|化))/.test(cl)&&!/相手/.test(cl))fx.push({t:"deckShield",n:numOf(cl,/(\d+)枚/)});
     // 横差し（終葬/Q.Q.QX）
@@ -9085,6 +9096,8 @@ function parseCardText(txt,mode){
   }
   // マッドネス
   if(/マッドネス/.test(tSelf))out.set.madness="on";
+  else if(/相手の(?:カードの)?効果[^。■]*?手札から捨てられる時[^。■]*?バトルゾーンに出す/.test(t))out.set.madness="eternal";
+  else if(/手札から捨てられ[るた]時[^。■]*?(?:かわりに)?バトルゾーンに出す/.test(t))out.set.madness="on";
   // 侵略の条件（種族・コスト）
   m=t.match(/侵略[：: ]?〔?([^〕（(0-9]{1,12}?)(?:コスト)?(\d+)?[以上]*〕?/);
   if(/侵略/.test(t)){
