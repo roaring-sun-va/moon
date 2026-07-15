@@ -1154,6 +1154,11 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
       </div>
       <div class="row">
+        <span style="font-size:12px;font-weight:700">💪 条件付きパワー ＋</span>
+        <input type="number" id="fxCstPow" style="width:100px" placeholder="0" min="0">
+        <input type="text" id="fxCstPowCond" style="flex:1;min-width:160px" placeholder="条件（例：マナ:ボルシャック／ルピア>=3・空欄＝常時）">
+      </div>
+      <div class="row">
         <span style="font-size:12px;font-weight:700">パワーアタッカー ＋</span>
         <input type="number" id="fxPA" style="width:100px" placeholder="0" min="0">
         <span style="font-size:12px;font-weight:700">バトル中 ＋</span>
@@ -1809,10 +1814,11 @@ body.shake{animation:bodyShake .4s ease-out}
 
 <div class="olay" id="askOlay" style="z-index:600;align-items:center">
   <div class="panelbox" style="max-width:400px">
-    <div class="row" style="margin:0;justify-content:flex-end">
+    <div class="row" style="margin:0;justify-content:flex-end;gap:6px">
+      <button class="btn small ghost" id="askCopy" style="padding:4px 10px">📋 コピー</button>
       <button class="btn small ghost" id="askPeek" style="padding:4px 10px">👁 盤面を見る</button>
     </div>
-    <div id="askMsg" style="font-size:13px;line-height:1.7;font-weight:700;white-space:pre-line"></div>
+    <div id="askMsg" style="font-size:13px;line-height:1.7;font-weight:700;white-space:pre-line;user-select:text;-webkit-user-select:text"></div>
     <input type="number" id="askNum" min="1" inputmode="numeric" style="display:none">
     <input type="text" id="askTxt" style="display:none">
     <div class="row" id="askChoices" style="display:none"></div>
@@ -4166,7 +4172,8 @@ const FX_TYPES=[
   ["handShieldUp","手札から1枚選んで表向きにシールド化（サッヴァーク型・任意/新規盾or重ねるを選択）"],
   ["deckShield","🛡 自分の山札の上からn枚を裏向きでシールドゾーンに加える（シールド追加・シールド化）"],
   ["freeSummon","コストを支払わずにクリーチャーを召喚（実行時に元ゾーンとカードを選択・踏み倒し）"],
-  ["deckRecruit","🔎 山札から条件に合うカードをn体バトルゾーンへ（超探索踏み倒し・条件欄で対象を指定・ボルシャック・NEX型）→山札シャッフル"],
+  ["deckRecruit","🔎 山札から条件に合うカードをn体バトルゾーンへ（超探索踏み倒し・5種提示・条件欄で対象を指定・ボルシャック・NEX型）→山札シャッフル"],
+  ["deckSearch","🔎 山札から条件に合うカードをn体バトルゾーンへ（探索踏み倒し・3種提示のランダム・条件欄で対象を指定）→山札シャッフル"],
   ["freeCast","コストを支払わずに呪文を唱える（実行時に元ゾーンとカードを選択・解決中へ）"],
   ["underDeck","山札の上からn枚を裏向きでこのカードの下に置く（G城/クリーチャーの下・ザ・ラムーン型）"],
   ["atkNoLeaveSelf","攻撃中のクリーチャーは離れない（このターン・味方攻撃時付与allyAtkと併用）"],
@@ -4739,12 +4746,41 @@ function parseModeChoice(line){
   }
   return {label:label||s.trim(),fx};
 }
+/* 🔎 探索/超探索の踏み倒し共通処理：山札から条件に合うカードをn体バトルゾーンへ。
+   searchN=3（探索）/5（超探索）＝候補をカード名でユニーク化し、種類が多ければランダムにsearchN種だけ提示（デュエプレ仕様）。searchN=0＝全部提示（確定）。 */
+async function deckRecruitCore(pi,filt,n,searchN,labelJa){
+  const Z=zonesOf(pi);
+  let put=0;
+  for(let i=0;i<n;i++){
+    let pool=Z.deck.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x));});
+    if(!pool.length){if(i===0)toast(`山札に該当カードなし${filt?`（${filt}）`:""}`);break;}
+    if(searchN>0){
+      const byName=new Map();
+      for(const x of pool){const nm=faceNameOf(x);if(!byName.has(nm))byName.set(nm,x);}
+      let reps=[...byName.values()];
+      if(reps.length>searchN){for(let k=reps.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[reps[k],reps[j]]=[reps[j],reps[k]];}reps=reps.slice(0,searchN);}
+      pool=reps;
+    }
+    const j=await pickCard(`🔎 ${labelJa}（${i+1}/${n}）：出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:searchN>0?`${searchN}種まで提示／タップで選択・キャンセルで終了`:"タップで選択・キャンセルで終了"});
+    if(j===null)break;
+    const tgt=pool[j];
+    const di=Z.deck.findIndex(x=>x.id===tgt.id);
+    if(di<0)continue;
+    const cc=Z.deck.splice(di,1)[0];cc.faceup=true;cc.tapped=false;
+    Z.battle.push(cc);markArrive(cc);
+    emitEvent(pi,"summon");enqueueFx(pi,cc);
+    put++;toast(`🔎 ${labelJa}：${faceNameOf(cc)} をバトルゾーンへ`);
+    renderAll();await waitFxIdle();
+  }
+  if(put>0){shuffle(Z.deck);toast("🔀 山札をシャッフル");}
+  renderAll();
+}
 async function runFxList(pi,list,srcCard){
   const op=pi===0?1:0;
   for(const f of list){
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
-    if(f.cond&&f.t!=="nextCost"&&f.t!=="bounceFilt"&&f.t!=="retrieveHand"&&f.t!=="diaBliz"&&f.t!=="deckRecruit"&&!zoneCondOk(f.cond,pi)){
+    if(f.cond&&f.t!=="nextCost"&&f.t!=="bounceFilt"&&f.t!=="retrieveHand"&&f.t!=="diaBliz"&&f.t!=="deckRecruit"&&f.t!=="deckSearch"&&!zoneCondOk(f.cond,pi)){
       toast(`条件未達（${f.cond}）：効果をスキップ`);
       continue;
     }
@@ -5262,26 +5298,9 @@ async function runFxList(pi,list,srcCard){
       sfx("ok");renderAll();
       toast(`⚔ ${srcCard?faceNameOf(srcCard):"効果"}：相手のクリーチャー${cnt}体は次の自分のターンまでプレイヤーを攻撃できない（今バトルゾーンにいる分のみ・後から出た分は対象外）`);
     }else if(f.t==="deckRecruit"){
-      // 🔎 山札から条件(f.cond)に合うカードをn体バトルゾーンへ（超探索踏み倒し・ボルシャック・NEX型）→シャッフル
-      const filt=String(f.cond||"").trim();
-      let put=0;
-      for(let i=0;i<n;i++){
-        const pool=Z.deck.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x));});
-        if(!pool.length){if(i===0)toast(`山札に該当カードなし${filt?`（${filt}）`:""}`);break;}
-        const j=await pickCard(`🔎 超探索（${i+1}/${n}）：山札から出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:"タップで選択／キャンセルで終了"});
-        if(j===null)break;
-        const tgt=pool[j];
-        const di=Z.deck.findIndex(x=>x.id===tgt.id);
-        if(di<0)continue;
-        const cc=Z.deck.splice(di,1)[0];cc.faceup=true;cc.tapped=false;
-        Z.battle.push(cc);markArrive(cc);
-        emitEvent(pi,"summon");enqueueFx(pi,cc);
-        put++;
-        toast(`🔎 超探索：${faceNameOf(cc)} をバトルゾーンへ`);
-        renderAll();await waitFxIdle();
-      }
-      if(put>0){shuffle(Z.deck);toast("🔀 山札をシャッフル");}
-      renderAll();
+      await deckRecruitCore(pi,String(f.cond||"").trim(),n,5,"超探索");
+    }else if(f.t==="deckSearch"){
+      await deckRecruitCore(pi,String(f.cond||"").trim(),n,3,"探索");
     }else if(f.t==="shieldPickNew"||f.t==="shieldPickTuck"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
       const isTuck=f.t==="shieldPickTuck";
@@ -6170,6 +6189,11 @@ async function effPower(c,attacking,inBattle){
   if(c.sfActive&&r&&r.sforceFx==="pw"&&r.sforceN)p+=(+r.sforceN||0);
   if(c.buff)p+=(c.buff.pa||0)+(c.buff.pm||0);
   if(r)p+=powPerBonus(c,r,attacking);
+  // 条件付きパワー強化（「〔条件〕あれば、このクリーチャーのパワーを+N」）
+  if(r&&r.cstPow&&r.cstPowCond){
+    const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle.includes(c));
+    if(own!=null&&zoneCondOk(r.cstPowCond,own))p+=(+r.cstPow||0);
+  }
   return p;
 }
 /* 🛡 真・エスケープ：破壊に限らずバトルゾーンを離れる時に発動できる。
@@ -8598,6 +8622,8 @@ function renderFxEditor(){
   $("fxWatchTurnEndOpp").checked=!!FXEDIT.watch.turnEndOpp;
   $("fxWatchTurnEndBoth").checked=!!FXEDIT.watch.turnEndBoth;
   $("fxPA").value=FXEDIT.pa||"";
+  {const e=$("fxCstPow");if(e)e.value=FXEDIT.cstPow||"";}
+  {const e=$("fxCstPowCond");if(e)e.value=FXEDIT.cstPowCond||"";}
   $("fxPB").value=FXEDIT.pb||"";
   $("fxBreaks").value=FXEDIT.breaks||"1";
   $("fxGimmick").value=FXEDIT.gimmick||"";
@@ -8661,7 +8687,10 @@ function condExprFrom(clause){
   const has=/が(?:あれば|いれば|あり)|がいる/.test(c);
   // フィルタ（ツインパクト/種族/文明/呪文/クリーチャー/多色）
   let filt="";
-  if(/ツインパクト/.test(c))filt="ツインパクト";
+  // 名前に《X》（または《Y》）とあるカード → 名前フィルタ（「／」区切り＝いずれか）
+  const _names=[...c.matchAll(/《([^》]+)》/g)].map(mm=>mm[1]);
+  if(_names.length)filt=_names.join("／");
+  else if(/ツインパクト/.test(c))filt="ツインパクト";
   else if(/呪文/.test(c))filt="呪文";
   else if(/多色/.test(c))filt="多色";
   else{
@@ -8697,6 +8726,8 @@ function extractEffects(text,mode){
   const numOf=(s,re)=>{const m=s.match(re);return m?+m[1]:1;};
   for(const cl of clauses){
     const _before=fx.length;
+    // 「〜してもよい。そうしなかった場合〜」の分岐（選択しなかった時のオマケ）は選択依存なので自動化しない
+    if(/^(?:そうしなかった場合|しなかった場合|選ばなかった場合)/.test(cl))continue;
     // ドロー
     if(/引く/.test(cl)&&!/相手/.test(cl.split("引く")[0].slice(-8))){
       const n=numOf(cl,/(\d+)枚(?:を)?引く/); fx.push({t:"draw",n});
@@ -8739,13 +8770,13 @@ function extractEffects(text,mode){
       const n=numOf(cl,/(\d+)枚/);
       fx.push({t:/すべて見|全て見|好きな/.test(cl)?"tutor":"tutorDMPS",n});
     }
-    // 🔎 超探索踏み倒し（山札から条件に合うカードをバトルゾーンへ・ボルシャック・NEX型）
+    // 🔎 探索/超探索踏み倒し（山札から条件に合うカードをバトルゾーンへ・ボルシャック・NEX型）
     if(/山札(?:から|を見て|を見る)/.test(cl)&&/バトルゾーンに出/.test(cl)&&!/相手/.test(cl)){
       let filt="";
       const mN=cl.match(/名前に《([^》]+)》とある/);
       if(mN)filt=mN[1];
       else{const mR=cl.match(/([ァ-ヶー・ｦ-ﾟ一-龠]{2,12})を(?:超)?探索/);if(mR&&!/山札/.test(mR[1]))filt=mR[1];}
-      fx.push({t:"deckRecruit",n:numOf(cl,/(\d+)(?:枚|体)/),cond:filt});
+      fx.push({t:/超探索/.test(cl)?"deckRecruit":"deckSearch",n:numOf(cl,/(\d+)(?:枚|体)/),cond:filt});
     }
     // 🛡 山札の上を自分のシールドに加える（シールド追加・シールド化）
     if(/山札の上から.{0,6}?(?:シールド化|シールド(?:ゾーン)?に(?:加え|置)|盾(?:に(?:加え|置)|化))/.test(cl)&&!/相手/.test(cl))fx.push({t:"deckShield",n:numOf(cl,/(\d+)枚/)});
@@ -8801,6 +8832,9 @@ function parseCardText(txt,mode){
    if(mCU){out.set.stCostUp=mCU[2]?+mCU[2]:1;if(mCU[1]==="呪文")out.set.stCostUpT="spell";else if(mCU[1]==="クリーチャー")out.set.stCostUpT="creature";}}
   // ハンデス耐性（自分の手札は相手の効果で捨てられない）
   if(/(?:自分の)?手札は[、,]?[\s\S]{0,14}相手[\s\S]{0,14}捨てられない/.test(t))out.set.stNoHandes=true;
+  // 💪 条件付きパワー強化（「〔条件〕あれば、（この）クリーチャーのパワーを+N（する）」）。条件はcondExprFromで汎用的に。
+  {const mCP=t.match(/([^。■\n]*?(?:あれば|いれば|なら))[、,]?[^。■\n]*?(?:この)?(?:クリーチャーの)?パワーを\s*\+?\s*(\d{3,5})/);
+   if(mCP&&!/相手[^。■\n]{0,12}パワーを\s*\+/.test(t)){const cond=condExprFrom(mCP[1]);if(cond){out.set.cstPow=+mCP[2];out.set.cstPowCond=cond;out.notes.push({msg:`💪 条件付きパワー+${mCP[2]}（${cond}）を設定しました`,q:"条件付きパワー"});}}}
   // 💠 各ターン最初に召喚する〔対象〕のコスト軽減（コッコ・ルピア型／一撃奪取・文明+コスト条件型／種族指定なしの全体型）
   {const mFR=t.match(/(?:各ターン[、,]?)?(?:最初に|初めて)召喚する(.+?)の(?:召喚)?コストを(?:最大)?(\d+)(?:少なく|小さく)/);
    if(mFR){out.set.firstRed=+mFR[2];let tgt=mFR[1].trim().replace(/クリーチャー$/,"").replace(/[のな]$/,"").trim();out.set.firstRedF=tgt;}}
@@ -9207,7 +9241,17 @@ function showFxGuide(){
     if(j===null)return;
     const q=g[j]&&g[j].q;
     const inp=document.getElementById("fxFinder");
-    if(q&&inp){inp.value=q;inp.dispatchEvent(new Event("input"));toast(`🔎 「${q}」で絞り込みました（空欄に戻すと全表示）`);}
+    if(q&&inp){
+      inp.value=q;inp.dispatchEvent(new Event("input"));
+      setTimeout(()=>{
+        const panel=inp.closest(".panelbox");
+        if(panel){
+          const hit=[...panel.querySelectorAll("label,.row")].find(el=>el.offsetParent!==null&&getComputedStyle(el).display!=="none"&&!el.querySelector("#fxFinder")&&!el.closest("#fxTabs")&&(el.textContent||"").trim().length>0);
+          if(hit)hit.scrollIntoView({behavior:"smooth",block:"center"});
+        }
+      },90);
+      toast(`🔎 「${q}」で絞り込み、該当欄へ移動しました（空欄に戻すと全表示）`);
+    }
     else toast(g[j].msg||String(g[j]));
   })();
 }
@@ -9587,6 +9631,8 @@ function openFxEditor(key){
     lunaTarget:cur&&cur.lunaTarget||"",
     lunaCost:cur&&cur.lunaCost||0,
     pa:cur&&cur.pa||null,
+    cstPow:cur&&(+cur.cstPow||0)||0,
+    cstPowCond:cur&&cur.cstPowCond||"",
     pb:cur&&cur.pb||null,
     breaks:cur&&cur.breaks||"1",
     gimmick:cur&&cur.gimmick||"",
@@ -9872,6 +9918,8 @@ $("fxSave").addEventListener("click",async ()=>{
     lunaTarget:$("fxLunaTarget").value.trim(),
     lunaCost:+$("fxLunaCost").value||0,
     pa:$("fxPA").value.trim()===""?null:Math.max(0,+$("fxPA").value||0),
+    cstPow:+($("fxCstPow")?$("fxCstPow").value:0)||0,
+    cstPowCond:($("fxCstPowCond")?$("fxCstPowCond").value:"").trim(),
     pb:$("fxPB").value.trim()===""?null:Math.max(0,+$("fxPB").value||0),
     breaks:$("fxBreaks").value,
     gimmick:$("fxGimmick").value,
@@ -16904,6 +16952,17 @@ $("askPeek").addEventListener("click",()=>{
   PEEK="askOlay";
   $("peekChip").classList.add("show");
 });
+$("askCopy").addEventListener("click",async()=>{
+  const txt=$("askMsg").textContent||"";
+  if(!txt){toast("コピーする文章がありません");return;}
+  try{await navigator.clipboard.writeText(txt);toast("📋 文章をコピーしました");}
+  catch(e){
+    const ta=document.createElement("textarea");ta.value=txt;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.focus();ta.select();
+    let ok=false;try{ok=document.execCommand("copy");}catch(e2){}
+    document.body.removeChild(ta);
+    toast(ok?"📋 文章をコピーしました":"コピーできませんでした（文章を長押しで選択してください）");
+  }
+});
 $("bkPeek").addEventListener("click",()=>{
   $("breakOlay").classList.remove("open");
   PEEK="breakOlay";
@@ -17822,14 +17881,17 @@ function zoneCondOk(expr,pi){
       if(!filt)cnt=arrs.length;
       else{
         const civMap={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature"};
+        const toks=filt.split(/[／\/]/).map(s=>s.trim()).filter(Boolean);
         cnt=arrs.filter(x=>{
           const r=getReg(x);
-          if(filt==="多色")return r&&r.civs&&r.civs.length>=2;
-          if(filt==="呪文")return r&&r.ctype==="spell";
-          if(filt==="クリーチャー")return r&&r.ctype!=="spell";
-          if(filt==="ツインパクト")return r&&(r.twin||r.ctype==="twinpact");
-          if(civMap[filt])return r&&r.civs&&r.civs.includes(civMap[filt]);
-          return (r&&raceMatch(r,filt))||String(x.name||"").includes(filt);
+          return toks.some(tk=>{
+            if(tk==="多色")return r&&r.civs&&r.civs.length>=2;
+            if(tk==="呪文")return r&&r.ctype==="spell";
+            if(tk==="クリーチャー")return r&&r.ctype!=="spell";
+            if(tk==="ツインパクト")return r&&(r.twin||r.ctype==="twinpact");
+            if(civMap[tk])return r&&r.civs&&r.civs.includes(civMap[tk]);
+            return (r&&raceMatch(r,tk))||String(x.name||"").includes(tk);
+          });
         }).length;
       }
       if(opr==="<="||opr==="≦")return cnt<=n;
