@@ -4164,6 +4164,7 @@ const FX_TYPES=[
   ["randMove","ランダムでn枚選んで移動（実行時に対象ゾーンと行き先を選択・デッドソード型）"],
   ["flip","この多面カードを裏返す（次の面へ・チャクラ/ディアスZ型・確認あり）"],
   ["handShieldUp","手札から1枚選んで表向きにシールド化（サッヴァーク型・任意/新規盾or重ねるを選択）"],
+  ["deckShield","🛡 自分の山札の上からn枚を裏向きでシールドゾーンに加える（シールド追加・シールド化）"],
   ["freeSummon","コストを支払わずにクリーチャーを召喚（実行時に元ゾーンとカードを選択・踏み倒し）"],
   ["deckRecruit","🔎 山札から条件に合うカードをn体バトルゾーンへ（超探索踏み倒し・条件欄で対象を指定・ボルシャック・NEX型）→山札シャッフル"],
   ["freeCast","コストを支払わずに呪文を唱える（実行時に元ゾーンとカードを選択・解決中へ）"],
@@ -5367,6 +5368,16 @@ async function runFxList(pi,list,srcCard){
         toast(`🛡✨ 表向きシールド化：${sc.name}`);
       }
       sfx("move");renderAll();
+    }else if(f.t==="deckShield"){
+      // 🛡 自分の山札の上からn枚を裏向きでシールドゾーンに加える（シールド追加）
+      let add=0;
+      for(let i=0;i<n&&Z.deck.length;i++){
+        const cc=Z.deck.shift();cc.faceup=false;cc.tapped=false;cc.sideways=false;
+        if(S.turn>0)cc.mark=true;
+        Z.shield.push(cc);add++;
+      }
+      if(add>0){sfx("move");renderAll();toast(`🛡 山札の上${add}枚をシールドゾーンに加えた`);}
+      else toast("山札がありません");
     }else if(f.t==="flip"){
       const tgtC=srcCard||null;
       if(!tgtC){toast("裏返す対象がありません");continue;}
@@ -8736,6 +8747,8 @@ function extractEffects(text,mode){
       else{const mR=cl.match(/([ァ-ヶー・ｦ-ﾟ一-龠]{2,12})を(?:超)?探索/);if(mR&&!/山札/.test(mR[1]))filt=mR[1];}
       fx.push({t:"deckRecruit",n:numOf(cl,/(\d+)(?:枚|体)/),cond:filt});
     }
+    // 🛡 山札の上を自分のシールドに加える（シールド追加・シールド化）
+    if(/山札の上から.{0,6}?(?:シールド化|シールド(?:ゾーン)?に(?:加え|置)|盾(?:に(?:加え|置)|化))/.test(cl)&&!/相手/.test(cl))fx.push({t:"deckShield",n:numOf(cl,/(\d+)枚/)});
     // 横差し（終葬/Q.Q.QX）
     if(/山札の上から4枚目.*?横向き/.test(cl)||/横向き.*?山札の上から4枚目/.test(cl))fx.push({t:"deckPin4",n:1});
     // 墓地/山札を見る
