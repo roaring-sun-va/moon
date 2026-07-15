@@ -2073,6 +2073,7 @@ const imgURL=new Map();
 const dispName=new Map();
 const imgOrder=new Map(); // キー→登録した順の連番（追加順ソート用）
 let imgSeq=0;             // 登録連番のカウンタ
+let regListSort="name";  // 効果登録一覧の並び順："name"=名前順（既定）/"added"=登録した順
 const FXDB=new Map();
 const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
@@ -9769,13 +9770,29 @@ function pickImage(title,hint){
     $("vOk").style.display="none";$("vStatus").textContent="";
     const search=$("vSearch");search.style.display="";search.value="";
     let tf="";
+    let pickSort="name"; // 並び順："name"=名前順（既定） / "added"=登録した順
     const g=$("vGrid");
     const fb=$("vTypeFilter");
     if(fb){fb.style.display="";fb.value="";fb.onchange=()=>{tf=fb.value;render();};}
     const render=()=>{
       g.innerHTML="";
+      const bar=document.createElement("div");
+      bar.style.cssText="grid-column:1/-1;display:flex;gap:8px;align-items:center;margin:0 0 4px";
+      const sb=document.createElement("button");
+      sb.className="btn small";
+      sb.textContent=pickSort==="added"?"並び順：追加した順（タップで名前順へ）":"並び順：名前順（タップで追加した順へ）";
+      sb.onclick=()=>{pickSort=(pickSort==="added"?"name":"added");render();};
+      bar.appendChild(sb);
+      g.appendChild(bar);
       const q=normName(search.value);
-      for(const k of Array.from(dispName.keys()).sort((a,b)=>dispName.get(a).localeCompare(dispName.get(b),"ja"))){
+      const keys=Array.from(dispName.keys()).sort((a,b)=>{
+        if(pickSort==="added"){
+          const oa=imgOrder.has(a)?imgOrder.get(a):Infinity, ob=imgOrder.has(b)?imgOrder.get(b):Infinity;
+          if(oa!==ob)return oa-ob;
+        }
+        return dispName.get(a).localeCompare(dispName.get(b),"ja");
+      });
+      for(const k of keys){
         if(q&&!k.includes(q))continue;
         if(tf&&!typeMatch(k,tf))continue;
         const el=vCardEl(dispName.get(k));
@@ -9826,8 +9843,22 @@ $("btnLinkReg").addEventListener("click",async ()=>{
 });
 $("btnRegList").addEventListener("click",()=>{
   const fxBody=$("regFxBody");fxBody.innerHTML="";
-  if(!FXDB.size)fxBody.innerHTML="<div class='hint'>効果登録はありません</div>";
-  const fxEntries=[...FXDB.entries()].sort((a,b)=>String(dispName.get(a[0])||a[0]).localeCompare(String(dispName.get(b[0])||b[0]),"ja"));
+  const sortBar=document.createElement("div");
+  sortBar.style.cssText="display:flex;gap:8px;align-items:center;margin:0 0 6px";
+  const sortBtn=document.createElement("button");
+  sortBtn.className="btn small";
+  sortBtn.textContent=regListSort==="added"?"並び順：追加した順（タップで名前順へ）":"並び順：名前順（タップで追加した順へ）";
+  sortBtn.onclick=()=>{regListSort=(regListSort==="added"?"name":"added");$("btnRegList").click();};
+  sortBar.appendChild(sortBtn);
+  fxBody.appendChild(sortBar);
+  if(!FXDB.size){const h=document.createElement("div");h.className="hint";h.textContent="効果登録はありません";fxBody.appendChild(h);}
+  const fxEntries=[...FXDB.entries()].sort((a,b)=>{
+    if(regListSort==="added"){
+      const oa=imgOrder.has(a[0])?imgOrder.get(a[0]):Infinity, ob=imgOrder.has(b[0])?imgOrder.get(b[0]):Infinity;
+      if(oa!==ob)return oa-ob;
+    }
+    return String(dispName.get(a[0])||a[0]).localeCompare(String(dispName.get(b[0])||b[0]),"ja");
+  });
   for(const [k,v] of fxEntries){
     const item=document.createElement("div");item.className="dl-item";
     const nm=document.createElement("div");nm.className="dl-name";
