@@ -1409,6 +1409,11 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="text" id="fxGZero" placeholder="条件（メモ）空欄=なし" style="flex:1;min-width:130px">
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:12px;font-weight:700">💠 各ターン最初の召喚を軽減</span>
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px">コスト−<input type="number" id="fxFirstRed" min="0" placeholder="0" style="width:56px"></label>
+        <input type="text" id="fxFirstRedF" list="raceList" placeholder="対象（種族/名前・「／」区切り・空欄＝すべてのクリーチャー）・コッコ・ルピア型" style="flex:1;min-width:150px">
+      </div>
+      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;font-weight:700">マナ武装</span>
         <select id="fxManaArm" style="width:auto;flex:0 0 70px">
           <option value="0">なし</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option>
@@ -2774,7 +2779,7 @@ function nextTurn(){
   S.manaX2={};
   S.tauntUsed={};
   S.playedTurn={};
-  S.spellTurn={};
+  S.spellTurn={};S.firstSumUsed={};
   if(S.oriotisTurn){
     const nw=S.vs?(S.who===0?1:0):0;
     if(S.oriotisTurn[nw]){
@@ -4346,6 +4351,26 @@ async function autoTapCost(pi,c){
       const dec=Math.min(cnt*mult,cost);
       cost-=dec;
       toast(`💞 ${mult>1?"ダブル":""}シンパシー（${w}）：${cnt}体×${mult} → コスト${dec}軽減（残り${cost}）`);
+    }
+  }
+  // 💠 各ターン最初に召喚する〔種族〕のコスト軽減（コッコ・ルピア型）。0以下にはならない。
+  if(paySide==="creature"){
+    S.firstSumUsed=S.firstSumUsed||{};
+    let redTotal=0;const usedKeys=[];
+    for(const b of Z.battle){
+      const rb=getReg(b);
+      if(!rb||!rb.firstRed||+rb.firstRed<=0)continue;
+      if(isSealed(b)||isIgnored(b,pi))continue;
+      // 対象条件（種族/文明/コスト条件・「クリーチャー」or空＝すべてのクリーチャー）
+      if(rb.firstRedF&&rb.firstRedF!=="クリーチャー"&&!lockFilterOk(rb.firstRedF,r,c))continue;
+      const key=`${pi}_${b.id}`;
+      if(S.firstSumUsed[key])continue; // そのターン、この軽減元はもう最初の1回を使った
+      redTotal+=+rb.firstRed;usedKeys.push(key);
+    }
+    if(redTotal>0){
+      cost=Math.max(0,cost-redTotal);
+      for(const key of usedKeys)S.firstSumUsed[key]=true;
+      toast(`💠 各ターン最初の召喚：コスト−${redTotal}（残り${cost}）`);
     }
   }
   // ゲイル・ヴェスパー型：場のgrantDS持ちが手札のクリーチャーにシンパシー付与（複数で重複）
@@ -8106,9 +8131,9 @@ function fxUiPolish(){
         const bar=document.createElement("div");
         bar.className="row";
         bar.style.cssText="position:sticky;top:0;z-index:5;background:var(--panel,#131a2a);padding:6px 0;margin:0";
-        bar.innerHTML='<input type="text" id="fxFinder" placeholder="🔎 項目をしぼり込み（例：マッドネス／常在／侵略／シールド…・空欄で全表示）" style="flex:1;min-width:180px"><button type="button" class="btn small primary" id="fxAutoBtn" style="white-space:nowrap">📋 テキストから自動設定</button><button type="button" class="btn small" id="fxGuideBtn" style="white-space:nowrap;display:none">💡 案内</button><span id="fxFinderN" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>';
+        bar.innerHTML='<input type="text" id="fxFinder" placeholder="🔎 項目をしぼり込み（例：マッドネス／常在／侵略／シールド…・空欄で全表示）" style="flex:1;min-width:180px"><button type="button" class="btn small primary" id="fxAutoBtn" style="white-space:nowrap">📋 テキストから自動設定</button><button type="button" class="btn small" id="fxGuideBtn" style="white-space:nowrap;display:none">💡 取り込み結果を再表示</button><span id="fxFinderN" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>';
         bar.querySelector("#fxAutoBtn").addEventListener("click",autoFillFromText);
-        bar.querySelector("#fxGuideBtn").addEventListener("click",showFxGuide);
+        bar.querySelector("#fxGuideBtn").addEventListener("click",()=>{if(LAST_EXTRACT)showExtractSummary(LAST_EXTRACT.setObj,LAST_EXTRACT.faceFx,LAST_EXTRACT.notes);else if(typeof showFxGuide==="function")showFxGuide();});
         // 「⭐ 名前から設定」を常時表示（該当がなければ押した時に案内）
         {
           const nb=document.createElement("button");
@@ -8389,6 +8414,8 @@ function renderFxEditor(){
 
   $("fxSInvade").value=FXEDIT.sInvade||"";
   $("fxSympathy").value=FXEDIT.sympathy||"";
+  {const e=$("fxFirstRed");if(e)e.value=FXEDIT.firstRed||"";}
+  {const e=$("fxFirstRedF");if(e)e.value=FXEDIT.firstRedF||"";}
   $("fxGalaxy").value=String(FXEDIT.galaxy||0);
   $("fxAltCost").value=FXEDIT.altCost!=null?FXEDIT.altCost:"";
   $("fxAltCiv").value=FXEDIT.altCiv||"";
@@ -8583,9 +8610,9 @@ function condExprFrom(clause){
   const zoneMap=[[/(?:自分の)?マナ(?:ゾーン)?/,"マナ"],[/(?:自分の)?墓地/,"墓地"],[/(?:自分の)?手札/,"手札"],[/(?:自分の)?シールド|(?:自分の)?盾/,"盾"],[/(?:自分の)?バトルゾーン/,"バトル"]];
   let zone=null;
   for(const [re,z] of zoneMap)if(re.test(c)){zone=z;break;}
-  if(!zone)return "";
   // 枚数と比較
-  const m=c.match(/(\d+)枚以上/); const eq=c.match(/(\d+)枚(?:ある|あれば|以下)/);
+  const m=c.match(/(\d+)枚以上/);
+  const has=/が(?:あれば|いれば|あり)|がいる/.test(c);
   // フィルタ（ツインパクト/種族/文明/呪文/クリーチャー/多色）
   let filt="";
   if(/ツインパクト/.test(c))filt="ツインパクト";
@@ -8593,9 +8620,12 @@ function condExprFrom(clause){
   else if(/多色/.test(c))filt="多色";
   else{
     const civ=c.match(/(光|水|闇|火|自然)(?:のカード|のクリーチャー)?が/); if(civ)filt=civ[1];
-    else{const race=c.match(/([ァ-ヶー・ｦ-ﾟ一-龠]{2,12})(?:のカード|のクリーチャー)?が\d/); if(race&&!/ゾーン|マナ|墓地|手札|シールド|バトル/.test(race[1]))filt=race[1];}
+    else{const race=c.match(/([ァ-ヶー・ｦ-ﾟ一-龠]{2,12})(?:のカード|のクリーチャー)?が(?:\d|あれば|いれば|あり|いる)/); if(race&&!/ゾーン|マナ|墓地|手札|シールド|バトル/.test(race[1]))filt=race[1];}
   }
+  // ゾーン明示が無く「〔種族/文明〕があれば/いれば」＝バトルゾーンにその対象が1体以上
+  if(!zone){if(filt&&has)zone="バトル";else return "";}
   if(m)return `${zone}${filt?":"+filt:""}>=${m[1]}`;
+  if(has)return `${zone}${filt?":"+filt:""}>=1`;
   if(/(\d+)枚以下/.test(c)){const mm=c.match(/(\d+)枚以下/);return `${zone}${filt?":"+filt:""}<=${mm[1]}`;}
   return "";
 }
@@ -8620,6 +8650,7 @@ function extractEffects(text,mode){
   const clauses=text.split(/[■●。\n]/).map(x=>x.trim()).filter(x=>x.length>1);
   const numOf=(s,re)=>{const m=s.match(re);return m?+m[1]:1;};
   for(const cl of clauses){
+    const _before=fx.length;
     // ドロー
     if(/引く/.test(cl)&&!/相手/.test(cl.split("引く")[0].slice(-8))){
       const n=numOf(cl,/(\d+)枚(?:を)?引く/); fx.push({t:"draw",n});
@@ -8669,6 +8700,9 @@ function extractEffects(text,mode){
     if(/手札を.{0,6}?山札の(?:一番)?(?:上|下)/.test(cl))fx.push({t:"randMove",n:numOf(cl,/(\d+)枚/)});
     if(/山札の上から(\d+)枚を?見る/.test(cl)){const n=numOf(cl,/(\d+)枚/);fx.push({t:"look",n});}
     if(/山札の上から(\d+)枚を?(?:表向きに|公開)/.test(cl)){const n=numOf(cl,/(\d+)枚/);fx.push({t:"reveal",n});}
+    // 「〔条件〕あれば/いれば/なら、〔効果〕」→ この句で追加した効果に条件（zoneCondOk式）を付与
+    {const cm=cl.match(/^(.+?(?:あれば|いれば|なら))[、,]/);
+     if(cm){const cond=condExprFrom(cm[1]);if(cond)for(let i=_before;i<fx.length;i++)if(!fx[i].cond)fx[i].cond=cond;}}
   }
   // 重複除去
   const seen=new Set();
@@ -8708,6 +8742,9 @@ function parseCardText(txt,mode){
    if(mCU){out.set.stCostUp=mCU[2]?+mCU[2]:1;if(mCU[1]==="呪文")out.set.stCostUpT="spell";else if(mCU[1]==="クリーチャー")out.set.stCostUpT="creature";}}
   // ハンデス耐性（自分の手札は相手の効果で捨てられない）
   if(/(?:自分の)?手札は[、,]?[\s\S]{0,14}相手[\s\S]{0,14}捨てられない/.test(t))out.set.stNoHandes=true;
+  // 💠 各ターン最初に召喚する〔対象〕のコスト軽減（コッコ・ルピア型／一撃奪取・文明+コスト条件型／種族指定なしの全体型）
+  {const mFR=t.match(/(?:各ターン[、,]?)?(?:最初に|初めて)召喚する(.+?)の(?:召喚)?コストを(?:最大)?(\d+)(?:少なく|小さく)/);
+   if(mFR){out.set.firstRed=+mFR[2];let tgt=mFR[1].trim().replace(/クリーチャー$/,"").replace(/[のな]$/,"").trim();out.set.firstRedF=tgt;}}
   // 「〜を与える」系の付与テキストを除外した本文（キーワード誤検出防止：I amのワールド・ブレイカー付与など）
   const tSelf=t.replace(/「[^」]*」を与え[^。■]*[。]?/g,"").replace(/[^■。]*ブレイカー」?を与える[^。■]*[。]?/g,"");
   // ツインパクトの手掛かり：コスト「7/3」形式、カードタイプ「クリーチャー/呪文」
@@ -8772,12 +8809,12 @@ function parseCardText(txt,mode){
   if(!m)m=t.match(/コスト\s*\d{1,2}(?:\s*[\/／]\s*\d{1,2})?\s+(\d{4,6})\+?\s*マナ/);
   if(!m)m=t.match(/コスト\s*パワー\s*\d{1,2}\s+(\d{3,6})\+?/);
   if(m)out.set.power=+m[1];
-  // コスト（ツインパクト「7/3」・表形式「コスト パワー 6 -」に対応）
-  m=t.match(/コスト\s*(\d{1,2})\s*[\/／]\s*(\d{1,2})/);
+  // コスト（ツインパクト「7/3」・表形式「コスト パワー 2／4」に対応）
+  m=t.match(/コスト\s*(?:パワー\s*)?(\d{1,2})\s*[\/／]\s*(\d{1,2})/);
   if(m){out.set.cost=+m[1];out.set.cost2=+m[2];}
   else{
     m=t.match(/コスト\s*パワー\s*(\d{1,2})/)||t.match(/コスト\s*(\d{1,2})/);
-    if(m){if(mode==="spell")out.set.cost2=+m[1];else out.set.cost=+m[1];}
+    if(m){out.set.cost=+m[1];}
   }
   // タイプ（表形式）：D2フィールド／クロスギア／タマシード等
   if(/D2フィールド/.test(t))out.set.ctype="d2";
@@ -8882,10 +8919,13 @@ function parseCardText(txt,mode){
     [/マッハファイター/,"mach"],[/ジャストダイバー/,"jdiver"],[/EXライフ/,"exlife"],
     [/エスケープ/,"escape"],[/ラストバースト/,"lastburst"],
     [/侵略/,"invade"],[/(?<![PＰ])革命チェンジ/,"kakumei"],[/[PＰ]革命チェンジ/,"pKakumei"],
+    [/相手プレイヤー(?:を|に)?攻撃できない/,"cantAtkP"],[/攻撃できない/,"cantAtk"],
   ];
   for(const [re,k] of KW)if(re.test(tSelf))out.set[k]=true;
   // P革命チェンジ検出時は通常革命チェンジフラグを外す（超次元からの誘発と混同しないため）
   if(out.set.pKakumei)delete out.set.kakumei;
+  // 「相手プレイヤーを攻撃できない」は cantAtkP のみ（全攻撃不可の cantAtk は外す）
+  if(out.set.cantAtkP)delete out.set.cantAtk;
   // 条件付きキーワード付与（「〜あれば/なら、『ブロッカー』を得る」等）→ 条件常在(cstFx/cstCond)に。無条件フラグは外す
   {
     const CST=[[/ブロッカー/,"blocker","blocker"],[/スピードアタッカー/,"sa","sa"],[/スレイヤー/,"slayer","slayer"]];
@@ -9149,7 +9189,9 @@ function fxSetValLabel(k,v){
   return String(v);
 }
 /* 検出結果の確認パネルを表示（モーダル・閉じるまで残る） */
+let LAST_EXTRACT=null; // 直近のテキスト取り込み結果（💡ボタンで再表示するため保持）
 async function showExtractSummary(setObj,faceFx,notes){
+  LAST_EXTRACT={setObj,faceFx,notes};
   const lines=[];
   const setKeys=Object.keys(setObj||{});
   if(setKeys.length){
@@ -9173,7 +9215,7 @@ async function showExtractSummary(setObj,faceFx,notes){
   const guideN=(FXEDIT._guide||[]).length;
   const opts=guideN?["OK（閉じる）",`💡 案内（${guideN}件）で該当欄へジャンプ`]:["OK（閉じる）"];
   const j=await askChoice("📋 テキスト取り込みの検出結果\n\n"+lines.join("\n"),opts);
-  if(j===1){const gb=document.getElementById("fxGuideBtn");if(gb)gb.click();}
+  if(j===1){if(typeof showFxGuide==="function")showFxGuide();}
 }
 /* カード名から固有効果を引き当てる辞書（部分一致・正規化名で判定）。
    set:自動チェックする項目 / fx:効果リストへ追加 / note:案内 */
@@ -9243,7 +9285,7 @@ async function autoFillFromText(){
     if(named){cnt++;if(named.note)r.notes.push({msg:"⭐ "+named.note,q:""});}
     FXEDIT._guide=r.notes.filter(x=>x&&x.q);
     renderFxEditor();
-    {const gb=document.getElementById("fxGuideBtn");if(gb)gb.style.display=FXEDIT._guide.length?"":"none";}
+    {const gb=document.getElementById("fxGuideBtn");if(gb)gb.style.display=(FXEDIT._guide.length||LAST_EXTRACT)?"":"none";}
     if(r.twinHint)r.notes.push({msg:"💡 コスト表記が「n/m」でした。ツインパクトの可能性があります（ツインパクトにチェックして再取り込みできます）",q:""});
     if(named&&named.set)Object.assign(r.set,named.set);
     await showExtractSummary(r.set,[{face:0,list:r.fx}],r.notes);
@@ -9267,7 +9309,8 @@ async function autoFillFromText(){
   if(dn){
     const r2=parseCardText(dn,"spell");
     // 下面から拾うのは cost2・ST・条件ST・呪文効果（パワー等は上面優先で上書きしない）
-    if(r2.set.cost2!=null){FXEDIT.cost2=r2.set.cost2;_twinSet.cost2=r2.set.cost2;}
+    const dnCost=(r2.set.cost2!=null)?r2.set.cost2:r2.set.cost;
+    if(dnCost!=null){FXEDIT.cost2=dnCost;_twinSet.cost2=dnCost;}
     if(r2.set.st){FXEDIT.st=true;_twinSet.st=true;}
     if(r2.set.stCond){FXEDIT.stCond=r2.set.stCond;_twinSet.stCond=r2.set.stCond;}
     total+=applyFx(r2.fx,1);
@@ -9276,7 +9319,7 @@ async function autoFillFromText(){
   }
   FXEDIT._guide=notes.filter(x=>x&&x.q);
   renderFxEditor();
-  {const gb=document.getElementById("fxGuideBtn");if(gb)gb.style.display=FXEDIT._guide.length?"":"none";}
+  {const gb=document.getElementById("fxGuideBtn");if(gb)gb.style.display=(FXEDIT._guide.length||LAST_EXTRACT)?"":"none";}
   const upSet={};if(FXEDIT.twinTop)upSet.twinTop=FXEDIT.twinTop;
   await showExtractSummary(Object.assign({twin:true},upSet,_twinSet),
     [{face:0,list:_twinUpFx},{face:1,list:_twinDnFx}],notes);
@@ -9361,6 +9404,8 @@ function openFxEditor(key){
 
     sInvade:cur&&cur.sInvade||"",
     sympathy:cur&&cur.sympathy||"",
+    firstRed:cur&&(+cur.firstRed||0)||0,
+    firstRedF:cur&&cur.firstRedF||"",
     galaxy:cur&&(+cur.galaxy||0)||0,
     altCost:cur&&cur.altCost!=null?+cur.altCost:null,
     altCiv:cur&&cur.altCiv||"",
@@ -9644,6 +9689,8 @@ $("fxSave").addEventListener("click",async ()=>{
 
     sInvade:$("fxSInvade").value||"",
     sympathy:$("fxSympathy").value.trim(),
+    firstRed:+($("fxFirstRed")?$("fxFirstRed").value:0)||0,
+    firstRedF:($("fxFirstRedF")?$("fxFirstRedF").value:"").trim(),
     galaxy:+$("fxGalaxy").value||0,
     altCost:$("fxAltCost").value===""?null:Math.max(0,+$("fxAltCost").value||0),
     altCiv:$("fxAltCiv").value.trim(),
