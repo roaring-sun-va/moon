@@ -1284,14 +1284,18 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row" style="gap:12px">
         <label><input type="checkbox" id="fxCantAtk"> 攻撃できない</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="条件式を満たしていない間は攻撃できない（例：墓地:ドラゴン>=5）"><span style="font-size:12px;font-weight:700">⛔ 条件を満たさないと攻撃できない</span><input type="text" id="fxCantAtkCond" placeholder="条件式（例：墓地:ドラゴン>=5・空欄＝なし）" style="width:230px"></label>
+        <label><input type="checkbox" id="fxCantAtkP"> 相手プレイヤーを攻撃できない</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="ここに書いた対象（種族など・「／」区切り）以外のクリーチャーは、出たターン攻撃できない（両者・SAでも不可）"><span style="font-size:12px;font-weight:700">🥶 常在：対象以外は出たターン攻撃不可</span><input type="text" id="fxStSickAll" list="raceList" placeholder="対象（例：スノーフェアリー／オリジン・空欄＝無効）" style="width:230px"></label>
+        <label><input type="checkbox" id="fxAtkUn"> タップしていないクリーチャーも攻撃できる</label>
+        <label><input type="checkbox" id="fxMachF"> マッハファイター（出たターンでも相手獣を攻撃可・アンタップ獣も対象）</label>
+      </div>
+      <div class="row" style="gap:12px">
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="ブレイクなどで自分のシールドゾーンから手札に加える〔対象〕すべてに「S・トリガー」を与える（ブレイクパネルに⚡バッジが付き、解決中へ/バトルへを選べる）"><span style="font-size:12px;font-weight:700">⚡ 常在：盾→手札の対象にS・トリガー付与</span><input type="text" id="fxStShieldStG" list="raceList" placeholder="対象（例：ゼニス・「全て」＝盾の全カード・空欄＝無効）" style="width:200px"></label>
         <label title="自分のクリーチャー（自身含む）がバトルゾーンを離れる時、パワーが0より大きければ、かわりに自分のランダムなシールドn枚をブレイクし（S・トリガー使用可）、そのターンそのクリーチャーは離れない"><span style="font-size:12px;font-weight:700">♻ 常在：味方の離場→かわりに自分のランダム盾ブレイク＋離れない</span><input type="checkbox" id="fxStLeaveRep"> 盾<input type="number" id="fxStLeaveRepN" min="1" max="5" value="2" style="width:52px">枚</label>
         <label title="自分の、対象条件に合うクリーチャーすべてに「エターナル・Ω（離れるかわりに手札へ）」を与える（例：ドラゴン／コマンド・「全て」＝全クリーチャー・空欄＝無効）"><span style="font-size:12px;font-weight:700">♾ 常在：味方に「エターナル・Ω」を付与</span> <input type="text" id="fxStAuraOmegaF" list="raceList" placeholder="対象（例：ドラゴン／コマンド・空欄＝無効）" style="width:230px"></label>
+      </div>
+      <div class="row" style="gap:12px">
         <label title="バトルゾーンにある相手のエレメントの持つ文明1つにつき、召喚コストがn少なくなる（ウェディング・イノセンス型・0＝無効）"><span style="font-size:12px;font-weight:700">💒 相手の文明1つにつき召喚コスト−</span><input type="number" id="fxCostRedOppCiv" min="0" max="9" value="0" style="width:52px"></label>
-        <label><input type="checkbox" id="fxCantAtkP"> 相手プレイヤーを攻撃できない</label>
-        <label><input type="checkbox" id="fxAtkUn"> タップしていないクリーチャーも攻撃できる</label>
-        <label><input type="checkbox" id="fxMachF"> マッハファイター（出たターンでも相手獣を攻撃可・アンタップ獣も対象）</label>
       </div>
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <label><input type="checkbox" id="fxNoBlock"> ブロックされない</label>
@@ -9977,11 +9981,11 @@ function fxUiPolish(){
           ["gimmick","🌀 特殊ギミック",["無月","ラビリンス","光臨","ハイパー","零龍","禁断","COMPLEX","G・G・G","GGG","フェニックス","ドルスザク","超無限","ゼニス","スター進化","ムー泊"]],
           ["misc","📦 その他",null],
         ];
-        // 前方一致で判定（fxRace1〜5・fxRacesB・fxCost2 など下面系/連番系を確実に常時表示へ）
-        const KEEP_IDS=["fxCost","fxCType","fxCiv","fxRace","fxPower","fxBreaks","fxDest","fxTwin"];
+        // 完全一致で判定（識別情報のみ常時表示。fxCostRedOppCiv等の能力系を巻き込まないよう前方一致は不可）
+        const KEEP_IDS=["fxCost","fxCost2","fxCType","fxCivL","fxRace1","fxRacesB","fxPower","fxBreaks","fxDest","fxTwinTop"];
         const isKeep=el=>{
           if(el.querySelector&&el.querySelector("[data-qk]"))return true;
-          return KEEP_IDS.some(k=>el.querySelector&&el.querySelector('[id^="'+k+'"]'));
+          return KEEP_IDS.some(k=>el.querySelector&&el.querySelector("#"+k));
         };
         const catOf=el=>{
           let t=(el.textContent||"");
