@@ -5303,7 +5303,7 @@ async function runFxList(pi,list,srcCard){
   for(const f of list){
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
-    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay"]);
+    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana"]);
     // 🪧 「召喚時のみ」の効果：このカードの出た方法を1回だけ確認してゲート
     if(f.sumOnly&&srcCard){
       if(srcCard._wasSummon==null){
@@ -8173,13 +8173,35 @@ function processBroken(op,stack,label){
   return new Promise(res=>{
     const Z=zonesOf(op);
     let remaining=stack.slice(), sel=null, wentGrave=false;
+    const stDefer=[]; // ⚡ S・トリガーの効果処理はパネルを閉じた後に、選んだ順で1枚ずつ実行（配置と順番だけパネルで決める）
     const finish=()=>{
       $("breakOlay").classList.remove("open");renderAll();
       if(wentGrave){
         const hz=Z.hand.filter(h=>{const r3=getReg(h);return r3&&(r3.sback||r3.sabaki);});
         if(hz.length)toast(`S・バック/サバキZ：${[...new Set(hz.map(h=>faceNameOf(h)))].join("、")} を手札から踏み倒せます`);
       }
-      res();
+      // ⚡ パネルで決めた順に、S・トリガーの効果を1枚ずつ処理（全部終わってから攻撃等の続きへ）
+      if(stDefer.length){
+        (async()=>{
+          if(stDefer.length>1)toast(`⚡ S・トリガー${stDefer.length}枚を、選んだ順に1枚ずつ解決します`);
+          for(const d of stDefer){
+            const cc=d.c;
+            if(d.zone==="resolve"){
+              const still=Z.resolve.find(x=>x.id===cc.id);
+              if(!still)continue; // 手動で動かされていたらスキップ
+              toast(`⚡ 解決（${stDefer.indexOf(d)+1}/${stDefer.length}）：${faceNameOf(cc)}`);
+              emitEvent(op,"spell");enqueueFx(op,cc);
+            }else{
+              if(!Z.battle.find(x=>x.id===cc.id))continue; // 既に離れていたらスキップ
+              toast(`⚡ 出た時効果（${stDefer.indexOf(d)+1}/${stDefer.length}）：${faceNameOf(cc)}`);
+              emitEvent(op,"summon");enqueueFx(op,cc);
+            }
+            await waitFxIdle();
+            renderAll();
+          }
+          res();
+        })();
+      }else res();
     };
     const put=(c,zone)=>{
       // 常在ロック／ターン限定ロック：S・トリガー等での唱え/出しにも適用
@@ -8217,17 +8239,17 @@ function processBroken(op,stack,label){
       c.tapped=false;
       if(zone==="grave"){c.faceup=true;Z.grave.push(c);sfx("grave");wentGrave=true;logOnly(`${S.players[op].label}：ブレイクされた《${faceNameOf(c)}》を墓地へ置いた（S・バック/サバキZコスト等）`);}
       else if(zone==="resolve"){
-        if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
+        // 複数のS・トリガー呪文は解決中に積んでおき、パネル完了後に選んだ順で1枚ずつ解決（スタック式）
         c.faceup=true;Z.resolve.push(c);markArrive(c);sfx("move");
-        logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を唱えた`);
+        logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を唱えた（${stDefer.length+1}番目・パネル完了後に順番に解決）`);
         bumpEv("stTrig",op);
-        emitEvent(op,"spell");enqueueFx(op,c);
+        stDefer.push({c,zone:"resolve"});
       }else if(zone==="battle"){
         c.faceup=true;Z.battle.push(c);markArrive(c);sfx("move");
         const r=getReg(c);if(r&&(r.d2||r.wide))c.rot=(op===S.seat)?270:90;
-        logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を出した`);
+        logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を出した（${stDefer.length+1}番目・出た時効果はパネル完了後）`);
         bumpEv("stTrig",op);
-        emitEvent(op,"summon");enqueueFx(op,c);
+        stDefer.push({c,zone:"battle"});
       }else if(zone==="hand"){
         c.faceup=true;const kept=toHand(Z,c);sfx(kept?"move":"grave");
         logOnly(`${S.players[op].label}：ブレイクされた《${faceNameOf(c)}》を${kept?"手札へ":"手札上限(10枚)のため墓地へ"}`);
