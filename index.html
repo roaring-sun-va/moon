@@ -1849,6 +1849,10 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="text" id="fxModeAllCond" placeholder="この条件を満たせば全モード実行（例：マナ:ボルシャック／ルピア>=5・空欄＝なし）" style="flex:1;min-width:180px;font-size:11px">
         <label style="font-size:11px" title="キーワード能力「爆進ダブル」：自分のバトルゾーンに進化クリーチャーがいれば、指定された2つ（全）のモードを両方とも行う。チェックすると全モード実行の条件に『バトル:進化>=1』を自動適用します"><input type="checkbox" id="fxBakushinW"> 💥爆進ダブル（進化がいれば全モード）</label>
       </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="fxModeCond" placeholder="発動条件式（例：マナ:ドラゴン>=3・満たさないと選択が出ない・空欄＝常時）" style="flex:1;min-width:200px;font-size:11px">
+        <label style="font-size:11px" title="この選択効果は各ターン中1回のみ発動する（ゾルザーク型）"><input type="checkbox" id="fxModeOnce"> 1️⃣各ターン1回</label>
+      </div>
       <textarea id="fxModeOpts" rows="4" style="width:100%;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;font-size:12px;padding:6px;box-sizing:border-box" placeholder="選択肢を1行に1つ。行末に「＠コマンドN」を付けると、その選択肢を選んだ時に自動処理します（省略可）。&#10;例）&#10;山上2枚を墓地へ ＠墓地肥やし2&#10;1枚ドローする ＠ドロー1&#10;山上1枚をマナ ＠マナ加速1&#10;相手1体に-3000（自動化なし）&#10;※コマンド例：墓地肥やし/ドロー/マナ加速/相手墓地肥やし/公開/見る＋数字。複数は「＋」で連結"></textarea>
       <div class="hint" style="margin-top:2px">選んだ選択肢に「＠コマンド」があればエキスパート時に自動実行。無い選択肢は宣言のみ（従来どおり手動処理）。</div>
       </div>
@@ -4562,6 +4566,7 @@ const FX_TYPES=[
   ["battleAsk","相手のクリーチャーとバトルする（対象選択・確認つき）"],
   ["hold","⏸ 処理中にする（攻撃を保留して手動で解決。もう一度攻撃で続行）"],
   ["pauseManual","⏸ 手動処理タイム（出た時などの処理を一時停止して盤面を自由に操作 →「▶ 効果処理を続行」ボタンで再開。メテオバーンや特殊処理に）"],
+  ["runMode","🔀 このカードの「選択効果（モード）」を実行（出た時以外の誘発＝墓地に置かれた時などから選択を出す・ゾルザーク型）"],
   ["oriotis1","このターン（次の相手ターン）オリオティス効果を得る（真悠I）"],
   ["drawTapped","自分のタップしているクリーチャー1体につき1ドロー（真悠II）"],
   ["nextCost","次に召喚するクリーチャーのコスト−n（実行時に文明指定・プレリュード型）"],
@@ -4587,7 +4592,7 @@ const FX_TYPES=[
   ["millUntilCre","山札の上から、クリーチャーがn体墓地に置かれるまで置く（ヴォルグ・サンダー型・対象プレイヤー選択）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","foeNoSpell"]);
+const FX_NO_N=new Set(["peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","foeNoSpell","runMode"]);
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
@@ -5317,6 +5322,18 @@ async function runModeChoice(pi,reg,c,inPump){
   if(baseN<=0)return;
   const parsed=String(reg.modeOpts||"").split("\n").map(x=>x.trim()).filter(Boolean).map(parseModeChoice);
   if(!parsed.length)return;
+  // 🚦 発動条件（例：マナ:ドラゴン>=3）：満たさなければ選択を出さない（ゾルザーク型）
+  if(reg.modeCond&&typeof zoneCondOk==="function"&&!zoneCondOk(reg.modeCond,pi)){
+    toast(`⏸ 選択効果は発動条件（${reg.modeCond}）を満たさないため発動しません`);
+    return;
+  }
+  // 1️⃣ 各ターン1回：このターン既に使っていればスキップ（このカードのIDで管理）
+  if(reg.modeOnce){
+    S._watchOnce=S._watchOnce||{};
+    const mk=`${c.id}:modeChoice`;
+    if(S._watchOnce[mk]===`${S.turn}:${S.who}`){toast("⏸ この選択効果は各ターン1回のみ（このターンは使用済み）");return;}
+    S._watchOnce[mk]=`${S.turn}:${S.who}`;
+  }
   const _allCond2=reg.bakushinW?"バトル:進化>=1":reg.modeAllCond;
   const allMet=!!(_allCond2&&typeof zoneCondOk==="function"&&zoneCondOk(_allCond2,pi));
   if(allMet){
@@ -6643,6 +6660,13 @@ async function runFxList(pi,list,srcCard,inPump){
       renderAll();
       await waitManualResume(srcCard?faceNameOf(srcCard):"");
       toast("▶ 効果処理を再開します");
+    }else if(f.t==="runMode"){
+      // 🔀 このカードのモード選択を実行（墓地に置かれた時などの誘発から呼ぶ・ゾルザーク型）
+      if(srcCard){
+        const rM=getReg(srcCard);
+        if(rM&&(rM.modeN|0)>0)await runModeChoice(pi,rM,srcCard,inPump);
+        else toast("🔀 このカードにモード選択が登録されていません");
+      }
     }else if(f.t==="tapMyN"){
       // 自分のクリーチャーをn体選んでタップ
       for(let i=0;i<n;i++){
@@ -10280,7 +10304,7 @@ function fxTrigRowEl(i){
   const fb=fxTypeSearchBtn(sel,()=>f.t,v=>{f.t=v;num.style.display=fxNoN(f.t)?"none":"";});
   num.onchange=()=>{f.n=Math.max(1,parseInt(num.value,10)||1);};
   const cnd=document.createElement("input");
-  cnd.type="text";cnd.placeholder="条件（例：墓地>=4・空欄=常時）";
+  cnd.type="text";cnd.placeholder="条件（例：墓地>=4／ドラゴン＆自分ターン・空欄=常時）";
   cnd.style.cssText="flex:1 1 100%;min-width:0;font-size:12px";
   cnd.value=f.cond||"";
   cnd.onchange=()=>{f.cond=cnd.value.trim();};
@@ -11226,6 +11250,8 @@ function renderFxEditor(){
   $("fxModeN").value=String(FXEDIT.modeN||0);
   $("fxModeDup").checked=!!FXEDIT.modeDup;
   {const e=$("fxModeAllCond");if(e)e.value=FXEDIT.modeAllCond||"";}
+  {const e=$("fxModeCond");if(e)e.value=FXEDIT.modeCond||"";}
+  {const e=$("fxModeOnce");if(e)e.checked=!!FXEDIT.modeOnce;}
   {const e=$("fxBakushinW");if(e)e.checked=!!FXEDIT.bakushinW;}
   $("fxModeOpts").value=FXEDIT.modeOpts||"";
   const th=$("fxThumb");th.innerHTML="";
@@ -12823,6 +12849,8 @@ function openFxEditor(key){
     modeN:cur&&cur.modeN||0,
     modeDup:cur?!!cur.modeDup:false,
     modeAllCond:cur&&cur.modeAllCond||"",
+    modeCond:cur&&cur.modeCond||"",
+    modeOnce:cur?!!cur.modeOnce:false,
     bakushinW:cur?!!cur.bakushinW:false,
     modeOpts:cur&&cur.modeOpts||"",
     watch:cur&&cur.watch?{...cur.watch}:{atkC:false,atkP:false,draw:false,summon:false,spell:false,turnEndMine:false,turnEndOpp:false,turnEndBoth:false},
@@ -13153,6 +13181,8 @@ $("fxSave").addEventListener("click",async ()=>{
     modeN:+$("fxModeN").value||0,
     modeDup:$("fxModeDup").checked,
     modeAllCond:($("fxModeAllCond")?$("fxModeAllCond").value:"").trim(),
+    modeCond:($("fxModeCond")?$("fxModeCond").value:"").trim(),
+    modeOnce:$("fxModeOnce")?$("fxModeOnce").checked:false,
     bakushinW:$("fxBakushinW")?$("fxBakushinW").checked:false,
     modeOpts:$("fxModeOpts").value,
     watch:{
