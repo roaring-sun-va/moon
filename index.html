@@ -1458,7 +1458,7 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;font-weight:700">シンパシー</span>
-        <input type="text" id="fxSympathy" list="raceList" placeholder="種族/名前／12000以上／コスト5以上（「／」区切り複数OK）" style="flex:1;min-width:130px">
+        <input type="text" id="fxSympathy" list="raceList" placeholder="種族/名前／12000以上／コスト5以上／墓地:クリーチャー（墓地を数える・「／」区切り複数OK）" style="flex:1;min-width:130px">
         <select id="fxSymX" style="width:auto;flex:0 0 96px">
           <option value="1">×1軽減</option>
           <option value="2">×2（ダブル）</option>
@@ -1608,6 +1608,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <label><input type="checkbox" id="fxStLockSpell"> 相手は呪文を唱えられない</label>
           <input type="text" id="fxStLockSpellF" placeholder="対象条件（例：光以外／コスト5以下・「／」＝すべて満たす呪文のみ禁止・空欄＝全て）" style="flex:1;min-width:170px">
           <label><input type="checkbox" id="fxStLockCre"> 相手はクリーチャーを出せない</label>
+          <label title="このロックを自分にも適用する＝すべてのプレイヤーが対象（暴走龍5000GT型）"><input type="checkbox" id="fxStLockBoth"> 両者に適用（自分も）</label>
           <input type="text" id="fxStLockCreF" placeholder="対象条件（例：コスト5以下／パワー5000以下／光以外・空欄＝全て）" style="flex:1;min-width:170px">
           <label style="display:flex;align-items:center;gap:6px">相手は各ターン<input type="number" id="fxStSpellPT" min="0" placeholder="0" style="width:56px"> 回しか呪文を唱えられない（0=制限なし・一音の妖精型）</label>
           <label style="display:flex;align-items:center;gap:6px">相手は各ターン<input type="number" id="fxStCrePT" min="0" placeholder="0" style="width:56px"> 体しかクリーチャーを出せない（0=制限なし）</label>
@@ -4502,6 +4503,7 @@ const FX_TYPES=[
   ["tempPowSelf1k","💪 そのターン、このクリーチャー自身のパワーを＋n×1000（ターン終了時まで・誘発と組み合わせて）"],
   ["foePowDownAll","⬇ そのターン、条件に合う相手クリーチャーすべてのパワーを−n×1000（ターン終了時まで・条件欄で対象指定・空欄＝全部・HADES型）"],
   ["foePowDownPick","⬇ 相手クリーチャー1体を選び、そのターン、パワーを−n×1000（ターン終了時まで・パワー0以下で破壊・メテオバーン等の対象指定に）"],
+  ["foePowDownPer","⬇ 相手クリーチャー1体を選び、〔ゾーン:対象〕の枚数×n×1000だけそのターンパワーマイナス（条件欄に「墓地:クリーチャー」等・墓地の数だけ−1000型／オブザ08号型）"],
   ["flipTopMana","🔍 山札の上からn枚を1枚ずつ表向きにし、条件に合えばマナゾーンへ・合わなければ山札の下へ（条件欄で対象を指定）"],
   ["revealTakeAll","👀 山札の上からn枚を公開し、条件に合うカードをすべて手札に加え、残りをランダムな順番で山札の下に置く（条件欄で対象・ブローチ型）"],
   ["revealTakeGrave","👀 山札の上からn枚を表向きにし、条件に合うカードをすべて手札に加え、それ以外を墓地に置く（条件欄で対象・コアクアンのおつかい型）"],
@@ -4585,6 +4587,7 @@ const FX_TYPES=[
   ["handRecruit","✋ 手札から条件に合うクリーチャーをn体バトルゾーンへ（踏み倒し・条件欄で対象を指定）"],
   ["handRecruitBlkNext","✋🛡 手札から条件に合うクリーチャーをn体踏み倒し→出したクリーチャーに「ブロッカー」を次の自分のターン開始時まで付与（トユケテラス下面型・条件欄で対象）"],
   ["destroyFilt","💥 条件に合う相手クリーチャーをすべて破壊（条件欄でパワー/コスト等を指定・空欄＝全部）"],
+  ["destroyFiltAll","💥 条件に合うクリーチャーを両者すべて破壊（自分も相手も・条件欄でパワー/コスト/サイキック等・5000GT型）"],
   ["foeBounceAll","↩ 条件に合う相手クリーチャーをすべて手札に戻す（条件欄でコスト/種族等を指定・空欄＝全部・VANベートーベン型）"],
   ["freeCast","コストを支払わずに呪文を唱える（実行時に元ゾーンとカードを選択・解決中へ）"],
   ["underDeck","山札の上からn枚を裏向きでこのカードの下に置く（G城/クリーチャーの下・ザ・ラムーン型）"],
@@ -4775,12 +4778,18 @@ async function autoTapCost(pi,c){
     }
   }
   if(paySide==="creature"&&r.sympathy){
-    const w=r.sympathy;
+    let w=r.sympathy;
+    // 🗂 ゾーン指定：「墓地:クリーチャー」「マナ:ドラゴン」等で、数えるゾーンを変えられる（既定＝バトルゾーン）。オブザ08号/HADES型
+    let symZone="battle";
+    {const mZ=String(w).match(/^(墓地|マナ|手札|山札|盾|シールド|バトル)[:：]/);
+     if(mZ){symZone={"墓地":"grave","マナ":"mana","手札":"hand","山札":"deck","盾":"shield","シールド":"shield","バトル":"battle"}[mZ[1]];w=String(w).slice(mZ[0].length);}}
     const toks=String(w).split(/[／\/、,]/).map(x=>x.trim()).filter(Boolean);
-    const cnt=Z.battle.filter(b=>{
+    const srcZone=Z[symZone]||Z.battle;
+    const cnt=srcZone.filter(b=>{
       if(b.id===c.id)return false;
       const rb=getReg(b);
       return toks.some(tk=>{
+        if(tk==="クリーチャー")return rb&&isCreatureReg(rb); // 「クリーチャー」＝全クリーチャー
         const mPow=tk.match(/^(?:パワー)?(\d+)以上$/);
         if(mPow){
           const pw=rb&&rb.power!=null?+rb.power:(b.buff&&b.buff.pw!=null?+b.buff.pw:null);
@@ -4798,7 +4807,7 @@ async function autoTapCost(pi,c){
       const mult=r.symX||1;
       const dec=Math.min(cnt*mult,Math.max(0,cost-1)); // 0以下にならない（下限1）
       cost-=dec;
-      toast(`💞 ${mult>1?"ダブル":""}シンパシー（${w}）：${cnt}体×${mult} → コスト${dec}軽減（残り${cost}）`);
+      toast(`💞 ${mult>1?"ダブル":""}シンパシー（${symZone==="battle"?"":({grave:"墓地",mana:"マナ",hand:"手札",deck:"山札",shield:"盾"}[symZone]||symZone)+"の"}${w}）：${cnt}体×${mult} → コスト${dec}軽減（残り${cost}）`);
     }
   }
   // 💠 各ターン最初に召喚する〔種族〕のコスト軽減（コッコ・ルピア型）。0以下にはならない。
@@ -5204,12 +5213,12 @@ async function destroyCreature(pi,c){
       const fx=rp.watchFx.filter(w=>w.ev==="pig");
       if(fx.length){
         toast(`⚡破壊された時の効果：${faceNameOf(c)}`);
-        runFxList(pi,fx);
+        runFxList(pi,fx,c);
       }
       const fxG=rp.watchFx.filter(w=>w.ev==="toGrave");
       if(fxG.length){
         toast(`⚡墓地に置かれた時の効果：${faceNameOf(c)}`);
-        runFxList(pi,fxG);
+        runFxList(pi,fxG,c);
       }
     }
   }
@@ -5496,7 +5505,7 @@ async function runFxList(pi,list,srcCard,inPump){
   for(const f of list){
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
-    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell"]);
+    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll"]);
     // 🪧 「召喚時のみ」の効果：このカードの出た方法を1回だけ確認してゲート
     if(f.sumOnly&&srcCard){
       if(srcCard._wasSummon==null){
@@ -6543,6 +6552,28 @@ async function runFxList(pi,list,srcCard,inPump){
           emitEvent(pi,"summon");enqueueFx(pi,cc);
         }
       }
+    }else if(f.t==="foePowDownPer"){
+      // ⬇ 相手1体を選び、〔ゾーン:対象〕の枚数×n×1000 パワーマイナス（このターン・墓地の数だけ−1000型）
+      const spec=String(f.cond||"墓地:クリーチャー").trim();
+      const mZ=spec.match(/^(墓地|マナ|手札|山札|盾|シールド|バトル)[:：](.*)$/);
+      const zoneKey=mZ?{"墓地":"grave","マナ":"mana","手札":"hand","山札":"deck","盾":"shield","シールド":"shield","バトル":"battle"}[mZ[1]]:"grave";
+      const filt=mZ?mZ[2].trim():spec;
+      const srcZone=zonesOf(pi)[zoneKey]||[];
+      const cnt=srcZone.filter(x=>{const rx=getReg(x);if(!rx)return false;if(!filt||filt==="クリーチャー")return isCreatureReg(rx);return lockFilterOk(filt,rx,x);}).length;
+      const amt=cnt*(n||1)*1000;
+      const pool=zonesOf(op).battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
+      if(!pool.length){toast("相手のクリーチャーがいません");}
+      else if(amt<=0){toast(`⬇ ${mZ?mZ[1]:"墓地"}の対象が0のためパワーマイナスなし`);}
+      else{
+        const j=pool.length===1?0:await pickCard(`⬇ パワー−${amt}する相手クリーチャーを選択（${mZ?mZ[1]:"墓地"}の${filt||"クリーチャー"}${cnt}体分）`,pool);
+        if(j!==null){
+          const tgt=pool[j];
+          tgt.buff=tgt.buff||{};tgt.buff.pow=(+tgt.buff.pow||0)-amt;markBuffTurn(tgt,["pow"]);
+          sfx("ok");renderAll();
+          toast(`⬇ ${faceNameOf(tgt)} のパワー−${amt}（ターン終了時まで）`);
+          await checkZeroPower();
+        }
+      }
     }else if(f.t==="foePowDownPick"){
       // ⬇ 相手クリーチャー1体を選び、そのターン、パワーを−n×1000（メテオバーンで出たクリーチャーを狙う等）
       const amt=n*1000;
@@ -6956,6 +6987,19 @@ async function runFxList(pi,list,srcCard,inPump){
       const added=Z.battle.filter(x=>!before.has(x.id));
       added.forEach(c2=>{c2.buff=c2.buff||{};c2.buff.blocker=true;markBuffNext(c2,["blocker"],pi);});
       if(added.length){renderAll();toast(`🛡 ${added.map(faceNameOf).join("、")} に次の自分のターンまで「ブロッカー」を付与`);}
+    }else if(f.t==="destroyFiltAll"){
+      // 💥 条件(f.cond)に合うクリーチャーを両者すべて破壊（自分も相手も）。このカード自身は除外（自壊しない）。
+      const filt=String(f.cond||"").trim();
+      const collect=pp=>zonesOf(pp).battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&x.id!==(srcCard&&srcCard.id)&&(!filt||lockFilterOk(filt,rx,x));});
+      const myT=collect(pi),opT=collect(op);
+      const total=myT.length+opT.length;
+      if(!total){toast(`該当するクリーチャーなし${filt?`（${filt}）`:""}`);}
+      else{
+        for(const x of opT.slice())await destroyCreature(op,x);
+        for(const x of myT.slice())await destroyCreature(pi,x);
+        toast(`💥 ${filt?filt+"の":""}クリーチャーを両者${total}体破壊（自分${myT.length}／相手${opT.length}）`);
+        renderAll();
+      }
     }else if(f.t==="destroyFilt"){
       // 💥 条件(f.cond)に合う相手クリーチャーをすべて破壊
       const filt=String(f.cond||"").trim();
@@ -7325,6 +7369,7 @@ function lockFilterOk(filt,r,c,lockPi,face){
     if(tk==="ブロッカー")return !!((r&&r.blocker)||(c&&c.buff&&c.buff.blocker)||gearBlockerOn(c));
     if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(c)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」・通常召喚状態や手札では「進化以外」（ヘブンズ・ゲート／爆進ダブル両対応）
     if(tk==="クロスギア")return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));
+     if(tk==="サイキック")return !!((r&&(r.ctype==="psychic"||r.ctype==="psyevo"))||(c&&c.isPsy));
     if(tk==="クリーチャー")return !!(r&&r.ctype!=="spell");
     if(tk==="呪文")return !!(r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact")); // ツインパクトは呪文としても扱う
     if(tk==="ツインパクト")return !!(r&&(r.twin||r.ctype==="twinpact"));
@@ -7334,7 +7379,7 @@ function lockFilterOk(filt,r,c,lockPi,face){
   filt=String(filt).replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0)).replace(/＞/g,">").replace(/＜/g,"<").replace(/＝/g,"=");
   // 種族・名前のトークンは「いずれか（OR）」、コスト/パワー/タイプ/文明/多色単色/「以外」は「すべて（AND）」。
   // 例：「ボルシャック／ルピア／コスト7以下」＝（名前にボルシャック または ルピア）かつ コスト7以下
-  const isCons=tk=>/^コスト/.test(tk)||/^パワー\d+(?:以下|以上)$/.test(tk)||tk==="多色"||tk==="単色"||tk==="クリーチャー"||tk==="呪文"||tk==="ツインパクト"||tk==="ブロッカー"||tk==="進化"||tk==="クロスギア"||!!civMap[tk]||/以外$/.test(tk);
+  const isCons=tk=>/^コスト/.test(tk)||/^パワー\d+(?:以下|以上)$/.test(tk)||tk==="多色"||tk==="単色"||tk==="クリーチャー"||tk==="呪文"||tk==="ツインパクト"||tk==="ブロッカー"||tk==="進化"||tk==="クロスギア"||tk==="サイキック"||!!civMap[tk]||/以外$/.test(tk);
   // 「・」区切りの許容：ユーザーが「光/水・コスト5以下」のように中黒で区切っても動くようにする。
   //   ただし「ボルシャック・ドギラゴン」等のカード名を壊さないため、分割後の全ピースが制約語（コスト/パワー/文明/多色単色/タイプ/以外）の時だけ分割する。
   const splitDot=piece=>{
@@ -7374,6 +7419,12 @@ function stLockerOf(pi,key,filtKey,r,c){
     if(!rb||isSealed(b)||isIgnored(b,op2))continue;
     if(rb[key]&&lockFilterOk(rb[filtKey],r,c,op2))return b;
     if(b.hyper&&rb[hmKey]&&lockFilterOk(rb[hmFiltKey],r,c))return b;
+  }
+  // 🔒 両者ロック（stLockBoth）：自分の場のロック持ちも自分に効く（暴走龍5000GT型・自身は除外）
+  for(const b of zonesOf(pi).battle){
+    const rb=getReg(b);
+    if(!rb||isSealed(b)||isIgnored(b,pi))continue;
+    if(rb.stLockBoth&&rb[key]&&b.id!==(c&&c.id)&&lockFilterOk(rb[filtKey],r,c,pi))return b;
   }
   return null;
 }
@@ -11070,6 +11121,7 @@ function renderFxEditor(){
   $("fxStLockSpell").checked=!!FXEDIT.stLockSpell;
   $("fxStLockSpellF").value=FXEDIT.stLockSpellF||"";
   $("fxStLockCre").checked=!!FXEDIT.stLockCre;
+  {const e=$("fxStLockBoth");if(e)e.checked=!!FXEDIT.stLockBoth;}
   $("fxStLockCreF").value=FXEDIT.stLockCreF||"";
   $("fxStSpellPT").value=FXEDIT.stSpellPT||"";
   $("fxStCrePT").value=FXEDIT.stCrePT||"";
@@ -11397,6 +11449,14 @@ function extractEffects(text,mode){
     const _before=fx.length;
     // 「〜してもよい。そうしなかった場合〜」の分岐（選択しなかった時のオマケ）は選択依存なので自動化しない
     if(/^(?:そうしなかった場合|しなかった場合|選ばなかった場合)/.test(cl))continue;
+    // ⬇ 相手1体を選び、〔ゾーン〕の〔対象〕1体につき−N（オブザ08号型・可変マイナス）
+    if(/1体につき|1枚につき/.test(cl)&&/パワー/.test(cl)&&/[-−]|少なく|マイナス|下げ/.test(cl)&&/自分の(?:墓地|マナ|手札|山札|シールド)/.test(cl)){
+      const mZP=cl.match(/自分の(墓地|マナ|手札|山札|シールド)(?:ゾーン)?にある([ァ-ヶー・ｦ-ﾟ一-龠]{2,12}?)(?:1体|1枚)につき[-−]?(\d+)/);
+      if(mZP){
+        const zl={"墓地":"墓地","マナ":"マナ","手札":"手札","山札":"山札","シールド":"盾"}[mZP[1]];
+        fx.push({t:"foePowDownPer",n:Math.max(1,Math.round(+mZP[3]/1000)),cond:`${zl}:${mZP[2]}`});
+      }
+    }
     // ⬇ 相手クリーチャー全体のパワー-N（そのターン・HADES型）
     if(/相手の?クリーチャー(?:すべて|全て|全部)?の?パワーを?[-−]?(\d+)\s*(?:する|下げ|マイナス)/.test(cl)&&/相手/.test(cl)&&!/以下|以上/.test(cl.split("パワー")[0]||"")){
       const mA=cl.match(/パワーを?[-−]?(\d+)/);
@@ -12107,6 +12167,16 @@ function parseCardText(txt,mode){
   else if(/W・?ブレイカー/.test(tSelf))out.set.breaks="2";
   // シンパシー
   m=t.match(/シンパシー[：: ]?([^（(。■]+)/); if(m)out.set.sympathy=m[1].trim();
+  // 💞 「（召喚）コストを、自分の〔ゾーン〕にある〔対象〕1体につきN少なくする」→ シンパシー（ゾーン指定）。オブザ08号型
+  if(!out.set.sympathy){
+    const mSY=t.match(/(?:召喚)?コストを[、,]?\s*自分の(墓地|マナ|手札|山札|シールド)(?:ゾーン)?にある([ァ-ヶー・ｦ-ﾟ一-龠]{2,12}?)(?:1体|1枚)につき(\d+)少なく/);
+    if(mSY){
+      const zl={"墓地":"墓地","マナ":"マナ","手札":"手札","山札":"山札","シールド":"盾"}[mSY[1]];
+      out.set.sympathy=`${zl}:${mSY[2]}`;
+      if(+mSY[3]>1)out.set.symX=+mSY[3];
+      out.notes.push({msg:`💞 シンパシー（${zl}の${mSY[2]}・1体につき${mSY[3]}軽減）を設定しました`,q:"シンパシー"});
+    }
+  }
   // G・ゼロ（明示型＋条件踏み倒し型「〜あれば、このクリーチャーをコストを支払わずに召喚してもよい」）
   m=t.match(/G・?ゼロ[-ー－]?[：: ]?([^（(。■]+)/); if(m)out.set.gzero=m[1].trim();
   if(!out.set.gzero){
@@ -12707,6 +12777,7 @@ function openFxEditor(key){
     stCrePTevo:cur?!!cur.stCrePTevo:false,
     stLockSpellF:cur&&cur.stLockSpellF||"",
     stLockCre:cur?!!cur.stLockCre:false,
+    stLockBoth:cur?!!cur.stLockBoth:false,
     stLockCreF:cur&&cur.stLockCreF||"",
     invCiv:cur&&cur.invCiv||"",
     symX:cur&&(+cur.symX||1)||1,
@@ -13039,6 +13110,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stCrePTevo:$("fxStCrePTevo").checked,
     stLockSpellF:$("fxStLockSpellF").value.trim(),
     stLockCre:$("fxStLockCre").checked,
+    stLockBoth:$("fxStLockBoth")?$("fxStLockBoth").checked:false,
     stLockCreF:$("fxStLockCreF").value.trim(),
     invCiv:$("fxInvCiv").value||"",
     symX:+$("fxSymX").value||1,
@@ -21667,6 +21739,7 @@ function zoneCondOk(expr,pi){
             if(tk==="ブロッカー")return !!((r&&r.blocker)||(x.buff&&x.buff.blocker)||gearBlockerOn(x));
             if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(x)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」・通常召喚状態や手札では「進化以外」（ヘブンズ・ゲート／爆進ダブル両対応）
             if(tk==="クロスギア")return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));
+     if(tk==="サイキック")return !!((r&&(r.ctype==="psychic"||r.ctype==="psyevo"))||(c&&c.isPsy));
             if(civMap[tk])return r&&r.civs&&r.civs.includes(civMap[tk]);
             return (r&&raceMatch(r,tk))||String(x.name||"").includes(tk);
           });
