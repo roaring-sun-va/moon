@@ -4606,6 +4606,7 @@ const FX_TYPES=[
   ["retrieveManaGrave","↩ マナと墓地から合計n枚 手札に戻す（両ゾーンを組み合わせて自由に選択・条件欄で対象指定・ベートーベン型）"],
   ["meteoburn","☄ メテオバーン：このクリーチャーの下のカードをn枚墓地に置く（置けない/キャンセル時は、この行より下に登録した効果を中止・マーキュリー/ヴィーナス型の1枚ずつ形式）"],
   ["untapFilt","🔄 アンタップ：自分の対象クリーチャーをすべてアンタップする（条件欄で対象指定・カード名で自身のみも可・ターン終了時アンタップ／聖霊王ナルカミ／パーフェクト・エイティー型）"],
+  ["graveToManaAllTap","⚰→🔷 自分の墓地から条件に合うカードをすべてタップしてマナゾーンに置く（使用可能マナは増えない・パラスラプト型／条件欄で対象指定）"],
   ["grantStayBlk","🛡⚓ 自分の「ブロッカー」を持つクリーチャーすべてに『離れる時、パワーが0より大きいならかわりにとどまる』を次の自分のターン開始時まで付与（Shin-Ka Musical型）"],
   ["handStFree","⚡ 自分の手札の「S・トリガー」持ちを1枚、コストを支払わずに実行（クリーチャー→召喚／呪文→詠唱・条件欄で追加対象指定可）"],
   ["handCastSpell","🔮 自分の手札から条件に合う呪文を1枚、コストを支払わずに唱えてもよい（条件欄で文明/コスト指定・シャッフ型）"],
@@ -4641,7 +4642,7 @@ const FX_TYPES=[
   ["millUntilCre","山札の上から、クリーチャーがn体墓地に置かれるまで置く（ヴォルグ・サンダー型・対象プレイヤー選択）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand"]);
+const FX_NO_N=new Set(["peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap"]);
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
@@ -5646,7 +5647,7 @@ async function runFxList(pi,list,srcCard,inPump){
   for(const f of list){
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
-    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll"]);
+    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap"]);
     // 🪧 「召喚時のみ」の効果：このカードの出た方法を1回だけ確認してゲート
     if(f.sumOnly&&srcCard){
       if(srcCard._wasSummon==null){
@@ -5690,6 +5691,22 @@ async function runFxList(pi,list,srcCard,inPump){
       if(tp.length)toast(`多色：${tp.join("、")} はタップしてマナゾーンへ`);
       if(cc>0){const nm=Z.mana.slice(-cc).map(faceNameOf).join("、");toast(`💎 マナ加速：${nm} をマナゾーンへ`);}
       sfx("move");
+    }else if(f.t==="graveToManaAllTap"){
+      // ⚰→🔷 墓地から条件(f.cond)に合うカードをすべてタップしてマナへ（使用可能マナは増えない＝タップイン）
+      const filt=String(f.cond||"").trim();
+      const targets=Z.grave.filter(x=>{const rx=getReg(x);return !filt||lockFilterOk(filt,rx,x);});
+      if(!targets.length){toast(`墓地に該当カードなし${filt?`（${filt}）`:""}`);}
+      else{
+        for(const tgt of targets.slice()){
+          const di=Z.grave.findIndex(x=>x.id===tgt.id);if(di<0)continue;
+          const cc=Z.grave.splice(di,1)[0];
+          cc.faceup=true;cc.tapped=true;cc.sideways=false; // タップイン＝このターン使用可能マナは増えない
+          Z.mana.push(cc);
+        }
+        sfx("move");
+        toast(`🔷 墓地から${filt?filt+"の":""}${targets.length}枚をタップしてマナゾーンへ（使用可能マナは増えない）`);
+        renderAll();
+      }
     }else if(f.t==="graveToMana"){
       // ⚰→🔷 自分の墓地から条件(f.cond)に合うカードをn枚マナゾーンに置く
       const filt=String(f.cond||"").trim();
@@ -22571,9 +22588,18 @@ $("bListView").addEventListener("click",()=>{
 });
 $("bSearch").addEventListener("input",bRender);
 $("bReset").addEventListener("click",()=>{B.counts[B.mode].clear();bRender();});
-$("bCancel").addEventListener("click",()=>$("builderOlay").classList.remove("open"));
+$("bCancel").addEventListener("click",()=>{
+  // 💾 「反映」を押さずに閉じても編集を失わないよう、閉じる時に自動でデッキリストへ反映（名前順）
+  const toText=m=>Array.from(m.entries()).sort((a,b)=>dispName.get(a[0]).localeCompare(dispName.get(b[0]),"ja")).map(([k,n])=>`${n} ${dispName.get(k)}`).join("\n");
+  $("deckText").value=toText(B.counts.main);
+  $("grText").value=toText(B.counts.gr);
+  $("hyText").value=toText(B.counts.hy);
+  $("exText").value=toText(B.counts.ex);
+  $("builderOlay").classList.remove("open");
+  $("deckStatus").textContent=`ビルダーの編集を保持しました：メイン${listTotal(parseList($("deckText").value))}枚。「保存して使用」で開始。`;
+});
 $("bApply").addEventListener("click",()=>{
-  const toText=m=>Array.from(m.entries()).map(([k,n])=>`${n} ${dispName.get(k)}`).join("\n");
+  const toText=m=>Array.from(m.entries()).sort((a,b)=>dispName.get(a[0]).localeCompare(dispName.get(b[0]),"ja")).map(([k,n])=>`${n} ${dispName.get(k)}`).join("\n");
   $("deckText").value=toText(B.counts.main);
   $("grText").value=toText(B.counts.gr);
   $("hyText").value=toText(B.counts.hy);
