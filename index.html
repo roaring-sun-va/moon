@@ -1553,6 +1553,7 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="unblock">ブロックされない（攻撃時表示）</option>
             <option value="blocker">ブロッカーを得る</option>
             <option value="slayer">スレイヤーを得る（バトル時表示）</option>
+            <option value="noSpell">相手は呪文を唱えられない（マキア型）</option>
           </select>
         </div>
         <span style="font-size:12px;font-weight:700">└ SF有効中</span>
@@ -3293,7 +3294,7 @@ function finishNextTurn(cur){
           if(isSp){
             if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
             Z.resolve.push(sc);
-            emitEvent(pi,"spell");
+            emitEvent(pi,"spell",sc);
             toast(`🛡✨ ギャラクシールド：${faceNameOf(sc)} を唱えた（解決中へ）`);
             enqueueFx(pi,sc);
           }else{
@@ -3636,7 +3637,7 @@ async function offerSealPeel(actor){
     renderAll();
   }
 }
-function emitEvent(actor,type){
+function emitEvent(actor,type,card){
   if(type==="summon")bumpEv("summons",actor);
   if(type==="spell")bumpEv("spells",actor);
   if(type==="summon")updatePeakBoard();
@@ -3647,6 +3648,7 @@ function emitEvent(actor,type){
     sfx("flip");
     toast(`⚡誘発確認（${WATCH_LABEL[type]}時）：${names.join("、")}`);
   }
+  if(type==="spell")runWatchFx(actor,"allySpell",card); // ⚡ 自分が呪文を唱えた時（スパーク型・条件欄=呪文名・ソロでも動く）
   if(S.vs)runWatchFx(actor===0?1:0,type);
   if(type==="summon"){
     const AZ0=zonesOf(actor);
@@ -3740,7 +3742,7 @@ async function findByCond(pi){
     if(!shieldCapOk(Z,dst===5)){toast(`🛡 シールド上限（10枚）：${c.name} は手札へ`);Z.hand.push(c);markArrive(c);}
     else{c.faceup=(dst===5);c.mark=S.turn>0;Z.shield.push(c);}
   }
-  else if(dst===6){Z.resolve.push(c);emitEvent(pi,"spell");enqueueFx(pi,c);}
+  else if(dst===6){Z.resolve.push(c);emitEvent(pi,"spell",c);enqueueFx(pi,c);}
   else{Z.hand.push(c);markArrive(c);}
   shuffleDeck(Z);
   toast(`サーチ：${c.name} → 山札をシャッフル`);
@@ -3795,7 +3797,7 @@ async function searchZone(pi,zone,kinds){
     if(!shieldCapOk(Z,dst===5)){toast(`🛡 シールド上限（10枚）：${c.name} は手札へ`);Z.hand.push(c);markArrive(c);}
     else{c.faceup=(dst===5);c.mark=S.turn>0;Z.shield.push(c);}
   }
-  else if(dst===6){Z.resolve.push(c);emitEvent(pi,"spell");enqueueFx(pi,c);}
+  else if(dst===6){Z.resolve.push(c);emitEvent(pi,"spell",c);enqueueFx(pi,c);}
   else{Z.hand.push(c);markArrive(c);}
   if(zone==="deck"){shuffleDeck(Z);toast(`探索：${c.name} → 山札をシャッフル`);}
   else toast(`探索：${c.name}`);
@@ -4532,6 +4534,9 @@ const FX_TYPES=[
   ["draw","n枚ドロー"],
   ["tapAllOp","相手のクリーチャーをすべてタップ（スパーク型）"],
   ["tapOpN","相手のクリーチャーをn体まで選んでタップ（「〜体までタップ」型）"],
+  ["foeFreezeAll","❄ 相手のクリーチャーすべては、次の相手のターンのはじめにアンタップしない（ボルパンサー型・タップはしない）"],
+  ["drawPerOppTapped","🃏 相手のタップしているクリーチャー1体につきカードを1枚引く（手札上限10枚まで・フラッシュ・スパーク型）"],
+  ["pickCostSpellHand","🔢 数字を1つ選び、そのコストの呪文を山札から超探索して1枚公開し手札へ→シャッフル（ロジック・スパーク型）"],
   ["turnLock","⛔ ターン限定ロックを設定（実行時に対象/種別/条件/期間を指定・5000VT後半効果型）"],
   ["foeAtkLockP","⚔ 今バトルゾーンにいる相手クリーチャーは、次の自分のターン開始時までプレイヤーを攻撃できない（ドギラゴールデン型・後から出た分は対象外）"],
   ["foeNoSpell","🚫 相手は次の自分のターン終了時まで呪文を唱えられない（唱えた側の次ターンまで・条件欄でコスト等指定可・空欄＝全呪文）"],
@@ -4636,7 +4641,7 @@ const FX_TYPES=[
   ["millUntilCre","山札の上から、クリーチャーがn体墓地に置かれるまで置く（ヴォルグ・サンダー型・対象プレイヤー選択）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","foeNoSpell","runMode"]);
+const FX_NO_N=new Set(["peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand"]);
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
@@ -5649,6 +5654,12 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       if(!srcCard._wasSummon){toast(`（召喚以外で出たため「召喚時のみ」の効果はスキップ）`);continue;}
     }
+    // ❓ 任意効果（〜してもよい）：実行前に確認。いいえでこの効果だけスキップ
+    if(f.opt){
+      const lbl=(FX_LABEL[f.t]||f.t).replace("n",f.n).split("（")[0];
+      const doIt=await ask(`❓ 任意効果${srcCard?`（${faceNameOf(srcCard)}）`:""}\n「${lbl}${f.cond?`／条件:${f.cond}`:""}」を行いますか？`);
+      if(!doIt){toast(`（任意効果をスキップ）`);continue;}
+    }
     if(f.cond&&!FILT_COND.has(f.t)){
       const _condStr=String(f.cond).trim();
       const _parseable=/(?:<=|>=|<|>|＝|=|以上|以下)/.test(_condStr)||/^(?:自分|相手)?(?:の)?(?:マナ|墓地|手札|盾|シールド|バトル|山札|革命|超次元|GR|デッキ)/.test(_condStr);
@@ -5803,6 +5814,64 @@ async function runFxList(pi,list,srcCard,inPump){
       for(const b of OZt.battle){if(!b.tapped){b.tapped=true;tn++;}}
       sfx("move");renderAll();
       toast(`⚡ スパーク！ 相手のクリーチャーをすべてタップ（${tn}体）`);
+    }else if(f.t==="foeFreezeAll"){
+      // ❄ 相手のクリーチャーすべては次の相手のターンのはじめにアンタップしない（タップ状態は変えない・ボルパンサー型）
+      const OZf=zonesOf(op);
+      const tgts=OZf.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
+      if(!tgts.length){toast("相手のクリーチャーがいません");}
+      else{
+        tgts.forEach(x=>{x.frozen=true;});
+        sfx("flip");
+        toast(`❄ 相手のクリーチャー${tgts.length}体は、次の相手のターンのはじめにアンタップしない`);
+        renderAll();
+      }
+    }else if(f.t==="drawPerOppTapped"){
+      // 🃏 相手のタップしているクリーチャー1体につき1枚引く（手札上限10枚まで・フラッシュ・スパーク型）
+      const OZd=zonesOf(op);
+      const tn=OZd.battle.filter(x=>x.tapped&&(()=>{const rx=getReg(x);return rx&&isCreatureReg(rx);})()).length;
+      if(!tn){toast("相手のタップしているクリーチャーがいません（ドローなし）");}
+      else{
+        const cap=Math.max(0,10-Z.hand.length);
+        const dn=Math.min(tn,cap,Z.deck.length);
+        for(let i=0;i<dn;i++){const dc=Z.deck.shift();dc.faceup=true;dc.sideways=false;Z.hand.push(dc);markArrive(dc);}
+        bumpEv("draws",pi,dn);
+        sfx("draw");emitEvent(pi,"draw");
+        toast(`🃏 相手のタップ中クリーチャー${tn}体 → ${dn}枚ドロー${dn<tn?`（手札上限10枚のため${tn-dn}枚は引けない）`:""}`);
+        renderAll();
+      }
+    }else if(f.t==="pickCostSpellHand"){
+      // 🔢 数字を1つ選び、そのコストの呪文を超探索して1枚公開し手札へ→シャッフル（ロジック・スパーク型）
+      const num=await askNumber("🔢 数字を1つ選んでください（そのコストの呪文を超探索）",3,99);
+      if(num===null)break;
+      const cands=Z.deck.filter(x=>{
+        const rx=getReg(x);if(!rx)return false;
+        const isSp=rx.ctype==="spell"||rx.twin||rx.ctype==="twinpact";
+        if(!isSp)return false;
+        const cst=rx.ctype==="spell"?rx.cost:(rx.cost2!=null?rx.cost2:rx.cost);
+        return cst===num;
+      });
+      if(!cands.length){
+        toast(`🔎 超探索：コスト${num}の呪文は山札にありません → シャッフル`);
+        shuffle(Z.deck);
+      }else{
+        // 超探索＝候補から最大5枚をランダム提示して1枚選ぶ
+        const pool=cands.slice();
+        for(let a=pool.length-1;a>0;a--){const b=Math.floor(Math.random()*(a+1));[pool[a],pool[b]]=[pool[b],pool[a]];}
+        const show=pool.slice(0,5);
+        const j=await pickCard(`🔎 超探索：コスト${num}の呪文（${show.length}枚提示）\n1枚公開して手札に加えてもよい（キャンセル＝加えない）`,show);
+        if(j!==null){
+          const sel=show[j];
+          const di=Z.deck.findIndex(x=>x.id===sel.id);
+          if(di>=0)Z.deck.splice(di,1);
+          sel.faceup=true;Z.hand.push(sel);markArrive(sel);
+          toast(`👐 公開して手札へ：${faceNameOf(sel)}`);
+        }else{
+          toast("（手札に加えませんでした）");
+        }
+        shuffle(Z.deck);
+        toast("🔀 山札をシャッフル");
+      }
+      sfx("ok");renderAll();
     }else if(f.t==="tapOpN"){
       // ⤵ 相手のクリーチャーをn体まで選んでタップ
       let cnt=0;
@@ -5986,10 +6055,10 @@ async function runFxList(pi,list,srcCard,inPump){
       if(wantSpell){
         // 呪文：解決中スタックへ（自動墓地・虚無月誘発などは既存経路で処理）
         if(S.spellAutoGrave!==false){
-          Z.resolve.push(chosen);emitEvent(pi,"spell");scheduleAutoResolve(pi,chosen);
+          Z.resolve.push(chosen);emitEvent(pi,"spell",chosen);scheduleAutoResolve(pi,chosen);
         }else{
           if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
-          Z.resolve.push(chosen);emitEvent(pi,"spell");
+          Z.resolve.push(chosen);emitEvent(pi,"spell",chosen);
         }
         enqueueFx(pi,chosen);
         toast(`✨ ${faceNameOf(chosen)} をコストを支払わず唱えた（${zoneOpts[zj][1]}から）`);
@@ -6373,7 +6442,7 @@ async function runFxList(pi,list,srcCard,inPump){
             sel.faceup=true;
             {const rSel=getReg(sel);if(rSel&&rSel.twin)sel.face=1;} // 🃏 ツインパクトは呪文面（下面）で唱える
             if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
-            Z.resolve.push(sel);emitEvent(pi,"spell");enqueueFx(pi,sel);
+            Z.resolve.push(sel);emitEvent(pi,"spell",sel);enqueueFx(pi,sel);
             toast(`🔮 ${faceNameOf(sel)} をコストを支払わず唱えた（解決中へ）`);
           }
         }
@@ -6546,7 +6615,7 @@ async function runFxList(pi,list,srcCard,inPump){
             sel.faceup=true;sel.tapped=false;
             if(rSel&&rSel.ctype==="spell"){
               if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
-              Z.resolve.push(sel);emitEvent(pi,"spell");enqueueFx(pi,sel);
+              Z.resolve.push(sel);emitEvent(pi,"spell",sel);enqueueFx(pi,sel);
               toast(`⚡ S・トリガー無償詠唱：${faceNameOf(sel)}（解決中へ）`);
             }else{
               Z.battle.push(sel);markArrive(sel);emitEvent(pi,"summon");enqueueFx(pi,sel);
@@ -6572,7 +6641,7 @@ async function runFxList(pi,list,srcCard,inPump){
             sel.faceup=true;sel.tapped=false;
             {const rSel=getReg(sel);if(rSel&&rSel.twin)sel.face=1;} // ツインパクトは呪文面で唱える
             if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
-            Z.resolve.push(sel);emitEvent(pi,"spell");enqueueFx(pi,sel);
+            Z.resolve.push(sel);emitEvent(pi,"spell",sel);enqueueFx(pi,sel);
             toast(`🔮 ${faceNameOf(sel)} をコストを支払わず唱えた（解決中へ）`);
             sfx("ok");renderAll();await waitFxIdle(inPump);
           }
@@ -6994,7 +7063,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(rx2&&rx2.twin)o.c.face=1; // ツインパクトは呪文面（下面）で唱える
         Z.resolve.push(o.c);
         toast(`✨ コストを支払わず唱える：${faceNameOf(o.c)}`);
-        emitEvent(pi,"spell");
+        emitEvent(pi,"spell",o.c);
         renderAll();
         // 呪文効果をこの場でインライン実行（ポンプ内なのでwaitFxIdle不可）
         {const fl=(rx2&&rx2.faces&&rx2.faces[o.c.face|0])||[];
@@ -7559,6 +7628,7 @@ function lockFilterOk(filt,r,c,lockPi,face){
     if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(c)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」・通常召喚状態や手札では「進化以外」（ヘブンズ・ゲート／爆進ダブル両対応）
     if(tk==="クロスギア")return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));
      if(tk==="サイキック")return !!((r&&(r.ctype==="psychic"||r.ctype==="psyevo"))||(c&&c.isPsy));
+     if(tk==="S・トリガー"||tk==="Sトリガー"||tk==="ST")return !!(r&&r.st);
     if(tk==="クリーチャー")return !!(r&&r.ctype!=="spell");
     if(tk==="呪文")return !!(r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact")); // ツインパクトは呪文としても扱う
     if(tk==="ツインパクト")return !!(r&&(r.twin||r.ctype==="twinpact"));
@@ -7568,7 +7638,7 @@ function lockFilterOk(filt,r,c,lockPi,face){
   filt=String(filt).replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0)).replace(/＞/g,">").replace(/＜/g,"<").replace(/＝/g,"=");
   // 種族・名前のトークンは「いずれか（OR）」、コスト/パワー/タイプ/文明/多色単色/「以外」は「すべて（AND）」。
   // 例：「ボルシャック／ルピア／コスト7以下」＝（名前にボルシャック または ルピア）かつ コスト7以下
-  const isCons=tk=>/^コスト/.test(tk)||/^パワー\d+(?:以下|以上)$/.test(tk)||tk==="多色"||tk==="単色"||tk==="クリーチャー"||tk==="呪文"||tk==="ツインパクト"||tk==="ブロッカー"||tk==="進化"||tk==="クロスギア"||tk==="サイキック"||!!civMap[tk]||/以外$/.test(tk);
+  const isCons=tk=>/^コスト/.test(tk)||/^パワー\d+(?:以下|以上)$/.test(tk)||tk==="多色"||tk==="単色"||tk==="クリーチャー"||tk==="呪文"||tk==="ツインパクト"||tk==="ブロッカー"||tk==="進化"||tk==="クロスギア"||tk==="サイキック"||tk==="S・トリガー"||tk==="Sトリガー"||tk==="ST"||!!civMap[tk]||/以外$/.test(tk);
   // 「・」区切りの許容：ユーザーが「光/水・コスト5以下」のように中黒で区切っても動くようにする。
   //   ただし「ボルシャック・ドギラゴン」等のカード名を壊さないため、分割後の全ピースが制約語（コスト/パワー/文明/多色単色/タイプ/以外）の時だけ分割する。
   const splitDot=piece=>{
@@ -7608,6 +7678,8 @@ function stLockerOf(pi,key,filtKey,r,c){
     if(!rb||isSealed(b)||isIgnored(b,op2))continue;
     if(rb[key]&&lockFilterOk(rb[filtKey],r,c,op2))return b;
     if(b.hyper&&rb[hmKey]&&lockFilterOk(rb[hmFiltKey],r,c))return b;
+    // ✨ 条件付き常在「相手は呪文を唱えられない」（マキア型：条件式を満たす間のみ）
+    if(key==="stLockSpell"&&rb.cstCond&&rb.cstFx==="noSpell"&&zoneCondOk(rb.cstCond,op2))return b;
   }
   // 🔒 両者ロック（stLockBoth）：自分の場のロック持ちも自分に効く（暴走龍5000GT型・自身は除外）
   for(const b of zonesOf(pi).battle){
@@ -7864,6 +7936,7 @@ async function pumpFx(){
     // ⏱ APNAP：オリオティス所有者がターンプレイヤーなら、出た時(CIP)より先に判定
     if(ORI_QUEUE.length&&ORI_QUEUE.some(o=>S.who===o.defO))await drainOriotis(true);
     if(TRIG_PENDING.length&&TRIG_PENDING.some(t=>S.who===t.pi))await drainTrig(true); // ⏱ ターンプレイヤーの誘発はCIPより先
+    HILITE_ID=c.id;renderAll(); // 🔶 処理中のカードを黄色ハイライト
     {const _wt=fxQueue.length>=3?120:fxQueue.length>=1?220:380;toast(`▶ 効果処理：${faceNameOf(c)}`);await new Promise(r=>setTimeout(r,_wt));}
     snap();
     // 🚩 革命N：自分の盾がN枚以下でのみ追加能力が有効。未達なら発動しない（他の効果があれば選択）
@@ -7967,6 +8040,7 @@ async function pumpFx(){
       }
     }
     // ⚡ このカードの解決が完全に終わったので、解決中に墓地へ落ちたカードの「墓地に置かれた時」を発火（割り込まない）
+    if(HILITE_ID===c.id){HILITE_ID=null;renderAll();} // 🔶 処理完了でハイライト解除
     await drainToGrave();
     // ⏱ APNAP：出した側がターンプレイヤーの場合、キューが空（＝全CIP解決後）になってからオリオティス判定
     if(!fxQueue.length){if(TRIG_PENDING.length)await drainTrig(false);if(ORI_QUEUE.length)await drainOriotis(false);}
@@ -8862,7 +8936,7 @@ function processBroken(op,stack,label){
               const still=Z.resolve.find(x=>x.id===cc.id);
               if(!still)continue; // 手動で動かされていたらスキップ
               toast(`⚡ 解決（${stDefer.indexOf(d)+1}/${stDefer.length}）：${faceNameOf(cc)}`);
-              emitEvent(op,"spell");enqueueFx(op,cc);
+              emitEvent(op,"spell",cc);enqueueFx(op,cc);
             }else{
               const onB=Z.battle.find(x=>x.id===cc.id);
               const asB=!onB&&Z.battle.some(x=>x.under&&x.under.some(u=>u.id===cc.id));
@@ -9076,6 +9150,7 @@ function pickShieldIdxs(op,count){
         if(picked.size!==count){toast(`あと${count-picked.size}枚選択してください`);return;}
         const ba=$("bkActions");if(ba){ba.innerHTML="";ba.style.display="none";}
         $("bkDone").onclick=null;
+        $("breakOlay").classList.remove("open"); // 🔥 焼却/QQQX（processBroken非経由）でも閉じ残らないように（processBrokenは必要なら再度開く）
         res([...picked]);
       };
     };
@@ -9915,7 +9990,7 @@ async function execAttack(pi,id,tg){
                 const rH=getReg(h);
                 if(rH&&rH.ctype==="spell"){
                   if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
-                  Z.resolve.push(h);emitEvent(pi,"spell");
+                  Z.resolve.push(h);emitEvent(pi,"spell",h);
                   toast(`⬛ ${faceNameOf(h)} を唱えた（解決中へ）`);
                 }else{
                   Z.battle.push(h);markArrive(h);emitEvent(pi,"summon");
@@ -10117,33 +10192,7 @@ async function execAttack(pi,id,tg){
       return;
     }
   }
-  const aregNB=getReg(c);
-  const isBlk=b=>{
-    const rb=getReg(b);
-    if(rb&&rb.blocker)return true;
-    if(b.buff&&b.buff.blocker)return true;
-    if(gearBlockerOn(b))return true; // ⚙ クロスギアの「ブロッカー」付与
-    if(rb&&(rb.hmBlocker||rb.hmBK)&&b.hyper&&!isSealed(b)&&!isIgnored(b,op))return true;
-    if(!isSealed(b)&&!isIgnored(b,op)&&allyGrant(op,"agBlocker"))return true;
-    if(rb&&rb.cstCond&&rb.cstFx==="blocker"&&!isSealed(b)&&!isIgnored(b,op)&&zoneCondOk(rb.cstCond,op))return true;
-    return false;
-  };
-  const blockers=(aregNB&&aregNB.noBlock)?[]:OZ.battle.filter(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b));
-  if(aregNB&&aregNB.noBlock&&OZ.battle.some(b=>!b.tapped&&isBlk(b)))
-    toast(`${faceNameOf(c)} はブロックされない`);
-  let defender=null;
-  if(blockers.length){
-    const bl=await askChoice(`${S.players[op].label}：ブロックしますか？`,
-      [...blockers.map(b=>`🛡 ${faceNameOf(b)} でブロック`),"ブロックしない"]);
-    if(bl===null){renderAll();return;}
-    if(bl<blockers.length){
-      defender=blockers[bl];
-      defender.tapped=true;
-      toast(`ブロック：${faceNameOf(defender)}`);
-      renderAll();
-    }
-  }
-  if(defender){await doBattle(pi,c,op,defender);clearPendingAtk();return;}
+  // ✨ アタック・チャンス：攻撃宣言時＝ブロック宣言や対象解決の前に唱える（正式タイミング）
   if(S.expert){
     const rAtk2=getReg(c);
     const acs=Z.hand.filter(h=>{
@@ -10175,6 +10224,33 @@ async function execAttack(pi,id,tg){
       }
     }
   }
+  const aregNB=getReg(c);
+  const isBlk=b=>{
+    const rb=getReg(b);
+    if(rb&&rb.blocker)return true;
+    if(b.buff&&b.buff.blocker)return true;
+    if(gearBlockerOn(b))return true; // ⚙ クロスギアの「ブロッカー」付与
+    if(rb&&(rb.hmBlocker||rb.hmBK)&&b.hyper&&!isSealed(b)&&!isIgnored(b,op))return true;
+    if(!isSealed(b)&&!isIgnored(b,op)&&allyGrant(op,"agBlocker"))return true;
+    if(rb&&rb.cstCond&&rb.cstFx==="blocker"&&!isSealed(b)&&!isIgnored(b,op)&&zoneCondOk(rb.cstCond,op))return true;
+    return false;
+  };
+  const blockers=(aregNB&&aregNB.noBlock)?[]:OZ.battle.filter(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b));
+  if(aregNB&&aregNB.noBlock&&OZ.battle.some(b=>!b.tapped&&isBlk(b)))
+    toast(`${faceNameOf(c)} はブロックされない`);
+  let defender=null;
+  if(blockers.length){
+    const bl=await askChoice(`${S.players[op].label}：ブロックしますか？`,
+      [...blockers.map(b=>`🛡 ${faceNameOf(b)} でブロック`),"ブロックしない"]);
+    if(bl===null){renderAll();return;}
+    if(bl<blockers.length){
+      defender=blockers[bl];
+      defender.tapped=true;
+      toast(`ブロック：${faceNameOf(defender)}`);
+      renderAll();
+    }
+  }
+  if(defender){await doBattle(pi,c,op,defender);clearPendingAtk();return;}
   if(S.expert){
     const rK=getReg(c);
     if(rK&&rK.kizuna){
@@ -10615,6 +10691,15 @@ function fxRowEl(faceIdx,i){
   scb.onchange=()=>{f.sumOnly=scb.checked;};
   sumL.appendChild(scb);
   sumL.appendChild(document.createTextNode("召喚時のみ"));
+  // ❓ 任意効果：実行前に「行いますか？」を確認（「〜してもよい」型）
+  const optL=document.createElement("label");
+  optL.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  optL.title="この効果は任意（〜してもよい）：実行前に「行いますか？」の確認が出て、いいえでスキップできます";
+  const ocb=document.createElement("input");
+  ocb.type="checkbox";ocb.checked=!!f.opt;
+  ocb.onchange=()=>{f.opt=ocb.checked;};
+  optL.appendChild(ocb);
+  optL.appendChild(document.createTextNode("❓任意"));
   const del=document.createElement("button");
   del.className="btn small warn del";del.textContent="✕";
   del.onclick=()=>{FXEDIT.faces[faceIdx].splice(i,1);renderFxEditor();};
@@ -10630,7 +10715,7 @@ function fxRowEl(faceIdx,i){
   dn.title="1つ下へ（実行順が変わります）";dn.style.cssText="padding:2px 7px";
   dn.disabled=i===arr0.length-1;
   dn.onclick=()=>{[arr0[i],arr0[i+1]]=[arr0[i+1],arr0[i]];renderFxEditor();};
-  row.appendChild(sel);row.appendChild(fb);row.appendChild(num);row.appendChild(shb);row.appendChild(sumL);row.appendChild(up);row.appendChild(dn);row.appendChild(del);row.appendChild(cnd);
+  row.appendChild(sel);row.appendChild(fb);row.appendChild(num);row.appendChild(shb);row.appendChild(sumL);row.appendChild(optL);row.appendChild(up);row.appendChild(dn);row.appendChild(del);row.appendChild(cnd);
   return row;
 }
 const CIVS=[["fxCivL","light","光"],["fxCivW","water","水"],["fxCivD","dark","闇"],["fxCivF","fire","火"],["fxCivN","nature","自然"],["fxCivZ","zero","ゼロ"]];
@@ -10654,6 +10739,7 @@ const TRIG_EVS=[
   ["summon","相手がクリーチャーを出した時"],
   ["elem","相手がエレメントを出した時"],
   ["spell","相手が呪文を唱えた時"],
+  ["allySpell","自分が呪文を唱えた時（条件欄＝唱えた呪文の名前など・《スパーク》型）"],
   ["turnEndMine","自分のターンの終わりに"],
   ["turnEndOpp","相手のターンの終わりに"],
   ["turnEndBoth","お互いのターンの終わりに"],
@@ -14856,7 +14942,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       // 📚 スタック方式：前のカードを掃かずに重ねる（ザフィヴォ型の入れ子処理に対応）。
       // 各カードは自身の効果処理が終わり、かつスタック最上位になった時点で自動で墓地へ（scheduleAutoResolve）
       Z.resolve.push(c);
-      emitEvent(pTo,"spell");
+      emitEvent(pTo,"spell",c);
       scheduleAutoResolve(pTo,c);
     }else{
       // 従来方式：新しい呪文を置く時に前のカードを墓地へ掃く
@@ -14869,7 +14955,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         if(chg.length)toast(`⚡チャージャー：${chg.join("、")} はマナゾーンへ`);
       }
       Z.resolve.push(c);
-      emitEvent(pTo,"spell");
+      emitEvent(pTo,"spell",c);
     }
   }
   else if(fromZone==="resolve"&&toZone==="grave"&&(()=>{
@@ -19849,7 +19935,7 @@ function renderRevealPanel(){
           else{
             cc.faceup=true;
             Z2[tz].push(cc);
-            if(tz==="resolve"){emitEvent(rvPi,"spell");enqueueFx(rvPi,cc);} // ⚡ 解決中へ＝呪文の解決（効果発火）
+            if(tz==="resolve"){emitEvent(rvPi,"spell",cc);enqueueFx(rvPi,cc);} // ⚡ 解決中へ＝呪文の解決（効果発火）
           }
         }
         rvMulti.clear();
