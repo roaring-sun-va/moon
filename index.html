@@ -1542,9 +1542,18 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxSoulShift"> ソウルシフト（進化時、進化元のコスト分軽減）</label>
         <label><input type="checkbox" id="fxGaiash"> 相手のターンの終わりに手札から出せる（ガイアッシュ型・条件はプレイヤー判断）</label>
         <label><input type="checkbox" id="fxSForce"> シールド・フォース（出た時、盾を1つ指定。その盾がある間有効）</label>
+        <span style="font-size:12px;font-weight:700">└ シールド・フォース有効中の効果</span>
+        <select id="fxSForceFx" style="width:auto;flex:0 0 240px">
+          <option value="">アナウンスのみ（効果は手動）</option>
+          <option value="noLeave">バトルゾーンを離れない（P・ギャラクシー／パーフェクト・エイティー型）</option>
+          <option value="noDestroy">破壊されない</option>
+          <option value="pw">パワー＋n</option>
+          <option value="break">ブレイク数＋n</option>
+        </select>
+        <input type="number" id="fxSForceN" style="width:80px" placeholder="n" min="0">
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span style="font-size:12px;font-weight:700">条件付き常在</span>
-          <input type="text" id="fxCStCond" placeholder="条件式（例：盾合計<=6／盾>=5／手札<=1／マナ:ドラゴン>=3／相手ターン）" style="flex:2;min-width:180px">
+          <input type="text" id="fxCStCond" placeholder="条件式（例：盾合計<=6／盾>=5／手札<=1／マナ:ドラゴン>=3／自分パワー>=12000／相手ターン）" style="flex:2;min-width:180px">
           <select id="fxCStFx" style="width:auto;flex:1 0 170px">
             <option value="">効果：アナウンスのみ</option>
             <option value="noLeave">離れない</option>
@@ -1556,15 +1565,6 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="noSpell">相手は呪文を唱えられない（マキア型）</option>
           </select>
         </div>
-        <span style="font-size:12px;font-weight:700">└ SF有効中</span>
-        <select id="fxSForceFx" style="width:auto;flex:0 0 220px">
-          <option value="">アナウンスのみ（効果は手動）</option>
-          <option value="noLeave">バトルゾーンを離れない（P・ギャラクシー／パーフェクト・エイティー型）</option>
-          <option value="noDestroy">破壊されない</option>
-          <option value="pw">パワー＋n</option>
-          <option value="break">ブレイク数＋n</option>
-        </select>
-        <input type="number" id="fxSForceN" style="width:80px" placeholder="n" min="0">
         <span style="font-size:12px;font-weight:700">シールド・プラス</span>
         <select id="fxSPlus" style="width:auto;flex:0 0 170px">
           <option value="0">なし</option>
