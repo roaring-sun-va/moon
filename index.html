@@ -16859,7 +16859,22 @@ function checkLibWin(){
     },250);
   }
 }
+/* ⚡ 描画の間引き：効果チェーン中にrenderAllが連続で呼ばれた時、50msに1回へまとめて全盤面再構築の負荷を削減。
+   アイドル時（前回描画から50ms以上）は従来どおり即時描画＝通常操作の体感は不変。末尾は必ず描画される。 */
+let _raLast=0,_raTm=null;
 function renderAll(){
+  const now=(typeof performance!=="undefined"&&performance.now)?performance.now():Date.now();
+  if(now-_raLast>=50){
+    if(_raTm){clearTimeout(_raTm);_raTm=null;}
+    _raLast=now;renderAllNow();return;
+  }
+  if(!_raTm)_raTm=setTimeout(()=>{
+    _raTm=null;
+    _raLast=(typeof performance!=="undefined"&&performance.now)?performance.now():Date.now();
+    renderAllNow();
+  },55-(now-_raLast));
+}
+function renderAllNow(){
   checkLibWin();
   checkMugetsu(false);
   // 🩹 保険：保留中の攻撃が無いのに「▶ 攻撃を再開」ボタンが残っていたら隠す（取りこぼしの自己修復）。
