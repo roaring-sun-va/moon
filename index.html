@@ -2783,7 +2783,7 @@ function startGame(picks){
   WATCH_CHAIN=Promise.resolve();
   MOVE_TAP_CHAIN=Promise.resolve();
   FX_HOLD=false;GAME_PAUSE=false;LABY_RUN=false;try{ORI_QUEUE.length=0;TOGRAVE_PENDING.length=0;TRIG_PENDING.length=0;}catch(e){}{const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
-  MUGETSU_BUSY=false;MUGETSU_TE_DONE=false;MUGETSU_ASKED={};MUGETSU_PENDING=new Set();
+  MUGETSU_BUSY=false;MUGETSU_TE_DONE=false;MUGETSU_ASKED={};MUGETSU_PENDING=new Set();MUGETSU_THIS_TRIG=new Set();
   S._watchOnce={};S.pendingAtk=null;MOVE_BLOCKED=false;
   try{$("fxBanner").classList.remove("show");}catch(e){}
   if(!S.players[0].mainList.length){openDeckPanel();toast("先にデッキを登録してください");return;}
@@ -2987,7 +2987,7 @@ function nextTurn(){
       return;
     }
   }
-  MUGETSU_ASKED={};MUGETSU_PENDING.clear(); // ターンが変わるので無月の門の確認済み/登場フラグをリセット（絶は毎ターン終了時に再確認）
+  MUGETSU_ASKED={};MUGETSU_PENDING.clear();MUGETSU_THIS_TRIG.clear(); // ターンが変わるので無月の門の確認済み/登場フラグをリセット（絶は毎ターン終了時に再確認）
   if(LABY_RUN){
     toast("⏳ ラビリンス・マジックの処理中です");
     return;
@@ -5545,7 +5545,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
         if(fj!==null){
           cc.face=fj;
           const fr=FXDB.get(lk[fj]);
-          cc.rot=(fr&&(fr.wide||fr.d2))?90:0;
+          cc.rot=(fr&&(fr.wide||fr.d2))?((pi===S.seat)?270:90):0;
         }
       }
     }
@@ -6768,7 +6768,7 @@ async function runFxList(pi,list,srcCard,inPump){
               if(fj!==null){
                 cc.face=fj;
                 const fr=FXDB.get(lk[fj]);
-                cc.rot=(fr&&(fr.wide||fr.d2))?90:0;
+                cc.rot=(fr&&(fr.wide||fr.d2))?((pi===S.seat)?270:90):0;
               }
             }
           }
@@ -7869,6 +7869,11 @@ function afterHandDiscard(owner,c){
         renderAll();
       })();
     }
+  }
+  // ⚡ 「このカードが（どこからでも）墓地に置かれた時」（ゾルザーク型toGrave）：手札を捨てて墓地に置かれた場合も発火
+  const rG=getReg(c);
+  if(rG&&rG.watchFx&&rG.watchFx.some(w=>w.ev==="toGrave")&&!(rM&&rM.madness)){
+    queueToGrave(owner,c);
   }
 }
 function isSealed(c){return !!(c&&c.seals&&c.seals.length);}
@@ -12659,6 +12664,9 @@ function parseCardText(txt,mode){
     const mz=sy.match(/^自分の(墓地|マナ|手札|山札|シールド|盾)(?:ゾーン)?の(.+)$/);
     if(mz){const zl={"墓地":"墓地","マナ":"マナ","手札":"手札","山札":"山札","シールド":"盾","盾":"盾"}[mz[1]];sy=`${zl}:${mz[2].trim()}`;}
     out.set.sympathy=sy;
+    // 💞 ダブルシンパシー（1体につき2軽減）表記も拾う
+    if(/ダブル・?シンパシー|1体につき2|１体につき２/.test(t))out.set.symX=2;
+    out.notes.push({msg:`💞 シンパシー（${sy}${out.set.symX>1?"・1体につき2軽減":""}）を設定しました`,q:"シンパシー"});
   }
   // 💞 「（召喚）コストを、自分の〔ゾーン〕にある〔対象〕1体につきN少なくする」→ シンパシー（ゾーン指定）。オブザ08号型
   if(!out.set.sympathy){
@@ -16734,6 +16742,7 @@ let LIBWIN_ASKED=[false,false];
 let MUGETSU_ASKED={};
 let MUGETSU_BUSY=false;
 let MUGETSU_TE_DONE=false;      // 絶ゲート：このターン終了処理で確認済みか
+let MUGETSU_THIS_TRIG=new Set(); // 現在の登場/解決トリガー内で確認済みの門
 let MUGETSU_PENDING=new Set();  // 無月/虚無月の誘発イベント（魔導具の着地・水魔導具の解決完了）が起きたプレイヤー
 /* 無月の門（ドルスザク）：魔導具（種族）を数えて条件成立を判定し、召喚を確認する
    条件： 無月の門(normal)＝場に魔導具2以上 かつ 墓地に魔導具2以上
@@ -16787,10 +16796,10 @@ async function checkMugetsu(atTurnEnd){
       if(!r||!r.mugetsu||r.mugetsu==="zetsu")continue; // 絶はターン終了ゲートで処理
       const type=r.mugetsu;
       const met=type==="normal"?(battleMad>=2&&graveMad>=2):(total>=4);
-      const key=pi+":"+h.id+":hand";
-      if(!met){delete MUGETSU_ASKED[key];continue;}
-      if(MUGETSU_ASKED[key])continue;
-      MUGETSU_ASKED[key]=true;
+      const tkey=pi+":"+h.id;
+      if(!met)continue;
+      if(MUGETSU_THIS_TRIG.has(tkey))continue; // 🌑 この登場/解決イベント内で既に確認した門はスキップ（次の魔導具登場では再度選べる）
+      MUGETSU_THIS_TRIG.add(tkey);
       MUGETSU_BUSY=true;
       asked=true;
       try{
@@ -16803,7 +16812,11 @@ async function checkMugetsu(atTurnEnd){
       return; // 1回につき1体（召喚した魔導具が新たに登場フラグを立て、次の描画で残りの門を続けて判定）
     }
     // このpiで開くべき門がもう無い → 今回の登場/解決イベントを消費（次のドロー等で誤発動しない）
-    if(!asked){MUGETSU_PENDING.delete(pi+":cre");MUGETSU_PENDING.delete(pi+":spl");}
+    if(!asked){
+      MUGETSU_PENDING.delete(pi+":cre");MUGETSU_PENDING.delete(pi+":spl");
+      // このトリガーの確認済みをクリア → 次の魔導具登場/呪文解決で同じ門を再度選べる
+      for(const kk of [...MUGETSU_THIS_TRIG]){if(kk.startsWith(pi+":"))MUGETSU_THIS_TRIG.delete(kk);}
+    }
   }
 }
 function checkLibWin(){
@@ -18693,7 +18706,7 @@ function openCardSheet(ctx){
     box.appendChild(actBtn(`変形（${((c.face||0)+1)%link.length+1}/${link.length}面へ）`,async ()=>{
       c.face=((c.face||0)+1)%link.length;
       const fr=FXDB.get(link[c.face]);
-      if(ctx.zone==="battle")c.rot=(fr&&(fr.wide||fr.d2))?90:0;
+      if(ctx.zone==="battle")c.rot=(fr&&(fr.wide||fr.d2))?((ctx.p===S.seat)?270:90):0;
       if(ctx.zone==="battle"&&c.sick){c.sick=false;toast("⚡ 変形（覚醒/龍解など）：召喚酔いが解けた");}
       sfx("flip");
       // 覚醒/龍解/究極進化など「裏返った時」の効果：変形後の面の出た時効果を発動できる
@@ -19110,7 +19123,7 @@ function openCardSheet(ctx){
         if(link2&&link2.length>1)g.face=((g.face||0)+1)%link2.length;
         const fk2=link2&&link2.length?link2[g.face||0]:normName(g.name);
         const fr2=FXDB.get(fk2);
-        g.rot=(fr2&&(fr2.wide||fr2.d2))?90:0;
+        g.rot=(fr2&&(fr2.wide||fr2.d2))?((ctx.p===S.seat)?270:90):0;
         g.tapped=false;
         zonesOf(ctx.p).battle.push(g);
         markArrive(g);sfx("ok");
