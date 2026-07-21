@@ -1613,6 +1613,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxStOriotis"> オリオティス（相手のマナ枚数よりコストが大きい相手クリーチャーが出たら山札の下へ）</label>
         <label>🌀 相手ターン開始時、相手マナのアンタップを <input type="number" id="fxManaUntapN" min="0" max="99" style="width:58px" value="0"> 枚までに制限（0=制限なし・ガ・リュザーク型は3）</label>
         <label><input type="checkbox" id="fxNoUntap"> 常在：ターン開始時にアンタップしない（自身）</label>
+        <label title="このクリーチャーは封印されない（禁断・零龍などの封印を受け付けない・パーフェクト・エイティー型）"><input type="checkbox" id="fxNoSeal"> 🔏 封印されない（自身・パーフェクト・エイティー型）</label>
         <label><input type="checkbox" id="fxStNoHandes"> 常在：自分の手札は相手のカードの効果によって捨てられない</label>
         <label><input type="checkbox" id="fxLibWin"> 常在：自分の山札が0枚になったら、負けるかわりに勝利する（シャコガイル型）</label>
         <label><input type="checkbox" id="fxPetensy"> 相手のターンの終わりに、そのターン クリーチャーが3体以上出ていれば、手札からコストを支払わずに使える（ペテンシー型）</label>
@@ -8080,6 +8081,13 @@ function afterHandDiscard(owner,c){
   }
 }
 function isSealed(c){return !!(c&&c.seals&&c.seals.length);}
+/* 🔏 封印されないか（パーフェクト・エイティー型・能力無視を受けていれば封印される） */
+function canSeal(pi,c){
+  if(!c)return false;
+  const r=getReg(c);
+  if(S.expert&&r&&r.noSeal&&!isIgnored(c,pi)){toast(`🔏 ${faceNameOf(c)} は封印されない！`);return false;}
+  return true;
+}
 function isIgnored(c,pi){
   if(!S.expert)return false;
   if(c.buff&&c.buff.ignoreAbility)return true; // 🚯 付与：このカードの能力を無視（立ち上がれ型等）
@@ -9695,6 +9703,7 @@ async function dormaChoice(pi,c){
     if(S.vs&&await ask("相手のクリーチャーすべてに封印を1つずつ付けますか？（相手の山札の上から）")){
       const OZ=zonesOf(op);
       OZ.battle.forEach(t=>{
+        if(!canSeal(op,t))return;
         if(OZ.deck.length){const sc=OZ.deck.shift();sc.faceup=false;t.seals=t.seals||[];t.seals.push(sc);}
       });
       toast("相手クリーチャーすべてに封印を付けました");
@@ -11984,6 +11993,7 @@ function renderFxEditor(){
   {const e=$("fxStNoST");if(e)e.checked=!!FXEDIT.stNoST;}
   $("fxCostFloor1").checked=!!FXEDIT.costFloor1;
   $("fxNoUntap").checked=!!FXEDIT.noUntap;
+  {const e=$("fxNoSeal");if(e)e.checked=!!FXEDIT.noSeal;}
   $("fxStNoHandes").checked=!!FXEDIT.stNoHandes;
   $("fxLibWin").checked=!!FXEDIT.libWin;
   $("fxPetensy").checked=!!FXEDIT.petensy;
@@ -13154,7 +13164,8 @@ function parseCardText(txt,mode){
     }
   }
   if(/相手は(?:クリーチャーを)?(?:バトルゾーンに)?クリーチャーを出せない/.test(t))out.set.stLockCre=true;
-  // 🚫 「相手は〔ゴッドまたはコスト4以下のクリーチャー〕を召喚できない」（クロス・NEX型）→ 召喚のみ禁止＋「または」はORグループ（｜）に変換
+  // 🔏 「このクリーチャーは封印されない」（パーフェクト・エイティー型）
+  if(/(?:この)?クリーチャーは[、,]?封印されない/.test(tSelf))out.set.noSeal=true;
   {const mSL=!out.set.stLockCre&&t.match(/相手は([^■。]{1,40}?)を召喚できない/);
    if(mSL){
      let f=mSL[1].replace(/のクリーチャー$/,"").replace(/クリーチャー$/,"").trim();
@@ -13808,6 +13819,7 @@ function openFxEditor(key){
     stNoST:cur?!!cur.stNoST:false,
     costFloor1:cur?!!cur.costFloor1:false,
     noUntap:cur?!!cur.noUntap:false,
+    noSeal:cur?!!cur.noSeal:false,
     stNoHandes:cur?!!cur.stNoHandes:false,
     libWin:cur?!!cur.libWin:false,
     petensy:cur?!!cur.petensy:false,
@@ -14143,6 +14155,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stNoST:$("fxStNoST")?$("fxStNoST").checked:false,
     costFloor1:$("fxCostFloor1").checked,
     noUntap:$("fxNoUntap").checked,
+    noSeal:$("fxNoSeal")?$("fxNoSeal").checked:false,
     stNoHandes:$("fxStNoHandes").checked,
     libWin:$("fxLibWin").checked,
     petensy:$("fxPetensy").checked,
@@ -19066,6 +19079,7 @@ function openCardSheet(ctx){
       },"",true));
     }
     box.appendChild(actBtn("封印を付ける（自分の山上から）",()=>{
+      if(!canSeal(ctx.p,c))return;
       const Z2=zonesOf(ctx.p);
       if(!Z2.deck.length){toast("山札がありません");return;}
       const sc=Z2.deck.shift();sc.faceup=false;
