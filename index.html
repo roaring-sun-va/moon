@@ -2211,6 +2211,40 @@ let MOVE_BLOCKED=false;  // moveCardXが意図的にブロックした時true（
 let CUR_ATTACKER=null;   // 現在攻撃中のクリーチャーID（allyAtkのatkNoLeaveSelf等で参照）
 let HILITE_ID=null;      // 一時ハイライト表示するカードID（メテオバーンでどのカードか強調する等）
 let LAST_ARRIVED=null; // 直近にバトルゾーンへ出たカード（allyEnter誘発の対象判定に使う）
+/* 🛡 シールド・フォース／シールド・プラスの盾指定（到着時共通・markArriveから全経路で呼ばれる） */
+function askShieldForcePlus(pTo,c,reg){
+  if(reg.sforce&&!c.sfActive){
+    (async()=>{
+      const Z2=zonesOf(pTo);
+      if(!Z2.shield.length){toast("シールド・フォース：盾がありません");return;}
+      const j=await askChoice(`🛡 シールド・フォース（${faceNameOf(c)}）：指定する盾を選択`,
+        Z2.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表：${x.name}）`:""}`));
+      if(j===null)return;
+      Z2.shield[j].sfMark=faceNameOf(c);
+      Z2.shield[j].sfBy=c.id;
+      c.sfActive=true;
+      toast(`🛡 シールド・フォース：盾${j+1}を指定（この盾がある間、能力有効${reg.sforceFx?`：${{noLeave:"⚓離れない",noDestroy:"🪨破壊されない"}[reg.sforceFx]}`:""}）`);
+      renderAll();
+    })();
+  }
+  if(reg.splus){
+    (async()=>{
+      const Z2=zonesOf(pTo);
+      const n2=reg.splus;
+      if(!Z2.deck.length)return;
+      if(!Z2.shield.length){toast("シールド・プラス：盾がありません");return;}
+      const j=await askChoice(`🛡 シールド・プラス＋${n2}（${faceNameOf(c)}）：山札の上から${n2}枚を重ねる盾を選択`,
+        [...Z2.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表：${x.name}）`:""}${x.under&&x.under.length?` +${x.under.length}`:""}`),"重ねない"]);
+      if(j===null||j>=Z2.shield.length)return;
+      snap();
+      const sh=Z2.shield[j];
+      sh.under=sh.under||[];
+      for(let k=0;k<n2&&Z2.deck.length;k++){const dc=Z2.deck.shift();dc.faceup=false;sh.under.push(dc);}
+      toast(`🛡 シールド・プラス：盾${j+1}に${n2}枚重ねた（ブレイク時は同時にブレイク）`);
+      renderAll();
+    })();
+  }
+}
 function markArrive(c){
   c.dealIdx=null;c._pfAsked=false;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
   c._oriNew=true; // 🌀 オリオティス判定用：次のsummonイベントで消費される永続フラグ（1秒TTLのarrivedだと2体同時出しで取りこぼす）
@@ -2225,6 +2259,13 @@ function markArrive(c){
       const tk=`${S.turn}:${S.who}`;
       if(S._turnArrived.key!==tk){S._turnArrived={key:tk,list:[]};}
       S._turnArrived.list.push({pi:own,id:c.id,name:faceNameOf(c),reg:getReg(c)});
+      // 🛡 シールド・フォース／シールド・プラス：どの経路（ドラッグ・パネル・踏み倒し・進化）で出ても盾指定を確認
+      //    ※二重確認ガード：同じ到着でmarkArriveが複数回呼ばれても1.5秒以内は1回だけ
+      const rgA=getReg(c);
+      if(S.expert&&rgA&&(rgA.sforce||rgA.splus)&&!(c._sfAskedAt&&Date.now()-c._sfAskedAt<1500)){
+        c._sfAskedAt=Date.now();
+        askShieldForcePlus(own,c,rgA);
+      }
     }
   }catch(e){}
   try{
@@ -8958,6 +8999,8 @@ async function scheduleAutoResolve(pi,c){
     if(ix===Z.resolve.length-1&&!fxRunning&&!fxQueue.length
       &&!($("askOlay")&&$("askOlay").classList.contains("open"))
       &&!($("viewerOlay")&&$("viewerOlay").classList.contains("open"))
+      &&!($("revealOlay")&&$("revealOlay").classList.contains("open"))
+      &&!($("breakOlay")&&$("breakOlay").classList.contains("open"))
       &&!($("sheet")&&$("sheet").classList.contains("open"))){
       Z.resolve.splice(ix,1);
       const toMana=resolveOut(Z,c);       // 墓地へ（チャージャーはマナ）＋虚無月誘発はresolveOut内
@@ -15673,41 +15716,6 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     if(S.expert&&reg&&reg.ignore==="cost"){
       toast(`🚯 ${faceNameOf(c)}：コスト${reg.ignoreN||0}以下のクリーチャーの能力を無視（両プレイヤー）`);
     }
-    if(S.expert&&reg&&reg.sforce){
-      (async()=>{
-        const Z2=zonesOf(pTo);
-        if(!Z2.shield.length){toast("シールド・フォース：盾がありません");return;}
-        const j=await askChoice(`🛡 シールド・フォース（${faceNameOf(c)}）：指定する盾を選択`,
-          Z2.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表：${x.name}）`:""}`));
-        if(j===null)return;
-        Z2.shield[j].sfMark=faceNameOf(c);
-        Z2.shield[j].sfBy=c.id;
-        c.sfActive=true;
-        toast(`🛡 シールド・フォース：盾${j+1}を指定（この盾がある間、能力有効${reg.sforceFx?`：${{noLeave:"⚓離れない",noDestroy:"🪨破壊されない"}[reg.sforceFx]}`:""}）`);
-        renderAll();
-      })();
-    }
-    if(S.expert&&reg&&reg.splus){
-      (async()=>{
-        const Z2=zonesOf(pTo);
-        const n2=reg.splus;
-        if(!Z2.deck.length)return;
-        if(!Z2.shield.length){toast("シールド・プラス：盾がありません");return;}
-        const j=await askChoice(`🛡 シールド・プラス＋${n2}（${faceNameOf(c)}）：山札の上から${n2}枚を重ねる盾を選択`,
-          [...Z2.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表：${x.name}）`:""}${x.under&&x.under.length?` +${x.under.length}`:""}`),"重ねない"]);
-        if(j===null||j>=Z2.shield.length)return;
-        snap();
-        const sh=Z2.shield[j];
-        sh.under=sh.under||[];
-        for(let i=0;i<n2&&Z2.deck.length;i++){
-          const top=Z2.deck.shift();
-          top.faceup=false;
-          sh.under.push(top);
-        }
-        toast(`🛡 シールド・プラス：盾${j+1}に${n2}枚重ねた（ブレイク時は同時にブレイク）`);
-        renderAll();
-      })();
-    }
     if(S.expert&&reg&&reg.bad&&fromZone==="hand"&&(!S.autoTap||S.freePlay)){
       (async()=>{
         const yes=await ask(`💢 B・A・D（${faceNameOf(c)}）\nコスト2軽減で召喚しましたか？\n（「はい」の場合、ターンの終わりにこのクリーチャーは破壊されます）`);
@@ -20275,7 +20283,14 @@ function closeRevealPanel(){
   const def=RV_CIP_DEFER;RV_CIP_DEFER=null;
   if(def&&def.length){
     // パネルを閉じた後に、公開パネルから出したカードの出た時効果を順に処理（新たな公開は別パネルで開く）
-    for(const [pp,cc] of def){if(zonesOf(pp).battle.find(x=>x.id===cc.id))enqueueFx(pp,cc);}
+    // 🔮 解決中（resolve）へ送った呪文もここで効果を発動する（従来はバトルのみでスキップされていた）
+    // ⤴ パネルから出した直後に進化元として下に重ねられたカードも、出た時は誘発済みなので解決する（ブレイクパネルと同じ扱い）
+    for(const [pp,cc] of def){
+      const Zp=zonesOf(pp);
+      const onB=Zp.battle.find(x=>x.id===cc.id)||Zp.resolve.find(x=>x.id===cc.id);
+      const asUnder=!onB&&Zp.battle.some(x=>x.under&&x.under.some(u=>u.id===cc.id));
+      if(onB||asUnder)enqueueFx(pp,cc);
+    }
   }
 }
 const rvArr=()=>zonesOf(rvPi)[rvMode==="look"?"look":rvMode==="grave"?"grave":"reveal"];
