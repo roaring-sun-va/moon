@@ -1368,6 +1368,7 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
           </select>枚を墓地に置く</label>
         <label><input type="checkbox" id="fxStarEvo"> スター進化（離れる時、自身のみ離れ下は重なったまま残る）</label>
+        <label title="禁断英雄 モモキングダム✕型。出た時：進化ではないレクスターズが出るまで山札を表向き→下に置きシャッフル。自分の他のレクスターズが出た時：山上1枚を表向きで下に置いてもよい。含まれるカードが6枚未満なら攻撃不可・相手に選ばれない。6枚になった時：このターン相手クリーチャーすべてのパワーを−99999。※スター進化にもチェックが入ります"><input type="checkbox" id="fxMomoKingX"> 🌟 モモキングダム✕型（禁断スター進化＋6枚ゲート＋6枚到達で全体−99999）</label>
         <label><input type="checkbox" id="fxExLife"> EXライフ</label>
         <label><input type="checkbox" id="fxGNeo"> G・NEO進化（破壊時に一番下が離れ上が残る）</label>
         <label><input type="checkbox" id="fxShieldGo"> シールド・ゴー</label>
@@ -1614,7 +1615,7 @@ body.shake{animation:bodyShake .4s ease-out}
         </div>
         <label><input type="checkbox" id="fxStUnblock"> 自分のクリーチャー全てブロックされない（攻撃時アナウンス）</label>
         <label><input type="checkbox" id="fxStOriotis"> オリオティス（相手のマナ枚数よりコストが大きい相手クリーチャーが出たら山札の下へ）</label>
-        <label style="margin-left:18px" title="山札の下でなく破壊する（マグナム・ルピア型）。上のオリオティスと併用してください"><input type="checkbox" id="fxStOriotisDestroy"> └ かわりに破壊する（マグナム・ルピア型）</label>
+        <label data-fxcat="aura" style="margin-left:18px" title="山札の下でなく破壊する（マグナム・ルピア型）。上のオリオティスと併用してください"><input type="checkbox" id="fxStOriotisDestroy"> └ オリオティス：かわりに破壊する（マグナム・ルピア型）</label>
         <label>🌀 相手ターン開始時、相手マナのアンタップを <input type="number" id="fxManaUntapN" min="0" max="99" style="width:58px" value="0"> 枚までに制限（0=制限なし・ガ・リュザーク型は3）</label>
         <label><input type="checkbox" id="fxNoUntap"> 常在：ターン開始時にアンタップしない（自身）</label>
         <label title="このクリーチャーは封印されない（禁断・零龍などの封印を受け付けない・パーフェクト・エイティー型）"><input type="checkbox" id="fxNoSeal"> 🔏 封印されない（自身・パーフェクト・エイティー型）</label>
@@ -2367,6 +2368,51 @@ function markBuffTurn(c,keys){
   if(!c.buff)c.buff={};
   c.buff._t=c.buff._t||[];
   for(const k of keys)if(!c.buff._t.includes(k))c.buff._t.push(k);
+}
+/* 🌟 モモキングダム✕型：含まれるカード枚数＝自身＋下のカード。6枚未満で攻撃不可・相手に選ばれない。6枚到達でこのターン相手全体−99999。 */
+function stackCountOf(c){return 1+((c&&c.under)?c.under.length:0);}
+function momoUntouchable(x){const r=getReg(x);return !!(r&&r.momoKingX&&stackCountOf(x)<6);}
+async function momoCheckReach(pi,c){
+  if(!c)return;
+  const r=getReg(c);if(!r||!r.momoKingX)return;
+  const cnt=stackCountOf(c);
+  if(cnt<6){c._momoFired6=false;return;}
+  if(c._momoFired6)return; // 6枚「になった時」＝1回。5枚以下に戻れば再武装
+  c._momoFired6=true;
+  const op=pi===0?1:0;
+  let n=0;
+  for(const x of zonesOf(op).battle){
+    const rx=getReg(x);if(!rx||!isCreatureReg(rx))continue;
+    x.buff=x.buff||{};x.buff.pow=(+x.buff.pow||0)-99999;markBuffTurn(x,["pow"]);n++;
+  }
+  sfx("atk");renderAll();
+  toast(`🌟 ${faceNameOf(c)}：含まれるカードが6枚になった！このターン、相手のクリーチャー${n}体すべてのパワーを−99999`);
+  await checkZeroPower();
+}
+/* 🌟 禁断スター進化（出た時）：山札の上から進化ではないレクスターズが出るまで表向きにし、それを下に置く→シャッフル */
+async function momoKingCip(pi,c){
+  const Z=zonesOf(pi);
+  if(!Z.battle.some(x=>x.id===c.id))return;
+  const EVOCT=["evo","neoevo","ultimate","starevo","psyevo","lunatic","gneo","neodream","gneodream","smaxevo","onismaxevo"];
+  const revealed=[];let found=null;
+  while(Z.deck.length){
+    const tc=Z.deck.shift();tc.faceup=true;const rt=getReg(tc);
+    revealed.push(tc);renderAll();
+    const isRex=rt&&lockFilterOk("レクスターズ",rt,tc);
+    const isEvo=rt&&EVOCT.includes(rt.ctype);
+    if(isRex&&!isEvo){found=tc;break;}
+  }
+  if(found){
+    const rest=revealed.filter(x=>x!==found);
+    c.under=c.under||[];found.tapped=false;found.faceup=true;c.under.push(found);
+    rest.forEach(x=>{x.faceup=false;Z.deck.push(x);});
+    toast(`🌟 禁断スター進化：${faceNameOf(found)} を《${faceNameOf(c)}》の下に置いた（計${stackCountOf(c)}枚）`);
+  }else{
+    revealed.forEach(x=>{x.faceup=false;Z.deck.push(x);});
+    toast(`🌟 禁断スター進化：進化ではないレクスターズが見つからなかった`);
+  }
+  shuffle(Z.deck);sfx("move");renderAll();
+  await momoCheckReach(pi,c);
 }
 function markBuffNext(c,keys,owner){
   if(!c.buff)c.buff={};
@@ -3745,6 +3791,26 @@ function emitEvent(actor,type,card){
   }
   if(type==="spell")runWatchFx(actor,"allySpell",card); // ⚡ 自分が呪文を唱えた時（スパーク型・条件欄=呪文名・ソロでも動く）
   if(S.vs)runWatchFx(actor===0?1:0,type,card);
+  // 🐉 ボルシャック・ヒカリスマ型：相手が非クリーチャー（呪文等＝実行＝解決中）を実行する時、表向きシールド1枚を裏向きにして、その実行カードを持ち主の墓地に置ける（打ち消し）
+  if(type==="spell"&&S.expert&&S.vs&&card){
+    const def2=actor===0?1:0;const DZ2=zonesOf(def2);
+    const hik=DZ2.battle.find(x=>{const rx=getReg(x);return rx&&rx.hikarisma&&!isSealed(x)&&!isIgnored(x,def2);});
+    if(hik&&DZ2.shield.some(s=>s.faceup)){
+      enqueueWatchJob(async()=>{
+        if(!zonesOf(actor).resolve.some(x=>x.id===card.id))return; // 既に解決/移動していたら打ち消さない
+        const yes=await ask(`🐉 ${faceNameOf(hik)}：相手が《${faceNameOf(card)}》（非クリーチャー）を実行しました。\n表向きのシールドを1枚裏向きにして、これを持ち主の墓地に置き「実行しなかったこと」にしますか？`);
+        if(!yes)return;
+        const ups=DZ2.shield.filter(s=>s.faceup);
+        if(!ups.length){toast("🐉 表向きのシールドがありません");return;}
+        const j=ups.length===1?0:await pickCard("🐉 裏向きにする表向きシールドを選択",ups,{hint:"1枚を裏向きにします"});
+        const tgt=ups[j==null?0:j];tgt.faceup=false;
+        const ri=zonesOf(actor).resolve.findIndex(x=>x.id===card.id);
+        if(ri>=0){const cc=zonesOf(actor).resolve.splice(ri,1)[0];cc.faceup=true;cc.tapped=false;zonesOf(actor).grave.push(cc);}
+        sfx("grave");renderAll();
+        toast(`🐉 ${faceNameOf(hik)}：${faceNameOf(tgt)} を裏向きにし、《${faceNameOf(card)}》を打ち消して持ち主の墓地へ（実行しなかったことに）`);
+      });
+    }
+  }
   if(type==="summon"){
     const AZ0=zonesOf(actor);
     const news0=AZ0.battle.filter(x=>arrived.has(x.id)&&!x._pfAsked);
@@ -3786,6 +3852,21 @@ function emitEvent(actor,type,card){
     const DZ=zonesOf(def);
     runWatchFx(def,"oppSummon");
     runWatchFx(def,"oppSummonTapped");
+    // 🏯 超鯱城型（G城）：相手のマナ枚数よりコストが大きい相手クリーチャーが出た時、それを破壊
+    {
+      const arrived=LAST_ARRIVED;const aReg=arrived&&getReg(arrived);
+      if(arrived&&aReg&&isCreatureReg(aReg)&&aReg.cost!=null){
+        const castle=DZ.shield.find(s=>s.faceup&&!isSealed(s)&&(()=>{const rs=getReg(s);return rs&&rs.castleManaKill;})());
+        if(castle&&+aReg.cost>zonesOf(actor).mana.length){
+          enqueueWatchJob(async()=>{
+            if(!zonesOf(actor).battle.some(x=>x.id===arrived.id))return; // 既に離れていたら何もしない
+            toast(`🏯 ${faceNameOf(castle)}：${faceNameOf(arrived)}（コスト${aReg.cost}）＞ ${S.players[actor].label}のマナ${zonesOf(actor).mana.length}枚 → 破壊`);
+            await destroyWithReplace(actor,arrived);
+            renderAll();
+          });
+        }
+      }
+    }
     // 裏ニンジャ・ストライク：バトルゾーンに出た時の誘発は誤り → 通常NSと同じタイミング（execAttack内）へ統合済み
   }
   if(type==="summon"){
@@ -5896,10 +5977,26 @@ async function runFxList(pi,list,srcCard,inPump){
       const host=srcCard&&[0,1].map(p=>zonesOf(p)).flatMap(Z2=>[...Z2.battle,...Z2.shield]).find(x=>x.id===srcCard.id);
       if(!host){toast("🌙 下に置く対象カードが見つかりません（このカードの効果として実行してください）");}
       else{
-        let put=0;host.under=host.under||[];
-        for(let i=0;i<n&&Z.deck.length;i++){const u=Z.deck.shift();u.faceup=false;u.tapped=false;host.under.push(u);put++;}
+        let put=0;host.under=host.under||[];const up=!!f.faceUp;
+        for(let i=0;i<n&&Z.deck.length;i++){const u=Z.deck.shift();u.faceup=up;u.tapped=false;host.under.push(u);put++;}
         sfx("move");
-        toast(`🌙 山札の上${put}枚を裏向きで《${faceNameOf(host)}》の下に置いた（計${host.under.length}枚）`);
+        toast(`🌙 山札の上${put}枚を${up?"表向き":"裏向き"}で《${faceNameOf(host)}》の下に置いた（計${host.under.length}枚）`);
+        const hr=getReg(host);if(hr&&hr.momoKingX){const hpi=[0,1].find(p=>zonesOf(p).battle.some(x=>x.id===host.id));if(hpi!=null)await momoCheckReach(hpi,host);}
+      }
+    }else if(f.t==="peekShieldHand"){
+      // 🐉 山上2枚を見て、1枚を表向きでシールド化・もう1枚を手札に加える（ヒカリスマ型）
+      const look=[];for(let i=0;i<(n||2)&&Z.deck.length;i++){const tc=Z.deck.shift();tc.faceup=true;look.push(tc);}
+      if(!look.length){toast("山札がありません");}
+      else if(look.length===1){const s=look[0];s.faceup=true;s.tapped=false;s.sideways=false;Z.shield.push(s);toast(`🛡 ${faceNameOf(s)} を表向きのシールドに（山札は1枚のみ）`);sfx("move");renderAll();}
+      else{
+        toast(`👀 山上2枚：${look.map(faceNameOf).join("、")}`);renderAll();
+        const j=await pickCard("🛡 表向きでシールド化するカードを選択（もう1枚は手札へ）",look,{hint:"選んだ方が表向きシールド・残りは手札"});
+        const si=(j==null)?0:j;
+        const s=look[si],hd=look[1-si];
+        s.faceup=true;s.tapped=false;s.sideways=false;Z.shield.push(s);
+        hd.faceup=true;Z.hand.push(hd);markArrive(hd);
+        toast(`🛡 ${faceNameOf(s)} を表向きのシールドに／🖐 ${faceNameOf(hd)} を手札に`);
+        sfx("move");renderAll();
       }
     }else if(f.t==="atkNoLeaveSelf"){
       // ⚓ 攻撃中のクリーチャーは離れない（このターン）。allyAtk等で攻撃クリーチャーに付与
@@ -6337,7 +6434,7 @@ async function runFxList(pi,list,srcCard,inPump){
       // 🚫 選ばれない（アンタッチャブル）：相手の効果には選ばれない（選ぶ側≠持ち主の時だけ除外）。
       //    相手自身が選ぶ foeSelf系は持ち主＝選ぶ側なので選べる。攻撃・ブロック・全体（すべて）効果には無関係。
       const chooserPi=fixedFoe?tp:pi;
-      const _ncOk=x=>{const rx=getReg(x);return !(rx&&rx.noChoose&&chooserPi!==tp&&!isIgnored(x,tp));};
+      const _ncOk=x=>{const rx=getReg(x);return !(((rx&&rx.noChoose)||momoUntouchable(x))&&chooserPi!==tp&&!isIgnored(x,tp));};
       for(let i=0;i<n;i++){
         let pool=isElem?TZ.battle.slice():TZ.battle.filter(x=>isCreatureReg(getReg(x)));
         if(pickFilt)pool=pool.filter(x=>lockFilterOk(pickFilt,getReg(x),x));
@@ -6387,7 +6484,7 @@ async function runFxList(pi,list,srcCard,inPump){
         let _ncCut2=0;
         for(const owp of sides){for(const x of zonesOf(owp).battle){const rx=getReg(x);
           if(filt&&!lockFilterOk(filt,rx,x))continue;
-          if(rx&&rx.noChoose&&owp!==pi&&!isIgnored(x,owp)){_ncCut2++;continue;} // 🚫 相手の「選ばれない」は選択不可
+          if(((rx&&rx.noChoose)||momoUntouchable(x))&&owp!==pi&&!isIgnored(x,owp)){_ncCut2++;continue;} // 🚫 相手の「選ばれない」は選択不可
           pool.push({x,owp});}}
         if(_ncCut2>0&&i===0)toast(`🚫 「選ばれない」${_ncCut2}体は効果の対象から除外`);
         if(!pool.length){
@@ -7510,7 +7607,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const pool=[];
         for(const owp of [op,pi]){for(const x of zonesOf(owp).battle){const rx=getReg(x);
           if(!isCreatureReg(rx))continue;
-          if(rx&&rx.noChoose&&owp!==pi&&!isIgnored(x,owp))continue; // 🚫 相手の「選ばれない」は選択不可
+          if(((rx&&rx.noChoose)||momoUntouchable(x))&&owp!==pi&&!isIgnored(x,owp))continue; // 🚫 相手の「選ばれない」は選択不可
           pool.push({x,owp});}}
         if(!pool.length){
           const _d=[op,pi].map(pp=>`${S.players[pp].label}の場${zonesOf(pp).battle.length}枚`).join("・");
@@ -8184,7 +8281,7 @@ function enqueueFx(pi,c){
   if([0,1].some(p=>zonesOf(p).battle.some(b=>b.gear&&b.gear.includes(c))))return;
   const reg=getReg(c);
   const hasFx=reg&&(reg.faces[0].length||(reg.twin&&reg.faces[1].length)||(reg.modeN|0)>0);
-  if(!hasFx&&!(reg&&reg.soulRaid)&&!soulXCipFx(c).length)return;
+  if(!hasFx&&!(reg&&(reg.soulRaid||reg.momoKingX))&&!soulXCipFx(c).length)return;
   // 🔢 いまカードを1枚処理している最中に生まれたCIP（＝その効果の結果出たカード）は、
   //    残りの兄弟カードより先に解決する（カーソル位置に順番を保って挿入）。処理中でなければ末尾へ。
   if(fxRunning&&fxInsertAt!=null){fxQueue.splice(fxInsertAt,0,{pi,c,reg});fxInsertAt++;}
@@ -8276,6 +8373,10 @@ async function pumpFx(){
     // 🔥 超魂レイド（出た時：山上3枚→進化元1枚を下に置く）。バトルゾーンにいる時のみ。
     if(reg&&reg.soulRaid&&zonesOf(pi).battle.some(x=>x.id===c.id)){
       await offerSoulRaid(pi,c);
+    }
+    // 🌟 禁断スター進化（出た時：進化ではないレクスターズが出るまで表向き→下に置く→シャッフル）
+    if(reg&&reg.momoKingX&&zonesOf(pi).battle.some(x=>x.id===c.id)){
+      await momoKingCip(pi,c);
     }
     // ⚡ 極限ファイナル革命P'S：出た時（どんな出方でも）・このゲーム中に自分は1回だけ・任意・モード選択
     if(reg&&reg.watchFx&&reg.watchFx.some(w=>w.ev==="revFinalPS")&&zonesOf(pi).battle.some(x=>x.id===c.id)){
@@ -9728,6 +9829,8 @@ async function startAttack(pi,id){
   if(S.expert){
     const rA=getReg(c);
     if(rA&&rA.cantAtk&&!isIgnored(c,pi)){toast(`⛔ ${faceNameOf(c)} は攻撃できない`);return;}
+    // 🌟 モモキングダム✕型：含まれるカードが6枚未満なら攻撃できない
+    if(rA&&rA.momoKingX&&!isIgnored(c,pi)&&stackCountOf(c)<6){toast(`⛔ ${faceNameOf(c)} は含まれるカードが6枚未満なので攻撃できない（現在${stackCountOf(c)}枚）`);return;}
     // ⛔ 条件付き攻撃不可：条件式を満たしていない間は攻撃できない（例：墓地:ドラゴン>=5）
     if(rA&&rA.cantAtkCond&&!isIgnored(c,pi)&&!zoneCondOk(rA.cantAtkCond,pi)){
       toast(`⛔ ${faceNameOf(c)} は攻撃できない（条件未達：${rA.cantAtkCond}）`);
@@ -10169,7 +10272,7 @@ async function execAttack(pi,id,tg){
       if(v==="sss"||v==="tensai")return ["hand","mana","grave","battle"];
       return ["hand"];
     };
-    const zLb={hand:"手札",mana:"マナ",grave:"墓地",battle:"場",hyper:"超次元"};
+    const zLb={hand:"手札",mana:"マナ",grave:"墓地",battle:"場",hyper:"超次元",shield:"表向き盾"};
     const aRegNow=getReg(c);
     const condOk=r=>{
       if(!r.invCiv&&!r.invRace&&!r.invCost&&!r.invPow)return true;
@@ -10204,10 +10307,18 @@ async function execAttack(pi,id,tg){
         cands.push({h,zn});
       }
     }
+    // 🐉 S革命チェンジ（表向きのシールドゾーンから）：ヒカリスマ型・コスト5以上アーマードの攻撃時
+    for(const h of Z.shield){
+      if(!h.faceup)continue;
+      const r=getReg(h);
+      if(!r||!r.hikarisma)continue;
+      if(!condOk(r))continue;
+      cands.push({h,zn:"shield",sKakumei:true});
+    }
     if(!cands.length)break;
     {
       const j=await askChoice(`⚔ ${invadedOnce?"さらに":"攻撃時："}侵略／革命チェンジしますか？\n（侵略が先→革命チェンジの順。重ねた順に効果処理）`,
-        [...cands.map(({h,zn,jchange})=>{const r=getReg(h);return (jchange?"🃏J・チェンジ：":zn==="hyper"?(r.pInvade?"🌌P侵略：":"🌌P革命チェンジ："):r.sInvade?(r.sInvade==="sss"||r.sInvade==="tensai"?"🌠SSS級侵略：":"🌟S級侵略："):r.invade?"⚡侵略：":"♻革命チェンジ：")+faceNameOf(h)+`（${zLb[zn]}）`;}),"しない"]);
+        [...cands.map(({h,zn,jchange,sKakumei})=>{const r=getReg(h);return (sKakumei?"🐉S革命チェンジ：":jchange?"🃏J・チェンジ：":zn==="hyper"?(r.pInvade?"🌌P侵略：":"🌌P革命チェンジ："):r.sInvade?(r.sInvade==="sss"||r.sInvade==="tensai"?"🌠SSS級侵略：":"🌟S級侵略："):r.invade?"⚡侵略：":"♻革命チェンジ：")+faceNameOf(h)+`（${zLb[zn]}）`;}),"しない"]);
       if(j!==null&&j<cands.length){
         const {h:hcard,zn:srcZone,jchange:isJ}=cands[j];
         const r=getReg(hcard);
@@ -10233,21 +10344,25 @@ async function execAttack(pi,id,tg){
           Z.battle[bi]=hcard;
           // 革命チェンジ：入れ替わるクリーチャーはスタックごと分解して戻る
           const backs=[c,...(c.under?c.under.splice(0):[])];
-          for(const bc of backs){
+          const _toShield=(srcZone==="shield"); // 🐉 S革命チェンジ：入れ替え元（本体）は表向きシールドへ
+          backs.forEach((bc,bidx)=>{
             bc.tapped=false;bc.faceup=true;bc.rot=0;
             const rb=getReg(bc);
-            if(r.pKakumei){bc.face=0;bc.rot=0;bc.isPsy=false;bc.under=[];Z.hyper.push(bc);} // 🌌 P革命チェンジ：チェンジ元は超次元ゾーンへ送られる
+            if(_toShield&&bidx===0){bc.sideways=false;bc.under=[];Z.shield.push(bc);} // 本体を表向きの新しいシールドへ
+            else if(r.pKakumei){bc.face=0;bc.rot=0;bc.isPsy=false;bc.under=[];Z.hyper.push(bc);} // 🌌 P革命チェンジ：チェンジ元は超次元ゾーンへ送られる
             else if(bc.isGR){bc.faceup=false;bc.under=[];Z.gr.push(bc);}
             else if(rb&&rb.ctype==="dragheart"){bc.face=0;bc.rot=0;Z.hyper.push(bc);}
             else Z.hand.push(bc);
-          }
-          toast(`${isJ?"🃏J・チェンジ":r.pKakumei?"🌌P革命チェンジ":"♻革命チェンジ"}！ ${faceNameOf(hcard)}（${faceNameOf(c)}は${c.isGR?"GRゾーンの下":r.pKakumei?"超次元ゾーン":"手札"}へ・攻撃継続）`);
+          });
+          toast(`${_toShield?"🐉S革命チェンジ":isJ?"🃏J・チェンジ":r.pKakumei?"🌌P革命チェンジ":"♻革命チェンジ"}！ ${faceNameOf(hcard)}（${faceNameOf(c)}は${_toShield?"表向きシールド":c.isGR?"GRゾーンの下":r.pKakumei?"超次元ゾーン":"手札"}へ・攻撃継続）`);
         }
         markArrive(hcard);
         emitEvent(pi,"summon");
         enqueueFx(pi,hcard);
         renderAll();
         await waitFxIdle();
+        // 🐉 ヒカリスマ型：革命チェンジで出た時、山上2枚を見て1枚を表向きシールド化・1枚を手札（攻撃時はselfAtk側で処理）
+        {const rH2=getReg(hcard);if(rH2&&rH2.hikarisma){toast(`🐉 ${faceNameOf(hcard)}：革命チェンジで出た時の効果`);await runFxList(pi,[{t:"peekShieldHand",n:2}],hcard);renderAll();await waitFxIdle();}}
         // ⚡ ファイナル革命：革命チェンジ系で出た時、そのターンまだ他のファイナル革命を使っていなければ発動
         if(isRevCh){
           const rH=getReg(hcard);
@@ -11942,6 +12057,8 @@ function renderFxEditor(){
   $("fxPInvade").checked=!!FXEDIT.pInvade;
   $("fxPKakumei").checked=!!FXEDIT.pKakumei;
   $("fxSoulRaid").checked=!!FXEDIT.soulRaid;
+  {const _mk=$("fxMomoKingX");if(_mk)_mk.checked=!!FXEDIT.momoKingX;}
+  if(FXEDIT.momoKingX)$("fxStarEvo").checked=true;
   $("fxSoulX").checked=!!FXEDIT.soulX;
   $("fxLastBurst").checked=!!FXEDIT.lastburst;
   $("fxMegaLB").checked=!!FXEDIT.megaLB;
@@ -13440,6 +13557,36 @@ function parseCardText(txt,mode){
     [/Dスイッチ/,"Dスイッチ：D2フィールド設定済み → 反転後の効果は覚え書き＋手動で","覚え書き"],
   ];
   for(const [re,msg,q] of DETECT)if(re.test(t))out.notes.push({msg:"💡 "+msg,q});
+  // 🌟 モモキングダム✕型（禁断スター進化＋スタック蓄積＋6枚ゲート＋6枚到達で全体−99999）
+  if(/スター進化/.test(t)&&/カードが6枚以上含まれていなければ/.test(t)&&/含まれるカードが6枚になった時/.test(t)){
+    out.set.momoKingX=true;
+    out.set.ctype="starevo";
+    // 能力④の「全体−99999」を汎用効果として拾ってしまうのを除去（6枚到達トリガーで別処理）
+    out.fx=out.fx.filter(f=>f.t!=="foePowDownAll"&&f.t!=="foePowDownPick");
+    // 能力②：自分の他のレクスターズが出た時、山上1枚を表向きで下に置いてもよい（任意）
+    if(/他のレクスターズが出た時/.test(t))
+      out.set.watchFx=(out.set.watchFx||[]).concat([{ev:"allyEnter",t:"underDeck",n:1,cond:"他のレクスターズ",once:false,opt:true,faceUp:true}]);
+    out.notes.push({msg:"🌟 モモキングダム✕型として登録：出た時に非進化レクスターズを下へ／他レクスターズ登場で任意で下に追加／6枚未満は攻撃不可・相手に選ばれない／6枚到達でこのターン相手全体−99999。離場は『スター進化（自身のみ離れ下が残る）』で処理",q:"モモキングダム"});
+  }
+  // 🏯 超鯱城型（G城）：相手のマナ枚数よりコストが大きい相手クリーチャーが出た時、それを破壊
+  if(/[GＧ]城/.test(t)&&/マナゾーン[^。]*枚数よりコストが大き[^。]*相手のクリーチャーが出た時[^。]*破壊/.test(t)){
+    out.set.ctype="gcastle";out.set.castleManaKill=true;
+    // 汎用抽出で拾った破壊系は除去（この専用トリガーで処理）
+    out.fx=out.fx.filter(f=>!/destroy|Destroy|break/.test(f.t));
+    out.notes.push({msg:"🏯 超鯱城型（G城）として登録：相手のマナゾーンの枚数よりコストが大きい相手クリーチャーが出た時、それを破壊。実行で表向きシールド化・表向きで盾を離れる時は墓地（G城の基本挙動）",q:"G城"});
+  }
+  // 🐉 ボルシャック・ヒカリスマ型：S革命チェンジ（手札/表向き盾から・コスト5以上アーマード）＋革命チェンジ/攻撃時に山上2枚を盾1・手札1＋相手の非クリーチャー実行をシールド1枚で打ち消し
+  if(/[SＳ][\s　]*革命チェンジ/.test(t)&&/表向きでシールドゾーンにあるこのクリーチャー/.test(t)){
+    out.set.hikarisma=true;
+    if(out.set.ctype==null)out.set.ctype="creature";
+    // S革命チェンジの入れ替え条件（コスト5以上のアーマード）
+    out.set.invRace="アーマード";out.set.invCost=5;
+    // 能力③：革命チェンジで出た時／攻撃する時に山上2枚を盾1・手札1（攻撃時誘発として登録）
+    out.set.watchFx=(out.set.watchFx||[]).concat([{ev:"selfAtk",t:"peekShieldHand",n:2}]);
+    // 汎用抽出のノイズを掃除（能力③④は専用処理）
+    out.fx=out.fx.filter(f=>!/shield|Shield|hand|draw|destroy|break|foePow|look|reveal|peek/.test(f.t));
+    out.notes.push({msg:"🐉 ボルシャック・ヒカリスマ型として登録：S革命チェンジ（コスト5以上アーマードの攻撃時、手札または表向きシールドから入れ替え）／革命チェンジで出た時・攻撃する時に山上2枚を見て1枚を表向きシールド化・1枚を手札／相手が非クリーチャーを実行する時、表向きシールド1枚を裏向きにしてその実行カードを墓地に置ける（打ち消し）。SA・W・ブレイカーは各欄で確認を",q:"革命チェンジ"});
+  }
   return out;
 }
 /* 解析で検出した案内リストを表示し、選ぶと該当欄に絞り込みジャンプ */
@@ -13780,6 +13927,9 @@ function openFxEditor(key){
     pInvade:cur?!!cur.pInvade:false,
     pKakumei:cur?!!cur.pKakumei:false,
     soulRaid:cur?!!cur.soulRaid:false,
+    momoKingX:cur?!!cur.momoKingX:false,
+    castleManaKill:cur?!!cur.castleManaKill:false,
+    hikarisma:cur?!!cur.hikarisma:false,
     soulX:cur?!!cur.soulX:false,
     lastburst:cur?!!cur.lastburst:false,
     megaLB:cur?!!cur.megaLB:false,
@@ -14117,6 +14267,9 @@ $("fxSave").addEventListener("click",async ()=>{
     pInvade:$("fxPInvade").checked,
     pKakumei:$("fxPKakumei").checked,
     soulRaid:$("fxSoulRaid").checked,
+    momoKingX:$("fxMomoKingX")?$("fxMomoKingX").checked:false,
+    castleManaKill:!!(FXEDIT&&FXEDIT.castleManaKill),
+    hikarisma:!!(FXEDIT&&FXEDIT.hikarisma),
     soulX:$("fxSoulX").checked,
     lastburst:$("fxLastBurst").checked,
     megaLB:$("fxMegaLB").checked,
@@ -14562,6 +14715,9 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.pKakumei)attrs.push("P革命チェンジ");
     if(v.civil)attrs.push(`シビルカウント${v.civil}${v.civilCiv?`〔${({light:"光",water:"水",dark:"闇",fire:"火",nature:"自然"})[v.civilCiv]}〕`:""}`);
     if(v.soulRaid)attrs.push("超魂レイド");
+    if(v.momoKingX)attrs.push("モモキングダム✕型");
+    if(v.castleManaKill)attrs.push("超鯱城型(G城/マナ超過破壊)");
+    if(v.hikarisma)attrs.push("ヒカリスマ型(S革命チェンジ)");
     if(v.soulX)attrs.push("超魂X");
     if(v.lastburst)attrs.push("ラストバースト");
     if(v.megaLB)attrs.push("メガLB");
@@ -18997,6 +19153,38 @@ function openCardSheet(ctx){
         document.body.appendChild(ol);
       });
       box.appendChild(pv);
+    }
+  }
+  // 🛡 ライオネル・クローネ専用（手動）：ゲーム外からゼニスをランダムにシールド化。自動（登録効果）が不発の時の保険。
+  if(!masked&&c.faceup){
+    const _allFx=(reg&&reg.faces)?[].concat(reg.faces[0]||[],reg.faces[1]||[]):[];
+    const _croneFx=_allFx.find(f=>f&&f.t==="shieldMakeRand");
+    if(_croneFx||/クローネ|ライオネル/.test(c.name||"")){
+      box.appendChild(actBtn("🛡 ゼニスの盾を追加（ゲーム外から・手動）",async ()=>{
+        closeSheet();
+        const dn=(_croneFx&&_croneFx.n)||3;
+        const v=await askNumber("ゲーム外からシールドを何枚追加しますか？",dn);
+        if(v==null)return;
+        const nn=Math.max(0,+v||0);if(!nn)return;
+        let names=String((_croneFx&&_croneFx.cond)||"").split(/[／\/、,]/).map(x=>x.trim()).filter(Boolean);
+        if(!names.length){
+          const inp=await askText("候補のカード名を「／」区切りで入力（例：ゼニスA／ゼニスB）","ゼニス");
+          if(inp==null)return;
+          names=String(inp).split(/[／\/、,]/).map(x=>x.trim()).filter(Boolean);
+        }
+        if(!names.length){toast("候補カード名がありません");return;}
+        const Z=zonesOf(ctx.p);
+        let made=[],capHit=false;
+        for(let i=0;i<nn;i++){
+          if(!shieldCapOk(Z)){capHit=true;break;}
+          const nm=names[Math.floor(Math.random()*names.length)];
+          const sc=makeCard(nm);sc.faceup=false;sc.tapped=false;
+          Z.shield.push(sc);made.push(nm);
+        }
+        if(capHit)toast("🛡 シールド上限（10枚）：これ以上は追加できません");
+        sfx("move");renderAll();
+        if(made.length)toast(`🛡 ゲーム外からランダムに${made.length}枚をシールド化した（内容は非公開・上限内で追加）`);
+      }));
     }
   }
   if(ctx.zone==="hand"){
