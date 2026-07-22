@@ -12513,6 +12513,10 @@ function extractEffects(text,mode){
         const n=numOf(cl,/(\d+)体/); fx.push({t:"destroyRnd",n});
       }
     }
+    // 自分のクリーチャーを破壊する（自己破壊・副次効果／せれしす型）。「相手/すべて」を含まない自分側クリーチャー破壊
+    else if(/破壊する/.test(cl)&&/自分の(?:他の)?クリーチャー/.test(cl)&&!/相手|すべて|全て/.test(cl)){
+      fx.push({t:"selfDestroy",n:numOf(cl,/(\d+)体/),cond:""});
+    }
     // バウンス（デュエプレは基本「選んで戻す」。「ランダム」の語がある時だけランダム。「戻してもよい」も対応）
     if(/手札に戻(?:す|して)/.test(cl)&&/相手/.test(cl)&&!/捨て/.test(cl)){
       // 「相手のクリーチャーをすべて手札に戻す」＝全体バウンス（VANベートーベン型）。条件があれば条件付き全体。
@@ -12539,6 +12543,7 @@ function extractEffects(text,mode){
     else if(/相手のクリーチャー(?:すべて)?は[^■。]{0,20}?アンタップ(?:しない|できない)/.test(cl))fx.push({t:"foeFreezeAll",n:1});
     else if(/相手の.*クリーチャーを.*(?:すべて|全て).*タップ/.test(cl))fx.push({t:"tapAllOp",n:1});
     else if(/相手の.*クリーチャーを.*タップ/.test(cl))fx.push({t:"tapOpN",n:numOf(cl,/(\d+)体/)});
+    else if(/クリーチャー\d+体を?タップ/.test(cl)&&!/アンタップ/.test(cl))fx.push({t:"tapOpN",n:numOf(cl,/(\d+)体/)}); // 「クリーチャー1体をタップ（してもよい）」＝選んでタップ
     // GR召喚
     if(/GR召喚|超GR/.test(cl)){const n=numOf(cl,/(\d+)体/);fx.push({t:"grsummon",n});}
     // サーチ（山札から手札）
@@ -12778,22 +12783,6 @@ function parseCardText(txt,mode){
       const mc=tn.match(/ルナティック進化[^0-9]*?(\d+)/);
       if(mc)out.set.lunaCost=+mc[1];
     }
-    // 🏷 種族抽出：「A／B」形式の種族行（効果記号・数値・文明のみの行は除外）。名前直後の行を想定。改行保持のため生テキストtxtを使う
-    if(!out.set.races){
-      const CIVW=["光","水","火","自然","闇","ゼロ","無色"];
-      for(const ln of String(txt).split(/\n/).map(s=>s.trim()).filter(Boolean)){
-        if(ln.length>40)continue;
-        if(/[■。：:0-9０-９()（）]/.test(ln))continue;
-        if(/進化|クリーチャー|呪文|コスト|パワー|ブレイカー|マナ|シールド|バトル|文明|レアリティ|タイプ/.test(ln))continue;
-        if(!/[\/／]/.test(ln))continue;
-        const toks=ln.split(/[\/／]/).map(x=>x.trim()).filter(Boolean);
-        if(toks.length<2||toks.length>5)continue;
-        if(!toks.every(x=>x.length>=2&&x.length<=12&&/^[ァ-ヶーぁ-ん一-龠・A-Za-zＡ-Ｚ号]+$/.test(x)))continue;
-        if(toks.every(x=>CIVW.includes(x)))continue;
-        out.set.races=toks.concat(["","","","",""]).slice(0,5);
-        break;
-      }
-    }
   }
   // 🚩 革命N（盾N枚以下で追加能力）。「革命0トリガー」「革命チェンジ」は除外。
   {
@@ -12970,6 +12959,23 @@ function parseCardText(txt,mode){
       if(races.length)out.set.races=races.slice(0,5).concat(["","","","",""]).slice(0,5);
     }
   }
+  // 🏷 ラベル無しフォールバック：名前直後などの「種族A／種族B」だけの行（種族ラベルが無い貼り付け用）。使用可能フォーマット(ND/AD)・文明のみ・効果行は除外
+  if(!out.set.races){
+    const CIVW=["光","水","火","自然","闇","ゼロ","無色"],FMT=["ND","AD","NDAD","GR","ADND","殿堂","プレミアム"];
+    for(const ln of String(txt).split(/\n/).map(s=>s.replace(/[\s　\t]+$/,"").trim()).filter(Boolean)){
+      if(ln.length>40)continue;
+      if(/[■。：:0-9０-９()（）\[\]【】]/.test(ln))continue;
+      if(/進化|クリーチャー|呪文|コスト|パワー|ブレイカー|マナ|シールド|バトル|文明|レアリティ|タイプ|フォーマット|イラスト|生成|分解/.test(ln))continue;
+      if(!/[\/／]/.test(ln))continue;
+      const toks=ln.split(/[\/／]/).map(x=>x.trim()).filter(Boolean);
+      if(toks.length<2||toks.length>5)continue;
+      if(!toks.every(x=>x.length>=2&&x.length<=12&&/^[ァ-ヶーぁ-ん一-龠・A-Za-zＡ-Ｚ号]+$/.test(x)))continue;
+      if(toks.every(x=>CIVW.includes(x)))continue;
+      if(toks.every(x=>FMT.includes(x)))continue;
+      out.set.races=toks.concat(["","","","",""]).slice(0,5);
+      break;
+    }
+  }
   // ── 代替コスト / G・ゼロ の条件式を自動設定 ──
   // 💀 「このクリーチャーを〔n〕を支払って召喚してもよい。そうした場合、このクリーチャーを破壊する」（クォ・ヴァディス型）
   {
@@ -13034,7 +13040,7 @@ function parseCardText(txt,mode){
   if(/バトル(?:する時)?[、,]?\s*バトルの?後[、,]?\s*この(?:クリーチャー|カード)を破壊/.test(t))out.set.battleSelfKill=true;
   // キーワード能力（付与文を除外したtSelfで判定）
   const KW=[
-    [/スピードアタッカー/,"sa"],[/ブロッカー/,"blocker"],[/スレイヤー/,"slayer"],
+    [/スピードアタッカー/,"sa"],[/(?<![「『])ブロッカー(?![」』])/,"blocker"],[/スレイヤー/,"slayer"],
     [/G・?ストライク/,"gs"],[/S・?トリガー/,"st"],[/ガードマン/,"guardman"],
     [/マッハファイター/,"mach"],[/ジャストダイバー/,"jdiver"],[/EXライフ/,"exlife"],
     [/エスケープ/,"escape"],[/ラストバースト/,"lastburst"],
@@ -13215,7 +13221,7 @@ function parseCardText(txt,mode){
     if(mm)out.set.mugenCiv=(mm[1].includes("水")&&mm[1].includes("闇"))?"wd":(mm[1]==="水"?"w":"d");
   }
   // ⚡ チャージャー（この呪文を唱えた後、墓地のかわりにマナゾーンに置く）
-  if(/チャージャー\s*[（(]この呪文を唱えた後|墓地の?かわりにマナゾーンに置く/.test(t))out.set.charger=true;
+  if(/チャージャー\s*[（(]この呪文を唱えた後|墓地の?かわりにマナゾーンに置く/.test(t)||/[■●]\s*チャージャー\s*(?=[■●\n]|$)/.test(t))out.set.charger=true;
   // マッドネス（「相手のターン中」を含む＝バイケン型／それ以外＝永遠龍型として登録）
   if(/マッドネス/.test(tSelf))out.set.madness=/相手のターン/.test(t)?"baiken":"eternal";
   else if(/相手の(?:カードの)?効果[^。■]*?手札から捨てられる時[^。■]*?バトルゾーンに出す/.test(t))out.set.madness="eternal";
