@@ -661,6 +661,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <button class="btn small ghost bar-extra" id="btnLog">📜</button>
     <button class="btn small ghost bar-extra" id="btnStats" title="対戦戦績">📊</button>
     <button class="btn small bar-extra" id="btnFreePlay">踏倒:OFF</button>
+    <button class="btn small warn bar-extra" id="btnUnstick" title="🚑 処理リセット：効果処理が詰まって動かない時に、ロックと待ち状態を安全に解除します（盤面は変わりません）">🚑</button>
     <button class="btn" id="btnPause" title="処理中（誤操作防止ロック）">⏸ 処理中</button>
   </div>
   <button class="btn primary" id="btnNextTurn">次のターン ▶</button>
@@ -1433,6 +1434,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="装備先クリーチャーのパワーを常時+n（例：+500）。クロスギアだけでなくオレガ・オーラ／ドラグハート・ウエポンの登録でも同様に有効">⚙ 装備先パワー+<input type="number" id="fxGearPow" min="0" step="500" value="0" style="width:76px"></label>
         <label title="装備先クリーチャーのパワーを相手のターン中だけ+n（例：+12000）。オーラ／ドラグハートでも有効">⚙ 装備先パワー+（相手ターン中のみ）<input type="number" id="fxGearPowOppT" min="0" step="500" value="0" style="width:86px"></label>
         <label title="装備先クリーチャーに「ブロッカー」を与える。クロスギア／オレガ・オーラ／ドラグハート・ウエポン共通"><input type="checkbox" id="fxGearBlocker"> ⚙ 装備先に「ブロッカー」を与える</label>
+        <label title="これをクロスしたクリーチャーに「スレイヤー」を与える（秘福 キナコ・カチューシャ型）。クロスギア／オレガ・オーラ／ドラグハート・ウエポン共通"><input type="checkbox" id="fxGearSlayer"> ⚙ クロス先に「スレイヤー」を与える</label>
         <label title="このギアをクロスしたクリーチャーに「エスケープP'S」を与える（破壊される時パワー0超なら、かわりにランダム盾1つを手札へ・ST不可・各ターン1回）"><input type="checkbox" id="fxGearEscapePS"> ⚙ クロス先に「エスケープP'S」を与える</label>
         <label title="このギアをクロスしたクリーチャー（クロス先）が破壊された時、このギアのコントローラーがn枚引く（秘福 サスペンス・ブーツ型）。ギア自身の破壊ではなく、クロス先クリーチャーの破壊が条件です">⚙ クロス先が破壊された時 <input type="number" id="fxGearHostDeadDraw" min="0" max="9" value="0" style="width:52px"> 枚引く</label>
         <label title="このクリーチャー自身が「エスケープP'S」を持つ（破壊される時パワー0超なら、かわりにランダム盾1つを手札へ・ST不可・各ターン1回）"><input type="checkbox" id="fxEscapePS"> 🏃 エスケープP'S（自身）</label>
@@ -2072,8 +2074,8 @@ function makeDlgGate(){
     return ticket;
   };
 }
-const ASK_GATE=makeDlgGate();   // ask / askNumber / askText / askChoice 用
-const PICK_GATE=makeDlgGate();  // pickCard / pickCards 用
+let ASK_GATE=makeDlgGate();   // ask / askNumber / askText / askChoice 用（🚑処理リセットで再生成される）
+let PICK_GATE=makeDlgGate();  // pickCard / pickCards 用（🚑処理リセットで再生成される）
 async function _serialDlg(acquire,open){
   const release=await acquire();
   try{ return await open(); }
@@ -3069,6 +3071,45 @@ function togglePause(){
   }
   toast(GAME_PAUSE?"⏸ 処理中：ターン送りとショートカットをロックしました（カード操作は可能）":"▶ 処理を終了しました");
 }
+/* 🚑 処理リセット：効果処理・確認パネル・ターン終了待ちなどが詰まって動かない時の復旧ボタン。
+   盤面（カードの位置・タップ状態など）は一切変更せず、処理系のロックと待ち行列だけを安全に解除する。
+   確認にはブラウザ標準のconfirmを使う（アプリ内のask()自体が詰まっている可能性があるため）。 */
+function emergencyUnstick(){
+  const qn=fxQueue.length;
+  if(!window.confirm(`🚑 処理リセットを実行しますか？\n\n・効果処理のロック／確認待ちをすべて解除します\n・開いている確認パネルは閉じます（未回答の選択は中断されます）\n・盤面のカードは変わりません${qn?`\n・待機中の効果 ${qn}件は解除後に順番に処理されます`:""}\n\n※通常のプレイ中に押しても害はありませんが、処理が詰まった時専用です`))return;
+  try{
+    // 効果処理エンジンのロック解除
+    fxRunning=false;fxInsertAt=null;FX_HOLD=false;
+    // ターン終了・各種進行の保留解除
+    NEXT_TURN_HOLD=0;TURN_END_PHASE="";NT_BLOCK_CNT=0;NT_RUN_ID++;
+    LABY_RUN=false;MUGETSU_BUSY=false;GAME_PAUSE=false;MOVE_BLOCKED=false;
+    {const b=$("btnPause");if(b){b.textContent="⏸ 処理中";b.classList.remove("primary");}}
+    // 動作チェーンを新品に（止まった古いawait連鎖から切り離す）
+    WATCH_CHAIN=Promise.resolve();MOVE_TAP_CHAIN=Promise.resolve();
+    // 確認ダイアログの直列ゲートを再生成（未解決のまま詰まった順番待ちを破棄）
+    ASK_GATE=makeDlgGate();PICK_GATE=makeDlgGate();
+    // 開いている確認・選択パネルを閉じる（回答待ちのPromiseは破棄される＝上のゲート再生成とセット）
+    for(const id of ["askOlay","viewerOlay","breakOlay","revealOlay"]){
+      const e=document.getElementById(id);if(e)e.classList.remove("open");
+    }
+    try{closeSheet();}catch(e){}
+    // 攻撃バナー・再開ボタン・重ね置き待ち・ハイライトを解除
+    try{$("fxBanner").classList.remove("show");}catch(e){}
+    {const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
+    if(typeof PENDING!=="undefined")PENDING=null;
+    S.pendingAtk=null;HILITE_ID=null;endMulti();
+    renderAll();
+    sfx("ok");
+    toast(`🚑 処理をリセットしました（盤面はそのまま）${qn?`。待機中の効果${qn}件を再開します`:""}`);
+    // 残っていたCIPキュー・誘発を再開
+    if(fxQueue.length)pumpFx();
+    else{(async()=>{try{await drainToGrave();if(TRIG_PENDING.length)await drainTrig(false);if(ORI_QUEUE.length)await drainOriotis(false);}catch(e){}})();}
+  }catch(e){
+    console.error("emergencyUnstick error:",e);
+    toast("⚠ リセット中にエラーが発生しました。改善しない場合はページを再読み込みしてください（対戦の途中経過は失われます）");
+  }
+}
+{const ub=document.getElementById("btnUnstick");if(ub)ub.addEventListener("click",emergencyUnstick);}
 async function runLabyEnd(cur2){
   const ZL=zonesOf(cur2);
   const OZL=zonesOf(cur2===0?1:0);
@@ -4951,6 +4992,7 @@ function cardInfoText(key){
   if(r.graveReviveN>0)kw.push(`ターン開始時：墓地から自分${r.graveReviveN}体破壊で復活`);
   if(r.hmShieldGSG)kw.push(`HM時：自分の盾の「${r.hmShieldGSG}」にG・ストライク付与`);
   if(r.sback)kw.push(`S・バック${r.sbackCond?`[${r.sbackCond}]`:""}`);
+  if(r.gearSlayer)kw.push("クロス先にスレイヤー付与");
   if(r.stCostM)kw.push(`常在コスト-${r.stCostM}${r.stCostMF?`(${r.stCostMF})`:""}`);
   if(r.stLockCre)kw.push(`クリーチャー召喚ロック${r.stLockCreF?`(${r.stLockCreF})`:""}`);
   if(r.stLockSpell)kw.push(`呪文ロック${r.stLockSpellF?`(${r.stLockSpellF})`:""}`);
@@ -5148,7 +5190,8 @@ async function autoTapCost(pi,c){
     // 💒 ウェディング型：バトルゾーンにある相手のエレメントの持つ文明1つにつき−n（ゼロ文明は「文明を持たない」ため数えない）
     if(paySide==="creature"&&r.costRedOppCiv){
       const civSet=new Set();
-      for(const b of zonesOf(pi===0?1:0).battle){const rb=getReg(b);if(rb&&rb.civs)rb.civs.forEach(cv=>{if(cv!=="zero")civSet.add(cv);});}
+      const addCivs=o=>{const ro=getReg(o);if(ro&&ro.civs)ro.civs.forEach(cv=>{if(cv!=="zero")civSet.add(cv);});};
+      for(const b of zonesOf(pi===0?1:0).battle){addCivs(b);(b.gear||[]).forEach(addCivs);} // クロス中のギアもエレメント
       const dec=Math.min(civSet.size*(+r.costRedOppCiv||2),Math.max(0,cost-1)); // 0以下にならない（下限1）
       if(dec>0){cost=Math.max(0,cost-dec);toast(`💒 相手エレメントの文明${civSet.size}種 → 召喚コスト−${dec}（残り${cost}）`);}
     }
@@ -8521,6 +8564,31 @@ async function pumpFx(){
   finally{fxRunning=false;fxInsertAt=null;}
   if(fxQueue.length)pumpFx(); // エラーで中断しても残りのキューを処理
 }
+/* ⚡ 手動CIP：カードのパネルから「出た時（CIP）を使う」。
+   CIPの連鎖で処理が止まった時の復旧にも使う（処理ロックを解除してから、そのカードの出た時を実行）。 */
+async function manualRunCip(pi,c){
+  if(!S.expert){toast("⚡ EXモードのときだけ使えます（設定でEXをONにしてください）");return;}
+  if(isSealed(c)){toast(`🔒 ${faceNameOf(c)} は封印中のため能力を使えません`);return;}
+  const reg=getReg(c);
+  const hasFx=reg&&(reg.faces[0].length||(reg.twin&&reg.faces[1].length)||(reg.modeN|0)>0);
+  if(!hasFx&&!(reg&&(reg.soulRaid||reg.momoKingX))&&!soulXCipFx(c).length){
+    toast(`《${faceNameOf(c)}》には登録された出た時（CIP）効果がありません`);return;
+  }
+  // ⏳ 効果処理が途中で止まっている場合：開いているパネルがなければ、確認のうえロックを解除
+  if(fxRunning){
+    const dlgOpen=["askOlay","viewerOlay","breakOlay","revealOlay"].some(id=>{
+      const e=document.getElementById(id);return e&&e.classList.contains("open");
+    });
+    if(dlgOpen){toast("⏳ 開いている確認パネルを先に完了してください");return;}
+    const go=await ask(`⏳ 効果の処理が途中で止まっているようです。\n処理のロックを解除して《${faceNameOf(c)}》の出た時（CIP）を実行しますか？${fxQueue.length?`\n（待機中の効果${fxQueue.length}件も、このあと順に処理されます）`:""}`);
+    if(!go)return;
+    fxRunning=false;fxInsertAt=null;
+    toast("🔓 処理のロックを解除しました");
+  }
+  if(c._repPending)c._repPending=false; // 手動実行なので置換効果の保留は解除
+  toast(`⚡ 手動：${faceNameOf(c)} の出た時（CIP）を実行します`);
+  enqueueFx(pi,c);
+}
 /* 🔥 超魂レイド：このクリーチャーが出た時、山札の上から3枚を表向きにする。
    その中からこのクリーチャーの進化元になれるカードを1枚この下に置いてよい（→進化状態＝召喚酔い解除）。
    残りを好きな順序で山札の下に置く。進化元の適否はプレイヤー判断（デュエプレ準拠・クリーチャーを候補に強調）。 */
@@ -8755,6 +8823,13 @@ function dispCost(c,pi){
       }).length;
       if(cnt>0){const mult=r.symX||1;const civ0S=r.civs||[];const civFloorS=(civ0S.length===1&&civ0S[0]==="zero")?0:Math.max(1,civ0S.length||1);cost-=Math.min(cnt*mult,Math.max(0,cost-civFloorS));}
     }
+    // 💒 ウェディング・イノセンス型：相手のバトルゾーンのエレメント（クロス中ギア含む）の文明1つにつき−n（表示に反映・召喚コストなのでクリーチャー面のみ・下限1）
+    if(r.costRedOppCiv&&r.ctype!=="spell"){
+      const civSet=new Set();
+      const addCivs=o=>{const ro=getReg(o);if(ro&&ro.civs)ro.civs.forEach(cv=>{if(cv!=="zero")civSet.add(cv);});};
+      for(const b of zonesOf(pi===0?1:0).battle){addCivs(b);(b.gear||[]).forEach(addCivs);}
+      if(civSet.size>0)cost-=Math.min(civSet.size*(+r.costRedOppCiv||2),Math.max(0,cost-1));
+    }
     // 💠 各ターン最初の召喚コスト軽減（表示に反映・このターン未使用の軽減元のみ）
     if(r.ctype!=="spell"){
       S.firstSumUsed=S.firstSumUsed||{};
@@ -8823,6 +8898,9 @@ function gearPowSum(c,own){
 }
 function gearBlockerOn(c){
   return (c&&c.gear||[]).some(g=>{const rg=getReg(g);return rg&&rg.gearBlocker;});
+}
+function gearSlayerOn(c){
+  return (c&&c.gear||[]).some(g=>{const rg=getReg(g);return rg&&rg.gearSlayer;});
 }
 function gearEscapePSOn(c){
   return (c&&c.gear||[]).some(g=>{const rg=getReg(g);return rg&&rg.gearEscapePS;});
@@ -9277,7 +9355,7 @@ async function scheduleAutoResolve(pi,c){
     await new Promise(r2=>setTimeout(r2,300)); // 上に別カードがある間は待つ（入れ子処理中）
   }
 }
-function hasSlayer(c){const r=getReg(c);return !!((r&&r.slayer)||(c.buff&&c.buff.slayer)||(c.hyper&&r&&(r.hmSlayer||r.hmSL)));}
+function hasSlayer(c){const r=getReg(c);return !!((r&&r.slayer)||(c.buff&&c.buff.slayer)||(c.hyper&&r&&(r.hmSlayer||r.hmSL))||gearSlayerOn(c));}
 /* 🥏 バトル肩代わり：指定種族の味方がバトルする時、タップせずに別のクリーチャーがかわりにバトルできる。
    ガードマン（味方が攻撃された時にタップして身代わり）とは異なり、タップしない・攻撃/被攻撃どちらのバトルにも働く。 */
 async function battleSubPick(pp,battler){
@@ -12161,6 +12239,7 @@ function renderFxEditor(){
   {const e=$("fxGearPow");if(e)e.value=String(FXEDIT.gearPow||0);}
   {const e=$("fxGearPowOppT");if(e)e.value=String(FXEDIT.gearPowOppT||0);}
   {const e=$("fxGearBlocker");if(e)e.checked=!!FXEDIT.gearBlocker;}
+  {const e=$("fxGearSlayer");if(e)e.checked=!!FXEDIT.gearSlayer;}
   {const e=$("fxGearEscapePS");if(e)e.checked=!!FXEDIT.gearEscapePS;}
   {const e=$("fxGearHostDeadDraw");if(e)e.value=String(FXEDIT.gearHostDeadDraw||0);}
   {const e=$("fxEscapePS");if(e)e.checked=!!FXEDIT.escapePS;}
@@ -12978,6 +13057,7 @@ function parseCardText(txt,mode){
   // ⚙ クロス先への付与（これをクロスした/しているクリーチャー…）
   {const mGP=t.match(/これをクロスし(?:た|ている)クリーチャーのパワーを\+?(\d+)/);if(mGP)out.set.gearPow=+mGP[1];}
   if(/これをクロスし(?:た|ている)クリーチャー[^■]{0,80}?「ブロッカー」/.test(t))out.set.gearBlocker=true;
+  if(/これをクロスし(?:た|ている)クリーチャー[^■]{0,80}?「?スレイヤー」?/.test(t))out.set.gearSlayer=true;
   {const mGO=t.match(/これをクロスし(?:た|ている)クリーチャー[^■]{0,60}?「相手のターン中、?パワーを\+?(\d+)する/);if(mGO)out.set.gearPowOppT=+mGO[1];}
   if(/これをクロスし(?:た|ている)クリーチャー[^■]{0,40}?「エスケープP.?S」/.test(t))out.set.gearEscapePS=true;
   // 🏃 エスケープP'S（キーワード単独行）
@@ -14049,6 +14129,7 @@ function openFxEditor(key){
     gearPow:cur&&cur.gearPow||0,
     gearPowOppT:cur&&cur.gearPowOppT||0,
     gearBlocker:cur?!!cur.gearBlocker:false,
+    gearSlayer:cur?!!cur.gearSlayer:false,
     gearEscapePS:cur?!!cur.gearEscapePS:false,
     escapePS:cur?!!cur.escapePS:false,
     costRedAllyF:cur&&cur.costRedAllyF||"",
@@ -14394,6 +14475,7 @@ $("fxSave").addEventListener("click",async ()=>{
     gearPow:$("fxGearPow")?(parseInt($("fxGearPow").value,10)||0):0,
     gearPowOppT:$("fxGearPowOppT")?(parseInt($("fxGearPowOppT").value,10)||0):0,
     gearBlocker:$("fxGearBlocker")?$("fxGearBlocker").checked:false,
+    gearSlayer:$("fxGearSlayer")?$("fxGearSlayer").checked:false,
     gearEscapePS:$("fxGearEscapePS")?$("fxGearEscapePS").checked:false,
     gearHostDeadDraw:$("fxGearHostDeadDraw")?(parseInt($("fxGearHostDeadDraw").value,10)||0):0,
     escapePS:$("fxEscapePS")?$("fxEscapePS").checked:false,
@@ -18248,6 +18330,82 @@ function showMatchDetail(m){
   g.appendChild(wrap);
   $("viewerOlay").classList.add("open");
 }
+/* 📗 デッキ単位の詳細戦績：全体/先攻/後攻の勝率と、対面ごとの内訳（デッキ別勝率の行タップで表示） */
+function openDeckStatsPanel(dk,days){
+  const g=$("vGrid");g.innerHTML="";
+  const now=Date.now();
+  const st=((days&&days>0)?MATCH_STATS.filter(m=>now-m.d<=days*86400000):MATCH_STATS).filter(m=>m.deck0===dk||m.deck1===dk);
+  $("vTitle").textContent=`📗 ${dk} の戦績${days?`（直近${days}日）`:""}`;
+  $("vHint").textContent="このデッキがP1/P2どちら側で使われた試合も合算しています（ミラーは両側で1勝1敗と数えます）";
+  $("vSearch").style.display="none";$("vStatus").textContent="";$("vOk").style.display="none";
+  const wrap=document.createElement("div");
+  wrap.style.cssText="grid-column:1/-1;display:flex;flex-direction:column;gap:10px;font-size:13px";
+  // 集計：このデッキが使われた側ごとに1サンプル（ミラーは両側）
+  const agg={w:0,l:0,fw:0,fn:0,sw:0,sn:0,turns:0,n:0};
+  const byOpp=new Map();
+  for(const m of st){
+    for(const side of [0,1]){
+      const mine=side===0?m.deck0:m.deck1;
+      if(mine!==dk)continue;
+      const opp=side===0?m.deck1:m.deck0;
+      const won=m.winner===side;
+      const first=m.first===side;
+      agg.n++;agg.turns+=(m.turns||0);
+      if(won)agg.w++;else agg.l++;
+      if(first){agg.fn++;if(won)agg.fw++;}else{agg.sn++;if(won)agg.sw++;}
+      if(!byOpp.has(opp))byOpp.set(opp,{w:0,l:0,fw:0,fn:0,sw:0,sn:0});
+      const o=byOpp.get(opp);
+      if(won)o.w++;else o.l++;
+      if(first){o.fn++;if(won)o.fw++;}else{o.sn++;if(won)o.sw++;}
+    }
+  }
+  if(!agg.n){
+    const nd=document.createElement("div");nd.className="hint";
+    nd.textContent="この期間にこのデッキの試合はありません。";
+    wrap.appendChild(nd);
+  }else{
+    const avgT=Math.round(agg.turns/agg.n*10)/10;
+    // 全体・先攻・後攻のサマリー
+    const sum=document.createElement("div");
+    sum.style.cssText="background:#0d1119;border:1px solid var(--line);border-radius:10px;padding:10px;line-height:1.9";
+    sum.innerHTML=`<b>全体</b>　${agg.n}試合　勝率 <b>${pct(agg.w,agg.n)}%</b>（${agg.w}勝${agg.l}敗）　平均${avgT}ターン<br>`
+      +`<b>先攻時</b>　${agg.fn?`勝率 <b>${pct(agg.fw,agg.fn)}%</b>（${agg.fw}勝${agg.fn-agg.fw}敗／${agg.fn}試合）`:"—（先攻の試合なし）"}<br>`
+      +`<b>後攻時</b>　${agg.sn?`勝率 <b>${pct(agg.sw,agg.sn)}%</b>（${agg.sw}勝${agg.sn-agg.sw}敗／${agg.sn}試合）`:"—（後攻の試合なし）"}`;
+    wrap.appendChild(sum);
+    // 対面ごとの内訳（全体＋先攻/後攻）
+    const mv=document.createElement("div");
+    mv.style.cssText="background:#0d1119;border:1px solid var(--line);border-radius:10px;padding:10px;line-height:1.9";
+    let mh=`<b>対面ごとの成績</b>（${dk} 視点）<br>`;
+    const es=[...byOpp.entries()].sort((a,b)=>(b[1].w+b[1].l)-(a[1].w+a[1].l));
+    for(const [opp,o] of es){
+      const n=o.w+o.l;
+      mh+=`・vs ${opp}：<b>${pct(o.w,n)}%</b>（${o.w}-${o.l}）　先攻時 ${o.fn?`${pct(o.fw,o.fn)}%（${o.fw}/${o.fn}）`:"—"}　後攻時 ${o.sn?`${pct(o.sw,o.sn)}%（${o.sw}/${o.sn}）`:"—"}<br>`;
+    }
+    mv.innerHTML=mh;
+    wrap.appendChild(mv);
+    // 直近の試合（新しい順・最大10件）
+    const rc=document.createElement("div");
+    rc.style.cssText="background:#0d1119;border:1px solid var(--line);border-radius:10px;padding:10px;line-height:1.9";
+    let rh=`<b>直近の試合</b>（新しい順・最大10件）<br>`;
+    const recent=[...st].sort((a,b)=>b.d-a.d).slice(0,10);
+    for(const m of recent){
+      const side=m.deck0===dk?0:1; // ミラーはP1側視点で表示
+      const opp=side===0?m.deck1:m.deck0;
+      const won=m.winner===side;
+      const first=m.first===side;
+      const dt=new Date(m.d);
+      rh+=`・${dt.getMonth()+1}/${dt.getDate()}　${won?"🏆勝":"➖負"}　vs ${opp}　${first?"先攻":"後攻"}　${m.turns||0}T${m.reason?`　${m.reason}`:""}<br>`;
+    }
+    rc.innerHTML=rh;
+    wrap.appendChild(rc);
+  }
+  const back=document.createElement("button");
+  back.className="btn small";back.textContent="← 戦績に戻る";
+  back.onclick=()=>openStatsPanel(days);
+  wrap.appendChild(back);
+  g.appendChild(wrap);
+  $("viewerOlay").classList.add("open");
+}
 function openStatsPanel(days){
   const g=$("vGrid");g.innerHTML="";
   const now=Date.now();
@@ -18339,26 +18497,31 @@ function openStatsPanel(days){
       tv.innerHTML=th;
       wrap.appendChild(tv);
     }
-    // デッキ別成績（P1/P2どちら側でも合算）
+    // デッキ別成績（P1/P2どちら側でも合算・行タップでそのデッキの詳細へ）
     const byDeck=new Map();
     for(const m of st){
       for(const side of [0,1]){
         const dk=side===0?m.deck0:m.deck1;
-        if(!byDeck.has(dk))byDeck.set(dk,{w:0,l:0,fw:0,fn:0});
+        if(!byDeck.has(dk))byDeck.set(dk,{w:0,l:0,fw:0,fn:0,sw:0,sn:0});
         const o=byDeck.get(dk);
         if(m.winner===side)o.w++;else o.l++;
         if(m.first===side){o.fn++;if(m.winner===side)o.fw++;}
+        else{o.sn++;if(m.winner===side)o.sw++;}
       }
     }
     const dv=document.createElement("div");
     dv.style.cssText="background:#0d1119;border:1px solid var(--line);border-radius:10px;padding:10px";
-    let dh="<b>デッキ別勝率</b>（P1/P2両側を合算）<br>";
+    dv.innerHTML="<b>デッキ別勝率</b>（P1/P2両側を合算・デッキをタップで対面ごとの詳細）";
     const dEntries=[...byDeck.entries()].sort((a,b)=>(b[1].w+b[1].l)-(a[1].w+a[1].l));
     for(const [dk,o] of dEntries){
       const n=o.w+o.l;
-      dh+=`・${dk}：<b>${pct(o.w,n)}%</b>（${o.w}勝${o.l}敗）${o.fn?`　先攻時 ${pct(o.fw,o.fn)}%`:""}<br>`;
+      const row=document.createElement("div");
+      row.style.cssText="padding:6px 8px;margin-top:5px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:#10182a;line-height:1.7";
+      row.innerHTML=`📗 <b>${dk}</b>　全体 <b>${pct(o.w,n)}%</b>（${o.w}勝${o.l}敗）　先攻時 ${o.fn?`${pct(o.fw,o.fn)}%（${o.fw}/${o.fn}）`:"—"}　後攻時 ${o.sn?`${pct(o.sw,o.sn)}%（${o.sw}/${o.sn}）`:"—"}`;
+      row.title="タップでこのデッキの詳細戦績（対面ごとの先攻/後攻内訳）を見る";
+      row.addEventListener("click",()=>openDeckStatsPanel(dk,days));
+      dv.appendChild(row);
     }
-    dv.innerHTML=dh;
     wrap.appendChild(dv);
     // 対面マトリクス（デッキA vs デッキB・向き正規化）
     const byMatch=new Map();
@@ -18564,7 +18727,7 @@ $("olDeckSend").addEventListener("click",async ()=>{
 $("olResign").addEventListener("click",doResign);
 $("btnResignBar").addEventListener("click",doResign);
 $("btnLog").addEventListener("click",openGameLog);
-{const sb=document.getElementById("btnStats");if(sb)sb.addEventListener("click",openStatsPanel);}
+{const sb=document.getElementById("btnStats");if(sb)sb.addEventListener("click",()=>openStatsPanel());}
 $("btnMore").addEventListener("click",()=>{$("bottombar").classList.toggle("more-open");});
 $("btnFreePlay").addEventListener("click",()=>{
   S.freePlay=!S.freePlay;
@@ -19461,6 +19624,18 @@ function openCardSheet(ctx){
     inf.style.cssText="font-size:12px;color:#f59e0b;font-weight:700;padding:4px 2px";
     inf.textContent=`🔒 封印中（${c.seals.length}）：クリーチャーとして扱われません。攻撃・効果・ゾーン移動は不可。まず封印を外してください`;
     box.appendChild(inf);
+  }
+  // ⚡ 出た時（CIP）を手動で実行：CIPの連鎖で処理が止まった時の復旧にも使う
+  if(S.expert&&(ctx.zone==="battle"||ctx.zone==="resolve")&&c.faceup&&!masked&&!isSealed(c)){
+    const rC=getReg(c);
+    const hasCipReg=!!(rC&&((rC.faces&&(rC.faces[0].length||(rC.twin&&rC.faces[1].length)))||(rC.modeN|0)>0||rC.soulRaid||rC.momoKingX))||soulXCipFx(c).length>0;
+    if(hasCipReg){
+      const isSp=rC&&rC.ctype==="spell";
+      box.appendChild(actBtn(
+        `⚡ ${isSp?"呪文の効果":"出た時（CIP）"}を使う${fxRunning?"（処理が止まった時の復旧）":"（手動でもう一度）"}`,
+        async ()=>{closeSheet();closeSel();await manualRunCip(ctx.p,c);},
+        fxRunning?"warn":"",true));
+    }
   }
   if(ctx.zone==="battle"&&!isSealed(c)&&!isGear){
     box.appendChild(actBtn("⚔ 攻撃する",()=>{startAttack(ctx.p,ctx.id);},"primary",true));
