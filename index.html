@@ -1315,6 +1315,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row" style="gap:12px">
         <label><input type="checkbox" id="fxCantAtk"> 攻撃できない</label>
         <label title="このクリーチャーはバトルの後、破壊される（勝敗問わず・黒神龍マリシラ型）"><input type="checkbox" id="fxBattleSelfKill"> 💀 バトルの後、このクリーチャーを破壊</label>
+        <label title="相手プレイヤーを攻撃する時、攻撃の後（ブレイク／ダイレクトアタックの後）にこのクリーチャーを破壊する（黒神龍ジョブヴェール型）。クリーチャーへの攻撃では破壊されません"><input type="checkbox" id="fxAtkPSelfKill"> 💀 相手プレイヤーを攻撃した後、このクリーチャーを破壊</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="条件式を満たしていない間は攻撃できない（例：墓地:ドラゴン>=5）"><span style="font-size:12px;font-weight:700">⛔ 条件を満たさないと攻撃できない</span><input type="text" id="fxCantAtkCond" placeholder="条件式（例：墓地:ドラゴン>=5・空欄＝なし）" style="width:230px"></label>
         <label><input type="checkbox" id="fxCantAtkP"> 相手プレイヤーを攻撃できない</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="ここに書いた対象（種族など・「／」区切り）以外のクリーチャーは、出たターン攻撃できない（両者・SAでも不可）"><span style="font-size:12px;font-weight:700">🥶 常在：対象以外は出たターン攻撃不可</span><input type="text" id="fxStSickAll" list="raceList" placeholder="対象（例：スノーフェアリー／オリジン・空欄＝無効）" style="width:230px"></label>
@@ -4842,6 +4843,7 @@ const FX_TYPES=[
   ["draw","n枚ドロー"],
   ["tapAllOp","相手のクリーチャーをすべてタップ（スパーク型）"],
   ["tapOpN","相手のクリーチャーをn体まで選んでタップ（「〜体までタップ」型）"],
+  ["tapAnyN","⤵ クリーチャーをn体まで選んでタップ（両者どちらのクリーチャーでも対象・神光のカルマ ウイ型）"],
   ["foeFreezeAll","❄ 相手のクリーチャーすべては、次の相手のターンのはじめにアンタップしない（ボルパンサー型・タップはしない）"],
   ["turnEndUntapAll","🌙 このターン終了時、自分のクリーチャーをすべてアンタップする（ジャスティスの誓い型・唱えた/出したターンのみ）"],
   ["drawPerOppTapped","🃏 相手のタップしているクリーチャー1体につきカードを1枚引く（手札上限10枚まで・フラッシュ・スパーク型）"],
@@ -4979,7 +4981,7 @@ function cardInfoText(key){
   if(races.length)L.push(`種族：${races.join("／")}`);
   // キーワード類
   const kw=[];
-  const K=[["sa","SA"],["blocker","ブロッカー"],["slayer","スレイヤー"],["st","S・トリガー"],["gs","G・ストライク"],["machf","マッハファイター"],["jd","ジャストダイバー"],["noBlock","ブロックされない"],["noAtked","攻撃されない"],["noChoose","選ばれない"],["cantAtk","攻撃できない"],["cantAtkP","プレイヤー攻撃不可"],["guardman","ガードマン"],["escape","エスケープ"],["escapePS","エスケープP'S"],["exlife","EXライフ"],["mad","マッドネス"],["charger","チャージャー"],["battleSelfKill","バトル後自壊"],["auraTapIn","相手タップイン"],["auraTapInPow","パワー小タップイン(両者・チリ型)"],["stLockBoth","ロック両者適用"],["stLockPsy","サイキック出せない"],["altCostKill","代替コスト後自壊"]];
+  const K=[["sa","SA"],["blocker","ブロッカー"],["slayer","スレイヤー"],["st","S・トリガー"],["gs","G・ストライク"],["machf","マッハファイター"],["jd","ジャストダイバー"],["noBlock","ブロックされない"],["noAtked","攻撃されない"],["noChoose","選ばれない"],["cantAtk","攻撃できない"],["cantAtkP","プレイヤー攻撃不可"],["guardman","ガードマン"],["escape","エスケープ"],["escapePS","エスケープP'S"],["exlife","EXライフ"],["mad","マッドネス"],["charger","チャージャー"],["battleSelfKill","バトル後自壊"],["atkPSelfKill","プレイヤー攻撃後に自壊"],["auraTapIn","相手タップイン"],["auraTapInPow","パワー小タップイン(両者・チリ型)"],["stLockBoth","ロック両者適用"],["stLockPsy","サイキック出せない"],["altCostKill","代替コスト後自壊"]];
   for(const [k2,lb] of K)if(r[k2])kw.push(lb);
   if(r.breaks&&r.breaks>1)kw.push(`${r.breaks===2?"W":r.breaks===3?"T":r.breaks+""}・ブレイカー`);
   if(r.sympathy)kw.push(`シンパシー(${r.sympathy}${r.symX>1?`×${r.symX}`:""})`);
@@ -5750,7 +5752,7 @@ const MODE_FX_ALIAS={
   "S詠唱":"handStFree","手札S詠唱":"handStFree",
   "全ブロッカー付与":"tempBlockerAll","攻撃ブロック封じ":"lockFoeAtkBlock","攻撃封じ":"lockFoeAtkP",
   "相手シールド化":"foeToShield","シールド化":"foeToShield","シールド送り":"foeToShield","相手をシールド":"foeToShield",
-  "自分をゾーンへ":"selfToZone","自分パワーアップ":"tempPowSelf1k","めくってマナ":"flipTopMana","公開して手札":"revealTakeAll","公開して手札残り墓地":"revealTakeGrave","おつかい":"revealTakeGrave","自分タップ":"tapMyN","処理中":"pauseManual","手動処理":"pauseManual","盾ブレイク":"breakOneAsk","自分盾ブレイク":"breakMineAny","手札シールド化":"handShield","墓地山札":"graveToDeckAll","コスト合計踏み倒し":"sumRecruit","盾を見てブレイク":"breakMineRand","デッキ進化":"deckEvo",
+  "両者タップ":"tapAnyN","どちらでもタップ":"tapAnyN","自分をゾーンへ":"selfToZone","自分パワーアップ":"tempPowSelf1k","めくってマナ":"flipTopMana","公開して手札":"revealTakeAll","公開して手札残り墓地":"revealTakeGrave","おつかい":"revealTakeGrave","自分タップ":"tapMyN","処理中":"pauseManual","手動処理":"pauseManual","盾ブレイク":"breakOneAsk","自分盾ブレイク":"breakMineAny","手札シールド化":"handShield","墓地山札":"graveToDeckAll","コスト合計踏み倒し":"sumRecruit","盾を見てブレイク":"breakMineRand","デッキ進化":"deckEvo",
 };
 // 逆引き：モード@記法の自動出力に使う日本語名（内部名を画面に出さない）
 const MODE_FX_JA=(()=>{const m={};for(const [ja,en] of Object.entries(MODE_FX_ALIAS))if(!m[en])m[en]=ja;return m;})();
@@ -6287,6 +6289,20 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       if(cnt>0){sfx("move");toast(`⤵ 相手のクリーチャー${cnt}体をタップ`);}
       renderAll();
+    }else if(f.t==="tapAnyN"){
+      // ⤵ クリーチャーをn体まで選んでタップ（両者どちらのクリーチャーでも対象）
+      let cnt=0;
+      for(let i=0;i<n;i++){
+        const pool=[...zonesOf(pi).battle,...(S.vs?zonesOf(op).battle:[])].filter(x=>{
+          const rx=getReg(x);return !x.tapped&&(!rx||isCreatureReg(rx));
+        });
+        if(!pool.length)break;
+        const j=await pickCard(`⤵ タップするクリーチャーを選択（${i+1}/${n}・キャンセルで終了）`,pool,{hint:"自分/相手どちらのクリーチャーでも選べます"});
+        if(j===null)break;
+        pool[j].tapped=true;cnt++;renderAll();
+      }
+      if(cnt>0){sfx("move");toast(`⤵ クリーチャー${cnt}体をタップ`);}
+      renderAll();
     }else if(f.t==="turnLock"){
       const tgt=S.vs?await askChoice("⛔ ロック対象のプレイヤー",[`相手（${S.players[op].label}）`,`自分（${S.players[pi].label}）`]):0;
       if(tgt===null)continue;
@@ -6525,6 +6541,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const j=randInt(TZ.battle.length);
         const c=TZ.battle.splice(j,1)[0];
         c.tapped=false;c.faceup=true;c.rot=0;
+        leaveBattleCleanup(TZ,c,"hand"); // ⚙ クロスギアは場に残す（クリーチャーと一緒に離れない）
         TZ.hand.push(c);markArrive(c);
         toast(`バウンス：${faceNameOf(c)} を${S.players[tp].label}の手札へ`);
       }
@@ -7658,6 +7675,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const bi=Z.battle.findIndex(x=>x.id===top.id);
         if(bi>=0){
           Z.battle.splice(bi,1);
+          if(top.gear&&top.gear.length)host.gear=[...(host.gear||[]),...top.gear.splice(0)]; // ⚙ クロス中のギアは上面へ引き継ぐ
           host.under=host.under||[];
           if(top.under&&top.under.length)host.under.push(...top.under.splice(0));
           host.under.push(top);
@@ -7670,8 +7688,8 @@ async function runFxList(pi,list,srcCard,inPump){
           ["墓地に置く（召喚失敗扱い）","手札に戻す","そのまま場に残す（非進化・召喚酔い）"]);
         // めくったカードは山札の上に戻す（裏向き）
         top.faceup=false;Z.deck.unshift(top);
-        if(j===0){const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const cc=Z.battle.splice(bi,1)[0];cc.faceup=true;Z.grave.push(cc);}toast(`🂠 ${faceNameOf(host)} は墓地へ（進化失敗）`);}
-        else if(j===1){const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const cc=Z.battle.splice(bi,1)[0];cc.faceup=true;Z.hand.push(cc);}toast(`🂠 ${faceNameOf(host)} は手札へ（進化失敗）`);}
+        if(j===0){const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const cc=Z.battle.splice(bi,1)[0];cc.faceup=true;leaveBattleCleanup(Z,cc,"grave");Z.grave.push(cc);}toast(`🂠 ${faceNameOf(host)} は墓地へ（進化失敗）`);}
+        else if(j===1){const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const cc=Z.battle.splice(bi,1)[0];cc.faceup=true;leaveBattleCleanup(Z,cc,"hand");Z.hand.push(cc);}toast(`🂠 ${faceNameOf(host)} は手札へ（進化失敗）`);}
         else toast(`🂠 ${faceNameOf(host)} は非進化として場に残った（召喚酔いあり）`);
         renderAll();
       }
@@ -8667,6 +8685,33 @@ function gearOut(Z,g){
   const rg=getReg(g);
   if(rg&&["aura","gigaaura"].includes(rg.ctype)){g.faceup=true;g.face=0;g.rot=0;g.tapped=false;Z.grave.push(g);return;}
   g.face=0;g.rot=0;g.tapped=false;Z.hyper.push(g);
+}
+/* ⚙ クリーチャーがバトルゾーンを離れる時の共通整理。
+   ・クロスギアはクリーチャーと一緒に離れず、外れてバトルゾーンに残る（ジェネレート状態に戻る）
+   ・オーラは墓地／ドラグハートは超次元／封印は墓地
+   ・重なっていた下敷き（進化元）は移動先へ
+   toZone省略時は下敷きを墓地へ。moveCardX以外の直接移動（バウンス等）から呼ぶ。 */
+function leaveBattleCleanup(Z,c,toZone){
+  if(c.gear&&c.gear.length){
+    const gs=c.gear.splice(0);
+    gs.forEach(g=>gearOut(Z,g));
+    toast(`装備を整理：オーラ→墓地／クロスギア→場に残留／ドラグハート→超次元`);
+  }
+  if(c.seals&&c.seals.length){
+    const sl=c.seals.splice(0);
+    sl.forEach(x=>{x.faceup=true;Z.grave.push(x);});
+    toast(`封印${sl.length}枚は墓地へ`);
+  }
+  if(c.under&&c.under.length){
+    const kids=c.under.splice(0);
+    const kz=(!toZone||toZone==="resolve")?"grave":toZone;
+    for(const u of kids){
+      u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;
+      u.faceup=(kz!=="shield");
+      placeCard(Z,kz,u);
+    }
+    toast(`重なっていた${kids.length}枚もバラして同じ場所へ移動`);
+  }
 }
 async function offerPhoenixStore(pi,newCard){
   if(!S.expert)return;
@@ -11124,6 +11169,15 @@ async function execAttack(pi,id,tg){
         }
       }
     }
+    // 💀 相手プレイヤーを攻撃する時、攻撃の後、このクリーチャーを破壊する（黒神龍ジョブヴェール型）
+    if(S.expert){
+      const rSK=getReg(c);
+      if(rSK&&rSK.atkPSelfKill&&Z.battle.find(x=>x.id===id)){
+        toast(`💀 ${faceNameOf(c)} は相手プレイヤーを攻撃した後、破壊される`);
+        await destroyCreature(pi,c);
+        renderAll();
+      }
+    }
   }
   else{
     if(S.expert){
@@ -11168,6 +11222,15 @@ async function execAttack(pi,id,tg){
       }
     }
     if(S.vs&&S.turn>0)declareWin(pi,`💥 ダイレクトアタック成立`);
+    // 💀 相手プレイヤーを攻撃する時、攻撃の後、このクリーチャーを破壊する（黒神龍ジョブヴェール型）
+    if(S.expert){
+      const rSK=getReg(c);
+      if(rSK&&rSK.atkPSelfKill&&Z.battle.find(x=>x.id===id)){
+        toast(`💀 ${faceNameOf(c)} は相手プレイヤーを攻撃した後、破壊される`);
+        await destroyCreature(pi,c);
+        renderAll();
+      }
+    }
   }
   clearPendingAtk(); // ✅ ここまで来たら攻撃は完了（保留は無し）。古い再開ボタン・保留状態を確実に消す
   renderAll();
@@ -11500,6 +11563,15 @@ function fxTrigRowEl(i){
   ocb.onchange=()=>{f.once=ocb.checked;};
   onceL.appendChild(ocb);
   onceL.appendChild(document.createTextNode("1️⃣各ターン1回"));
+  // ❓ 任意効果（〜してもよい）：誘発時に「行いますか？」の確認を出す
+  const optLw=document.createElement("label");
+  optLw.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  optLw.title="この効果は任意（〜してもよい）：誘発時に「行いますか？」の確認が出て、いいえでスキップできます";
+  const opw=document.createElement("input");
+  opw.type="checkbox";opw.checked=!!f.opt;
+  opw.onchange=()=>{f.opt=opw.checked;};
+  optLw.appendChild(opw);
+  optLw.appendChild(document.createTextNode("❓任意"));
   const del=document.createElement("button");
   del.className="btn small warn del";del.textContent="✕";
   del.onclick=()=>{FXEDIT.watchFx.splice(i,1);renderFxEditor();};
@@ -11518,7 +11590,7 @@ function fxTrigRowEl(i){
   const top=document.createElement("div");top.className="fxr-top";
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(ev);top.appendChild(evb);top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
-  bot.appendChild(hld);bot.appendChild(onceL);
+  bot.appendChild(hld);bot.appendChild(onceL);bot.appendChild(optLw);
   const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
   bot.appendChild(condWrap);
   row.appendChild(top);row.appendChild(bot);
@@ -12170,6 +12242,7 @@ function renderFxEditor(){
   $("fxAtkUn").checked=!!FXEDIT.atkUn;
   $("fxCantAtk").checked=!!FXEDIT.cantAtk;
   $("fxBattleSelfKill").checked=!!FXEDIT.battleSelfKill;
+  {const e=$("fxAtkPSelfKill");if(e)e.checked=!!FXEDIT.atkPSelfKill;}
   {const e=$("fxCantAtkCond");if(e)e.value=FXEDIT.cantAtkCond||"";}
   {const e=$("fxStSickAll");if(e)e.value=FXEDIT.stSickAll||"";}
   {const e=$("fxStShieldStG");if(e)e.value=FXEDIT.stShieldStG||"";}
@@ -12771,7 +12844,7 @@ function extractEffects(text,mode){
     else if(/相手のクリーチャー(?:すべて)?は[^■。]{0,20}?アンタップ(?:しない|できない)/.test(cl))fx.push({t:"foeFreezeAll",n:1});
     else if(/相手の.*クリーチャーを.*(?:すべて|全て).*タップ/.test(cl))fx.push({t:"tapAllOp",n:1});
     else if(/相手の.*クリーチャーを.*タップ/.test(cl))fx.push({t:"tapOpN",n:numOf(cl,/(\d+)体/)});
-    else if(/クリーチャー\d+体を?タップ/.test(cl)&&!/アンタップ/.test(cl))fx.push({t:"tapOpN",n:numOf(cl,/(\d+)体/)}); // 「クリーチャー1体をタップ（してもよい）」＝選んでタップ
+    else if(/クリーチャー\d+体を?タップ/.test(cl)&&!/アンタップ/.test(cl))fx.push({t:"tapAnyN",n:numOf(cl,/(\d+)体/),opt:/してもよい/.test(cl)}); // 「クリーチャー1体をタップしてもよい」＝両者どちらでも選んでタップ（任意）
     // GR召喚
     if(/GR召喚|超GR/.test(cl)){const n=numOf(cl,/(\d+)体/);fx.push({t:"grsummon",n});}
     // サーチ（山札から手札）
@@ -13267,6 +13340,7 @@ function parseCardText(txt,mode){
   }
   // 💀 バトルの後、このクリーチャーを破壊する（黒神龍マリシラ型）
   if(/バトル(?:する時)?[、,]?\s*バトルの?後[、,]?\s*この(?:クリーチャー|カード)を破壊/.test(t))out.set.battleSelfKill=true;
+  if(/相手プレイヤーを攻撃する時[、,]?\s*攻撃の後[、,]?\s*この(?:クリーチャー|カード)を破壊/.test(t))out.set.atkPSelfKill=true;
   // キーワード能力（付与文を除外したtSelfで判定）
   const KW=[
     [/スピードアタッカー/,"sa"],[/(?<![「『])ブロッカー(?![」』])/,"blocker"],[/スレイヤー/,"slayer"],
@@ -14065,6 +14139,7 @@ function openFxEditor(key){
     atkUn:cur?!!cur.atkUn:false,
     cantAtk:cur?!!cur.cantAtk:false,
     battleSelfKill:cur?!!cur.battleSelfKill:false,
+    atkPSelfKill:cur?!!cur.atkPSelfKill:false,
     cantAtkCond:cur&&cur.cantAtkCond||"",
     stSickAll:cur&&cur.stSickAll||"",
     stShieldStG:cur&&cur.stShieldStG||"",
@@ -14411,6 +14486,7 @@ $("fxSave").addEventListener("click",async ()=>{
     atkUn:$("fxAtkUn").checked,
     cantAtk:$("fxCantAtk").checked,
     battleSelfKill:$("fxBattleSelfKill").checked,
+    atkPSelfKill:$("fxAtkPSelfKill")?$("fxAtkPSelfKill").checked:false,
     cantAtkCond:($("fxCantAtkCond")?$("fxCantAtkCond").value:"").trim(),
     stSickAll:($("fxStSickAll")?$("fxStSickAll").value:"").trim(),
     stShieldStG:($("fxStShieldStG")?$("fxStShieldStG").value:"").trim(),
@@ -15575,10 +15651,14 @@ function openLinkProgress(pi,id){
         const i2=Z.battle.findIndex(y=>y.id===x.id);
         if(i2>=0)Z.battle.splice(i2,1);
       }
+      // ⚙ 合体前のクリーチャーにクロスしていたギアは、合体後のクリーチャーへ引き継ぐ（場から消さない）
+      const gAll=[];
+      for(const x of members){if(x.gear&&x.gear.length)gAll.push(...x.gear.splice(0));}
       const nm2=(reg.psyLinkTo)||members.map(x=>faceNameOf(x)).join("／");
       const nc=makeCard(nm2);
       nc.gl=true;
       nc.under=members;
+      if(gAll.length)nc.gear=[...(nc.gear||[]),...gAll];
       nc.rot=reg.psyLinkW?((pi===S.seat)?270:90):0;
       members.forEach(b=>{b.tapped=false;});
       Z.battle.push(nc);
