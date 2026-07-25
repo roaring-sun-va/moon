@@ -2362,6 +2362,17 @@ function markArrive(c){
 function getReg(c){return FXDB.get(faceKeyOf(c))||FXDB.get(normName(c.name))||null;}
 /* 進化系タイプの共通判定。ツインパクトは上面＝クリーチャー面なので twinTop（進化/NEO進化）で判定に含める */
 const EVO_CTYPES=["evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","lunatic","ultimate"];
+/* 🌟 バトルゾーンの進化元がいらない進化かどうか。
+   ・モモキングダム✕型の「禁断スター進化」＝出た時に山札から表向きにした非進化レクスターズの上に置く
+     （バトルゾーンに元からいるクリーチャー／タマシードには重ねない）
+   ・スターMAX進化（S-MAX進化）＝バトルゾーンの進化元を必要としない
+   これらは「そのまま出す」扱いにして、進化元の選択パネルを出さない。 */
+function isNoBaseEvoReg(r){
+  if(!r)return false;
+  if(r.momoKingX)return true;
+  const ct=r.ctype,tt=(r.twin||r.ctype==="twinpact")?r.twinTop:null;
+  return ct==="smaxevo"||ct==="onismaxevo"||tt==="smaxevo"||tt==="onismaxevo";
+}
 function isEvoReg(r){
   if(!r)return false;
   if(EVO_CTYPES.includes(r.ctype))return true;
@@ -2613,7 +2624,7 @@ async function summonCreatureNeoAware(pi,t,opts){
   const r=getReg(t);
   t.neoEvo=false;
   // 🧬 NEO：非進化としても出せる。⤴ 進化・究極進化（ultimate等）：進化元がいれば「重ねて出す」を選べる（ライジングNEX対応）
-  if(r&&(isNeoReg(r)||isEvoReg(r))){
+  if(r&&(isNeoReg(r)||isEvoReg(r))&&!isNoBaseEvoReg(r)){
     const isNeo=isNeoReg(r);
     const bases=Z.battle.filter(x=>x.id!==t.id&&x.id!==opts.excludeId&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize);})());
     if(bases.length){
@@ -5929,7 +5940,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
       }
     }
     // 🂠 進化クロスギア／進化クリーチャーは直接出せない。下敷き（進化元）に重ねる
-    if(rCC&&(rCC.ctype==="evocrossgear"||isEvoReg(rCC))){
+    if(rCC&&(rCC.ctype==="evocrossgear"||isEvoReg(rCC))&&!isNoBaseEvoReg(rCC)){
       const isEvoGear=rCC.ctype==="evocrossgear";
       // 進化クロスギア→バトルゾーンの通常クロスギア（ジェネレート済み or クロス中）が下敷き
       // 進化クリーチャー→バトルゾーンの自分クリーチャーが下敷き
@@ -7046,7 +7057,7 @@ async function runFxList(pi,list,srcCard,inPump){
           }
           let stacked=false, cancelled=false;
           const rc2=getReg(cc);
-          if(rc2&&isEvoReg(rc2)){
+          if(rc2&&isEvoReg(rc2)&&!isNoBaseEvoReg(rc2)){
             const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
             if(basePool.length){
               const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rc2)?"NEOクリーチャー":evoKindLabel(evoKindOf(rc2))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rc2)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"]);
@@ -7261,7 +7272,7 @@ async function runFxList(pi,list,srcCard,inPump){
           let stacked=false;
           {
             const rc2=getReg(cc);
-            if(rc2&&isEvoReg(rc2)){
+            if(rc2&&isEvoReg(rc2)&&!isNoBaseEvoReg(rc2)){
               const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
               if(basePool.length){
                 const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rc2)?"NEOクリーチャー":evoKindLabel(evoKindOf(rc2))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rc2)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"]);
@@ -7624,7 +7635,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const cc=Z[o.zn].splice(di,1)[0];
         cc.faceup=true;cc.tapped=false;cc.sideways=false;
         let sumStacked=false;
-        if(rx&&isEvoReg(rx)){
+        if(rx&&isEvoReg(rx)&&!isNoBaseEvoReg(rx)){
           const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
           if(basePool.length){
             const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rx)?"NEOクリーチャー":evoKindLabel(evoKindOf(rx))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rx)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"]);
