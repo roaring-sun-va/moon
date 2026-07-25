@@ -1397,6 +1397,9 @@ body.shake{animation:bodyShake .4s ease-out}
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="離れる時、パワーが0より大きければ、かわりに自分の他の〔対象〕のうちコスト最小の1体をランダムに破壊して場に残る（クローネ型）"><span style="font-size:12px;font-weight:700">🎲 離場身代わり／対象</span><input type="text" id="fxLeaveSacF" list="raceList" placeholder="例：オラクル（空欄＝無効）" style="width:170px"></label>
         <label><input type="checkbox" id="fxTrueEscape"> 真・エスケープ（盾なしでも手札へ戻る）</label>
         <label><input type="checkbox" id="fxRepShield"> 離れるかわりに表向きの盾カードを1枚墓地へ（サッヴァーク型）</label>
+        <label title="このクリーチャーが離れる時、下にカードがあれば、かわりにその下のカードを1枚墓地に置いて場に残る（S-MAX進化ジャオウガ型）。破壊・バウンス・マナ送りなど、離れるすべてに働きます"><input type="checkbox" id="fxUnderLeaveRep"> 🔽 離れるかわりに、下のカードを1枚墓地へ（ジャオウガ型）</label>
+        <label title="自分がゲームに負ける時、このクリーチャーの下にカードがあれば、かわりにその下のカードを1枚墓地に置いて負けない（S-MAX進化ジャオウガ型）"><input type="checkbox" id="fxUnderLoseRep"> 💀 負けるかわりに、下のカードを1枚墓地へ（ジャオウガ型）</label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="自分がゲームに負ける時、かわりに手札から〔対象〕のクリーチャー1体を、このカードの上に置いて負けない（一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）。対象は種族や「コスト5以下」で指定できます"><input type="checkbox" id="fxLoseRepTop"> 💀 負けるかわりに、手札から1体をこの上に置く／対象<input type="text" id="fxLoseRepTopF" list="raceList" placeholder="例：デモニオ（空欄＝すべて）" style="width:150px">コスト<input type="number" id="fxLoseRepTopC" min="0" max="99" value="0" style="width:52px">以下（0＝制限なし）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap"><input type="checkbox" id="fxRepLeave"> 離れるかわりに、自分の
           <select id="fxRepLeaveZone" style="width:auto">
             <option value="deck">山札の上</option>
@@ -1570,6 +1573,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxLastBurst"> ラストバースト（破壊時に呪文側を唱えられる）</label>
         <label><input type="checkbox" id="fxMegaLB"> メガ・ラストバースト（離れた時に呪文側）</label>
         <label><input type="checkbox" id="fxOniTime"> 鬼タイム（両者の盾合計6枚以下で有効）</label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="◀鬼エンド▶ クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいて、自分のマナゾーンに指定の文明がすべてあれば、このカードを手札からコストを支払わずに出せる（一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）"><input type="checkbox" id="fxOniEnd"> 👹 鬼エンド（攻撃時・盾0のプレイヤーがいれば手札からコストなしで出す）／必要文明<input type="text" id="fxOniEndCiv" placeholder="例：火闇自然（空欄＝文明条件なし）" style="width:180px"></label>
         <label><input type="checkbox" id="fxAbyss"> アビスラッシュ（墓地から召喚・SA・ターン終わりに山下へ）</label>
         <label><input type="checkbox" id="fxYobinion"> ヨビニオン（召喚時、山上からコストの小さいクリーチャーが出るまでめくって出す）</label>
         <label><input type="checkbox" id="fxJD"> ジャストダイバー（出た時にアナウンスのみ・付与はメニューから手動）</label>
@@ -4130,7 +4134,7 @@ function runWatchFx(pi,type,trigCard){
             const _diag=(why)=>{if(type==="allyEnter"&&trigCard.id===c.id)toast(`💡 ${faceNameOf(c)} の「${evLb}」誘発は不発：条件「${cnd}」${why}。自身にも反応させるには条件欄を見直してください（種族の登録漏れ等）`);};
             // ＆区切りで「対象条件＆ゾーン条件式」を併用可（例：ブロッカー＆手札<=9）。ゾーン式はゾーン名で始まる項・ターン項
             const _parts=cnd.split(/[＆&]/).map(x=>x.trim()).filter(Boolean);
-            const _isExpr=p2=>/^(?:相手|自分の?)?(?:マナ|墓地(?:合計)?|手札|盾(?:合計)?|シールド|バトル(?:マナ)?|山札)/.test(p2)||/^(?:自分|相手)の?ターン$/.test(p2)||/鬼タイム|革命\d/.test(p2);
+            const _isExpr=p2=>/^(?:相手|自分の?)?(?:マナ|墓地(?:合計)?|手札|盾(?:合計)?|シールド|バトル(?:マナ)?|山札)/.test(p2)||/^(?:自分|相手)の?ターン$/.test(p2)||/鬼タイム|鬼エンド|革命\d/.test(p2);
             const _exprs=_parts.filter(_isExpr), _filts=_parts.filter(p2=>!_isExpr(p2));
             if(_parts.length>1||_exprs.length){
               if(_exprs.length&&!zoneCondOk(_exprs.join("＆"),pi)){_diag("のゾーン条件を満たしていません");return;}
@@ -5839,6 +5843,10 @@ async function destroyCreature(pi,c,opts){
     }
     if(rDC&&rDC.repLeave){
       if(await repLeaveReplace(pi,c,rDC))return;
+    }
+    // 🔽 ジャオウガ型：離れる時、下にカードがあれば かわりに下のカードを1枚墓地に置いて場に残る
+    if(rDC&&rDC.underLeaveRep&&c.under&&c.under.length&&!isIgnored(c,pi)){
+      if(await underLeaveReplace(pi,c))return;
     }
     // 🏃 エスケープP'S：破壊される時、パワー0超なら かわりにランダム盾1つを手札へ（STは使えない・各ターン1回）
     {
@@ -9467,6 +9475,91 @@ async function offerTrueEscape(pi,c){
     return true;
   }
 }
+/* 🔽 ジャオウガ型の離場置換：離れるかわりに、下のカードを1枚墓地に置いて場に残る。
+   置き換えたらtrue（呼び出し側は離場処理を中止する）。 */
+async function underLeaveReplace(pi,c){
+  if(!c.under||!c.under.length)return false;
+  const Z=zonesOf(pi);
+  const y=await ask(`🔽 ${faceNameOf(c)} が離れます。\nかわりに下のカード（${c.under.length}枚）を1枚墓地に置いて、場に残しますか？`);
+  if(!y)return false;
+  const u=c.under.shift(); // 一番上（最後に下に入ったカード）から墓地へ
+  u.faceup=true;u.tapped=false;u.isCross=false;
+  Z.grave.push(u);
+  sfx("grave");renderAll();
+  toast(`🔽 ${faceNameOf(c)} は離れない！ かわりに下の ${faceNameOf(u)} を墓地へ（残り${c.under.length}枚）`);
+  queueToGrave(pi,u);
+  return true;
+}
+/* 💀 ジャオウガ型の敗北置換：負ける時、下にカードがあれば かわりに1枚墓地に置いて負けない。
+   置き換えたらtrue（呼び出し側は敗北を取り消す）。 */
+async function underLoseReplace(loser){
+  if(!S.expert)return false;
+  const Z=zonesOf(loser);
+  const holders=Z.battle.filter(x=>{
+    const r=getReg(x);
+    return r&&r.underLoseRep&&x.under&&x.under.length&&!isSealed(x)&&!isIgnored(x,loser);
+  });
+  if(!holders.length)return false;
+  const h=holders[0];
+  const y=await ask(`💀 ${S.players[loser].label} が負けます。\n《${faceNameOf(h)}》の下のカード（${h.under.length}枚）を1枚墓地に置いて、かわりに負けないようにしますか？`);
+  if(!y)return false;
+  const u=h.under.shift();
+  u.faceup=true;u.tapped=false;u.isCross=false;
+  Z.grave.push(u);
+  sfx("grave");renderAll();
+  toast(`💀→🔽 ${S.players[loser].label} は負けない！ ${faceNameOf(h)} の下の ${faceNameOf(u)} を墓地へ（残り${h.under.length}枚）`);
+  logOnly(`💀 敗北置換：${faceNameOf(h)} の下から ${faceNameOf(u)} を墓地へ（残り${h.under.length}枚）`);
+  queueToGrave(loser,u);
+  return true;
+}
+/* 💀 バラド・ヴィナ・シューラ型の敗北置換：負ける時、かわりに手札から条件に合うクリーチャー1体を
+   このカードの上に置いて負けない。置き換えたらtrue。 */
+async function loseRepTopReplace(loser){
+  if(!S.expert)return false;
+  const Z=zonesOf(loser);
+  const holders=Z.battle.filter(x=>{
+    const r=getReg(x);
+    return r&&r.loseRepTop&&!isSealed(x)&&!isIgnored(x,loser);
+  });
+  if(!holders.length)return false;
+  for(const h of holders){
+    const rh=getReg(h);
+    const maxC=+rh.loseRepTopC||0;
+    const filt=(rh.loseRepTopF||"").trim();
+    const pool=Z.hand.filter(x=>{
+      const r=getReg(x);
+      if(!r||!isCreatureReg(r))return false;
+      if(maxC>0){const cv=(r.cost!=null&&r.cost!=="")?+r.cost:null;if(cv==null||isNaN(cv)||cv>maxC)return false;}
+      if(filt&&!lockFilterOk(filt,r,x))return false;
+      return true;
+    });
+    if(!pool.length)continue;
+    const y=await ask(`💀 ${S.players[loser].label} が負けます。\nかわりに手札から${filt?`「${filt}」の`:""}${maxC?`コスト${maxC}以下の`:""}クリーチャーを1体、《${faceNameOf(h)}》の上に置いて負けないようにしますか？`);
+    if(!y)continue;
+    const j=pool.length===1?0:await pickCard(`💀 ${faceNameOf(h)} の上に置くクリーチャーを選択`,pool,{hint:"タップで選択"});
+    if(j===null)continue;
+    const pick=pool[j];
+    const hi=Z.hand.findIndex(x=>x.id===pick.id);
+    if(hi<0)continue;
+    Z.hand.splice(hi,1);
+    // このカードの上に置く＝進化として重ねる（下は元のカードごと引き継ぐ）
+    pick.faceup=true;pick.tapped=h.tapped;
+    pick.under=[h,...(h.under?h.under.splice(0):[]),...(pick.under||[])];
+    if(h.gear&&h.gear.length)pick.gear=[...(pick.gear||[]),...h.gear.splice(0)];
+    const bi=Z.battle.findIndex(x=>x.id===h.id);
+    if(bi>=0)Z.battle[bi]=pick;else Z.battle.push(pick);
+    transferAtkState([h.id],pick);
+    markArrive(pick);
+    emitEvent(loser,"summon");
+    enqueueFx(loser,pick);
+    sfx("ok");renderAll();
+    toast(`💀→⤴ ${S.players[loser].label} は負けない！ ${faceNameOf(h)} の上に ${faceNameOf(pick)} を置いた`);
+    logOnly(`💀 敗北置換：${faceNameOf(h)} の上に手札から ${faceNameOf(pick)} を置いた`);
+    await waitFxIdle();
+    return true;
+  }
+  return false;
+}
 async function destroyWithReplace(pi,c){
   bumpEv("destroys",pi?0:1); // piのクリーチャーが破壊された＝相手(pi?0:1)の破壊数に加算
   const r=getReg(c);
@@ -10571,6 +10664,52 @@ function setFxNowChip(msg){
   applyFloatSize(e,"fxNowChip");
   applyFloatPos(e,"fxNowChip");
 }
+/* 👹 鬼エンド：クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいて、
+   自分のマナゾーンに必要な文明がすべてあれば、手札の鬼エンド持ちをコストを支払わずに出せる
+   （一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）。両プレイヤーが対象。 */
+async function offerOniEnd(){
+  if(!S.expert)return;
+  const sides=S.vs?[0,1]:[0];
+  const zeroShield=sides.some(p=>zonesOf(p).shield.length===0);
+  if(!zeroShield)return;
+  const CIVW={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature","ゼロ":"zero","無色":"zero"};
+  for(const p of sides){
+    const Z=zonesOf(p);
+    const cands=Z.hand.filter(x=>{
+      const r=getReg(x);
+      if(!r||!r.oniEnd)return false;
+      if(x._oniEndUsedTurn===S.turn)return false; // 同じターンに何度も聞かない
+      const w=String(r.oniEndCiv||"").trim();
+      if(!w)return true;
+      const need=[...w.matchAll(/光|水|闇|火|自然|ゼロ|無色/g)].map(m=>CIVW[m[0]]);
+      if(!need.length)return true;
+      return need.every(cv=>Z.mana.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}));
+    });
+    for(const cc of cands){
+      const r=getReg(cc);
+      const isSp=r&&r.ctype==="spell";
+      const y=await ask(`👹 鬼エンド！（シールドが1つもないプレイヤーがいます）\n${S.players[p].label} の手札の《${faceNameOf(cc)}》を、コストを支払わずに${isSp?"唱え":"出し"}ますか？${r&&r.oniEndCiv?`\n（必要文明：${r.oniEndCiv} — マナにそろっています）`:""}`);
+      cc._oniEndUsedTurn=S.turn;
+      if(!y)continue;
+      snap();
+      const hi=Z.hand.findIndex(h=>h.id===cc.id);
+      if(hi<0)continue;
+      Z.hand.splice(hi,1);
+      cc.faceup=true;cc.tapped=false;
+      if(isSp){
+        if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
+        Z.resolve.push(cc);emitEvent(p,"spell",cc);enqueueFx(p,cc);
+        toast(`👹 鬼エンド！ ${faceNameOf(cc)} をコストを支払わず唱えた（解決中へ）`);
+      }else{
+        Z.battle.push(cc);markArrive(cc);emitEvent(p,"summon");enqueueFx(p,cc);
+        toast(`👹 鬼エンド！ ${faceNameOf(cc)} をコストを支払わず出した`);
+      }
+      logOnly(`👹 鬼エンド：${S.players[p].label} が ${faceNameOf(cc)} をコストなしで出した`);
+      sfx("ok");renderAll();
+      await waitFxIdle();
+    }
+  }
+}
 async function startAttack(pi,id){
   const Z=zonesOf(pi);
   const c=Z.battle.find(x=>x.id===id);if(!c)return;
@@ -10586,6 +10725,9 @@ async function startAttack(pi,id){
       toast(`⛔ ${faceNameOf(c)} は攻撃できない（条件未達：${rA.cantAtkCond}）`);
       return;
     }
+    // 👹 鬼エンド：クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいれば、
+    //    手札の鬼エンド持ちをコストを支払わずに出せる（両者が持てる。マナの文明条件も確認）
+    await offerOniEnd();
     // 🥶 常在：〔対象〕以外のクリーチャーは出たターン攻撃できない（両者のバトルゾーンを確認・SAでも不可）
     {
       let sickSrc=null,sickFilt="";
@@ -12762,6 +12904,11 @@ function renderFxEditor(){
   {const e=$("fxLeaveSacF");if(e)e.value=FXEDIT.leaveSacF||"";}
   $("fxTrueEscape").checked=!!FXEDIT.trueEscape;
   $("fxRepShield").checked=!!FXEDIT.repShield;
+  {const e=$("fxUnderLeaveRep");if(e)e.checked=!!FXEDIT.underLeaveRep;}
+  {const e=$("fxUnderLoseRep");if(e)e.checked=!!FXEDIT.underLoseRep;}
+  {const e=$("fxLoseRepTop");if(e)e.checked=!!FXEDIT.loseRepTop;}
+  {const e=$("fxLoseRepTopF");if(e)e.value=FXEDIT.loseRepTopF||"";}
+  {const e=$("fxLoseRepTopC");if(e)e.value=String(FXEDIT.loseRepTopC||0);}
   $("fxRepLeave").checked=!!FXEDIT.repLeave;
   $("fxRepLeaveZone").value=FXEDIT.repLeaveZone||"deck";
   $("fxRepLeaveN").value=String(FXEDIT.repLeaveN||1);
@@ -12859,6 +13006,8 @@ function renderFxEditor(){
   $("fxLastBurst").checked=!!FXEDIT.lastburst;
   $("fxMegaLB").checked=!!FXEDIT.megaLB;
   $("fxOniTime").checked=!!FXEDIT.oniTime;
+  {const e=$("fxOniEnd");if(e)e.checked=!!FXEDIT.oniEnd;}
+  {const e=$("fxOniEndCiv");if(e)e.value=FXEDIT.oniEndCiv||"";}
   $("fxAbyss").checked=!!FXEDIT.abyss;
   $("fxFushigi").value=String(FXEDIT.fushigi||0);
   $("fxRyuArm").value=String(FXEDIT.ryuArm||0);
@@ -13622,6 +13771,9 @@ function parseCardText(txt,mode){
   if(/これをクロスし(?:た|ている)クリーチャー[^■]{0,40}?「エスケープP.?S」/.test(t))out.set.gearEscapePS=true;
   // 🏃 エスケープP'S（キーワード単独行）
   if(/[■●]\s*エスケープP.?S/.test(t))out.set.escapePS=true;
+  // 🔽💀 ジャオウガ型：離れる時／負ける時、かわりに下のカードを1枚墓地に置く
+  if(/(?:離れる|破壊される)時[^■]{0,60}?かわりに[^■]{0,50}?下[^■]{0,25}?墓地/.test(t))out.set.underLeaveRep=true;
+  if(/(?:ゲームに)?負ける時[^■]{0,60}?かわりに[^■]{0,50}?下[^■]{0,25}?墓地/.test(t))out.set.underLoseRep=true;
   // ⚙ 常在：自分の〔対象〕を実行/召喚するコストをn少なく
   {const mCA=t.match(/自分の(.{1,30}?)を(?:実行|召喚|使用)する?コストを(\d+)少なくする/);
    if(mCA){out.set.costRedAllyF=mCA[1].split(/または|や|、|,/).map(x=>x.trim()).filter(Boolean).join("／");out.set.costRedAllyN=+mCA[2];
@@ -14661,6 +14813,11 @@ function openFxEditor(key){
     leaveSacF:cur&&cur.leaveSacF||"",
     trueEscape:cur?!!cur.trueEscape:false,
     repShield:cur?!!cur.repShield:false,
+    underLeaveRep:cur?!!cur.underLeaveRep:false,
+    underLoseRep:cur?!!cur.underLoseRep:false,
+    loseRepTop:cur?!!cur.loseRepTop:false,
+    loseRepTopF:cur&&cur.loseRepTopF||"",
+    loseRepTopC:cur&&+cur.loseRepTopC||0,
     repLeave:cur?!!cur.repLeave:false,
     repLeaveZone:cur&&cur.repLeaveZone||"deck",
     repLeaveN:cur&&cur.repLeaveN||1,
@@ -14752,6 +14909,8 @@ function openFxEditor(key){
     lastburst:cur?!!cur.lastburst:false,
     megaLB:cur?!!cur.megaLB:false,
     oniTime:cur?!!cur.oniTime:false,
+    oniEnd:cur?!!cur.oniEnd:false,
+    oniEndCiv:cur&&cur.oniEndCiv||"",
     abyss:cur?!!cur.abyss:false,
     fushigi:cur&&(+cur.fushigi||0)||0,
     ryuArm:cur&&(+cur.ryuArm||0)||0,
@@ -15009,6 +15168,11 @@ $("fxSave").addEventListener("click",async ()=>{
     leaveSacF:($("fxLeaveSacF")?$("fxLeaveSacF").value:"").trim(),
     trueEscape:$("fxTrueEscape").checked,
     repShield:$("fxRepShield").checked,
+    underLeaveRep:$("fxUnderLeaveRep")?$("fxUnderLeaveRep").checked:false,
+    underLoseRep:$("fxUnderLoseRep")?$("fxUnderLoseRep").checked:false,
+    loseRepTop:$("fxLoseRepTop")?$("fxLoseRepTop").checked:false,
+    loseRepTopF:$("fxLoseRepTopF")?$("fxLoseRepTopF").value.trim():"",
+    loseRepTopC:$("fxLoseRepTopC")?(parseInt($("fxLoseRepTopC").value,10)||0):0,
     repLeave:$("fxRepLeave").checked,
     repLeaveZone:$("fxRepLeaveZone").value,
     repLeaveN:parseInt($("fxRepLeaveN").value,10)||1,
@@ -15101,6 +15265,8 @@ $("fxSave").addEventListener("click",async ()=>{
     lastburst:$("fxLastBurst").checked,
     megaLB:$("fxMegaLB").checked,
     oniTime:$("fxOniTime").checked,
+    oniEnd:$("fxOniEnd")?$("fxOniEnd").checked:false,
+    oniEndCiv:$("fxOniEndCiv")?$("fxOniEndCiv").value.trim():"",
     abyss:$("fxAbyss").checked,
     fushigi:+$("fxFushigi").value||0,
     ryuArm:+$("fxRyuArm").value||0,
@@ -15553,6 +15719,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.lastburst)attrs.push("ラストバースト");
     if(v.megaLB)attrs.push("メガLB");
     if(v.oniTime)attrs.push("鬼タイム");
+    if(v.oniEnd)attrs.push(`鬼エンド${v.oniEndCiv?`[${v.oniEndCiv}]`:""}`);
     if(v.abyss)attrs.push("アビスラッシュ");
     if(v.fushigi)attrs.push(`フシギバース${v.fushigi}${v.fushigiCiv&&v.fushigiCiv.length?"："+v.fushigiCiv.map(k=>({light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"}[k]||k)).join("/"):""}`);
     if(v.ryuArm)attrs.push(`龍マナ武装${v.ryuArm}`);
@@ -15623,6 +15790,9 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.races2&&v.races2.length)attrs.push("下面種族:"+v.races2.join("/"));
     if(v.starEvo)attrs.push("スター進化");
     if(v.noBaseEvo)attrs.push("進化元不要");
+    if(v.underLeaveRep)attrs.push("離場置換：下を1枚墓地へ");
+    if(v.underLoseRep)attrs.push("敗北置換：下を1枚墓地へ");
+    if(v.loseRepTop)attrs.push(`敗北置換：手札から${v.loseRepTopF||"1体"}${v.loseRepTopC?`(コスト${v.loseRepTopC}以下)`:""}を上に置く`);
     if(v.gneo)attrs.push("G・NEO進化");
     if(v.shieldGo)attrs.push("シールド・ゴー");
     if(v.seiba)attrs.push(v.seibaF?`セイバー：${v.seibaF}`:"セイバー");
@@ -16446,6 +16616,14 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         })();
         return;
       }
+    }
+    // 🔽 ジャオウガ型：バウンス・マナ送りなど破壊以外で離れる時も、下のカードを1枚墓地に置いて場に残せる
+    if(!skipRep&&rDC&&rDC.underLeaveRep&&f.card.under&&f.card.under.length&&!isIgnored(f.card,pFrom)){
+      (async()=>{
+        const done=await underLeaveReplace(pFrom,f.card);
+        if(!done)moveCardXRaw(pFrom,fromZone,id,pTo,toZone);
+      })();
+      return;
     }
   }
   // 🏰 G城：表向きで自分のシールドゾーンを離れる時、かわりに墓地に置く（手動移動も置換・墓地/シールド内移動は除く）
@@ -18330,6 +18508,16 @@ function renderAll(){
 function renderAllNow(){
   checkLibWin();
   checkMugetsu(false);
+  // 🌟 モモキングダム✕型：下から抜けて6枚未満になったら「6枚になった時」を再武装する
+  //    （メテオバーンや退化で減った後、また6枚になった時にもう一度−99999が出せるように）
+  if(S.expert){
+    for(const pp of (S.vs?[0,1]:[0])){
+      for(const x of zonesOf(pp).battle){
+        const rM=getReg(x);
+        if(rM&&rM.momoKingX&&stackCountOf(x)<6)x._momoFired6=false;
+      }
+    }
+  }
   // 🩹 保険：保留中の攻撃が無いのに「▶ 攻撃を再開」ボタンが残っていたら隠す（取りこぼしの自己修復）。
   //    攻撃していないのに再開ボタンが出る／変な場面で攻撃が再開される不具合の最後の砦。
   if(!S.pendingAtk){const _rw=document.getElementById("resumeAtkWrap");if(_rw&&_rw.style.display!=="none")_rw.style.display="none";}
@@ -19232,6 +19420,12 @@ function openStatsPanel(days){
 }
 async function declareWin(winner,reason,askFirst=true){
   if(!S.vs){toast(`🏆 ${reason}`);return;}
+  // 💀 ジャオウガ型の敗北置換：負ける側に「負けるかわりに下のカードを1枚墓地へ」があれば、先に確認する
+  {
+    const loser0=winner===0?1:0;
+    try{ if(await underLoseReplace(loser0))return; }catch(e){}
+    try{ if(await loseRepTopReplace(loser0))return; }catch(e){}
+  }
   let warn="";
   if(S.expert){
     const loser=winner===0?1:0;
@@ -21683,14 +21877,15 @@ function renderRevealPanel(){
       });
       bar.appendChild(b);
     }
-    // ⤴ 重ねる：選択カードをバトルゾーンのクリーチャーの上に進化元として重ねる（侵略/スター進化などの手動配置）
+    // ⤴⤵ 重ねる：バトルゾーンのクリーチャーの「上に重ねて進化」または「下に置く」（禁断スター進化・カリスマ／モモキングダム✕型）
     {
-      const canStack=zonesOf(rvPi).battle.some(x=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize);});
-      if(canStack){
+      const stackTargets=()=>zonesOf(rvPi).battle.filter(x=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize);});
+      if(stackTargets().length){
+        // ⤴ 上に重ねる（侵略・スター進化などで、公開したカード自身が進化クリーチャーになる場合）
         const b=document.createElement("button");
         b.className="btn small";
-        b.textContent="⤴ 重ねる";
-        b.title="バトルゾーンのクリーチャーの上に進化元として重ねる（侵略・スター進化など）";
+        b.textContent="⤴ 上に重ねる";
+        b.title="公開したカードを、バトルゾーンのクリーチャーの上に重ねて進化させる（侵略・スター進化など）";
         b.addEventListener("click",async ()=>{
           const id=rvSel;
           await playEvoCreature(rvPi,rvZoneKey(),id);
@@ -21699,6 +21894,34 @@ function renderRevealPanel(){
           renderAll();
         });
         bar.appendChild(b);
+        // ⤵ 下に置く（山札から表向きにしたカードを、盤面のクリーチャーの下に進化元として置く）
+        const b2=document.createElement("button");
+        b2.className="btn small";
+        b2.textContent="⤵ 下に置く";
+        b2.title="公開したカードを、バトルゾーンのクリーチャーの下に置く（禁断スター進化・カリスマ・スター進化など。盤面のクリーチャーはそのまま残ります）";
+        b2.addEventListener("click",async ()=>{
+          const id=rvSel;
+          const pool=stackTargets();
+          if(!pool.length){toast("下に置けるクリーチャーがいません");return;}
+          const j=pool.length===1?0:await pickCard("⤵ どのクリーチャーの下に置きますか？",pool,{hint:"タップで選択"});
+          if(j===null)return;
+          const host=pool[j];
+          const arr=rvArr();
+          const idx=arr.findIndex(x=>x.id===id);
+          if(idx<0){toast("カードが見つかりません");return;}
+          snap();
+          const cc=arr.splice(idx,1)[0];
+          cc.faceup=true;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.isCross=false;
+          host.under=host.under||[];
+          host.under.push(cc); // 下の山の一番下に加える（モモキングダム✕型と同じ並び）
+          await momoCheckReach(rvPi,host); // 🌟 6枚に到達したら全体−99999
+          sfx("move");
+          toast(`⤵ ${faceNameOf(cc)} を ${faceNameOf(host)} の下に置いた（下${host.under.length}枚）`);
+          rvSel=null;
+          if(rvArr().length)renderRevealPanel();else closeRevealPanel();
+          renderAll();
+        });
+        bar.appendChild(b2);
       }
     }
   }else bar.style.display="none";
@@ -24129,7 +24352,7 @@ $("btnHelp").addEventListener("click",()=>{
       <u>ゾーン</u>：<code>マナ</code>／<code>墓地</code>／<code>盾</code>／<code>バトル</code>／<code>手札</code>／<code>山札</code>／<code>バトルマナ</code>（自分のバトル＋マナ合計）／<code>相手墓地</code>・<code>相手盾</code>・<code>相手バトル</code>・<code>相手手札</code>／<code>墓地合計</code>・<code>盾合計</code>（両者合計）<br>
       <u>フィルタ</u>（1ゾーン1つ）：種族名／文明<code>光水闇火自然</code>／<code>多色</code>／<code>呪文</code>／<code>クリーチャー</code>／<code>ツインパクト</code>／カード名の一部<br>
       <u>比較</u>：<code>&gt;=</code>（以上）<code>&lt;=</code>（以下）<code>=</code>（ちょうど）<br>
-      <u>自然文・特殊語</u>：<code>N枚以上/以下</code>／<code>革命N</code>（=盾&lt;=N）／<code>鬼タイム</code>（=盾合計&lt;=6）／<code>相手ターン</code>・<code>自分ターン</code>／ゾーン対ゾーン比較（<code>盾&gt;=手札</code>）<br>
+      <u>自然文・特殊語</u>：<code>N枚以上/以下</code>／<code>革命N</code>（=盾&lt;=N）／<code>鬼タイム</code>（=盾合計&lt;=6）／<code>鬼エンド</code>（=どちらかの盾が0枚）／<code>相手ターン</code>・<code>自分ターン</code>／ゾーン対ゾーン比較（<code>盾&gt;=手札</code>）<br>
       <u>例</u>：<code>マナ:ドラゴン>=3</code>／<code>マナ:多色>=2</code>／<code>墓地合計>=13</code>／<code>盾合計<=6</code>／<code>手札<=1</code>／<code>相手バトル>=3</code>／<code>盾<=2＆相手ターン</code>／<code>バトルマナ:ジョーカーズ>=11</code><br><br>
 
       <b>■ 条件式【系統B：対象フィルタ】</b>（条件バウンス・回収・ロックの対象条件で共通）<br>
@@ -24292,6 +24515,7 @@ function zoneCondOk(expr,pi,selfCard){
       .replace(/>=+/g,">=").replace(/<=+/g,"<=")
       .replace(/　/g," ").replace(/\s+/g,"")
       .replace(/鬼タイム/g,"盾合計<=6")  // 鬼タイム＝両者の盾合計6枚以下
+      .replace(/鬼エンド/g,"盾最少=0")   // 鬼エンド＝シールドが1つもないプレイヤーがいる
       .replace(/革命(\d+)/g,"盾<=$1")   // 革命N＝自分の盾N枚以下
       .replace(/(\d+)(?:体|枚|つ|個)?以上/g,">=$1")
       .replace(/(\d+)(?:体|枚|つ|個)?以下/g,"<=$1")
@@ -24326,10 +24550,11 @@ function zoneCondOk(expr,pi,selfCard){
           return op3===">="?a>=b:op3==="<="?a<=b:op3===">"?a>b:op3==="<"?a<b:a===b;
         }
       }
-      const m=t.match(/^(マナ|墓地合計|相手墓地|墓地|盾合計|相手盾|盾|相手バトル|バトルマナ|バトル|相手手札|手札|山札)(?:：|:)?([^<>=]*)(>=|<=|=)(\d+)$/);
+      const m=t.match(/^(マナ|墓地合計|相手墓地|墓地|盾最少|盾合計|相手盾|盾|相手バトル|バトルマナ|バトル|相手手札|手札|山札)(?:：|:)?([^<>=]*)(>=|<=|=)(\d+)$/);
       if(!m)return false;
       const zn=m[1],filt=(m[2]||"").trim().replace(/^[のにはがを、]+/,"").replace(/[のにはがを、]+$/,""),opr=m[3],n=+m[4];
-      const arrs={"マナ":Z.mana,"墓地":Z.grave,"相手墓地":OZ.grave,"墓地合計":[...Z.grave,...OZ.grave],"盾":Z.shield,"相手盾":OZ.shield,"盾合計":[...Z.shield,...OZ.shield],"バトル":Z.battle,"バトルマナ":[...Z.battle,...Z.mana],"相手バトル":OZ.battle,"手札":Z.hand,"相手手札":OZ.hand,"山札":Z.deck}[zn];
+      // 「盾最少」＝両者のうち盾が少ない方の枚数（鬼エンド＝盾最少=0 の判定に使う）
+      const arrs={"マナ":Z.mana,"墓地":Z.grave,"相手墓地":OZ.grave,"墓地合計":[...Z.grave,...OZ.grave],"盾":Z.shield,"相手盾":OZ.shield,"盾合計":[...Z.shield,...OZ.shield],"盾最少":(Z.shield.length<=OZ.shield.length?Z.shield:OZ.shield),"バトル":Z.battle,"バトルマナ":[...Z.battle,...Z.mana],"相手バトル":OZ.battle,"手札":Z.hand,"相手手札":OZ.hand,"山札":Z.deck}[zn];
       if(!arrs)return false;
       let cnt;
       if(!filt)cnt=arrs.length;
