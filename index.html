@@ -232,6 +232,16 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   box-shadow:0 6px 18px rgba(0,0,0,.55);display:none;
 }
 #peekChip.show{display:block}
+/* ⚡ いま効果を処理しているカードを常時表示するバッジ（複数体が同時に出た時に、どのカードの処理か分かるように） */
+#fxNowChip{
+  position:fixed;left:50%;transform:translateX(-50%);
+  top:calc(84px + env(safe-area-inset-top));z-index:640;
+  background:linear-gradient(180deg,#ffe08a,#f0b429);color:#241a00;
+  border:none;border-radius:20px;padding:7px 14px;font-weight:900;font-size:12px;
+  box-shadow:0 6px 18px rgba(0,0,0,.55);display:none;max-width:92vw;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+}
+#fxNowChip.show{display:block}
 #evoBar{
   position:fixed;left:50%;transform:translateX(-50%);
   bottom:calc(66px + env(safe-area-inset-bottom));z-index:640;
@@ -1070,6 +1080,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <option value="evo">進化</option>
         <option value="neoevo">NEOクリーチャー</option>
         <option value="starevo">スター進化</option>
+        <option value="charismaevo">カリスマ・スター進化</option>
         <option value="spell">呪文</option>
         <option value="crossgear">クロスギア</option><option value="evocrossgear">進化クロスギア（クロスギアの上に重ねて進化）</option><option value="gigaaura">ギガオレガオーラ</option>
         <option value="tamaseed">タマシード</option>
@@ -1199,6 +1210,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="evo">進化クリーチャー</option>
           <option value="neoevo">NEOクリーチャー</option>
           <option value="starevo">スター進化</option>
+          <option value="charismaevo">カリスマ・スター進化（バトルゾーンの進化元を必要としない）</option>
           <option value="smaxevo">S-MAX進化</option>
           <option value="onismaxevo">鬼S-MAX進化</option>
           <option value="gneo">G・NEO進化</option>
@@ -1381,6 +1393,7 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
           </select>枚を墓地に置く</label>
         <label><input type="checkbox" id="fxStarEvo"> スター進化（離れる時、自身のみ離れ下は重なったまま残る）</label>
+        <label title="バトルゾーンのクリーチャー／タマシードには重ねずに、そのまま出す進化（カリスマ・スター進化／禁断スター進化／S-MAX進化など）。進化元の選択パネルを出しません。下に置くカードは出た時の効果で入れてください"><input type="checkbox" id="fxNoBaseEvo"> 🌟 進化元不要（バトルゾーンのカードに重ねない）</label>
         <label title="禁断英雄 モモキングダム✕型。出た時：進化ではないレクスターズが出るまで山札を表向き→下に置きシャッフル。自分の他のレクスターズが出た時：山上1枚を表向きで下に置いてもよい。含まれるカードが6枚未満なら攻撃不可・相手に選ばれない。6枚になった時：このターン相手クリーチャーすべてのパワーを−99999。※スター進化にもチェックが入ります"><input type="checkbox" id="fxMomoKingX"> 🌟 モモキングダム✕型（禁断スター進化＋6枚ゲート＋6枚到達で全体−99999）</label>
         <label><input type="checkbox" id="fxExLife"> EXライフ</label>
         <label><input type="checkbox" id="fxGNeo"> G・NEO進化（破壊時に一番下が離れ上が残る）</label>
@@ -1973,6 +1986,7 @@ body.shake{animation:bodyShake .4s ease-out}
 </div>
 
 <button id="peekChip">📋 パネルに戻る</button>
+<div id="fxNowChip"></div>
 <div id="evoBar">
   <span id="evoCount"></span>
   <button class="btn small" id="evoDeckBtn">＋山上を進化元に</button>
@@ -2361,7 +2375,7 @@ function markArrive(c){
 }
 function getReg(c){return FXDB.get(faceKeyOf(c))||FXDB.get(normName(c.name))||null;}
 /* 進化系タイプの共通判定。ツインパクトは上面＝クリーチャー面なので twinTop（進化/NEO進化）で判定に含める */
-const EVO_CTYPES=["evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","lunatic","ultimate"];
+const EVO_CTYPES=["evo","neoevo","starevo","charismaevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","lunatic","ultimate"];
 /* 🌟 バトルゾーンの進化元がいらない進化かどうか。
    ・モモキングダム✕型の「禁断スター進化」＝出た時に山札から表向きにした非進化レクスターズの上に置く
      （バトルゾーンに元からいるクリーチャー／タマシードには重ねない）
@@ -2369,9 +2383,10 @@ const EVO_CTYPES=["evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodre
    これらは「そのまま出す」扱いにして、進化元の選択パネルを出さない。 */
 function isNoBaseEvoReg(r){
   if(!r)return false;
-  if(r.momoKingX)return true;
+  if(r.momoKingX||r.noBaseEvo)return true;
+  const NB=["charismaevo","smaxevo","onismaxevo"];
   const ct=r.ctype,tt=(r.twin||r.ctype==="twinpact")?r.twinTop:null;
-  return ct==="smaxevo"||ct==="onismaxevo"||tt==="smaxevo"||tt==="onismaxevo";
+  return NB.includes(ct)||NB.includes(tt);
 }
 function isEvoReg(r){
   if(!r)return false;
@@ -2404,7 +2419,7 @@ function dreamDupOf(pi,c){
   return zonesOf(pi).battle.find(x=>x.id!==c.id&&normName(x.name)===nm)||null;
 }
 /* クリーチャー種別判定（呪文/クロスギア/タマシード/D2フィールド/城/オーラ等は非クリーチャー）。未設定は通常クリーチャー扱い */
-const CRE_CTYPES=["creature","dream","evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","psychic","twinpact","lunatic","ultimate","exile"];
+const CRE_CTYPES=["creature","dream","evo","neoevo","starevo","charismaevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","psychic","twinpact","lunatic","ultimate","exile"];
 function isCreatureReg(r){
   if(!r||!r.ctype)return true;
   return CRE_CTYPES.includes(r.ctype);
@@ -3111,6 +3126,7 @@ function emergencyUnstick(){
     try{closeSheet();}catch(e){}
     // 攻撃バナー・再開ボタン・重ね置き待ち・ハイライトを解除
     try{$("fxBanner").classList.remove("show");}catch(e){}
+    try{setFxNowChip("");}catch(e){}
     {const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
     if(typeof PENDING!=="undefined")PENDING=null;
     S.pendingAtk=null;HILITE_ID=null;endMulti();
@@ -6989,31 +7005,32 @@ async function runFxList(pi,list,srcCard,inPump){
       //    置けない・キャンセルの場合は break で以降のfxを中止（＝メテオバーンできなければ効果は発動しない）
       const srcLive=srcCard&&zonesOf(pi).battle.find(x=>x.id===srcCard.id);
       const un=srcLive&&srcLive.under?srcLive.under:null;
-      // 🏷 同名クリーチャーが複数いる時、どのカードのメテオバーンか区別できるようにラベルを作る（位置＋下の枚数）
+      // 🏷 どのクリーチャーのメテオバーンか必ず分かるようにラベルを作る（位置・下の枚数。同名が複数いる時も区別できる）
       let mbTag="";
       if(srcLive){
-        const sameName=zonesOf(pi).battle.filter(x=>faceNameOf(x)===faceNameOf(srcLive));
-        if(sameName.length>=2){
-          const idx=zonesOf(pi).battle.findIndex(x=>x.id===srcLive.id);
-          mbTag=`【左から${idx+1}体目・下${srcLive.under?srcLive.under.length:0}枚】`;
-        }
+        const idx=zonesOf(pi).battle.findIndex(x=>x.id===srcLive.id);
+        mbTag=`【左から${idx+1}体目・下${srcLive.under?srcLive.under.length:0}枚】`;
       }
       if(srcLive&&un){
-        // 場に残っている＝通常のメテオバーン（下をn枚選んで墓地へ。足りない/中止で以降の効果を停止）
+        // 場に残っている＝通常のメテオバーン（下をn枚墓地へ。足りない場合は以降の効果を停止）
         if(un.length<n){toast(`☄ メテオバーン：下のカードが${n}枚ないため効果は発動しない（${un.length}枚）`);break;}
-        // 🔎 どのHADESか一目で分かるよう、対象カードをハイライトしてから選ばせる
-        if(mbTag){HILITE_ID=srcLive.id;renderAll();toast(`☄ ${faceNameOf(srcLive)} ${mbTag} のメテオバーンを処理します`);await new Promise(r=>setTimeout(r,450));}
-        let mbOk=true;
+        // 🔎 どのクリーチャーの処理か一目で分かるよう、対象カードをハイライトして名前を出す
+        //    （複数のクリーチャーが同時に出た時に、どれのメテオバーンか迷わないように必ず表示する）
+        HILITE_ID=srcLive.id;renderAll();
+        fxAnim(srcLive.id,"an-cip",700);
+        toast(`☄ ${faceNameOf(srcLive)} ${mbTag} のメテオバーンを処理します`);
+        await new Promise(r=>setTimeout(r,500));
+        // ☄ 落とす順番は「進化元として選択した順」。under[0]＝最後に重ねた進化元なので、先頭から順に墓地へ置く。
+        const dropped=[];
         for(let i=0;i<n;i++){
-          const j=un.length===1?0:await pickCard(`☄ ${faceNameOf(srcLive)}${mbTag} のメテオバーン（${i+1}/${n}枚目）\n墓地に置く下のカードを選択（キャンセル＝効果ごと中止）`,un);
-          if(j===null){mbOk=false;break;}
-          const u=un.splice(j,1)[0];
+          const u=un.shift();
+          if(!u)break;
           u.faceup=true;u.tapped=false;u.isCross=false;
           Z.grave.push(u);
-          toast(`☄ メテオバーン：${faceNameOf(u)} を墓地へ（残り${un.length}枚）`);
+          dropped.push(faceNameOf(u));
         }
         HILITE_ID=null;renderAll();
-        if(!mbOk){toast("☄ メテオバーンを中止（以降の効果は発動しない）");break;}
+        toast(`☄ ${faceNameOf(srcLive)} のメテオバーン：${dropped.join("、")} を墓地へ（進化元にした順・残り${un.length}枚）`);
         sfx("grave");
       }else{
         // 離場時（selfLeave）：下敷きは既に墓地へ移動済み。退避した枚数で判定（コストは離場で支払い済み）
@@ -8534,6 +8551,9 @@ async function pumpFx(){
     if(ORI_QUEUE.length&&ORI_QUEUE.some(o=>S.who===o.defO))await drainOriotis(true);
     if(TRIG_PENDING.length&&TRIG_PENDING.some(t=>S.who===t.pi))await drainTrig(true); // ⏱ ターンプレイヤーの誘発はCIPより先
     HILITE_ID=c.id;renderAll(); // 🔶 処理中のカードを黄色ハイライト
+    // ⚡ どのカードの効果を処理中か常時表示（同時に複数体出た時に取り違えないように・残り待機数も出す）
+    {const _bi=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
+     setFxNowChip(`⚡ 処理中：${faceNameOf(c)}${_bi>=0?`（左から${_bi+1}体目）`:""}${fxQueue.length?`／あと${fxQueue.length}体待機`:""}`);}
     {const _wt=fxQueue.length>=3?120:fxQueue.length>=1?220:380;toast(`▶ 効果処理：${faceNameOf(c)}`);await new Promise(r=>setTimeout(r,_wt));}
     snap();
     // 🚩 革命N：自分の盾がN枚以下でのみ追加能力が有効。未達なら発動しない（他の効果があれば選択）
@@ -8653,6 +8673,7 @@ async function pumpFx(){
   }
   }catch(e){console.error("pumpFx error:",e);toast("⚠ 効果処理中にエラーが発生しました（処理を再開できます）");}
   finally{fxRunning=false;fxInsertAt=null;}
+  setFxNowChip(""); // ⚡ 処理中バッジを消す
   if(fxQueue.length)pumpFx(); // エラーで中断しても残りのキューを処理
 }
 /* ⚡ 手動CIP：カードのパネルから「出た時（CIP）を使う」。
@@ -9166,7 +9187,7 @@ async function destroyWithReplace(pi,c){
     if(r.trueEscape||allyGrant(pi,"agTEsc"))opts.push(["tescape","🛡 真・エスケープ（かわりにシールドを2枚手札に加えて場に残る）"]);
     const exSh=Z.shield.findIndex(x=>x.exFor===c.id);
     if(r.exlife&&(exSh>=0||Z.shield.length))opts.push(["exlife",exSh>=0?"💠 EXライフ（EX盾を墓地に置いて、場に残る）":"💠 EXライフ（盾を1枚墓地に置いて、場に残る）"]);
-    if((r.starEvo||["starevo","smaxevo","onismaxevo"].includes(r.ctype))&&c.under&&c.under.length)
+    if((r.starEvo||["starevo","charismaevo","smaxevo","onismaxevo"].includes(r.ctype))&&c.under&&c.under.length)
       opts.push(["starTop","⭐ スター進化（自身のみ離れ、下は重なったまま場に残る）"]);
     if((r.gneo||r.ctype==="gneo"||r.ctype==="gneodream")&&c.under&&c.under.length)opts.push(["gneoBottom","🔄 G・NEO進化（一番下が離れ、上のカードは場に残る）"]);
     if(r.shieldGo)opts.push(["sgo","🏰 シールド・ゴー（墓地の代わりに表向きの盾になる）"]);
@@ -10179,6 +10200,12 @@ async function dormaChoice(pi,c){
 /* 攻撃フロー（誘発パネル→一時中断→再開/中止） */
 let ATK=null;
 function hideAtkBanner(){$("fxBanner").classList.remove("show");}
+/* ⚡ いま処理しているカードを画面上部に表示（複数体が同時に出た時の取り違え防止）。msg省略で非表示 */
+function setFxNowChip(msg){
+  const e=document.getElementById("fxNowChip");if(!e)return;
+  if(!msg){e.classList.remove("show");e.textContent="";return;}
+  e.textContent=msg;e.classList.add("show");
+}
 async function startAttack(pi,id){
   const Z=zonesOf(pi);
   const c=Z.battle.find(x=>x.id===id);if(!c)return;
@@ -12546,6 +12573,7 @@ function renderFxEditor(){
   $("fxMugenCiv").value=FXEDIT.mugenCiv||"";
   $("fxExLife").checked=!!FXEDIT.exlife;
   $("fxStarEvo").checked=!!FXEDIT.starEvo;
+  {const e=$("fxNoBaseEvo");if(e)e.checked=!!FXEDIT.noBaseEvo;}
   $("fxGNeo").checked=!!FXEDIT.gneo;
   for(let i=0;i<5;i++)$("fxRace"+(i+1)).value=(FXEDIT.races&&FXEDIT.races[i])||"";
   {const rb=document.getElementById("fxRacesB");if(rb)rb.value=(FXEDIT.races2||[]).join("／");}
@@ -13134,6 +13162,7 @@ function parseCardText(txt,mode){
     else if(/ドリーム・?クリーチャー|ナイトメア・?クリーチャー/.test(t))out.set.ctype="dream";
     else if(/究極進化[：:]/.test(t))out.set.ctype="ultimate";
     else if(/NEO進化[：:]/.test(t)||/NEOクリーチャー/.test(t))out.set.ctype="neoevo";
+    else if(/カリスマ[・･]?\s*スター進化|カリスマックス/.test(t))out.set.ctype="charismaevo"; // カリスマ・スター進化（バトルゾーンの進化元を必要としない）
     else if(/スター進化/.test(t))out.set.ctype="starevo";
     else if(/[SＳ][-－ー‐]?\s*MAX進化/.test(t)&&/ゲームに負ける時/.test(t))out.set.ctype="onismaxevo"; // 鬼S-MAX進化（ジャオウガ型：負ける/離れる置換・離場は退化式で一番上を剥がす）
     else if(/[SＳ][-－ー‐]?\s*MAX進化/.test(t))out.set.ctype="smaxevo"; // S-MAX進化
@@ -14437,6 +14466,7 @@ function openFxEditor(key){
     mugenCiv:cur&&cur.mugenCiv||"",
     exlife:cur?!!cur.exlife:false,
     starEvo:cur?!!cur.starEvo:false,
+    noBaseEvo:cur?!!cur.noBaseEvo:false,
     gneo:cur?!!cur.gneo:false,
     races:cur&&cur.races||["","","","",""],
     races2:cur&&cur.races2||[],
@@ -14785,6 +14815,7 @@ $("fxSave").addEventListener("click",async ()=>{
     mugenCiv:$("fxMugenCiv").value||"",
     exlife:$("fxExLife").checked,
     starEvo:$("fxStarEvo").checked,
+    noBaseEvo:$("fxNoBaseEvo")?$("fxNoBaseEvo").checked:false,
     gneo:$("fxGNeo").checked,
     races:[1,2,3,4,5].map(i=>$("fxRace"+i).value.trim()).filter(x=>x).concat(["","","","",""]).slice(0,5),
     races2:(()=>{const e=document.getElementById("fxRacesB");if(!e)return (FXEDIT&&FXEDIT.races2)||[];return e.value.split(/[／\/、,]/).map(s=>s.trim()).filter(Boolean);})(),
@@ -15211,6 +15242,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.races&&v.races.some(x=>x))attrs.push("種族:"+v.races.filter(x=>x).join("/"));
     if(v.races2&&v.races2.length)attrs.push("下面種族:"+v.races2.join("/"));
     if(v.starEvo)attrs.push("スター進化");
+    if(v.noBaseEvo)attrs.push("進化元不要");
     if(v.gneo)attrs.push("G・NEO進化");
     if(v.shieldGo)attrs.push("シールド・ゴー");
     if(v.seiba)attrs.push(v.seibaF?`セイバー：${v.seibaF}`:"セイバー");
@@ -23978,7 +24010,7 @@ function typeMatch(k,tf){
   const r=FXDB.get(k);
   if(!r)return false;
   const ct=r.ctype;
-  if(tf==="creatureAll")return ["creature","dream","evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodream","gneodream","twinpact"].includes(ct)||!!r.twin;
+  if(tf==="creatureAll")return ["creature","dream","evo","neoevo","starevo","charismaevo","smaxevo","onismaxevo","gneo","neodream","gneodream","twinpact"].includes(ct)||!!r.twin;
   if(tf==="aura")return ct==="aura"||ct==="gigaaura";
   if(tf==="creature")return ct==="creature"||ct==="twinpact"||!!r.twin;
   if(tf==="spell")return ct==="spell"||ct==="twinpact"||!!r.twin;
