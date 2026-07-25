@@ -255,8 +255,9 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   background:linear-gradient(180deg,#ffe08a,#f0b429);color:#241a00;
   border:none;border-radius:20px;padding:7px 14px;font-weight:900;font-size:12px;
   box-shadow:0 6px 18px rgba(0,0,0,.55);display:none;max-width:92vw;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab;
 }
+@media(max-width:900px){#fxNowChip{font-size:11px;padding:5px 10px;max-width:80vw}}
 #fxNowChip.show{display:block}
 #evoBar{
   position:fixed;left:50%;transform:translateX(-50%);
@@ -10488,12 +10489,87 @@ async function dormaChoice(pi,c){
 }
 /* 攻撃フロー（誘発パネル→一時中断→再開/中止） */
 let ATK=null;
+/* 🖐 画面に浮かぶパネル（処理中バッジ・手動処理タイム）を指でドラッグして動かせるようにする。
+   スマホ/iPadで盤面が隠れる時に、じゃまにならない位置へよけられる。位置はそのセッション中は覚える。 */
+const FLOAT_POS={};
+function makeDraggable(el,key){
+  if(!el||el._dragBound)return;
+  el._dragBound=true;
+  el.style.touchAction="none";
+  let sx=0,sy=0,ox=0,oy=0,moving=false;
+  const onDown=ev=>{
+    // ボタンの上から始まったドラッグは無視（押せなくなるため）
+    if(ev.target&&ev.target.closest&&ev.target.closest("button"))return;
+    const r=el.getBoundingClientRect();
+    ox=r.left;oy=r.top;sx=ev.clientX;sy=ev.clientY;moving=false;
+    el.setPointerCapture&&el.setPointerCapture(ev.pointerId);
+    const onMove=e2=>{
+      const dx=e2.clientX-sx,dy=e2.clientY-sy;
+      if(!moving&&Math.abs(dx)<4&&Math.abs(dy)<4)return;
+      moving=true;
+      const w=el.offsetWidth,h=el.offsetHeight;
+      const nx=Math.max(2,Math.min(window.innerWidth-w-2,ox+dx));
+      const ny=Math.max(2,Math.min(window.innerHeight-h-2,oy+dy));
+      el.style.left=nx+"px";el.style.top=ny+"px";
+      el.style.right="auto";el.style.bottom="auto";el.style.transform="none";
+      if(key)FLOAT_POS[key]={x:nx,y:ny};
+      e2.preventDefault();
+    };
+    const onUp=()=>{
+      window.removeEventListener("pointermove",onMove);
+      window.removeEventListener("pointerup",onUp);
+      window.removeEventListener("pointercancel",onUp);
+    };
+    window.addEventListener("pointermove",onMove,{passive:false});
+    window.addEventListener("pointerup",onUp);
+    window.addEventListener("pointercancel",onUp);
+  };
+  el.addEventListener("pointerdown",onDown);
+}
+/* 覚えた位置を復元（無ければ既定位置のまま） */
+function applyFloatPos(el,key){
+  const p=FLOAT_POS[key];
+  if(!el||!p)return;
+  const w=el.offsetWidth||160,h=el.offsetHeight||40;
+  el.style.left=Math.max(2,Math.min(window.innerWidth-w-2,p.x))+"px";
+  el.style.top=Math.max(2,Math.min(window.innerHeight-h-2,p.y))+"px";
+  el.style.right="auto";el.style.bottom="auto";el.style.transform="none";
+}
+/* 🔎 浮かぶパネルの大きさ（小・中・大）。タップで切り替え、次に出す時も同じ大きさで出る */
+const FLOAT_SIZE={fxNowChip:1,resumeFxWrap:1};
+const FLOAT_SCALE=[0.8,1,1.25];
+function applyFloatSize(el,key){
+  if(!el)return;
+  const sc=FLOAT_SCALE[FLOAT_SIZE[key]||1];
+  el.style.fontSize=(key==="fxNowChip"?12:12.5)*sc+"px";
+  el.style.setProperty("--fscale",String(sc));
+  if(key==="resumeFxWrap"){
+    const b=document.getElementById("resumeFxBtn");
+    if(b){b.style.fontSize=(16*sc)+"px";b.style.padding=`${Math.round(12*sc)}px ${Math.round(28*sc)}px`;}
+    el.style.padding=`${Math.round(12*sc)}px ${Math.round(16*sc)}px`;
+  }else{
+    el.style.padding=`${Math.round(7*sc)}px ${Math.round(14*sc)}px`;
+  }
+}
+function cycleFloatSize(el,key){
+  FLOAT_SIZE[key]=((FLOAT_SIZE[key]||1)+1)%3;
+  applyFloatSize(el,key);
+  toast(`🔎 表示サイズ：${["小","中","大"][FLOAT_SIZE[key]]}（ドラッグで移動できます）`);
+}
 function hideAtkBanner(){$("fxBanner").classList.remove("show");}
 /* ⚡ いま処理しているカードを画面上部に表示（複数体が同時に出た時の取り違え防止）。msg省略で非表示 */
 function setFxNowChip(msg){
   const e=document.getElementById("fxNowChip");if(!e)return;
   if(!msg){e.classList.remove("show");e.textContent="";return;}
   e.textContent=msg;e.classList.add("show");
+  makeDraggable(e,"fxNowChip");
+  if(!e._sizeBound){
+    e._sizeBound=true;
+    e.title="ドラッグで移動／タップで大きさを変更";
+    e.addEventListener("click",()=>cycleFloatSize(e,"fxNowChip"));
+  }
+  applyFloatSize(e,"fxNowChip");
+  applyFloatPos(e,"fxNowChip");
 }
 async function startAttack(pi,id){
   const Z=zonesOf(pi);
@@ -10735,7 +10811,7 @@ function waitManualResume(label){
     if(!wrap){
       wrap=document.createElement("div");
       wrap.id="resumeFxWrap";
-      wrap.style.cssText="position:fixed;left:50%;bottom:calc(150px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:100000;display:flex;flex-direction:column;align-items:center;gap:8px;background:rgba(10,14,22,.96);border:2px solid #7b4bd6;border-radius:14px;padding:12px 16px;box-shadow:0 8px 28px rgba(0,0,0,.6);max-width:92vw";
+      wrap.style.cssText="position:fixed;left:50%;bottom:calc(150px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:100000;display:flex;flex-direction:column;align-items:center;gap:7px;background:rgba(10,14,22,.96);border:2px solid #7b4bd6;border-radius:14px;padding:12px 16px;box-shadow:0 8px 28px rgba(0,0,0,.6);max-width:min(88vw,340px)";
       const msg=document.createElement("div");
       msg.id="resumeFxMsg";
       msg.style.cssText="color:#ffe08a;font-size:12.5px;font-weight:700;text-align:center";
@@ -10752,6 +10828,21 @@ function waitManualResume(label){
     msg.textContent=`⏸ 手動処理タイム${label?`：《${label}》`:""} — 盤面を処理したら下のボタンで再開`;
     b.textContent="▶ 効果処理を続行";
     wrap.style.display="flex";
+    // 🖐 じゃまな時はドラッグで移動、🔎でサイズ変更（スマホ/iPad対策）
+    makeDraggable(wrap,"resumeFxWrap");
+    if(!wrap._sizeBound){
+      wrap._sizeBound=true;
+      msg.title="ドラッグでこのパネルを移動できます";
+      const sz=document.createElement("button");
+      sz.className="btn small ghost";
+      sz.textContent="🔎 大きさ";
+      sz.style.cssText="position:absolute;top:-10px;right:-6px;padding:2px 8px;font-size:10.5px";
+      sz.onclick=ev=>{ev.stopPropagation();cycleFloatSize(wrap,"resumeFxWrap");};
+      wrap.style.position="fixed";
+      wrap.appendChild(sz);
+    }
+    applyFloatSize(wrap,"resumeFxWrap");
+    applyFloatPos(wrap,"resumeFxWrap");
     b.onclick=()=>{wrap.style.display="none";res();};
   });
 }
@@ -16247,7 +16338,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       // ⤴ NEOクリーチャーの手動プレイ：常に出し方（通常／NEO進化）を確認（盤面7面でも進化なら出せる）
       {
         const rN=getReg(f.card);
-        if(isNeoReg(rN)&&!f.card._neoAsked&&pFrom===pTo&&["hand","grave","mana","deck","shield","exile","look","reveal"].includes(fromZone)){
+        if(isNeoReg(rN)&&!isNoBaseEvoReg(rN)&&!f.card._neoAsked&&pFrom===pTo&&["hand","grave","mana","deck","shield","exile","look","reveal"].includes(fromZone)){
           const baseOK=zonesOf(pTo).battle.some(x=>x.id!==f.card.id&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize);})());
           if(baseOK){
             MOVE_BLOCKED=true;
@@ -16256,7 +16347,8 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
           }
         }
         // ⤴ 通常の進化クリーチャー／究極進化：ドラッグで表向きに出す時は必ず進化元を選ばせる（NEO以外・ツインパクトも上面が進化なら対象）
-        else if(isEvoReg(rN)&&!isNeoReg(rN)&&rN.ctype!=="evocrossgear"&&!S.freePlay&&!f.card._neoAsked&&pFrom===pTo&&["hand","grave","mana","deck","shield","exile","look","reveal"].includes(fromZone)){
+        //    ただし進化元不要（カリスマ・スター進化／禁断スター進化／S-MAX進化など）は、そのまま出す
+        else if(isEvoReg(rN)&&!isNeoReg(rN)&&!isNoBaseEvoReg(rN)&&rN.ctype!=="evocrossgear"&&!S.freePlay&&!f.card._neoAsked&&pFrom===pTo&&["hand","grave","mana","deck","shield","exile","look","reveal"].includes(fromZone)){
           const baseOK=zonesOf(pTo).battle.some(x=>x.id!==f.card.id&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize);})());
           if(baseOK){
             MOVE_BLOCKED=true;
@@ -19610,7 +19702,7 @@ function attachPointer(el,ctx){
           const inSel2=S.multi&&S.msel.some(x=>x.id===ctx.id);
           const fS=findCard(ctx.p,ctx.zone,ctx.id);
           const rEv=fS&&getReg(fS.card);
-          const canEvo=!inSel2&&fS&&tgt.p===ctx.p&&ctx.zone!=="battle"&&rEv&&isEvoReg(rEv);
+          const canEvo=!inSel2&&fS&&tgt.p===ctx.p&&ctx.zone!=="battle"&&rEv&&isEvoReg(rEv)&&!isNoBaseEvoReg(rEv); // 進化元不要のカードは重ねない
           if(canEvo){
             (async()=>{
               const host=zonesOf(tgt.p).battle.find(x=>String(x.id)===String(tgt.cid));
