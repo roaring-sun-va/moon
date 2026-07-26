@@ -860,6 +860,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの見出しをつかんで、好きな場所へ動かせます。右下・左下の隅をつかむと大きさ（幅と高さ）を変えられます。位置と大きさは次回も覚えています"><input type="checkbox" id="optLogDrag" checked> ✋ ログの見出しをつかんで移動する（隅のつかみ手で大きさ変更）</label><button class="btn small ghost" id="btnLogBoxReset" title="自由に動かしたログの位置と大きさを、既定（右上・幅340px）に戻します">↺ ログの位置と大きさを戻す</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="画面の右端から左へ払うとログが開き、右へ払うと閉じます。カードのドラッグと当たる場合はオフにしてください"><input type="checkbox" id="optLogSwipe" checked> ➡ 画面の右端から左へ払ってログを開く（右へ払って閉じる）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="確認パネルや効果パネルが開いている間も、ログを手前に重ねて表示します。パネルの操作が隠れて邪魔な場合はオフにしてください"><input type="checkbox" id="optLogOverPanel" checked> 🪟 確認パネルが開いている間もログを手前に表示する</label></div>
+    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの文中に出てくるカード名を、《》が付いていなくても見つけて絵札を添えます。誤って別の言葉に絵札が付く場合や、動作が重い場合はオフにしてください"><input type="checkbox" id="optLogAutoImg" checked> 🎴 ログの文中のカード名にも絵札を付ける（《》なしでも自動で探す）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="オンライン対戦中、自分の操作のログを相手の端末にも送って、両者が同じ流れを追えるようにします。自分だけが中身を知っているカード（非公開で見た山札・サーチで手札に加えたカード等）は、カード名を送らず「処理だけ」を送ります"><input type="checkbox" id="optLogShare" checked> 🌐 オンライン対戦でログを相手にも送る（非公開のカード名は送らない）</label></div>
     <div class="row">
       <label><input type="checkbox" id="setAnim" checked> 🎬 カード演出（マスター・全演出の一括ON/OFF）</label>
@@ -2240,6 +2241,31 @@ function logImgKey(name){
 }
 /* 📜 ログの1行を作る。entryは{ts,m,turn,who,cat}（旧リプレイの文字列も受け付ける）。
    種類ごとの色帯と、どちらのプレイヤーの出来事かを左の線で示す。 */
+/* 🎴 ログの文中に出てくるカード名を、《》が付いていなくても見つけて絵札を添える。
+   トーストは1000箇所以上から呼ばれていて全部に《》を付けるのは現実的ではないため、
+   画像が登録されているカード名の一覧から作った正規表現で拾う。
+   名前は長いものから順に当てるので「ボルシャック・ドラゴン」が「ドラゴン」に負けない。 */
+let _logNameRe=null,_logNameSig="";
+function logNameRegex(){
+  if(typeof S!=="undefined"&&S&&S.logAutoImg===false)return null;
+  const sig=`${imgURL.size}|${dispName.size}`;
+  if(_logNameRe&&_logNameSig===sig)return _logNameRe;
+  _logNameSig=sig;
+  _logNameRe=null;
+  try{
+    const set=new Set();
+    for(const k of imgURL.keys()){
+      const dn=dispName.get(k);
+      if(dn&&dn.length>=4)set.add(dn);
+      if(k&&k.length>=4&&k!==dn)set.add(k);
+    }
+    if(!set.size)return null;
+    const names=[...set].sort((a,b)=>b.length-a.length).slice(0,900); // 長い順・数が多すぎる時は上位だけ
+    const esc=names.map(n=>n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
+    _logNameRe=new RegExp("("+esc.join("|")+")","g");
+  }catch(e){console.warn("logNameRegex",e);_logNameRe=null;}
+  return _logNameRe;
+}
 function logLineEl(entry,opt){
   const o=(typeof entry==="string")?{ts:"",m:entry,cat:"other",who:0,turn:0}:entry;
   const text=(typeof logTextOf==="function")?(logTextOf(o)||""):(o.m||"");
@@ -2249,10 +2275,21 @@ function logLineEl(entry,opt){
   const row=document.createElement("div");
   // 🎴 デュエプレ風：カードの絵札を左に立て、右に何が起きたかを書く（絵札はタップで拡大）
   row.style.cssText=`display:flex;gap:7px;align-items:flex-start;padding:4px 8px 4px 9px;background:#0d1119;border:1px solid var(--line);border-left:3px solid ${side};border-radius:7px;word-break:break-word`;
-  // 行の主役になるカード（最初に出てくる《カード名》）を左のサムネイルにする
+  // 行の主役になるカードを左のサムネイルにする。《》付きを優先し、無ければ文中のカード名を探す
   const names=[...String(text).matchAll(/《([^》]+)》/g)].map(x=>x[1]);
   let leadKey=null,leadName="";
   for(const nm of names){const k=logImgKey(nm);if(k){leadKey=k;leadName=nm;break;}}
+  if(!leadKey){
+    const re0=logNameRegex();
+    if(re0){
+      re0.lastIndex=0;let m0;
+      while((m0=re0.exec(String(text)))!==null){
+        const k=logImgKey(m0[1]);
+        if(k){leadKey=k;leadName=m0[1];break;}
+        if(re0.lastIndex===m0.index)re0.lastIndex++;
+      }
+    }
+  }
   const _u0=leadKey?safeImgURL(leadKey):"";
   if(leadKey&&_u0){
     const im=document.createElement("img");
@@ -2274,29 +2311,46 @@ function logLineEl(entry,opt){
     ts.style.cssText="color:#66748c;font-size:10.5px";
     txt.appendChild(ts);
   }
+  // 🎴 1行に貼る絵札の枚数には上限を設ける（大量ミル等で行が重くならないように）
+  let imgLeft=(opt&&opt.small)?6:8;
+  const addCard=(name,bracket)=>{
+    const k=logImgKey(name);
+    // 左に立てた絵札と同じカードは、文中では名前だけにして重複表示を避ける
+    const _uk=(k&&k!==leadKey&&imgLeft>0)?safeImgURL(k):"";
+    if(_uk){
+      imgLeft--;
+      const im=document.createElement("img");
+      im.src=_uk;im.draggable=false;im.loading="lazy";
+      im.style.cssText=`height:${(opt&&opt.small)?22:28}px;border-radius:4px;vertical-align:middle;margin:0 3px;box-shadow:0 1px 3px rgba(0,0,0,.5);cursor:zoom-in`;
+      im.title=`《${name}》（タップで拡大）`;
+      im.addEventListener("click",ev=>{ev.stopPropagation();showBigCardImage(k,name);});
+      txt.appendChild(im);
+    }
+    const sp=document.createElement("span");
+    sp.textContent=bracket?`《${name}》`:name;
+    sp.style.cssText=`font-weight:700;color:${col}`;
+    if(k){sp.style.cursor="zoom-in";sp.addEventListener("click",ev=>{ev.stopPropagation();showBigCardImage(k,name);});}
+    txt.appendChild(sp);
+  };
+  // 《》で囲まれていない部分も、登録済みのカード名を探して絵札を添える
+  const addPlain=(str)=>{
+    if(!str)return;
+    const re=logNameRegex();
+    if(!re){txt.appendChild(document.createTextNode(str));return;}
+    re.lastIndex=0;
+    let last=0,m;
+    while((m=re.exec(str))!==null){
+      if(m.index>last)txt.appendChild(document.createTextNode(str.slice(last,m.index)));
+      addCard(m[1],false);
+      last=m.index+m[0].length;
+      if(re.lastIndex===m.index)re.lastIndex++; // 空マッチでの無限ループ防止
+    }
+    if(last<str.length)txt.appendChild(document.createTextNode(str.slice(last)));
+  };
   const parts=String(text).split(/《([^》]+)》/);
   for(let i=0;i<parts.length;i++){
-    if(i%2===0){
-      if(parts[i])txt.appendChild(document.createTextNode(parts[i]));
-    }else{
-      const name=parts[i];
-      const k=logImgKey(name);
-      // 左に立てた絵札と同じカードは、文中では名前だけにして重複表示を避ける
-      const _uk=(k&&k!==leadKey)?safeImgURL(k):"";
-      if(_uk){
-        const im=document.createElement("img");
-        im.src=_uk;im.draggable=false;im.loading="lazy";
-        im.style.cssText=`height:${(opt&&opt.small)?22:28}px;border-radius:4px;vertical-align:middle;margin:0 3px;box-shadow:0 1px 3px rgba(0,0,0,.5);cursor:zoom-in`;
-        im.title=`《${name}》（タップで拡大）`;
-        im.addEventListener("click",ev=>{ev.stopPropagation();showBigCardImage(k,name);});
-        txt.appendChild(im);
-      }
-      const sp=document.createElement("span");
-      sp.textContent=`《${name}》`;
-      sp.style.cssText=`font-weight:700;color:${col}`;
-      if(k){sp.style.cursor="zoom-in";sp.addEventListener("click",ev=>{ev.stopPropagation();showBigCardImage(k,name);});}
-      txt.appendChild(sp);
-    }
+    if(i%2===0)addPlain(parts[i]);
+    else addCard(parts[i],true);
   }
   row.appendChild(txt);
   return row;
@@ -2763,6 +2817,14 @@ window.addEventListener("resize",()=>{try{applyLogBox();}catch(e){}});
    S.logFab=cb.checked;
    if(typeof applyLogFab==="function")applyLogFab();
    try{if(db)await idbPut("misc","logFab",S.logFab?1:0);}catch(e){}
+ });}
+{const cb=document.getElementById("optLogAutoImg");
+ if(cb)cb.addEventListener("change",async()=>{
+   if(typeof S==="undefined"||!S)return;
+   S.logAutoImg=cb.checked;
+   _logNameRe=null;_logNameSig=""; // 作り直させる
+   try{if(db)await idbPut("misc","logAutoImg",S.logAutoImg?1:0);}catch(e){}
+   if(typeof renderLogDock==="function")renderLogDock();
  });}
 {const cb=document.getElementById("optLogFabAvoid");
  if(cb)cb.addEventListener("change",async()=>{
@@ -4180,9 +4242,9 @@ function nextTurn(){
     if(Z.resolve.length){
       const olds=Z.resolve.splice(0);
       const chg=[],grv=[];
-      olds.forEach(o=>{(resolveOut(Z,o)?chg:grv).push(faceNameOf(o));});
-      if(grv.length)toast(`解決中のカードを墓地へ：${grv.join("、")}`);
-      if(chg.length)toast(`⚡チャージャー：${chg.join("、")} はマナゾーンへ`);
+      olds.forEach(o=>{(resolveOut(Z,o)?chg:grv).push(`《${faceNameOf(o)}》`);});
+      if(grv.length)toast(`🪦 解決中のカードを墓地へ：${grv.join("")}`);
+      if(chg.length)toast(`⚡チャージャー：${chg.join("")} はマナゾーンへ`);
       sfx("grave");
     }
   }
@@ -5613,9 +5675,9 @@ const EFFECTS=[
      snap();
      const OZ=zonesOf(op);
      let moved=0;const nmv=[];
-     for(let i=0;i<n&&OZ.deck.length;i++){const c=OZ.deck.shift();c.faceup=true;OZ.grave.push(c);nmv.push(faceNameOf(c));moved++;}
+     for(let i=0;i<n&&OZ.deck.length;i++){const c=OZ.deck.shift();c.faceup=true;OZ.grave.push(c);nmv.push(`《${faceNameOf(c)}》`);moved++;}
      renderAll();sfx("grave");
-     toast(`🗑 ${S.players[op].label} の山札を ${moved}枚 墓地へ：${nmv.join("、")}`);
+     toast(`🗑 ${S.players[op].label} の山札を ${moved}枚 墓地へ：${nmv.join("")}`);
      if(S.vs&&!OZ.deck.length)declareWin(pi,`山札破壊：${S.players[op].label} の山札が0枚`);
    }},
   {name:"探索/超探索（山札・墓地・マナ）",
@@ -6541,10 +6603,15 @@ async function autoTapCost(pi,c){
    パワー0以下の状態破壊チェック用。 */
 function powNow(c){
   const r=getReg(c);
-  if(!r||r.power===""||r.power==null||isNaN(+r.power))return null;
+  const buffSum=c.buff?((+c.buff.pa||0)+(+c.buff.pm||0)+(+c.buff.pow||0)):0;
+  if(!r||r.power===""||r.power==null||isNaN(+r.power)){
+    // 基礎パワーが未登録でも、−99999 のような「実質パワー0」の修正を受けているなら0以下と判断する
+    return (buffSum<=-99999)?0:null;
+  }
   let p=+r.power;
   if(c.hyper&&r.hmPow)p=+r.hmPow;
-  if(c.buff)p+=(c.buff.pa||0)+(c.buff.pm||0)+(+c.buff.pow||0);
+  p+=buffSum;
+  if(c.sfActive&&r.sforceFx==="pw"&&r.sforceN)p+=(+r.sforceN||0); // 💠 S・フォースのパワー修正
   p+=powPerBonus(c,r,false,false);
   const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle.includes(c));
   if(own!=null){
@@ -6561,23 +6628,53 @@ async function checkZeroPower(){
   if(!S.expert||ZERO_POW_RUNNING)return;
   ZERO_POW_RUNNING=true;
   try{
-    for(let pass=0;pass<8;pass++){ // 破壊で常在が変わり連鎖することがあるので数回まわす
-      let hit=null,hitPi=0;
-      for(const pi of [0,1]){
+    for(let pass=0;pass<24;pass++){ // 破壊で常在が変わり連鎖することがあるので数回まわす（全体マイナスで複数体が同時に落ちる分も見る）
+      let hit=null,hitPi=0,hitPow=0;
+      for(const pi of (S.vs?[0,1]:[0])){
         const Z=zonesOf(pi);
         for(const c of Z.battle){
           const r=getReg(c);if(!r||!isCreatureReg(r))continue;
           const p=powNow(c);
-          if(p!=null&&p<=0){hit=c;hitPi=pi;break;}
+          if(p!=null&&p<=0){
+            if(c._zpSkip)continue;               // 一度破壊を試して場に残ったものは繰り返さない（無限ループ防止）
+            hit=c;hitPi=pi;hitPow=p;break;
+          }
+          if(c._zpSkip)delete c._zpSkip;         // パワーが戻ったら、また判定の対象に戻す
         }
         if(hit)break;
       }
       if(!hit)break;
-      toast(`💥 ${faceNameOf(hit)} はパワー0以下のため破壊`);
+      toast(`💥 ${faceNameOf(hit)} はパワー0以下のため破壊（現在パワー${hitPow}）`);
+      logOnly(`💥 ${S.players[hitPi].label} の《${faceNameOf(hit)}》はパワー${hitPow}（0以下）のため破壊`);
       await destroyCreature(hitPi,hit,{byZeroPow:true});
+      if(zonesOf(hitPi).battle.some(x=>x.id===hit.id)){
+        // 零龍カード・封印など「破壊できない」ものが場に残った場合は、同じ判定を繰り返さない
+        hit._zpSkip=true;
+        logOnly(`💥 《${faceNameOf(hit)}》はパワー0以下だがバトルゾーンに残った（破壊できない効果のため）`);
+        renderAll();
+        continue;
+      }
       renderAll();
     }
   }finally{ZERO_POW_RUNNING=false;}
+}
+/* 💥 状態ベースのパワー0以下破壊を、盤面が動いたあとにまとめて点検する。
+   パワーを下げる手段は多く（全体マイナス／付与／常在の付与元が消える／クロスギアが外れる等）、
+   個別に呼び忘れると0以下でも生き残ってしまうため、renderAll のたびに一度だけ見直す。
+   効果処理や確認パネルの途中では割り込まず、落ち着いてから判定する。 */
+var _zpTm=null,_zpWait=0;
+function scheduleZeroPower(){
+  if(typeof S==="undefined"||!S||!S.expert)return;
+  if(ZERO_POW_RUNNING||_zpTm)return;
+  _zpTm=setTimeout(()=>{
+    _zpTm=null;
+    const busy=(typeof fxRunning!=="undefined"&&fxRunning)
+             ||(typeof fxQueue!=="undefined"&&fxQueue.length)
+             ||(typeof GAME_PAUSE!=="undefined"&&GAME_PAUSE);
+    if(busy&&_zpWait++<240){scheduleZeroPower();return;} // 処理が続いている間は待つ（約34秒で打ち切り）
+    _zpWait=0;
+    try{checkZeroPower();}catch(e){console.warn("zeroPow",e);}
+  },140);
 }
 async function destroyCreature(pi,c,opts){
   const Z=zonesOf(pi);
@@ -7317,8 +7414,8 @@ async function runFxList(pi,list,srcCard,inPump){
       if(cn>0){const nm=Z.mana.slice(-cn).map(faceNameOf).join("、");toast(`💠 マナ加速（タップイン）：${nm} をタップしてマナゾーンへ`);}
     }else if(f.t==="mill"){
       const dropped=[];const _milled=[];
-      for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;dropped.push(faceNameOf(c));if(!graveShuffleRepApply(c,pi)){Z.grave.push(c);_milled.push(c);}}
-      if(dropped.length)toast(`🪦 墓地肥やし：${dropped.join("、")} を墓地へ`);
+      for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;dropped.push(`《${faceNameOf(c)}》`);if(!graveShuffleRepApply(c,pi)){Z.grave.push(c);_milled.push(c);}}
+      if(dropped.length)toast(`🪦 墓地肥やし：${dropped.join("")} を墓地へ`); // 《》で囲むとログに絵札が出る
       sfx("grave");
       for(const mc of _milled)queueToGrave(pi,mc); // ⚡ 山札→墓地：このカードの解決が終わってから発火（割り込まない・ゾルザーク型）
     }else if(f.t==="millUntilCre"){
@@ -7354,9 +7451,9 @@ async function runFxList(pi,list,srcCard,inPump){
       renderAll();
     }else if(f.t==="millOpp"){
       const nmv3=[];
-      for(let i=0;i<n&&OZ.deck.length;i++){const c=OZ.deck.shift();c.faceup=true;nmv3.push(faceNameOf(c));if(!graveShuffleRepApply(c,op)){OZ.grave.push(c);queueToGrave(op,c);}} // ⚡ toGrave誘発（解決後発火）
+      for(let i=0;i<n&&OZ.deck.length;i++){const c=OZ.deck.shift();c.faceup=true;nmv3.push(`《${faceNameOf(c)}》`);if(!graveShuffleRepApply(c,op)){OZ.grave.push(c);queueToGrave(op,c);}} // ⚡ toGrave誘発（解決後発火）
       sfx("grave");
-      if(nmv3.length)toast(`🗑 相手の山札${nmv3.length}枚を墓地へ：${nmv3.join("、")}`);
+      if(nmv3.length)toast(`🗑 相手の山札${nmv3.length}枚を墓地へ：${nmv3.join("")}`);
       if(S.vs&&!OZ.deck.length)declareWin(pi,`山札破壊：${S.players[op].label} の山札が0枚`);
     }else if(f.t==="reveal"){
       const shown=[];
@@ -8305,7 +8402,7 @@ async function runFxList(pi,list,srcCard,inPump){
           dropped.push(faceNameOf(u));
         }
         HILITE_ID=null;renderAll();
-        toast(`☄ ${faceNameOf(srcLive)} のメテオバーン：${dropped.join("、")} を墓地へ（進化元にした順・残り${un.length}枚）`);
+        toast(`☄ 《${faceNameOf(srcLive)}》のメテオバーン：${dropped.map(x=>`《${x}》`).join("")} を墓地へ（進化元にした順・残り${un.length}枚）`);
         sfx("grave");
       }else{
         // 離場時（selfLeave）：下敷きは既に墓地へ移動済み。退避した枚数で判定（コストは離場で支払い済み）
@@ -12170,6 +12267,26 @@ async function execAttack(pi,id,tg){
   // ⚔ 攻撃中に進化などで攻撃者が別カードに変わることがある（コッコ・ルピア→ボルシャック等）。
   //    そのときは transferAtkState が CUR_ATTACKER を更新するので、再チェックは CUR_ATTACKER を追って
   //    新しいクリーチャー（進化後）を攻撃者として続行する。見つからなければ本当に離場した＝中止。
+  // ⚡ 「このクリーチャーの攻撃の終わりに」は、攻撃がどう終わっても1回だけ処理する。
+  //    ブロックされた時・ダイレクトアタック・0枚ブレイクの経路で呼ばれておらず、
+  //    「攻撃する時」の効果のあとが処理されない不具合になっていた（コーラレヒト型）。
+  let _atkEndRan=false;
+  const atkEnd=async()=>{
+    if(_atkEndRan)return;
+    _atkEndRan=true;
+    if(S.expert)await runSelfAtkEnd(pi,c);
+  };
+  // ⚔ 攻撃の宣言をログに残す（誰が何を攻撃したかが絵札つきで残るように）
+  if(!c._atkFxDone){ // 保留からの再開では二重に記録しない
+    const op0=pi===0?1:0;
+    let tgt="";
+    if(tg&&tg.kind==="creature"){
+      const d0=zonesOf(op0).battle.find(x=>x.id===tg.id);
+      tgt=d0?`《${faceNameOf(d0)}》`:"相手のクリーチャー";
+    }else if(tg&&tg.kind==="shield")tgt=`${S.players[op0]?S.players[op0].label:"相手"}のシールド`;
+    else tgt=`${S.players[op0]?S.players[op0].label:"相手"}（ダイレクトアタック）`;
+    logOnly(`⚔ ${S.players[pi].label}：《${faceNameOf(c)}》が ${tgt} を攻撃`);
+  }
   const stillAtk=()=>{
     let a=Z.battle.find(x=>x.id===CUR_ATTACKER)||Z.battle.find(x=>x.id===id);
     if(!a){
@@ -12759,11 +12876,11 @@ async function execAttack(pi,id,tg){
     if(bl<blockers.length){
       defender=blockers[bl];
       defender.tapped=true;
-      toast(`ブロック：${faceNameOf(defender)}`);
+      toast(`⚔ ブロック：《${faceNameOf(defender)}》が《${faceNameOf(c)}》の攻撃をブロック`);
       renderAll();
     }
   }
-  if(defender){await doBattle(pi,c,op,defender);clearPendingAtk();return;}
+  if(defender){await doBattle(pi,c,op,defender);await atkEnd();clearPendingAtk();return;} // ⚡ ブロックされても攻撃は終わるので誘発する
   if(S.expert){
     const rK=getReg(c);
     if(rK&&rK.kizuna&&rK.kizuna!=="k"){ // 素の「キズナ」は出た時なので、ここでは扱わない
@@ -12863,7 +12980,7 @@ async function execAttack(pi,id,tg){
           renderAll();
         }
       }
-      await runSelfAtkEnd(pi,c); // ⚡ このクリーチャーの攻撃の終わりに（条件式つき誘発）
+      await atkEnd(); // ⚡ このクリーチャーの攻撃の終わりに（条件式つき誘発）
     }
   }
   else if(tg.kind==="shield"){
@@ -12876,7 +12993,7 @@ async function execAttack(pi,id,tg){
       const opts=[];for(let k=0;k<=mx;k++)opts.push(k===0?"0枚（ブレイクしない）":`${k}枚ブレイク${k===mx?"（全部）":""}`);
       const j=await askChoice(`∞ ブレイカー（${faceNameOf(c)}）\nブレイクする枚数を選択（相手のシールド${mx}枚）`,opts);
       if(j===null){renderAll();return;}
-      if(j===0){toast(`∞ ブレイカー：0枚ブレイクを選択（ブレイクせず攻撃終了）`);renderAll();return;}
+      if(j===0){toast(`∞ ブレイカー：0枚ブレイクを選択（ブレイクせず攻撃終了）`);await atkEnd();renderAll();return;}
       n=j;
       toast(`∞ ブレイカー：${n}枚ブレイク！`);
     }
@@ -12968,7 +13085,7 @@ async function execAttack(pi,id,tg){
           renderAll();
         }
       }
-      await runSelfAtkEnd(pi,c); // ⚡ このクリーチャーの攻撃の終わりに（条件式つき誘発）
+      await atkEnd(); // ⚡ このクリーチャーの攻撃の終わりに（条件式つき誘発）
     }
     // 💀 相手プレイヤーを攻撃する時、攻撃の後、このクリーチャーを破壊する（黒神龍ジョブヴェール型）
     if(S.expert){
@@ -13023,6 +13140,7 @@ async function execAttack(pi,id,tg){
       }
     }
     if(S.vs&&S.turn>0)declareWin(pi,`💥 ダイレクトアタック成立`);
+    await atkEnd(); // ⚡ このクリーチャーの攻撃の終わりに
     // 💀 相手プレイヤーを攻撃する時、攻撃の後、このクリーチャーを破壊する（黒神龍ジョブヴェール型）
     if(S.expert){
       const rSK=getReg(c);
@@ -18178,13 +18296,19 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       // ↩ オニカマス型：相手のターン中、相手が召喚以外で出したクリーチャーを手札に戻してもよい
       //    （センノーと違い場には出るので、出た時の効果は先に誘発する）
       {
-        const kamasu=zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stBounceCheat&&!isSealed(x)&&!isIgnored(x,foeN);});
+        // ↩ 発動条件は2つとも必須：
+        //   ① 出たクリーチャーが「相手（＝オニカマスの持ち主から見た相手）」のもの＝ zonesOf(pTo) に出た
+        //   ② その相手のターン中である＝ S.who===pTo（オニカマスの持ち主はターンプレイヤーではない）
+        //   さらに、出たカード自身がオニカマスだった場合に自分で反応しないよう id で除外する
+        const kamasu=(S.vs&&S.who===pTo)
+          ? zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return x.id!==c.id&&rx&&rx.stBounceCheat&&!isSealed(x)&&!isIgnored(x,foeN);})
+          : null;
         const rNew=getReg(c);
-        if(kamasu&&S.who===pTo&&rNew&&isCreatureReg(rNew)&&!c._kamasuChk){
+        if(kamasu&&rNew&&isCreatureReg(rNew)&&!c._kamasuChk){
           c._kamasuChk=true;
           (async()=>{
-            const j=await askChoice(`↩ ${faceNameOf(kamasu)}：相手のターン中、召喚以外で出たクリーチャーを手札に戻せます\n《${c.name}》は【召喚】で出しましたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝そのまま。侵略・革命チェンジ・蘇生・トリガー出しは召喚以外）`,
-              ["召喚で出した（そのまま）","召喚以外だった","召喚以外だが戻さない"]);
+            const j=await askChoice(`↩ ${S.players[foeN].label} の《${faceNameOf(kamasu)}》\n（相手のターン中・相手が召喚以外で出したクリーチャーだけが対象）\n\n${S.players[pTo].label} が出した《${faceNameOf(c)}》は【召喚】でしたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝そのまま。侵略・革命チェンジ・蘇生・トリガー出しは召喚以外）`,
+              ["召喚で出した（そのまま）","召喚以外だった → 手札に戻す","召喚以外だが戻さない"]);
             c._kamasuChk=false;
             if(j!==1)return;
             const ZB=zonesOf(pTo);
@@ -18196,8 +18320,8 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
             c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.faceup=true;c.mark=false;
             if(typeof toHand==="function")toHand(ZB,c);else ZB.hand.push(c);
             sfx("move");renderAll();
-            toast(`↩ ${faceNameOf(kamasu)}：${c.name} を手札に戻した`);
-            logOnly(`↩ ${faceNameOf(kamasu)} により ${c.name} を手札へ（召喚以外で出たため）`);
+            toast(`↩ ${faceNameOf(kamasu)}：${faceNameOf(c)} を手札に戻した`);
+            logOnly(`↩ ${S.players[foeN].label} の《${faceNameOf(kamasu)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》を手札へ（召喚以外で出たため）`);
           })();
         }
       }
@@ -18816,7 +18940,7 @@ async function runHotkey(act){
   }else if(act==="mill"){
     if(!Z.deck.length){toast("山札がありません");return;}
     snap();const c=Z.deck.shift();c.faceup=true;Z.grave.push(c);
-    sfx("grave");renderAll();toast(`🪦 山上→墓地：${cn(c)}`);
+    sfx("grave");renderAll();toast(`🪦 山上→墓地：《${faceNameOf(c)}》`);
     await fireToGrave(pi,c);
   }else if(act==="handes"){
     const OZ=zonesOf(op);
@@ -19727,7 +19851,7 @@ function renderPlayer(pi){
     snap();
     const c=Z.deck.shift();c.faceup=true;Z.grave.push(c);
     sfx("grave");
-    renderAll();toast(`山上→墓地：${c.name}`);
+    renderAll();toast(`🪦 山上→墓地：《${faceNameOf(c)}》`);
     await fireToGrave(pi,c);
   });
   gwrap.appendChild(gb);
@@ -20095,6 +20219,7 @@ function renderAllNow(){
   fitBoard();
   if(typeof pingLogFab==="function")pingLogFab(); // 📜 丸ボタンがゾーンのボタンに重なっていないか見直す
   if(typeof ensureLogDock==="function")ensureLogDock(); // 📜 自動処理中に描画が飛んでいたら描き直す
+  if(typeof scheduleZeroPower==="function")scheduleZeroPower(); // 💥 パワー0以下のクリーチャーがいないか点検
 }
 let fitRaf=null;
 function baseCardH(){
@@ -22827,8 +22952,8 @@ function openCardSheet(ctx){
           }else toast("墓地が空です");
         }else if(k==="fu"){
           let n2=0;const nmv2=[];
-          for(let i2=0;i2<2&&Z2.deck.length;i2++){const t=Z2.deck.shift();t.faceup=true;Z2.grave.push(t);nmv2.push(faceNameOf(t));n2++;}
-          toast(`山上${n2}枚を墓地へ：${nmv2.join("、")}`);
+          for(let i2=0;i2<2&&Z2.deck.length;i2++){const t=Z2.deck.shift();t.faceup=true;Z2.grave.push(t);nmv2.push(`《${faceNameOf(t)}》`);n2++;}
+          toast(`🪦 山上${n2}枚を墓地へ：${nmv2.join("")}`);
         }
         sfx("ok");
         fxAnim(c.id,"an-cip",600);
@@ -27161,6 +27286,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
    const e=$("optLogFabAvoid");if(e)e.checked=S.logFabAvoid;}
   {const lsh=db?await idbGet("misc","logShare"):null;S.logShare=(lsh==null)?true:!!lsh;
    const e=$("optLogShare");if(e)e.checked=S.logShare;}
+  {const la=db?await idbGet("misc","logAutoImg"):null;S.logAutoImg=(la==null)?true:!!la;
+   const e=$("optLogAutoImg");if(e)e.checked=S.logAutoImg;}
   {const lo=db?await idbGet("misc","logOverPanel"):null;S.logOverPanel=(lo==null)?true:!!lo;
    const e=$("optLogOverPanel");if(e)e.checked=S.logOverPanel;
    if(typeof syncLogOverPanel==="function")syncLogOverPanel();}
