@@ -241,6 +241,31 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   box-shadow:0 10px 30px rgba(0,0,0,.6);
 }
 #logDock.show{display:flex}
+/* 📜 盤面に浮かぶログボタン（指で届きやすい右下） */
+#logFab{position:fixed;right:10px;bottom:calc(96px + env(safe-area-inset-bottom));z-index:84;
+  width:48px;height:48px;border-radius:50%;border:1px solid var(--line);
+  background:rgba(10,14,24,.92);color:#cbd3df;font-size:20px;
+  display:none;align-items:center;justify-content:center;
+  box-shadow:0 6px 18px rgba(0,0,0,.55);cursor:pointer;padding:0}
+#logFab.show{display:flex}
+#logFab:active{transform:scale(.92)}
+/* 📜 大きさ切替：下半分／帯にすると盤面の上側が空くので、そのまま操作できる */
+#logDock.ld-half{top:auto;bottom:calc(58px + env(safe-area-inset-bottom));max-height:42dvh}
+#logDock.ld-mini{top:auto;bottom:calc(58px + env(safe-area-inset-bottom));max-height:88px}
+#logDock.ld-mini .ld-chips{display:none}
+/* 📱 スマホでは、ログを画面いっぱいのシートにして文字も大きくする（盤面の作りには手を入れない） */
+@media (max-width:640px){
+  #logDock{
+    left:6px;right:6px;width:auto;
+    top:calc(66px + env(safe-area-inset-top));
+    max-height:calc(100dvh - 132px);
+  }
+  #logDock .ld-title{font-size:14px}
+  #logDock .ld-chips{max-height:62px;gap:5px;padding:7px 9px}
+  #logDock .ld-chip{font-size:12px;padding:4px 11px}
+  #logDock .ld-body{font-size:14px;line-height:1.65;padding:9px 11px;gap:6px}
+  #logDock .ld-turn{font-size:13px;padding:5px 10px}
+}
 #logDock .ld-head{display:flex;align-items:center;gap:6px;padding:7px 9px;border-bottom:1px solid var(--line);background:#111a2c}
 #logDock .ld-title{font-weight:900;font-size:12.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #logDock .ld-chips{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid var(--line);max-height:88px;overflow-y:auto}
@@ -804,6 +829,9 @@ body.shake{animation:bodyShake .4s ease-out}
     <h2>⚙ 設定</h2>
     <div class="row"><button class="btn small primary" id="btnTutorial" style="flex:1">📖 はじめての方へ（使い方チュートリアル）</button></div>
     <div class="row"><button class="btn small" id="btnHelp" style="flex:1">❓ 使い方・条件式リファレンス</button></div>
+    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="盤面の右下に、ログを開く丸ボタンを浮かべます。スマホ・iPadで片手で出し入れしやすくなります"><input type="checkbox" id="optLogFab" checked> 📜 ログを開く丸ボタンを盤面に浮かべる（スマホ・iPad向け）</label></div>
+    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの見出し部分を上下にドラッグして、大きさを切り替えます（ログの中だけの操作なので盤面と干渉しません）"><input type="checkbox" id="optLogDrag" checked> ↕ ログの見出しを指で上下に動かして大きさを変える</label></div>
+    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="画面の右端から左へ払うとログが開き、右へ払うと閉じます。カードのドラッグと当たる場合はオフにしてください"><input type="checkbox" id="optLogSwipe" checked> ➡ 画面の右端から左へ払ってログを開く（右へ払って閉じる）</label></div>
     <div class="row">
       <label><input type="checkbox" id="setAnim" checked> 🎬 カード演出（マスター・全演出の一括ON/OFF）</label>
     </div>
@@ -1538,7 +1566,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="2">×2（ダブル）</option>
         </select>
         <span style="font-size:12px;font-weight:700">G・ゼロ</span>
-        <input type="text" id="fxGZero" placeholder="条件（メモ）空欄=なし" style="flex:1;min-width:130px">
+        <input type="text" id="fxGZero" placeholder="条件（例：バトル:進化>=1／文章でも可）空欄=なし" title="条件がゾーン条件式なら自動で判定します。文章で書いた場合は、召喚時に文面を見せて満たしているか確認します" style="flex:1;min-width:130px">
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;font-weight:700">マナ武装</span>
@@ -2023,10 +2051,12 @@ body.shake{animation:bodyShake .4s ease-out}
 
 <button id="peekChip">📋 パネルに戻る</button>
 <div id="fxNowChip"></div>
+<button id="logFab" title="ログを開く／閉じる（長押しで大きさ切替）">📜</button>
 <div id="logDock">
   <div class="ld-head">
     <span class="ld-title" id="ldTitle">📜 ログ</span>
     <button class="btn small ghost" id="ldDeck" style="padding:3px 8px;font-size:11px" title="山札の公開情報（確認済み・表向き・横差し）を見る">🔍</button>
+    <button class="btn small ghost" id="ldSize" style="padding:3px 8px;font-size:11px" title="ログの大きさを切り替え（大きく → 下半分 → 帯）。下半分・帯にすると盤面を触れます">🗕</button>
     <button class="btn small ghost" id="ldFull" style="padding:3px 8px;font-size:11px" title="全画面のログを開く">⛶</button>
     <button class="btn small ghost" id="ldClose" style="padding:3px 8px;font-size:11px">✕</button>
   </div>
@@ -2383,7 +2413,107 @@ function openGameLog(){
   g.appendChild(wrap);
   $("viewerOlay").classList.add("open");
 }
+/* 📜 盤面に浮かぶログボタン：タップで開閉、長押しで大きさ切替 */
+{const fab=document.getElementById("logFab");
+ window.applyLogFab=()=>{
+   const f=document.getElementById("logFab");if(!f)return;
+   const on=(typeof S==="undefined"||!S||S.logFab!==false);
+   f.classList.toggle("show",on);
+   const cb=document.getElementById("optLogFab");if(cb)cb.checked=on;
+ };
+ if(fab){
+   let held=false,tm=null;
+   const openClose=()=>{const d=document.getElementById("logDock");if(d)d.classList.toggle("show");};
+   fab.addEventListener("pointerdown",()=>{held=false;tm=setTimeout(()=>{held=true;const b2=document.getElementById("ldSize");if(b2)b2.click();},520);});
+   const up=()=>{clearTimeout(tm);};
+   fab.addEventListener("pointerup",()=>{up();if(!held)openClose();});
+   fab.addEventListener("pointerleave",up);
+   fab.addEventListener("pointercancel",up);
+ }}
+/* ↕ ログの見出しを上下にドラッグして大きさを変える（ログの中だけの操作なので盤面と干渉しない） */
+{const head=document.querySelector("#logDock .ld-head");
+ if(head){
+   let y0=null;
+   head.addEventListener("pointerdown",ev=>{
+     if(typeof S==="undefined"||!S||S.logDrag===false)return;
+     if(ev.target&&ev.target.closest("button"))return; // ボタンの操作は邪魔しない
+     y0=ev.clientY;
+   });
+   head.addEventListener("pointerup",ev=>{
+     if(y0==null)return;
+     const dy=ev.clientY-y0;y0=null;
+     if(Math.abs(dy)<28)return;
+     if(typeof stepLogSize==="function")stepLogSize(dy>0?1:-1); // 下へ払う＝小さく、上へ払う＝大きく
+   });
+   head.addEventListener("pointercancel",()=>{y0=null;});
+ }}
+/* ➡ 画面の右端から左へ払うとログを開く。右へ払うと閉じる（端の細い帯からの操作だけを見る） */
+{let sx=null,sy=null,edge=false;
+ const EDGE=22, NEED=44;
+ window.addEventListener("pointerdown",ev=>{
+   if(typeof S==="undefined"||!S||S.logSwipe===false)return;
+   sx=ev.clientX;sy=ev.clientY;
+   const d=document.getElementById("logDock");
+   const open=!!(d&&d.classList.contains("show"));
+   // 閉じている時は画面の右端から、開いている時はログの中からでも受け付ける
+   edge=open?true:(window.innerWidth-ev.clientX<=EDGE);
+ },{passive:true});
+ window.addEventListener("pointerup",ev=>{
+   if(sx==null||!edge){sx=sy=null;edge=false;return;}
+   const dx=ev.clientX-sx, dy=ev.clientY-sy;
+   sx=sy=null;edge=false;
+   if(Math.abs(dx)<NEED||Math.abs(dy)>Math.abs(dx))return; // 横方向にはっきり払った時だけ
+   const d=document.getElementById("logDock");if(!d)return;
+   if(dx<0&&!d.classList.contains("show")){d.classList.add("show");toast("📜 ログを開きました");}
+   else if(dx>0&&d.classList.contains("show")){d.classList.remove("show");}
+ },{passive:true});}
+{for(const [id,key] of [["optLogDrag","logDrag"],["optLogSwipe","logSwipe"]]){
+   const el=document.getElementById(id);
+   if(el)el.addEventListener("change",async()=>{
+     if(typeof S==="undefined"||!S)return;
+     S[key]=el.checked;
+     try{if(db)await idbPut("misc",key,el.checked?1:0);}catch(e){}
+   });
+ }}
+{const cb=document.getElementById("optLogFab");
+ if(cb)cb.addEventListener("change",async()=>{
+   if(typeof S==="undefined"||!S)return;
+   S.logFab=cb.checked;
+   if(typeof applyLogFab==="function")applyLogFab();
+   try{if(db)await idbPut("misc","logFab",S.logFab?1:0);}catch(e){}
+ });}
 {const b=document.getElementById("ldClose");if(b)b.addEventListener("click",()=>{const d=document.getElementById("logDock");if(d)d.classList.remove("show");});}
+/* 📜 ログの大きさを 大きく → 下半分 → 帯 の順に切り替える（スマホ・iPadで盤面を触りやすくするため） */
+{const b=document.getElementById("ldSize");
+ const modes=["","ld-half","ld-mini"]; // 大きく → 下半分 → 帯
+ // 1段階ずつ大きく／小さくする（指での引き上げ・引き下げからも使う）
+ window.stepLogSize=(dir)=>{
+   if(typeof S==="undefined"||!S)return;
+   const i=modes.indexOf(S.logSize||"");
+   const ni=Math.max(0,Math.min(modes.length-1,i+(dir>0?1:-1)));
+   if(ni===i)return;
+   S.logSize=modes[ni];
+   if(typeof applyLogDockSize==="function")applyLogDockSize();
+   try{if(db)idbPut("misc","logSize",S.logSize);}catch(e){}
+   toast(S.logSize==="ld-half"?"📜 ログを下半分にしました":S.logSize==="ld-mini"?"📜 ログを帯にしました":"📜 ログを大きくしました");
+ };
+ const label={"":"🗕","ld-half":"🗗","ld-mini":"🗖"};
+ const tips={"":"いま：大きく（押すと下半分へ）","ld-half":"いま：下半分（押すと帯へ）","ld-mini":"いま：帯（押すと大きくへ）"};
+ window.applyLogDockSize=()=>{
+   const d=document.getElementById("logDock");if(!d)return;
+   const m=(typeof S!=="undefined"&&S&&S.logSize)||"";
+   d.classList.remove("ld-half","ld-mini");
+   if(m)d.classList.add(m);
+   if(b){b.textContent=label[m]||"🗕";b.title=tips[m]||"";}
+ };
+ if(b)b.addEventListener("click",async()=>{
+   if(typeof S==="undefined"||!S)return;
+   const i=modes.indexOf(S.logSize||"");
+   S.logSize=modes[(i+1)%modes.length];
+   window.applyLogDockSize();
+   try{if(db)await idbPut("misc","logSize",S.logSize);}catch(e){}
+   toast(S.logSize==="ld-half"?"📜 ログを下半分にしました（盤面の上側が触れます）":S.logSize==="ld-mini"?"📜 ログを帯にしました（直近だけ表示）":"📜 ログを大きくしました");
+ });}
 {const b=document.getElementById("ldFull");if(b)b.addEventListener("click",()=>{openGameLog();});}
 {const b=document.getElementById("ldDeck");if(b)b.addEventListener("click",()=>{openDeckKnownInfo();});}
 function dlgReset(){$("askNum").style.display="none";$("askTxt").style.display="none";$("askChoices").style.display="none";$("askYN").style.display="";}
@@ -3053,6 +3183,10 @@ function qqqxLeaveShuffle(pi,c){
 
 /* ================= undo ================= */
 const HIST=[];
+/* 📜 1手戻る／やり直しに合わせてログも巻き戻すための記録。
+   HIST_LOG[i] は HIST[i] を取った時点のログの行数。REDO_LOG には巻き戻して消した行そのものを積む。 */
+const HIST_LOG=[];
+const REDO_LOG=[];
 const REDO=[];
 const REPLAY={on:false,frames:[],live:null,idx:0,timer:null,cur:null};
 let DECK_DIRTY=false;
@@ -3071,8 +3205,9 @@ function snap(){
   const s=serializeState();
   if(HIST.length&&HIST[HIST.length-1]===s)return;
   HIST.push(s);
-  if(HIST.length>50)HIST.shift();
-  REDO.length=0;
+  HIST_LOG.push(typeof GAMELOG!=="undefined"?GAMELOG.length:0);
+  if(HIST.length>50){HIST.shift();HIST_LOG.shift();}
+  REDO.length=0;REDO_LOG.length=0;
   // 📽 リプレイ：試合中はフレームも蓄積（リプレイ再生中は記録しない・上限600）
   if(typeof MATCH_CTX!=="undefined"&&MATCH_CTX&&!REPLAY.on){
     if(REPLAY.frames.length<600&&REPLAY.frames[REPLAY.frames.length-1]!==s)REPLAY.frames.push(s);
@@ -3113,6 +3248,11 @@ function undo(){
   const cur=JSON.parse(curStr);
   REDO.push(curStr);
   const st=JSON.parse(HIST.pop());
+  // 📜 戻した手で増えたログ行を取り置いて消す（やり直しで戻せるようにする）
+  {const cut=HIST_LOG.pop();
+   if(typeof GAMELOG!=="undefined"&&cut!=null&&cut<=GAMELOG.length){
+     REDO_LOG.push(GAMELOG.splice(cut));
+   }else REDO_LOG.push([]);}
   restoreState(st);
   if(st.t!==cur.t||st.w!==cur.w){
     toast(`⟲ 前のターンへ戻しました（ターン${st.t}${S.vs?"・"+S.players[st.w].label:""}／⌘⇧Zでやり直し）`);
@@ -3123,7 +3263,15 @@ function undo(){
 function redo(){
   if(!REDO.length){toast("やり直す操作がありません");return;}
   HIST.push(serializeState());
+  HIST_LOG.push(typeof GAMELOG!=="undefined"?GAMELOG.length:0);
   restoreState(JSON.parse(REDO.pop()));
+  // 📜 戻した時に消したログ行を元に戻す
+  {const back=REDO_LOG.pop();
+   if(typeof GAMELOG!=="undefined"&&Array.isArray(back)&&back.length){
+     GAMELOG.push(...back);
+     if(GAMELOG.length>600)GAMELOG.splice(0,GAMELOG.length-600);
+     if(typeof scheduleLogDock==="function")scheduleLogDock();
+   }}
   toast("やり直しました");
 }
 
@@ -5635,6 +5783,28 @@ async function autoTapCost(pi,c){
   }
   // 🖐 タップ式の代替コスト：コストを支払うかわりに、自分のバトルゾーンの対象をn体タップする
   //    （ハンド・オブ・ウィッシュ型。「必要な味方」を書いた場合はそれが場にある時だけ選べる）
+  // 🆓 G・ゼロ：条件を満たしていればコストを支払わずに召喚できる。
+  //    条件欄がゾーン条件式として読める時は自動で判定し、読めない時は文面を見せて確認する。
+  if(r.gzero&&cost>0){
+    const gz=String(r.gzero).trim();
+    let auto=null;
+    try{
+      const parseable=/(?:<=|>=|<|>|＝|=|以上|以下)/.test(gz)||/^(?:自分|相手)?(?:の)?(?:マナ|墓地|手札|盾|シールド|バトル|山札)/.test(gz);
+      if(parseable)auto=!!zoneCondOk(gz,pi,c);
+    }catch(e){auto=null;}
+    if(auto===false){
+      toast(`🆓 G・ゼロの条件を満たしていません（${gz}）。通常コストで召喚します`);
+    }else{
+      const j=await askChoice(`🆓 G・ゼロ（${faceNameOf(c)}）\n条件：${gz||"（条件未記入）"}${auto===true?"\n※条件を満たしています":""}\nコストを支払わずに召喚しますか？`,
+        [`G・ゼロで召喚（コスト0）`,`通常コスト（${cost}）で召喚`]);
+      if(j===0){
+        toast(`🆓 G・ゼロ：${faceNameOf(c)} をコストを支払わずに召喚`);
+        logOnly(`🆓 G・ゼロ：${S.players[pi].label} が ${faceNameOf(c)} をコストなしで召喚`);
+        return;
+      }
+      if(j===null)return;
+    }
+  }
   if(r.altTapF){
     // 🔧 「自分の〔対象〕がバトルゾーンにあれば」の判定は、クロス中のクロスギアも数える。
     //    （クロス中のギアは c.gear[] に入っていてバトルゾーンの配列には並ばないため、
@@ -11560,7 +11730,7 @@ async function runSelfAtkEnd(pi,c){
   if(isSealed(c)||isIgnored(c,pi))return;
   const r=getReg(c);
   if(!r||!r.watchFx)return;
-  const list=r.watchFx.filter(w=>w.ev==="selfAtkEnd"&&w.fx&&w.fx.length);
+  const list=r.watchFx.filter(w=>w.ev==="selfAtkEnd"&&w.t);
   if(!list.length)return;
   for(const w of list){
     // 条件式（例：盾<=2／マナ>=6／鬼エンド）を満たしていなければスキップ
@@ -11576,7 +11746,7 @@ async function runSelfAtkEnd(pi,c){
       if(!y)continue;
     }
     toast(`⚡ 攻撃の終わり：${faceNameOf(c)}`);
-    await runFxList(pi,w.fx,c);
+    await runFxList(pi,[w],c);
   }
   renderAll();
 }
@@ -11679,7 +11849,7 @@ async function execAttack(pi,id,tg){
     for(const sx of sxs){
       const rsx=getReg(sx);
       if(!rsx)continue;
-      const atkFx=(rsx.watchFx||[]).filter(w=>["selfAtk","selfAtkC","selfAtkP"].includes(w.ev)&&w.fx&&w.fx.length).flatMap(w=>w.fx);
+      const atkFx=(rsx.watchFx||[]).filter(w=>["selfAtk","selfAtkC","selfAtkP"].includes(w.ev)&&w.t);
       const cipFx=(rsx.faces&&rsx.faces[0]&&rsx.faces[0].length)?rsx.faces[0]:null;
       const md=modeCountFor(rsx,pi);
       if(!atkFx.length&&!cipFx&&md<=0)continue;
@@ -11721,7 +11891,7 @@ async function execAttack(pi,id,tg){
       const rg=getReg(gc);
       const gfx=rg.watchFx.filter(w=>w.ev==="allyAtk");
       const j=await askChoice(`⚡《${faceNameOf(gc)}》：味方クリーチャー攻撃時の効果（攻撃：${faceNameOf(c)}）`,
-        [gfx.some(w=>w.fx&&w.fx.length)?"✨ 登録済みの効果を実行":"✨ 任意の効果を選択（効果メニュー）","⏸ 処理中にする（攻撃を保留→▶再開）","使わない"]);
+        [gfx.some(w=>w.t)?"✨ 登録済みの効果を実行":"✨ 任意の効果を選択（効果メニュー）","⏸ 処理中にする（攻撃を保留→▶再開）","使わない"]);
       if(j===null||j===2)continue;
       if(j===1){
         c._allyAtkDone=true;
@@ -11730,7 +11900,7 @@ async function execAttack(pi,id,tg){
         renderAll();
         return;
       }
-      if(gfx.some(w=>w.fx&&w.fx.length)){
+      if(gfx.some(w=>w.t)){
         toast(`⚡味方攻撃時効果：${faceNameOf(gc)}`);
         await runFxList(pi,gfx,gc);
       }else{
@@ -26364,6 +26534,20 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   if(lk)for(const [k,v] of Object.entries(lk))LINKS.set(k,v);
   {const bo=db?await idbGet("misc","builtinOff"):null;if(bo!==null&&bo!==undefined)BUILTIN_OFF=!!bo;}
   {const lc=db?await idbGet("misc","listCols"):null;if(lc)B._listCols=+lc||8;}
+  {const ls=db?await idbGet("misc","logSize"):null;if(ls!=null)S.logSize=String(ls||"");}
+  {const lf=db?await idbGet("misc","logFab"):null;S.logFab=(lf==null)?true:!!lf;}
+  {const ld=db?await idbGet("misc","logDrag"):null;S.logDrag=(ld==null)?true:!!ld;
+   const e=$("optLogDrag");if(e)e.checked=S.logDrag;}
+  {const lw=db?await idbGet("misc","logSwipe"):null;S.logSwipe=(lw==null)?true:!!lw;
+   const e=$("optLogSwipe");if(e)e.checked=S.logSwipe;}
+  if(typeof applyLogDockSize==="function")applyLogDockSize();
+  if(typeof applyLogFab==="function")applyLogFab();
+  // 📣 ログまわりの操作が変わったことを、既にお使いの方にも一度だけ案内する
+  {const seen=db?await idbGet("misc","noticeLogUI2"):null;
+   if(!seen){
+     setTimeout(()=>toast("📜 ログの出し方が変わりました\n右下の丸ボタン、または画面の右端から左へ払うと開きます。見出しを上下に動かすと「大きく／下半分／帯」を切り替えられます。3つとも設定でオフにできます"),1200);
+     try{if(db)await idbPut("misc","noticeLogUI2",1);}catch(e){}
+   }}
   await applyBuiltinCardFx(); // 📦 同梱データは土台。ユーザー自身の登録は上書きしない
   const so=db?await idbGet("misc","sound"):null;
   if(so!==null&&so!==undefined)S.sound=!!so;
