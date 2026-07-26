@@ -1061,6 +1061,7 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
       <div class="row">
         <button class="btn small" id="olDeckSend">📤 自分のデッキを相手に送る</button>
+        <button class="btn small" id="olFxShare">📦 カード登録の受け渡し</button>
       </div>
       <div class="row">
         <button class="btn small warn" id="olResign">🏳 投了</button>
@@ -1403,6 +1404,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxRepShield"> 離れるかわりに表向きの盾カードを1枚墓地へ（サッヴァーク型）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="このクリーチャーが離れる時、かわりに自分のバトルゾーンにある表向きのカード（自身を除く）をn枚破壊して場に残る（ジャオウガ型）。破壊・バウンス・マナ送り・盾送りなど、離れるすべてに働きます"><input type="checkbox" id="fxUnderLeaveRep"> 🔽 離れるかわりに、自分の表向きのカードを<input type="number" id="fxUnderLeaveRepN" min="1" max="9" value="3" style="width:52px">枚破壊（ジャオウガ型）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="自分がゲームに負ける時、かわりに自分のバトルゾーンにある表向きのカード（自身を除く）をn枚破壊して負けない（ジャオウガ型）"><input type="checkbox" id="fxUnderLoseRep"> 💀 負けるかわりに、自分の表向きのカードを<input type="number" id="fxUnderLoseRepN" min="1" max="9" value="3" style="width:52px">枚破壊（ジャオウガ型）</label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="上の2つの置換で、「表向きのカードをn枚破壊」のかわりに「自分のシールドを1つ墓地に置く」も選べるようにします（CRY-S-MAX ジャオウガ型）"><input type="checkbox" id="fxUnderRepShield"> 🛡 上の置換で「自分のシールドを1つ墓地に置く」も選べる（カリスマックス型）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="自分がゲームに負ける時、かわりに手札から〔対象〕のクリーチャー1体を、このカードの上に置いて負けない（一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）。対象は種族や「コスト5以下」で指定できます"><input type="checkbox" id="fxLoseRepTop"> 💀 負けるかわりに、手札から1体をこの上に置く／対象<input type="text" id="fxLoseRepTopF" list="raceList" placeholder="例：デモニオ（空欄＝すべて）" style="width:150px">コスト<input type="number" id="fxLoseRepTopC" min="0" max="99" value="0" style="width:52px">以下（0＝制限なし）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap"><input type="checkbox" id="fxRepLeave"> 離れるかわりに、自分の
           <select id="fxRepLeaveZone" style="width:auto">
@@ -2531,12 +2533,48 @@ const S={
   extra:[0,0],
   gameMode:"dmps", autoTap:false, noUntapMana:false, tapMultiMana:true,
 };
-const imgURL=new Map();
+/* 🖼 登録画像の管理（Safariのメモリ対策）
+   これまでは起動時に登録画像すべてぶんの一時URLを作っていたため、枚数が増えると
+   「メモリの使用量が多すぎたため、このWebページが再読み込みされました」が出やすかった。
+   → 画像データだけを持っておき、実際に表示を求められたキーの一時URLだけを作る。
+   使い方は今までのMapと同じ（get/has/keys/size/delete/clear）。登録は setBlob（またはset）に画像データを渡す。 */
+const imgURL=(()=>{
+  const blobs=new Map(); // キー→画像データ
+  const urls=new Map();  // キー→一時URL（求められた分だけ作る）
+  const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));urls.delete(k);}};
+  const api={
+    get size(){return blobs.size;},
+    has(k){return blobs.has(k);},
+    keys(){return blobs.keys();},
+    get(k){
+      if(!blobs.has(k))return undefined;
+      let u=urls.get(k);
+      if(!u){u=URL.createObjectURL(blobs.get(k));urls.set(k,u);}
+      return u;
+    },
+    setBlob(k,b){drop(k);blobs.set(k,b);return api;},
+    set(k,b){return api.setBlob(k,b);},
+    getBlob(k){return blobs.get(k);},
+    delete(k){drop(k);return blobs.delete(k);},
+    clear(){urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();blobs.clear();},
+    forEach(fn){blobs.forEach((b,k)=>fn(api.get(k),k));},
+    liveCount(){return urls.size;}, // 実際に一時URLを作った枚数（メモリの目安）
+  };
+  return api;
+})();
 const dispName=new Map();
 const imgOrder=new Map(); // キー→登録した順の連番（追加順ソート用）
 let imgSeq=0;             // 登録連番のカウンタ
 let regListSort="name";  // 効果登録一覧の並び順："name"=名前順（既定）/"added"=登録した順
 const FXDB=new Map();
+/* ===== BUILTIN_CARDFX_START =====
+   同梱するカード登録データ。マーカーの間を丸ごと差し替えれば更新できる。
+   （JSONを別タグで埋め込むと scripts=1 の検証が壊れるため、必ずこのJS変数として持つ）
+   起動時、ユーザー自身が登録していないカードだけ土台として取り込む。 */
+const BUILTIN_CARDFX={v:1,updated:"",cardFx:{},faceLinks:{},nameMap:{}};
+/* ===== BUILTIN_CARDFX_END ===== */
+let BUILTIN_OFF=false;      // 「同梱データを使わない」トグル
+let BUILTIN_NEWER=null;     // 自分の登録より同梱データが新しかったもの（起動時に通知）
 const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
@@ -2614,6 +2652,8 @@ function markArrive(c){
       const tk=`${S.turn}:${S.who}`;
       if(S._turnArrived.key!==tk){S._turnArrived={key:tk,list:[]};}
       S._turnArrived.list.push({pi:own,id:c.id,name:faceNameOf(c),reg:getReg(c)});
+      // 👑 S-MAX進化が出たら、自分の場に2体以上ないか確認する
+      if(S.expert&&isSmaxReg(getReg(c)))smaxUniqueCheck(own,c);
       // 🛡 シールド・フォース／シールド・プラス：どの経路（ドラッグ・パネル・踏み倒し・進化）で出ても盾指定を確認
       //    ※二重確認ガード：同じ到着でmarkArriveが複数回呼ばれても1.5秒以内は1回だけ
       const rgA=getReg(c);
@@ -3081,6 +3121,15 @@ const idbTx=(s,fn)=>new Promise(r=>{if(!db)return r(null);try{const t=db.transac
 const idbPut=(s,k,v)=>idbTx(s,st=>st.put(v,k));
 const idbDel=(s,k)=>idbTx(s,st=>st.delete(k));
 const idbClear=s=>idbTx(s,st=>st.clear());
+/* 🕒 効果登録に「いつ更新したか・どこから来たか」を記録する。
+   共有データや同梱データと突き合わせる時、どちらが新しいかを判断するために使う。
+   _v：更新時刻（ミリ秒）／_src："self"＝自分で登録、"builtin"＝同梱データ、"shared:名前"＝他の人からもらった登録 */
+function stampFx(reg,src){
+  if(!reg||typeof reg!=="object")return reg;
+  reg._v=Date.now();
+  reg._src=src||"self";
+  return reg;
+}
 async function persistFx(){if(db)await idbPut("misc","cardFx",Object.fromEntries(FXDB));}
 async function persistLinks(){if(db)await idbPut("misc","faceLinks",Object.fromEntries(LINKS));}
 async function persistNames(){if(db)await idbPut("misc","nameMap",Object.fromEntries(dispName));}
@@ -3088,13 +3137,13 @@ async function persistImgOrder(){if(db)await idbPut("misc","imgOrder",{seq:imgSe
 
 /* ================= images ================= */
 async function loadAllImages(){
-  imgURL.forEach(u=>URL.revokeObjectURL(u)); imgURL.clear();
+  imgURL.clear();
   if(db){
     for(const k of await idbKeys("images")){
       const b=await idbGet("images",k);
-      if(b) imgURL.set(k,URL.createObjectURL(b));
+      if(b) imgURL.setBlob(k,b);
     }
-  }else memImages.forEach((b,k)=>imgURL.set(k,URL.createObjectURL(b)));
+  }else memImages.forEach((b,k)=>imgURL.setBlob(k,b));
   $("imgStatus").textContent=`登録済み画像：${imgURL.size} 枚`;
 }
 function backURL(pi){
@@ -4085,6 +4134,39 @@ let WATCH_CHAIN=Promise.resolve();
 function enqueueWatchJob(fn){
   WATCH_CHAIN=WATCH_CHAIN.then(async()=>{
     try{await waitFxIdle();await fn();}catch(e){console.warn(e);}
+  });
+}
+/* 👑 S-MAX進化は自分の場に1体だけ。2体以上になったら1体を残し、残りをすべて手札に戻す
+   （CRY-S-MAX ジャオウガ等の「自分のS-MAX進化クリーチャーが2体以上あれば、そのうちの1体を残し、残りをすべて手札に戻す」） */
+const SMAX_CT=["smaxevo","onismaxevo"];
+function isSmaxReg(r){return !!(r&&SMAX_CT.includes(r.ctype));}
+function smaxUniqueCheck(pi,justArrived){
+  if(!S.expert)return;
+  const Z=zonesOf(pi);
+  if(Z.battle.filter(x=>isSmaxReg(getReg(x))&&!isSealed(x)).length<2)return;
+  enqueueWatchJob(async()=>{
+    const list=zonesOf(pi).battle.filter(x=>isSmaxReg(getReg(x))&&!isSealed(x));
+    if(list.length<2)return;
+    const j=await pickCard(`👑 S-MAX進化は1体だけ：場に残す1体を選択（残りはすべて手札に戻ります）`,list,
+      {hint:"タップで選択　／　キャンセルで最後に出たものを残します"});
+    const keep=(j===null)?(list.find(x=>justArrived&&x.id===justArrived.id)||list[list.length-1]):list[j];
+    const ZB=zonesOf(pi);
+    const back=[];
+    for(const x of list){
+      if(x.id===keep.id)continue;
+      const idx=ZB.battle.findIndex(y=>y.id===x.id);
+      if(idx<0)continue;
+      leaveBattleCleanup(ZB,x,"hand"); // 装備・封印・重なっていたカードを整理
+      ZB.battle.splice(idx,1);
+      x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;x.seals=[];x.faceup=true;x.mark=false;
+      if(typeof toHand==="function")toHand(ZB,x);else ZB.hand.push(x);
+      back.push(faceNameOf(x));
+    }
+    if(back.length){
+      sfx("move");renderAll();
+      toast(`👑 S-MAX進化は1体だけ：${back.join("、")} を手札に戻した（${faceNameOf(keep)} が残る）`);
+      logOnly(`👑 S-MAX進化の重複：${back.join("、")} を手札へ（${faceNameOf(keep)} を残した）`);
+    }
   });
 }
 function runWatchFx(pi,type,trigCard){
@@ -5327,6 +5409,9 @@ function cardInfoText(key){
   if(r.cost!=null)head.push(`コスト${r.cost}${r.cost2!=null?`/${r.cost2}`:""}`);
   if(r.power!=null&&r.power!=="")head.push(`パワー${r.power}${r.pa?`（PA+${r.pa}）`:""}`);
   L.push(head.join("・"));
+  // 📦 この登録がどこから来たか（自分の登録／同梱データ／もらった登録）
+  {const sv=r._src;
+   L.push(`出所：${sv==="builtin"?"📦 同梱データ":(typeof sv==="string"&&sv.indexOf("shared:")===0)?`🤝 ${sv.slice(7)} からもらった登録`:"👤 自分の登録"}${r._v?`（更新 ${new Date(r._v).toLocaleDateString("ja-JP")}）`:""}`);}
   const races=[...(r.races||[]),...(r.races2||[])].filter(Boolean);
   if(races.length)L.push(`種族：${races.join("／")}`);
   // キーワード類
@@ -5510,7 +5595,10 @@ async function autoTapCost(pi,c){
   // 🖐 タップ式の代替コスト：コストを支払うかわりに、自分のバトルゾーンの対象をn体タップする
   //    （ハンド・オブ・ウィッシュ型。「必要な味方」を書いた場合はそれが場にある時だけ選べる）
   if(r.altTapF){
-    const needOk=!r.altTapNeed||Z.battle.some(x=>{const rx=getReg(x);return rx&&!isSealed(x)&&lockFilterOk(r.altTapNeed,rx,x);});
+    // 🔧 「自分の〔対象〕がバトルゾーンにあれば」の判定は、クロス中のクロスギアも数える。
+    //    （クロス中のギアは c.gear[] に入っていてバトルゾーンの配列には並ばないため、
+    //      ゼニスの進化クロスギアをクロスした状態だと条件を満たさない判定になっていた）
+    const needOk=!r.altTapNeed||zoneCards(Z,"battle").some(x=>{const rx=getReg(x);return rx&&!isSealed(x)&&lockFilterOk(r.altTapNeed,rx,x);});
     const tapN=Math.max(1,+r.altTapN||1);
     const poolOf=()=>Z.battle.filter(x=>{
       const rx=getReg(x);
@@ -6383,7 +6471,9 @@ async function runFxList(pi,list,srcCard,inPump){
   for(const f of list){
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
-    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap"]);
+    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap",
+      // 🔧 条件欄を「対象の絞り込み／書式」として使う効果（ゾーン条件式として判定してはいけない）
+      "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS"]);
     // 🪧 「召喚時のみ」の効果：このカードの出た方法を1回だけ確認してゲート
     if(f.sumOnly&&srcCard){
       if(srcCard._wasSummon==null){
@@ -6797,22 +6887,43 @@ async function runFxList(pi,list,srcCard,inPump){
       const filt=_p[0]||"";        // 破壊対象の条件（例：無色以外）
       const rf=_p[1]||"";          // 回収条件（例：ゼニス｜オラクル）
       const rn=Math.max(0,parseInt(_p[2],10)||0); // 回収枚数（0＝回収しない）
-      const elemsOf=pp=>zonesOf(pp).battle.filter(x=>{
+      // 🔧 エレメント＝バトルゾーンのカード＋クロス中のクロスギア（クロス中のギアは配列に並ばないためzoneCardsで拾う）
+      const elemsOf=pp=>zoneCards(zonesOf(pp),"battle").filter(x=>{
         const rx=getReg(x);
         if(!rx)return true;
         if(filt&&!lockFilterOk(filt,rx,x))return false;
         return true;
       });
+      // 🚫 「選ばれない」：相手のエレメントを選ぶ時だけ対象から外す
+      const _ncOk=(x,own)=>{const rx=getReg(x);return !(((rx&&rx.noChoose)||momoUntouchable(x))&&own!==pi&&!isIgnored(x,own));};
       let selfKilled=false,killed=0;
       for(let i=0;i<n;i++){
-        const pool=[...elemsOf(pi).map(x=>({x,own:pi})),...(S.vs?elemsOf(op).map(x=>({x,own:op})):[])];
+        const pool=[...elemsOf(pi).map(x=>({x,own:pi})),...(S.vs?elemsOf(op).map(x=>({x,own:op})):[])].filter(o=>_ncOk(o.x,o.own));
         if(!pool.length){if(i===0)toast(`破壊できるエレメントがありません${filt?`（${filt}）`:""}`);break;}
         const j=pool.length===1?0:await pickCard(`💥 破壊するエレメントを選択（${i+1}/${n}個目${filt?`・${filt}`:""}）`,pool.map(o=>o.x),{hint:"自分／相手どちらのエレメントでも選べます"});
         if(j===null)break;
         const t=pool[j];
-        if(t.own===pi)selfKilled=true;
-        await destroyCreature(t.own,t.x,{});
-        killed++;
+        const TZe=zonesOf(t.own);
+        // クロス中のクロスギアは共通の破壊処理を通れないため、クロス元から外して墓地へ置く
+        const host=TZe.battle.find(h=>(h.gear||[]).some(g=>g.id===t.x.id));
+        if(host){
+          const gi=host.gear.findIndex(g=>g.id===t.x.id);
+          if(gi>=0){
+            const g=host.gear.splice(gi,1)[0];
+            g.faceup=true;g.tapped=false;g.rot=0;g.isCross=false;
+            TZe.grave.push(g);
+            if(t.own===pi)selfKilled=true;
+            killed++;sfx("grave");
+            toast(`💥 クロス中の ${faceNameOf(g)} を破壊（墓地へ）`);
+          }
+        }else{
+          await destroyWithReplace(t.own,t.x);
+          // 置換（エスケープ／真エスケープ等）で場に残った場合は「破壊した」に数えない
+          if(!TZe.battle.some(x=>x.id===t.x.id)){
+            if(t.own===pi)selfKilled=true;
+            killed++;
+          }
+        }
         renderAll();
       }
       if(killed)toast(`💥 エレメントを${killed}個破壊${selfKilled?"（自分のエレメントを含む）":""}`);
@@ -9022,6 +9133,9 @@ async function pumpFx(){
   try{ // 🛡 例外でfxRunningが立ちっぱなしになるとEXモード全停止するため、全体をtry/finallyで保護
   try{await MOVE_TAP_CHAIN;}catch(e){}
   while(fxQueue.length){
+    // 💰 効果を処理している最中に手札からカードを出した／唱えた場合、そのコスト支払い（代替コストの選択を含む）を先に済ませる。
+    //    1枚ごとに待たないと、コストの確認より先に効果が解決してしまい、確認が後の操作までずれ込む。
+    try{await MOVE_TAP_CHAIN;}catch(e){}
     const {pi,c,reg}=fxQueue.shift();
     fxInsertAt=0; // 🔢 このカードの子CIP（結果出たカード）は残りキューの先頭から順に入れる＝深さ優先で先に解決
     // ▶ 効果処理の演出待ち：連続処理（キューが多い）時は短縮して詰まり感を軽減
@@ -9667,12 +9781,40 @@ async function offerTrueEscape(pi,c){
    破壊できたらtrue（＝離れない／負けない）。 */
 async function faceupDestroyRep(pi,c,n,kindLabel){
   const Z=zonesOf(pi);
+  const rRep=getReg(c);
+  const canShield=!!(rRep&&rRep.underRepShield)&&Z.shield.length>0; // 🛡 「〜するか、自分のシールドを1つ墓地に置いてもよい」（カリスマックス型）
   const pool=()=>Z.battle.filter(x=>x.id!==(c?c.id:null)&&x.faceup!==false);
-  if(!pool().length)return false;
   const avail=pool().length;
-  const y=await ask(`${kindLabel}\nかわりに自分の表向きのカードを${n}枚破壊しますか？${avail<n?`\n（表向きのカードは${avail}枚しかありません。あるだけ破壊します）`:""}`);
-  if(!y)return false;
+  if(!avail&&!canShield)return false;
+  let mode=0;
+  if(canShield){
+    const opts=[];
+    if(avail)opts.push(`自分の表向きのカードを${n}枚破壊する${avail<n?`（${avail}枚しかないのであるだけ）`:""}`);
+    opts.push("自分のシールドを1つ墓地に置く");
+    const j=await askChoice(`${kindLabel}\nかわりに、どちらを行いますか？（キャンセル＝置き換えない）`,opts);
+    if(j===null)return false;
+    mode=(avail&&j===0)?0:1;
+  }else{
+    const y=await ask(`${kindLabel}\nかわりに自分の表向きのカードを${n}枚破壊しますか？${avail<n?`\n（表向きのカードは${avail}枚しかありません。あるだけ破壊します）`:""}`);
+    if(!y)return false;
+  }
   snap();
+  if(mode===1){
+    // 🛡 シールドを1つ墓地へ（どれを置くかは選べる）
+    const sh=Z.shield.slice();
+    if(!sh.length)return false;
+    const js=sh.length===1?0:await pickCard("🛡 墓地に置くシールドを選択",sh,{hint:"タップで選択"});
+    const t=sh[js===null?0:js];
+    const idx=Z.shield.findIndex(x=>x.id===t.id);
+    if(idx<0)return false;
+    const rm=Z.shield.splice(idx,1)[0];
+    rm.faceup=true;rm.tapped=false;rm.sideways=false;rm.mark=false;
+    if(rm.under&&rm.under.length)rm.under.splice(0).forEach(u=>{u.faceup=true;Z.grave.push(u);});
+    Z.grave.push(rm);
+    renderAll();
+    toast("🛡 シールドを1つ墓地に置いた");
+    return true;
+  }
   const names=[];
   for(let i=0;i<n;i++){
     const ps=pool();
@@ -12135,7 +12277,7 @@ const FX_CARD_SPECIFIC=new Set(["deckPin4","diaBliz","breakMineAny","suspenseRev
    type: 効果タイプ（出た時fx＋誘発fxのt）／ev: 誘発タイミング／kw: キーワード系フラグ（boolean true / 数値>0） */
 function fxUsageCounts(){
   const type=new Map(),ev=new Map(),kw=new Map();
-  const SKIP=new Set(["twin","faces","twinTop","power","dest","name","key","ctype","civs","race","races","cost","cost2","breaks","img","memo","twinName","watchFx"]);
+  const SKIP=new Set(["twin","faces","twinTop","power","dest","name","key","ctype","civs","race","races","cost","cost2","breaks","img","memo","twinName","watchFx","_v","_src"]);
   for(const [,r] of FXDB){
     if(!r)continue;
     const seenT=new Set(),seenE=new Set();
@@ -13150,6 +13292,7 @@ function renderFxEditor(){
   {const e=$("fxUnderLeaveRepN");if(e)e.value=String(FXEDIT.underLeaveRepN||3);}
   {const e=$("fxUnderLoseRep");if(e)e.checked=!!FXEDIT.underLoseRep;}
   {const e=$("fxUnderLoseRepN");if(e)e.value=String(FXEDIT.underLoseRepN||3);}
+  {const e=$("fxUnderRepShield");if(e)e.checked=!!FXEDIT.underRepShield;}
   {const e=$("fxLoseRepTop");if(e)e.checked=!!FXEDIT.loseRepTop;}
   {const e=$("fxLoseRepTopF");if(e)e.value=FXEDIT.loseRepTopF||"";}
   {const e=$("fxLoseRepTopC");if(e)e.value=String(FXEDIT.loseRepTopC||0);}
@@ -14023,6 +14166,8 @@ function parseCardText(txt,mode){
    if(mL){out.set.underLeaveRep=true;out.set.underLeaveRepN=+mL[1];}}
   {const mW=t.match(/(?:ゲームに)?負ける時[^■]{0,60}?かわりに[^■]{0,40}?表向きのカードを(\d+)枚破壊/);
    if(mW){out.set.underLoseRep=true;out.set.underLoseRepN=+mW[1];}}
+  // 🛡 「〜するか、自分のシールドを1つ墓地に置いてもよい」＝置換の第2選択肢（カリスマックス型）
+  {if(/シールドを[１1]つ墓地に置/.test(t)&&/かわりに/.test(t))out.set.underRepShield=true;}
   // ⚙ 常在：自分の〔対象〕を実行/召喚するコストをn少なく
   {const mCA=t.match(/自分の(.{1,30}?)を(?:実行|召喚|使用)する?コストを(\d+)少なくする/);
    if(mCA){out.set.costRedAllyF=mCA[1].split(/または|や|、|,/).map(x=>x.trim()).filter(Boolean).join("／");out.set.costRedAllyN=+mCA[2];
@@ -15066,6 +15211,7 @@ function openFxEditor(key){
     underLeaveRepN:cur&&+cur.underLeaveRepN||3,
     underLoseRep:cur?!!cur.underLoseRep:false,
     underLoseRepN:cur&&+cur.underLoseRepN||3,
+    underRepShield:cur?!!cur.underRepShield:false,
     loseRepTop:cur?!!cur.loseRepTop:false,
     loseRepTopF:cur&&cur.loseRepTopF||"",
     loseRepTopC:cur&&+cur.loseRepTopC||0,
@@ -15426,6 +15572,7 @@ $("fxSave").addEventListener("click",async ()=>{
     underLeaveRepN:$("fxUnderLeaveRepN")?(parseInt($("fxUnderLeaveRepN").value,10)||3):3,
     underLoseRep:$("fxUnderLoseRep")?$("fxUnderLoseRep").checked:false,
     underLoseRepN:$("fxUnderLoseRepN")?(parseInt($("fxUnderLoseRepN").value,10)||3):3,
+    underRepShield:$("fxUnderRepShield")?$("fxUnderRepShield").checked:false,
     loseRepTop:$("fxLoseRepTop")?$("fxLoseRepTop").checked:false,
     loseRepTopF:$("fxLoseRepTopF")?$("fxLoseRepTopF").value.trim():"",
     loseRepTopC:$("fxLoseRepTopC")?(parseInt($("fxLoseRepTopC").value,10)||0):0,
@@ -15678,6 +15825,7 @@ $("fxSave").addEventListener("click",async ()=>{
       turnEndBoth:$("fxWatchTurnEndBoth").checked,
     },
   });
+  stampFx(FXDB.get(FXEDIT.key),"self"); // 🕒 自分が更新した記録を残す（共有データとの突き合わせ用）
   await persistFx();
   sfx("ok");
   toast(`《${FXEDIT.name}》の登録を保存しました`);
@@ -16051,6 +16199,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.noBaseEvo)attrs.push("進化元不要");
     if(v.underLeaveRep)attrs.push(`離場置換：自分の表向き${v.underLeaveRepN||3}枚破壊`);
     if(v.underLoseRep)attrs.push(`敗北置換：自分の表向き${v.underLoseRepN||3}枚破壊`);
+    if(v.underRepShield)attrs.push("置換で「自分のシールドを1つ墓地に置く」も選べる");
     if(v.loseRepTop)attrs.push(`敗北置換：手札から${v.loseRepTopF||"1体"}${v.loseRepTopC?`(コスト${v.loseRepTopC}以下)`:""}を上に置く`);
     if(v.gneo)attrs.push("G・NEO進化");
     if(v.shieldGo)attrs.push("シールド・ゴー");
@@ -18981,11 +19130,29 @@ function setupConn(conn){
       if(!imgURL.has(msg.key)&&msg.buf){
         try{
           const blob=new Blob([msg.buf],{type:"image/jpeg"});
-          imgURL.set(msg.key,URL.createObjectURL(blob));
+          imgURL.setBlob(msg.key,blob);
           if(msg.key!=="__back__"&&!dispName.has(msg.key))dispName.set(msg.key,msg.name||msg.key);
           renderAll();
         }catch(e){}
       }
+    }
+    else if(msg&&msg.t==="fx"){
+      // 📦 カード登録の受信。盤面が壊れないよう、すぐには反映せず受信箱に貯めて差分画面で確認してもらう
+      if(!msg.items||typeof msg.items!=="object")return;
+      if((msg.chunk|0)===0){FX_INBOX.items={};FX_INBOX.names={};FX_INBOX.links={};}
+      FX_INBOX.from=String(msg.from||"相手").slice(0,12);
+      for(const [k,v] of Object.entries(msg.items)){
+        if(typeof k!=="string"||!k||!v||typeof v!=="object"||Array.isArray(v))continue;
+        FX_INBOX.items[k]=v;
+      }
+      if(msg.names&&typeof msg.names==="object")for(const [k,v] of Object.entries(msg.names)){if(typeof v==="string")FX_INBOX.names[k]=v.slice(0,60);}
+      if(msg.links&&typeof msg.links==="object")for(const [k,v] of Object.entries(msg.links)){if(Array.isArray(v))FX_INBOX.links[k]=v.filter(x=>typeof x==="string").slice(0,8);}
+      const cnt=fxInboxCount();
+      if((msg.chunk|0)+1>=(msg.total|0)){
+        sfx("ok");
+        toast(`📥 ${FX_INBOX.from} からカード登録${cnt}件を受信しました\n「📦 カード登録の受け渡し」→「受け取った登録を確認して取り込む」で反映できます`);
+        if(S.turn<=0)showFxDiffPanel(); // 対戦前なら、そのまま確認画面を開く
+      }else toast(`📥 カード登録を受信中… ${cnt}件`);
     }
     else if(msg&&msg.t==="link"){
       if(msg.base&&msg.faces&&!LINKS.has(msg.base))LINKS.set(msg.base,msg.faces);
@@ -19077,12 +19244,14 @@ function olLeaveRoom(){
   const b=$("olLeave");if(b)b.style.display="none";
 }
 async function shrinkImageBlob(blob,maxW=480,q=0.8){
+  let tmpURL=null;
   try{
     const img=await new Promise(res=>{
       const im=new Image();
       im.onload=()=>res(im);
       im.onerror=()=>res(null);
-      im.src=URL.createObjectURL(blob);
+      tmpURL=URL.createObjectURL(blob);
+      im.src=tmpURL;
     });
     if(!img)return blob;
     const sc=Math.min(1,maxW/img.naturalWidth);
@@ -19091,8 +19260,10 @@ async function shrinkImageBlob(blob,maxW=480,q=0.8){
     cv.height=Math.max(1,Math.round(img.naturalHeight*sc));
     cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
     const out=await new Promise(res=>cv.toBlob(res,"image/jpeg",q));
+    cv.width=cv.height=0; // 🧹 キャンバスの確保を早めに手放す
     return out||blob;
   }catch(e){return blob;}
+  finally{if(tmpURL)URL.revokeObjectURL(tmpURL);}
 }
 async function olSendDeckImages(names){
   if(!ONLINE.conn||!ONLINE.conn.open)return;
@@ -19731,6 +19902,235 @@ async function doResign(){
     try{ONLINE.conn.send({t:"resign",loser,score:SCORE.slice()});}catch(e){}
   }
   renderAll();
+}
+/* ================= カード登録の受け渡し（合言葉でつないだ相手と） =================
+   受け取った登録はすぐには反映せず、いったん受信箱に貯めて差分画面で確認してから取り込む。
+   （黙って上書きすると、自分で直した登録が他の人の古い登録に戻る事故が起きるため） */
+const FX_INBOX={from:"",items:{},names:{},links:{}};
+function fxInboxCount(){return Object.keys(FX_INBOX.items).length;}
+/* 送る対象のキーを集める。scope＝"all"／"deck"（デッキで使うカードだけ）／"recent"（最近更新した分だけ） */
+function fxShareKeys(scope,deckNames){
+  const all=[...FXDB.keys()];
+  if(scope==="deck"){
+    const set=new Set();
+    for(const nm of (deckNames||[])){
+      const k=normName(nm);set.add(k);
+      const l=LINKS.get(k);if(l)for(const f of l)set.add(f);
+    }
+    return all.filter(k=>set.has(k));
+  }
+  if(scope==="self")return all.filter(k=>((FXDB.get(k)||{})._src)==="self");
+  if(scope==="recent"){
+    const th=Date.now()-14*86400000;
+    return all.filter(k=>((FXDB.get(k)||{})._v|0)>=th);
+  }
+  return all;
+}
+/* 分割して送る（一度に大量に送るとつながりが詰まるため、画像と同じく数十件ずつ間隔を空ける） */
+async function olSendFx(keys,label){
+  if(!ONLINE.conn||!ONLINE.conn.open){toast("先にオンライン接続してください");return;}
+  if(!keys.length){toast("送るカード登録がありません");return;}
+  const CH=25, total=Math.ceil(keys.length/CH);
+  const me=S.players[S.seat|0].label;
+  for(let i=0;i<total;i++){
+    const part=keys.slice(i*CH,(i+1)*CH);
+    const items={},names={},links={};
+    for(const k of part){
+      const r=FXDB.get(k);if(!r)continue;
+      items[k]=r;
+      if(dispName.has(k))names[k]=dispName.get(k);
+      if(LINKS.has(k))links[k]=LINKS.get(k);
+    }
+    try{ONLINE.conn.send({t:"fx",from:me,chunk:i,total,items,names,links});}
+    catch(e){toast("送信に失敗しました");return;}
+    if(total>4&&i%4===3)toast(`📤 カード登録を送信中… ${Math.min((i+1)*CH,keys.length)}/${keys.length}`);
+    await new Promise(r=>setTimeout(r,60));
+  }
+  toast(`📤 カード登録${keys.length}件を送信しました（${label}）`);
+}
+/* 📦 受け取った登録の差分を見て、採用するものを選ぶ画面 */
+function showFxDiffPanel(){
+  const items=FX_INBOX.items;
+  const keys=Object.keys(items);
+  if(!keys.length){toast("受け取ったカード登録はありません");return;}
+  // 3分類：new＝自分が持っていない／newer＝相手の方が新しい／old＝自分の方が新しい（または同じ）
+  const clsOf=k=>{
+    const cur=FXDB.get(k);
+    if(!cur)return "new";
+    return (((items[k]||{})._v|0)>(cur._v|0))?"newer":"old";
+  };
+  const sumOf=r=>{
+    if(!r)return "（自分は未登録）";
+    const fx=((r.faces&&r.faces[0]&&r.faces[0].length)|0)+((r.faces&&r.faces[1]&&r.faces[1].length)|0);
+    const cv=(r.cost!=null&&r.cost!=="")?r.cost:"-";
+    const pw=(r.power!=null&&r.power!=="")?r.power:"-";
+    return `コスト${cv}／パワー${pw}／効果${fx}件`;
+  };
+  const pick=new Set();
+  for(const k of keys){
+    const c=clsOf(k), cur=FXDB.get(k);
+    // 既定は「自分優先」：自分の手が入った登録は黙って上書きしない
+    if(c==="new")pick.add(k);
+    else if(c==="newer"&&!(cur&&cur._src==="self"))pick.add(k);
+  }
+  const order={new:0,newer:1,old:2};
+  keys.sort((a,b)=>(order[clsOf(a)]-order[clsOf(b)])||String(dispName.get(a)||a).localeCompare(String(dispName.get(b)||b),"ja"));
+  const ol=document.createElement("div");
+  ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:995;display:flex;flex-direction:column;padding:12px;gap:8px";
+  const head=document.createElement("div");
+  head.style.cssText="color:#fff;font-weight:900;font-size:15px;line-height:1.5";
+  const nNew=keys.filter(k=>clsOf(k)==="new").length;
+  const nUp=keys.filter(k=>clsOf(k)==="newer").length;
+  const nOld=keys.length-nNew-nUp;
+  head.textContent=`📦 ${FX_INBOX.from||"相手"} から受け取ったカード登録（${keys.length}件）\n🆕 自分が持っていない ${nNew}／⬆ 相手の方が新しい ${nUp}／✅ 自分の方が新しい ${nOld}`;
+  head.style.whiteSpace="pre-line";
+  ol.appendChild(head);
+  const tools=document.createElement("div");
+  tools.style.cssText="display:flex;gap:6px;flex-wrap:wrap";
+  const list=document.createElement("div");
+  list.style.cssText="flex:1;overflow:auto;background:#0f172a;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:4px";
+  const countLbl=document.createElement("span");
+  countLbl.style.cssText="color:#93c5fd;font-weight:800;font-size:13px;align-self:center";
+  const refresh=()=>{
+    countLbl.textContent=`採用 ${pick.size} / ${keys.length} 件`;
+    list.querySelectorAll("[data-fxk]").forEach(row=>{
+      row.style.background=pick.has(row.dataset.fxk)?"#1e3a5f":"transparent";
+      const box=row.querySelector(".fxchk");
+      if(box)box.textContent=pick.has(row.dataset.fxk)?"☑":"☐";
+    });
+  };
+  const mk=(lb,fn)=>{const b=document.createElement("button");b.className="btn small";b.textContent=lb;b.onclick=fn;tools.appendChild(b);};
+  mk("すべて選ぶ",()=>{keys.forEach(k=>pick.add(k));refresh();});
+  mk("🆕 新規だけ",()=>{pick.clear();keys.forEach(k=>{if(clsOf(k)==="new")pick.add(k);});refresh();});
+  mk("すべて外す",()=>{pick.clear();refresh();});
+  tools.appendChild(countLbl);
+  ol.appendChild(tools);
+  for(const k of keys){
+    const c=clsOf(k);
+    const row=document.createElement("div");
+    row.dataset.fxk=k;
+    row.style.cssText="display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:8px;cursor:pointer";
+    const chk=document.createElement("span");
+    chk.className="fxchk";chk.style.cssText="font-size:17px;color:#93c5fd;flex:0 0 auto";
+    const txt=document.createElement("div");
+    txt.style.cssText="flex:1;color:#e2e8f0;font-size:13px;line-height:1.45;min-width:0";
+    const badge=c==="new"?"🆕 自分が持っていない":c==="newer"?"⬆ 相手の方が新しい":"✅ 自分の方が新しい";
+    const nm=FX_INBOX.names[k]||dispName.get(k)||k;
+    txt.innerHTML="";
+    const l1=document.createElement("div");l1.style.fontWeight="800";l1.textContent=`${badge}　${nm}`;
+    const l2=document.createElement("div");l2.style.cssText="color:#94a3b8;font-size:12px";
+    l2.textContent=`相手：${sumOf(items[k])}　／　自分：${sumOf(FXDB.get(k))}`;
+    txt.appendChild(l1);txt.appendChild(l2);
+    row.appendChild(chk);row.appendChild(txt);
+    row.onclick=()=>{if(pick.has(k))pick.delete(k);else pick.add(k);refresh();};
+    list.appendChild(row);
+  }
+  ol.appendChild(list);
+  const foot=document.createElement("div");
+  foot.style.cssText="display:flex;gap:8px;justify-content:flex-end";
+  const bClose=document.createElement("button");
+  bClose.className="btn small ghost";bClose.textContent="閉じる（あとで確認）";
+  bClose.onclick=()=>ol.remove();
+  const bOk=document.createElement("button");
+  bOk.className="btn small primary";bOk.textContent="📦 選んだ登録を取り込む";
+  bOk.onclick=async()=>{
+    let n=0;
+    for(const k of pick){
+      const v=items[k];
+      if(!v||typeof v!=="object")continue; // 受信データは形を確認してから入れる
+      let reg;
+      try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
+      reg._v=(v._v|0)||Date.now();
+      reg._src="shared:"+(FX_INBOX.from||"共有");
+      FXDB.set(k,reg);
+      if(!dispName.has(k))dispName.set(k,FX_INBOX.names[k]||k); // 名前を入れないとカード一覧に出ない
+      if(!LINKS.has(k)&&Array.isArray(FX_INBOX.links[k]))LINKS.set(k,FX_INBOX.links[k]);
+      n++;
+    }
+    await persistFx();await persistNames();await persistLinks();
+    ol.remove();
+    sfx("ok");
+    toast(`📦 ${n}件のカード登録を取り込みました`);
+    renderAll();
+  };
+  foot.appendChild(bClose);foot.appendChild(bOk);
+  ol.appendChild(foot);
+  document.body.appendChild(ol);
+  refresh();
+}
+$("olFxShare").addEventListener("click",async ()=>{
+  const inb=fxInboxCount();
+  const j=await askChoice(`📦 カード登録の受け渡し（合言葉でつないだ相手と）\n※ 画像は含みません（画像は「自分のデッキを相手に送る」から）`,
+    ["📤 全部を送る",
+     "📤 いま選んでいるデッキで使うカードだけ送る",
+     "📤 最近2週間に更新した分だけ送る",
+     `📥 受け取った登録を確認して取り込む（${inb}件）`]);
+  if(j===null)return;
+  if(j===3){showFxDiffPanel();return;}
+  let keys=[],label="";
+  if(j===0){keys=fxShareKeys("all");label="全部";}
+  else if(j===1){
+    const n=$("stDeck0").value||S.players[0].deckName;
+    if(!n){toast("上の「自分」欄でデッキを選択してください");return;}
+    const d=await getDeck(n);
+    if(!d){toast("デッキが見つかりません");return;}
+    const names=[...d.main,...(d.gr||[]),...(d.hy||[]),...(d.sp||[]),...(d.ex||[])].map(e=>e.name);
+    keys=fxShareKeys("deck",names);label=`デッキ「${n}」で使うカード`;
+  }else{keys=fxShareKeys("recent");label="最近2週間の更新分";}
+  if(!keys.length){toast("送る対象のカード登録がありません");return;}
+  if(!await ask(`📤 カード登録 ${keys.length}件を送信します（${label}）\nよろしいですか？`))return;
+  await olSendFx(keys,label);
+});
+/* 📦 もらったカード登録をローカルに取り込む共通処理（同梱・ファイル・合言葉のすべてで使う）
+   ・未登録 → そのまま採用
+   ・自分の手が入っていない登録（同梱／他の人由来） → 新しい方を自動で採用
+   ・自分の手が入った登録（_src が "self"） → 黙って上書きせず、確認用に取り置く
+   戻り値：{applied:自動で入れた件数, held:取り置いた件数, heldItems} */
+async function fxMergeIncoming(pack,from,opts={}){
+  const cardFx=(pack&&pack.cardFx)||{};
+  const names=(pack&&pack.nameMap)||{};
+  const links=(pack&&pack.faceLinks)||{};
+  const srcTag=opts.src||(from?("shared:"+from):"shared");
+  let applied=0;
+  const held={};
+  for(const [k,v] of Object.entries(cardFx)){
+    if(typeof k!=="string"||!k||!v||typeof v!=="object"||Array.isArray(v))continue; // もらったデータは形を確認してから入れる
+    const cur=FXDB.get(k);
+    const inV=(v._v|0);
+    const curV=cur?(cur._v|0):0;
+    if(cur&&cur._src==="self"){ if(inV>curV)held[k]=v; continue; }
+    if(cur&&inV<=curV)continue;
+    let reg;try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
+    reg._v=inV||Date.now();
+    reg._src=srcTag;
+    FXDB.set(k,reg);
+    if(!dispName.has(k))dispName.set(k,names[k]||k); // 名前を入れないとカード一覧に出ない
+    if(!LINKS.has(k)&&Array.isArray(links[k]))LINKS.set(k,links[k]);
+    applied++;
+  }
+  const heldKeys=Object.keys(held);
+  if(heldKeys.length&&!opts.noInbox){
+    FX_INBOX.from=from||"共有データ";
+    FX_INBOX.items=held;
+    FX_INBOX.names=Object.fromEntries(heldKeys.map(k=>[k,names[k]||dispName.get(k)||k]));
+    FX_INBOX.links=Object.fromEntries(heldKeys.filter(k=>Array.isArray(links[k])).map(k=>[k,links[k]]));
+  }
+  if(applied&&!opts.noPersist){await persistFx();await persistNames();await persistLinks();}
+  // 保留が出たら、呼び出し元の処理が終わってから差分画面を開く
+  if(heldKeys.length&&!opts.noInbox&&opts.autoPanel!==false)setTimeout(()=>{try{showFxDiffPanel();}catch(e){}},600);
+  return {applied,held:heldKeys.length,heldItems:held};
+}
+/* 📦 同梱データを土台として取り込む（起動時に1回） */
+async function applyBuiltinCardFx(){
+  if(BUILTIN_OFF)return;
+  const pack=(typeof BUILTIN_CARDFX!=="undefined")?BUILTIN_CARDFX:null;
+  if(!pack||!pack.cardFx||!Object.keys(pack.cardFx).length)return;
+  const res=await fxMergeIncoming(pack,"",{src:"builtin",noInbox:true});
+  if(res.held){
+    BUILTIN_NEWER={cardFx:res.heldItems,nameMap:pack.nameMap||{},faceLinks:pack.faceLinks||{}};
+    toast(`📦 同梱データに新しい版があります（${res.held}件）\n「📤 書き出し」→「同梱データの新しい版を確認」から採用できます`);
+  }
+  if(res.applied)toast(`📦 同梱データからカード登録${res.applied}件を読み込みました`);
 }
 $("olDeckSend").addEventListener("click",async ()=>{
   if(!ONLINE.conn||!ONLINE.conn.open){toast("先にオンライン接続してください");return;}
@@ -22516,7 +22916,7 @@ function vCardEl(name,opts={}){
   const el=document.createElement("div");el.className="vcard"+(opts.side?" side":"");
   const th=document.createElement("div");th.className="thumb";
   const url=imgURL.get(normName(name));
-  if(url){const im=document.createElement("img");im.src=url;im.draggable=false;th.appendChild(im);}
+  if(url){const im=document.createElement("img");im.src=url;im.draggable=false;im.loading="lazy";im.decoding="async";th.appendChild(im);}
   else{const np=document.createElement("div");np.className="nameplate";np.textContent=name;th.appendChild(np);}
   el.appendChild(th);
   if(opts.idx!=null){const x=document.createElement("span");x.className="idx";x.textContent=opts.idx;el.appendChild(x);}
@@ -23038,6 +23438,38 @@ function openImageManager(){
     sb.textContent=mgrSort==="added"?"並び順：追加した順（タップで名前順へ）":"並び順：名前順（タップで追加した順へ）";
     sb.onclick=()=>{mgrSort=(mgrSort==="added"?"name":"added");render();};
     bar.appendChild(sb);
+    // 🗜 登録画像をまとめて小さく保存し直す（Safariのメモリ落ち対策の根本策）
+    {
+      const zb=document.createElement("button");
+      zb.className="btn small";
+      zb.textContent="🗜 画像を軽くする";
+      zb.onclick=async()=>{
+        const keys=Array.from(imgURL.keys());
+        if(!keys.length){toast("登録画像がありません");return;}
+        let before=0;for(const k of keys){const b=imgURL.getBlob(k);if(b)before+=(b.size|0);}
+        const j=await askChoice(`🗜 登録画像を小さく保存し直します\n${keys.length}枚・現在の合計サイズ 約${(before/1048576).toFixed(1)}MB\n\n表示に使う横幅の上限を選んでください（元より大きくはなりません）。\n※元の画質には戻せません。画像ファイルは手元に残しておいてください。`,
+          ["高画質（横720px）","標準（横560px）※おすすめ","軽量（横420px）"]);
+        if(j===null)return;
+        const maxW=[720,560,420][j];
+        let after=0,done=0,changed=0;
+        for(const k of keys){
+          const b=imgURL.getBlob(k);
+          if(!b){done++;continue;}
+          const nb=await shrinkImageBlob(b,maxW,0.82);
+          if(nb&&nb.size<b.size*0.95){
+            if(db)await idbPut("images",k,nb);else memImages.set(k,nb);
+            imgURL.setBlob(k,nb);
+            after+=nb.size;changed++;
+          }else after+=b.size;
+          done++;
+          if(done%4===0){$("vStatus").textContent=`🗜 保存し直し中… ${done}/${keys.length}枚`;await new Promise(r=>setTimeout(r,0));}
+        }
+        $("vStatus").textContent=`🗜 完了：${changed}枚を保存し直しました（約${(before/1048576).toFixed(1)}MB → 約${(after/1048576).toFixed(1)}MB）`;
+        toast(`🗜 ${changed}枚を軽くしました（約${(before/1048576).toFixed(1)}MB → 約${(after/1048576).toFixed(1)}MB）`);
+        render();renderAll();
+      };
+      bar.appendChild(zb);
+    }
     g.appendChild(bar);
     const q=normName(search.value);
     const keys=Array.from(imgURL.keys()).filter(k=>!k.startsWith("__mat")).sort((a,b)=>{
@@ -23242,8 +23674,7 @@ function openMatPicker(pi){
         if(blob){
           const mk="__mat"+pi+"__";
           if(db)await idbPut("images",mk,blob);else memImages.set(mk,blob);
-          if(imgURL.has(mk))URL.revokeObjectURL(imgURL.get(mk));
-          imgURL.set(mk,URL.createObjectURL(blob));
+          imgURL.setBlob(mk,blob);
         }
         closeViewer();buildBoards();renderAll();
         toast(`${S.players[pi].label}のプレイマットを設定しました`);
@@ -23277,7 +23708,7 @@ $("btnMatReset").addEventListener("click",async ()=>{
   for(const pi of [0,1]){
     const mk="__mat"+pi+"__";
     if(db)await idbDel("images",mk);else memImages.delete(mk);
-    if(imgURL.has(mk)){URL.revokeObjectURL(imgURL.get(mk));imgURL.delete(mk);}
+    imgURL.delete(mk);
   }
   buildBoards();renderAll();
   toast("プレイマットを解除しました");
@@ -23987,7 +24418,77 @@ async function exportDeckShare(deckNames,withImg){
   const imgN=Object.keys(images).length;
   toast(`📤 ${multi?`${decks.length}個のデッキ`:`「${shortName(decks[0].name)}」`}を書き出しました（カード${keys.size}種${imgN?`・画像${imgN}枚`:"・画像なし"}）。相手は「📥 読み込み」で取り込めます`);
 }
+/* 📦 カード登録だけの共有パック（画像なし・数百KB）。取り込みは差分画面を通る */
+async function exportFxPack(){
+  const j=await askChoice("📦 カード登録だけの共有パックを書き出します（画像は含みません）\n書き出す範囲を選んでください",
+    ["全部","自分が登録・更新したものだけ","最近2週間に更新した分だけ"]);
+  if(j===null)return;
+  const keys=fxShareKeys(["all","self","recent"][j]);
+  if(!keys.length){toast("対象のカード登録がありません");return;}
+  const cardFx={},faceLinks={},nameMap={};
+  for(const k of keys){
+    cardFx[k]=FXDB.get(k);
+    if(LINKS.has(k))faceLinks[k]=LINKS.get(k);
+    if(dispName.has(k))nameMap[k]=dispName.get(k);
+  }
+  const data={v:1,type:"fxPack",exported:new Date().toISOString(),from:S.players[0].label||"共有",cardFx,faceLinks,nameMap};
+  const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`dmrv-cardfx-${keys.length}件-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  toast(`📦 カード登録${keys.length}件を書き出しました。受け取った人は「📥 読み込み」で取り込めます`);
+}
+/* 🧩 index.html に貼る同梱データ（マーカーの間を丸ごと差し替える） */
+async function exportBuiltinSnippet(){
+  const j=await askChoice("🧩 index.html に同梱するデータを作ります\n含める範囲を選んでください",
+    ["全部のカード登録","自分が登録・更新したものだけ"]);
+  if(j===null)return;
+  const keys=fxShareKeys(j===0?"all":"self");
+  if(!keys.length){toast("対象のカード登録がありません");return;}
+  const cardFx={},faceLinks={},nameMap={};
+  for(const k of keys){
+    cardFx[k]=FXDB.get(k);
+    if(LINKS.has(k))faceLinks[k]=LINKS.get(k);
+    if(dispName.has(k))nameMap[k]=dispName.get(k);
+  }
+  // HTMLの中に貼るので、万一の「<」でタグが切れないようにエスケープしておく
+  const json=JSON.stringify({v:1,updated:new Date().toISOString().slice(0,10),cardFx,faceLinks,nameMap}).replace(/</g,"\\u003c");
+  const text=`/* ===== BUILTIN_CARDFX_START ===== */\nconst BUILTIN_CARDFX=${json};\n/* ===== BUILTIN_CARDFX_END ===== */\n`;
+  const blob=new Blob([text],{type:"text/plain"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`BUILTIN_CARDFX-${keys.length}件-${new Date().toISOString().slice(0,10)}.txt`;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  toast(`🧩 同梱データを書き出しました（${keys.length}件・約${Math.max(1,Math.round(text.length/1024))}KB）\nindex.html の BUILTIN_CARDFX_START〜END の間を、このファイルの中身で置き換えてください`);
+}
 $("btnExport").addEventListener("click",async ()=>{
+  const nNew=BUILTIN_NEWER?Object.keys(BUILTIN_NEWER.cardFx).length:0;
+  const menu=["💾 全体のバックアップ（デッキ＋カード登録＋設定）",
+              "📦 カード登録だけの共有パック（他の人に渡す）",
+              "🧩 同梱データ用のスニペット（index.htmlに貼る）",
+              `${BUILTIN_OFF?"📦 同梱データを使う":"📦 同梱データを使わない"}（今：${BUILTIN_OFF?"使わない":"使う"}）`];
+  if(nNew)menu.push(`⬆ 同梱データの新しい版を確認（${nNew}件）`);
+  const j=await askChoice("📤 何を書き出しますか？",menu);
+  if(j===null)return;
+  if(j===1){await exportFxPack();return;}
+  if(j===2){await exportBuiltinSnippet();return;}
+  if(j===3){
+    BUILTIN_OFF=!BUILTIN_OFF;
+    if(db)await idbPut("misc","builtinOff",BUILTIN_OFF);
+    toast(BUILTIN_OFF?"📦 同梱データを使わない設定にしました（次回の起動から反映）":"📦 同梱データを使う設定にしました（次回の起動から反映）");
+    return;
+  }
+  if(j===4&&BUILTIN_NEWER){
+    FX_INBOX.from="同梱データ";
+    FX_INBOX.items=BUILTIN_NEWER.cardFx;
+    FX_INBOX.names=BUILTIN_NEWER.nameMap||{};
+    FX_INBOX.links=BUILTIN_NEWER.faceLinks||{};
+    showFxDiffPanel();
+    return;
+  }
   const withImg=await ask("カード画像もファイルに含めますか？\nOK＝含める（ファイル大）／キャンセル＝設定のみ（軽量）");
   const data={
     v:5, exported:new Date().toISOString(),
@@ -24018,6 +24519,16 @@ $("importInput").addEventListener("change",async e=>{
   if(!f)return;
   try{
     const data=JSON.parse(await f.text());
+    if(data&&data.type==="fxPack"&&data.cardFx){
+      // 📦 カード登録だけの共有パック（画像なし）
+      const n=Object.keys(data.cardFx).length;
+      const from=String(data.from||"共有").slice(0,12);
+      if(!await ask(`📦 カード登録の共有パックを読み込みます（${n}件・${from}）\n自分が登録・更新したカードは自動では上書きせず、差分画面で選べます。よろしいですか？`))return;
+      const res=await fxMergeIncoming(data,from);
+      renderAll();sfx("ok");
+      toast(`📦 ${res.applied}件を取り込みました${res.held?`／${res.held}件は保留（差分画面で選べます）`:""}`);
+      return;
+    }
     if(data&&data.type==="deck"&&data.deck){
       const imgN=Object.keys(data.images||{}).length;
       let nm=data.deckName||"共有デッキ";
@@ -24030,9 +24541,12 @@ $("importInput").addEventListener("change",async e=>{
       }
       if(!await ask(`共有デッキ「${nm}」を読み込みます（カード効果${Object.keys(data.cardFx||{}).length}種${imgN?`・画像${imgN}枚`:"・画像なし"}）。\n既存のカード登録に追加・上書きされます（他のデッキやカードは消えません）。よろしいですか？`))return;
       // カード効果・多面リンク・カード名をマージ（既存は上書き）
-      if(data.cardFx){for(const [k,v] of Object.entries(data.cardFx))FXDB.set(k,v);await persistFx();}
-      if(data.faceLinks){for(const [k,v] of Object.entries(data.faceLinks))LINKS.set(k,v);await persistLinks();}
-      if(data.nameMap){for(const [k,v] of Object.entries(data.nameMap))dispName.set(k,v);await persistNames();}
+      // 📦 カード登録は共通のマージ規則で取り込む（自分が触った登録は黙って上書きしない）
+      {const _mg=await fxMergeIncoming(data,String(data.from||"共有データ").slice(0,12));
+       if(data.nameMap)for(const [k,v] of Object.entries(data.nameMap)){if(!dispName.has(k)&&typeof v==="string")dispName.set(k,v);}
+       if(data.faceLinks)for(const [k,v] of Object.entries(data.faceLinks)){if(!LINKS.has(k)&&Array.isArray(v))LINKS.set(k,v);}
+       await persistNames();await persistLinks();
+       if(_mg.held)toast(`📦 ${_mg.held}件は自分の登録と競合するため保留しました（このあと差分画面で選べます）`);}
       if(imgN){
         toast("画像を復元中…");
         for(const [k,durl] of Object.entries(data.images)){
@@ -24053,9 +24567,12 @@ $("importInput").addEventListener("change",async e=>{
       const total=data.decks.length;
       if(!await ask(`共有デッキパック（${total}個のデッキ・カード効果${Object.keys(data.cardFx||{}).length}種${imgN?`・画像${imgN}枚`:"・画像なし"}）を読み込みます。\n既存のカード登録に追加・上書きされます（他のデッキやカードは消えません）。よろしいですか？`))return;
       // カード効果・多面リンク・カード名・画像をマージ（既存は上書き）
-      if(data.cardFx){for(const [k,v] of Object.entries(data.cardFx))FXDB.set(k,v);await persistFx();}
-      if(data.faceLinks){for(const [k,v] of Object.entries(data.faceLinks))LINKS.set(k,v);await persistLinks();}
-      if(data.nameMap){for(const [k,v] of Object.entries(data.nameMap))dispName.set(k,v);await persistNames();}
+      // 📦 カード登録は共通のマージ規則で取り込む（自分が触った登録は黙って上書きしない）
+      {const _mg=await fxMergeIncoming(data,String(data.from||"共有データ").slice(0,12));
+       if(data.nameMap)for(const [k,v] of Object.entries(data.nameMap)){if(!dispName.has(k)&&typeof v==="string")dispName.set(k,v);}
+       if(data.faceLinks)for(const [k,v] of Object.entries(data.faceLinks)){if(!LINKS.has(k)&&Array.isArray(v))LINKS.set(k,v);}
+       await persistNames();await persistLinks();
+       if(_mg.held)toast(`📦 ${_mg.held}件は自分の登録と競合するため保留しました（このあと差分画面で選べます）`);}
       if(imgN){
         toast("画像を復元中…");
         for(const [k,durl] of Object.entries(data.images)){
@@ -24088,9 +24605,12 @@ $("importInput").addEventListener("change",async e=>{
     if(data&&data.type==="cards"){
       const n=Object.keys(data.images||{}).length;
       if(!await ask(`カードパック（画像${n}枚）を読み込みます。\n既存データに追加され、同名カードは上書きされます。よろしいですか？`))return;
-      if(data.cardFx){for(const [k,v] of Object.entries(data.cardFx))FXDB.set(k,v);await persistFx();}
-      if(data.faceLinks){for(const [k,v] of Object.entries(data.faceLinks))LINKS.set(k,v);await persistLinks();}
-      if(data.nameMap){for(const [k,v] of Object.entries(data.nameMap))dispName.set(k,v);await persistNames();}
+      // 📦 カード登録は共通のマージ規則で取り込む（自分が触った登録は黙って上書きしない）
+      {const _mg=await fxMergeIncoming(data,String(data.from||"共有データ").slice(0,12));
+       if(data.nameMap)for(const [k,v] of Object.entries(data.nameMap)){if(!dispName.has(k)&&typeof v==="string")dispName.set(k,v);}
+       if(data.faceLinks)for(const [k,v] of Object.entries(data.faceLinks)){if(!LINKS.has(k)&&Array.isArray(v))LINKS.set(k,v);}
+       await persistNames();await persistLinks();
+       if(_mg.held)toast(`📦 ${_mg.held}件は自分の登録と競合するため保留しました（このあと差分画面で選べます）`);}
       if(data.images&&n){
         toast("画像を復元中…");
         for(const [k,durl] of Object.entries(data.images)){
@@ -25141,29 +25661,84 @@ $("bListView").addEventListener("click",()=>{
     $("vTitle").textContent=`📋 現在のリスト（メイン${t(B.counts.main)} / GR${t(B.counts.gr)} / 超次元${t(B.counts.hy)} / ゲーム外${t(B.counts.ex)}）`;
     g.innerHTML="";
     g.classList.add("decklist");
-    // 🔍 カードが小さすぎる時のために、大きさの切り替えを用意（設定は開いている間だけ覚える）
+    // 表示の切り替え：確認向き（1枚ずつ並べる）と 編集向き（同じカードをまとめて×N）
+    if(B._listMode==null)B._listMode="flat"; // 既定は1枚ずつ並べる
     {
       const bar=document.createElement("div");
       bar.style.cssText="grid-column:1/-1;display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:2px";
+      const md=document.createElement("button");
+      md.className="btn small"+(B._listMode==="flat"?" primary":" ghost");
+      md.style.cssText="padding:2px 10px;font-size:11px";
+      md.textContent=B._listMode==="flat"?"🗂 1枚ずつ並べる（確認向き）":"✏️ まとめて表示（編集向き・×N）";
+      md.title="1枚ずつ並べる＝デッキ画像と同じ並びで確認しやすい／まとめて表示＝枚数を増減して編集しやすい";
+      md.onclick=()=>{B._listMode=(B._listMode==="flat")?"grouped":"flat";paint();};
+      bar.appendChild(md);
       const tg=document.createElement("button");
       tg.className="btn small ghost";tg.style.cssText="padding:2px 10px;font-size:11px";
       tg.textContent=B._listBig?"🔍 大きく表示中（切替）":"🔎 全体を1画面に収める（切替）";
       tg.title="デッキ全体をスクロールなしで見るか、カードを大きく見るかを切り替えます";
       tg.onclick=()=>{B._listBig=!B._listBig;paint();};
       bar.appendChild(tg);
+      if(B._listMode==="flat"){
+        const hint=document.createElement("span");
+        hint.className="hint";hint.style.cssText="font-size:11px";
+        hint.textContent="タップで拡大表示。枚数を変える時は「まとめて表示」に切り替えてください";
+        bar.appendChild(hint);
+      }
       g.appendChild(bar);
     }
-    g.appendChild(buildDeckSummaryEl(B.counts.main)); // 📊 メインの文明別・タイプ別集計（作りながら見られる）
-    sec("メイン",B.counts.main,"main");
-    sec("超GR",B.counts.gr,"gr");
-    sec("超次元",B.counts.hy,"hy");
-    sec("ゲーム外",B.counts.ex,"ex");
-    // カード種類の数を数えて、全体が収まる大きさに調整する
-    {
-      const cards=B.counts.main.size+B.counts.gr.size+B.counts.hy.size+B.counts.ex.size;
-      const heads=4+(B.counts.main.size?0:1)+(B.counts.gr.size?0:1)+(B.counts.hy.size?0:1)+(B.counts.ex.size?0:1)+1;
-      requestAnimationFrame(()=>fitDeckListGrid(g,cards,heads));
+    let fitCount=0,fitHeads=0;
+    if(B._listMode==="flat"){
+      // 🗂 確認向き：デッキ名・文明配分の見出しを付け、同じカードを枚数ぶん並べる（デッキ画像と同じ並び）
+      const dn=($("deckName")&&$("deckName").value.trim())||"（無題のデッキ）";
+      const hd=document.createElement("div");
+      hd.style.cssText="grid-column:1/-1;text-align:center;font-weight:900;font-size:15px;padding:2px 0 4px";
+      hd.textContent=dn;
+      g.appendChild(hd);
+      g.appendChild(buildDeckSummaryEl(B.counts.main));
+      const flatSec=(title,m,cap)=>{
+        if(!m.size)return;
+        const h=document.createElement("div");
+        h.style.cssText="grid-column:1/-1;font-weight:900;font-size:12.5px;color:var(--accent);border-bottom:1px solid var(--line);padding:5px 2px 3px;text-align:center";
+        h.textContent=`${title}（${t(m)}${cap?`/${cap}`:""}）`;
+        g.appendChild(h);
+        fitHeads++;
+        // コスト順→名前順に並べ、同じカードは枚数ぶん続けて置く
+        const ks=[...m.keys()].sort((a,b)=>{
+          const ra=FXDB.get(a),rb=FXDB.get(b);
+          const ca=(ra&&ra.cost!=null&&ra.cost!=="")?+ra.cost:99;
+          const cb=(rb&&rb.cost!=null&&rb.cost!=="")?+rb.cost:99;
+          if(ca!==cb)return ca-cb;
+          return (dispName.get(a)||a).localeCompare(dispName.get(b)||b,"ja");
+        });
+        for(const k of ks){
+          const n=m.get(k)||0;
+          for(let i=0;i<n;i++){
+            const el=vCardEl(dispName.get(k)||k);
+            el.style.cursor="zoom-in";
+            el.title=`${dispName.get(k)||k}（タップで拡大）`;
+            el.addEventListener("click",()=>showBigCardImage(k,dispName.get(k)||k));
+            g.appendChild(el);
+            fitCount++;
+          }
+        }
+      };
+      flatSec("メインデッキ",B.counts.main,40);
+      flatSec("超GRゾーン",B.counts.gr,12);
+      flatSec("超次元ゾーン",B.counts.hy,8);
+      flatSec("ゲーム外",B.counts.ex,0);
+      fitHeads+=2;
+    }else{
+      g.appendChild(buildDeckSummaryEl(B.counts.main)); // 📊 メインの文明別・タイプ別集計（作りながら見られる）
+      sec("メイン",B.counts.main,"main");
+      sec("超GR",B.counts.gr,"gr");
+      sec("超次元",B.counts.hy,"hy");
+      sec("ゲーム外",B.counts.ex,"ex");
+      fitCount=B.counts.main.size+B.counts.gr.size+B.counts.hy.size+B.counts.ex.size;
+      fitHeads=4+(B.counts.main.size?0:1)+(B.counts.gr.size?0:1)+(B.counts.hy.size?0:1)+(B.counts.ex.size?0:1)+1;
     }
+    // 全体が収まる大きさに調整する
+    requestAnimationFrame(()=>fitDeckListGrid(g,fitCount,fitHeads));
     g.scrollTop=sc;
     bTotals();
   };
@@ -25357,6 +25932,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   if(fx)for(const [k,v] of Object.entries(fx))FXDB.set(k,v);
   const lk=db?await idbGet("misc","faceLinks"):null;
   if(lk)for(const [k,v] of Object.entries(lk))LINKS.set(k,v);
+  {const bo=db?await idbGet("misc","builtinOff"):null;if(bo!==null&&bo!==undefined)BUILTIN_OFF=!!bo;}
+  await applyBuiltinCardFx(); // 📦 同梱データは土台。ユーザー自身の登録は上書きしない
   const so=db?await idbGet("misc","sound"):null;
   if(so!==null&&so!==undefined)S.sound=!!so;
   const ex=db?await idbGet("misc","expert"):null;
