@@ -1372,6 +1372,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxNoBlock"> ブロックされない</label>
         <label><input type="checkbox" id="fxNoAtked"> 攻撃されない</label>
         <label><input type="checkbox" id="fxNoChoose"> 選ばれない（アンタッチャブル）</label>
+        <label title="相手のターン中だけ、相手はこのクリーチャーを選べない（自分のターン中は選べる／オニカマス型）。上の「選ばれない」と併用する必要はありません" style="opacity:.95"><input type="checkbox" id="fxNoChooseOppTurn"> └ 相手のターン中だけ選ばれない（オニカマス型）</label>
         <label><input type="checkbox" id="fxGS"> G・ストライク</label>
         <label><input type="checkbox" id="fxCharger"> チャージャー（呪文使用後マナへ／ツインパクト下面も可）</label>
         <label><input type="checkbox" id="fxHoldResolve"> 🕐 解決中に保持（ザフィヴォ型：処理の途中で他のカードを使う呪文。自動で墓地に置かず、手動で墓地に置いた時に虚無月の門等が誘発）</label>
@@ -1598,9 +1599,9 @@ body.shake{animation:bodyShake .4s ease-out}
         <span style="font-size:12px;font-weight:700">キズナ</span>
         <select id="fxKizuna" style="width:auto;flex:0 0 200px">
           <option value="">なし</option>
-          <option value="k">キズナ（攻撃時、自分の他の1体のキズナ能力を使う）</option>
-          <option value="plus">キズナプラス（攻撃時、自身→他の1体の順にキズナ能力）</option>
-          <option value="comp">キズナコンプ（攻撃時、好きな数のキズナ能力）</option>
+          <option value="k">キズナ（バトルゾーンに出た時、自分のクリーチャー1体のキズナ能力を使う・自身も選べる）</option>
+          <option value="plus">キズナプラス（攻撃する時、自身→自分の他の1体の順にキズナ能力）</option>
+          <option value="comp">キズナコンプ（攻撃する時、好きな数のキズナ能力）</option>
         </select>
         <input type="text" id="fxUSaber" list="raceList" placeholder="ウルトラ・セイバー対象（種族/名前・空欄=なし）" style="flex:1;min-width:170px">
         <span style="font-size:12px;font-weight:700">G・G・G（手札1枚以下）</span>
@@ -1680,7 +1681,6 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxLibWin"> 常在：自分の山札が0枚になったら、負けるかわりに勝利する（シャコガイル型）</label>
         <label><input type="checkbox" id="fxPetensy"> 相手のターンの終わりに、そのターン クリーチャーが3体以上出ていれば、手札からコストを支払わずに使える（ペテンシー型）</label>
         <label><input type="checkbox" id="fxCostFloor1"> コストは0にならない（軽減してもコスト1以上・ゼロ文明でも）</label>
-        <label title="相手のターン中だけ、相手はこのクリーチャーを選べない（自分のターン中は選べる）"><input type="checkbox" id="fxNoChooseOppTurn"> 🚫 相手のターン中、相手はこのクリーチャーを選べない（オニカマス型）</label>
         <label title="相手のターン中、相手が召喚以外の方法でクリーチャーをバトルゾーンに出した時、そのクリーチャーを手札に戻してもよい（出た時の効果は先に誘発します）"><input type="checkbox" id="fxStBounceCheat"> ↩ 相手のターン中、相手が召喚以外で出したクリーチャーを手札に戻してもよい（オニカマス型）</label>
         <label><input type="checkbox" id="fxStNoCheat"> 相手は召喚以外でクリーチャーを出せない（センノー型。侵略/チェンジ/蘇生/ST出しなど不可・GR召喚や墓地召喚は「召喚」なので可）</label>
         <label title="このクリーチャーが自分のバトルゾーンにいる間、相手はシールドの「S・トリガー」を使えない（ブレイクパネルのST使用ボタンが無効化される。G・ストライクやニンジャ・ストライクは別能力なので使える）"><input type="checkbox" id="fxStNoST"> 🚫 常在：相手はS・トリガーを使えない（カース・トーテム/ギガ・ボルバ型）</label>
@@ -2662,6 +2662,9 @@ function markArrive(c){
       S._turnArrived.list.push({pi:own,id:c.id,name:faceNameOf(c),reg:getReg(c)});
       // 👑 S-MAX進化が出たら、自分の場に2体以上ないか確認する
       if(S.expert&&isSmaxReg(getReg(c)))smaxUniqueCheck(own,c);
+      // 🤝 キズナ：バトルゾーンに出た時、自分のクリーチャー1体のキズナ能力を使う（自身のキズナ能力も選べる）
+      {const rKz=getReg(c);
+       if(S.expert&&rKz&&rKz.kizuna==="k")kizunaOnEnter(own,c);}
       // 🛡 シールド・フォース／シールド・プラス：どの経路（ドラッグ・パネル・踏み倒し・進化）で出ても盾指定を確認
       //    ※二重確認ガード：同じ到着でmarkArriveが複数回呼ばれても1.5秒以内は1回だけ
       const rgA=getReg(c);
@@ -4159,6 +4162,21 @@ function enqueueWatchJob(fn){
    （CRY-S-MAX ジャオウガ等の「自分のS-MAX進化クリーチャーが2体以上あれば、そのうちの1体を残し、残りをすべて手札に戻す」） */
 const SMAX_CT=["smaxevo","onismaxevo"];
 function isSmaxReg(r){return !!(r&&SMAX_CT.includes(r.ctype));}
+function kizunaOnEnter(pi,c){
+  enqueueWatchJob(async()=>{
+    const Z=zonesOf(pi);
+    if(!Z.battle.some(x=>x.id===c.id))return; // 出た直後に場を離れていたら何もしない
+    const kFxOf=x=>{const rx=getReg(x);return rx&&rx.watchFx?rx.watchFx.filter(w=>w.ev==="kizuna"):[];};
+    const pool=Z.battle.filter(x=>!isSealed(x)&&kFxOf(x).length); // 自身も選べる
+    if(!pool.length){toast(`🤝 キズナ：使えるキズナ能力がありません（${faceNameOf(c)}）`);return;}
+    const j=await askChoice(`🤝 キズナ（${faceNameOf(c)}）：キズナ能力を使う自分のクリーチャーを選択（自身も選べます）`,
+      [...pool.map(x=>faceNameOf(x)+(x.id===c.id?"（自身）":"")),"使わない"]);
+    if(j===null||j>=pool.length)return;
+    const t=pool[j];
+    toast(`🤝 キズナ能力：${faceNameOf(t)}`);
+    await runFxList(pi,kFxOf(t),t);
+  });
+}
 function smaxUniqueCheck(pi,justArrived){
   if(!S.expert)return;
   const Z=zonesOf(pi);
@@ -12165,7 +12183,7 @@ async function execAttack(pi,id,tg){
   if(defender){await doBattle(pi,c,op,defender);clearPendingAtk();return;}
   if(S.expert){
     const rK=getReg(c);
-    if(rK&&rK.kizuna){
+    if(rK&&rK.kizuna&&rK.kizuna!=="k"){ // 素の「キズナ」は出た時なので、ここでは扱わない
       const kFxOf=x=>{const rx=getReg(x);return rx&&rx.watchFx?rx.watchFx.filter(w=>w.ev==="kizuna"):[];};
       const runK=async x=>{
         const fx=kFxOf(x);
@@ -12181,10 +12199,11 @@ async function execAttack(pi,id,tg){
           if(j===null||j>=pool.length)break;
           await runK(pool[j]);
         }
-      }else{
+      }else if(rK.kizuna==="plus"){
+        // キズナプラス：自身のあと、自分の他のクリーチャー1体のキズナ能力を使う
         const pool=Z.battle.filter(x=>x.id!==c.id&&kFxOf(x).length);
         if(pool.length){
-          const j=pool.length===1?0:await askChoice(`🤝 キズナ：能力を使う自分の他のクリーチャーを選択`,[...pool.map(x=>faceNameOf(x)),"使わない"]);
+          const j=pool.length===1?0:await askChoice(`🤝 キズナプラス：能力を使う自分の他のクリーチャーを選択`,[...pool.map(x=>faceNameOf(x)),"使わない"]);
           if(j!==null&&j<pool.length)await runK(pool[j]);
         }
       }
