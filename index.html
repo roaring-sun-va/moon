@@ -1924,6 +1924,11 @@ body.shake{animation:bodyShake .4s ease-out}
       <div id="fxTrigList"></div>
       <div class="row" style="align-items:center;margin-top:8px">
         <span style="font-size:12px;font-weight:700">選択効果（モード）</span>
+        <select id="fxModeFace" style="width:auto;flex:0 0 150px" title="ツインパクト用。選択効果をどちらの面で使うかを決めます。「どちらでも」だと、クリーチャー面を出した時にも選択が出てしまいます">
+          <option value="0">どちらの面でも</option>
+          <option value="1">上面（クリーチャー）だけ</option>
+          <option value="2">下面（呪文）だけ</option>
+        </select>
         <select id="fxModeN" style="width:auto;flex:0 0 110px">
           <option value="0">なし</option>
           <option value="1">1回選ぶ</option>
@@ -6267,7 +6272,14 @@ function modeCountFor(reg,pi){
 /* ▶ モード選択の実行（共通）。
    ・全モード条件(modeAllCond)を満たしている時：テキストの上から順に全モードを自動実行（選ばせない）。
    ・満たしていない時：選ぶ回数(modeN)ぶんだけ選択（重複不可なら選んだものは除外）。 */
-async function runModeChoice(pi,reg,c,inPump){
+async function runModeChoice(pi,reg,c,inPump,faceUsed){
+  // 🔀 ツインパクトで面を指定している場合、違う面で使った時は選択を出さない
+  //    （選択効果はカード単位のため、指定しないとクリーチャー面を出した時にも呪文側の選択が出てしまう）
+  {const mf=reg&&(reg.modeFace|0);
+   if(mf){
+     const f=(faceUsed!=null)?(faceUsed|0):((c&&c.face)|0);
+     if((mf===1&&f!==0)||(mf===2&&f!==1))return;
+   }}
   const baseN=reg?reg.modeN|0:0;
   if(baseN<=0)return;
   const parsed=String(reg.modeOpts||"").split("\n").map(x=>x.trim()).filter(Boolean).map(parseModeChoice);
@@ -9313,7 +9325,7 @@ async function pumpFx(){
     }
     const md=modeCountFor(reg,pi);
     if((reg.modeN|0)>0){
-      await runModeChoice(pi,reg,c,true);
+      await runModeChoice(pi,reg,c,true,(reg.twin&&typeof pick!=="undefined")?(pick===1?1:0):((c&&c.face)|0));
     }
     // 🔗 超魂X：下に超魂Xカードがあれば、その出た時(CIP)効果を上のクリーチャーの能力として自動処理
     if(zonesOf(pi).battle.some(x=>x.id===c.id)){
@@ -13710,6 +13722,7 @@ function renderFxEditor(){
   {const e=$("fxStWinBattleCond");if(e)e.value=FXEDIT.stWinBattleCond||"";}
   $("fxAuraNote").value=FXEDIT.auraNote||"";
   $("fxModeN").value=String(FXEDIT.modeN||0);
+  {const e=$("fxModeFace");if(e)e.value=String(FXEDIT.modeFace||0);}
   $("fxModeDup").checked=!!FXEDIT.modeDup;
   {const e=$("fxModeAllCond");if(e)e.value=FXEDIT.modeAllCond||"";}
   {const e=$("fxModeCond");if(e)e.value=FXEDIT.modeCond||"";}
@@ -15228,7 +15241,7 @@ function fxKeyLabel(k){
     stAuraPow:"味方へのパワー付与",stAuraSA:"味方へのSA付与",stAuraPB:"味方へのパワード・ブレイカー付与",stAuraOthers:"付与は自分以外",stAuraFilt:"付与の対象条件",
     pa:"パワーアタッカー",sst:"スーパー・S・トリガー",
     powPer:"数だけパワー",powPerFilt:"数だけパワーの対象",powPerZone:"数える場所",powPerWho:"数える側",powPerBattle:"バトル中限定",powPerAtk:"攻撃中限定",
-    modeN:"選ぶ回数",modeOpts:"選択肢",modeAllCond:"全モード実行の条件",modeDup:"重複選択可",bakushinW:"💥爆進ダブル",
+    modeN:"選ぶ回数",modeFace:"選択効果を使う面",modeOpts:"選択肢",modeAllCond:"全モード実行の条件",modeDup:"重複選択可",bakushinW:"💥爆進ダブル",
     pa:"パワーアタッカー",pb:"バトル中パワー",seal:"封印",altCost:"代替コスト",altCond:"代替コストの条件"};
   return M[k]||k;
 }
@@ -15588,6 +15601,7 @@ function openFxEditor(key){
     stWinBattleCond:cur&&cur.stWinBattleCond||"",
     auraNote:cur&&cur.auraNote||"",
     modeN:cur&&cur.modeN||0,
+    modeFace:cur&&cur.modeFace||0,
     modeDup:cur?!!cur.modeDup:false,
     modeAllCond:cur&&cur.modeAllCond||"",
     modeCond:cur&&cur.modeCond||"",
@@ -15951,6 +15965,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stWinBattleCond:($("fxStWinBattleCond")?$("fxStWinBattleCond").value:"").trim(),
     auraNote:$("fxAuraNote").value.trim(),
     modeN:+$("fxModeN").value||0,
+    modeFace:$("fxModeFace")?(+$("fxModeFace").value||0):0,
     modeDup:$("fxModeDup").checked,
     modeAllCond:($("fxModeAllCond")?$("fxModeAllCond").value:"").trim(),
     modeCond:($("fxModeCond")?$("fxModeCond").value:"").trim(),
