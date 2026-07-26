@@ -252,6 +252,15 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 /* 📜 確認パネルが開いている間もログを読めるように前面へ出す（設定でオフにできる） */
 #logDock.ld-over{z-index:9400;border-color:var(--accent);box-shadow:0 12px 34px rgba(0,0,0,.75)}
 #logFab.ld-over{z-index:9401}
+/* 📜 ログが大きいままだとパネルを覆い隠してしまうので、パネルが開いている間だけ画面下の帯に退避する */
+#logDock.ld-peek{
+  left:6px!important;right:6px!important;top:auto!important;
+  bottom:calc(6px + env(safe-area-inset-bottom))!important;
+  width:auto!important;height:132px!important;max-height:30dvh!important;
+}
+#logDock.ld-peek .ld-chips{display:none}
+/* 帯のぶん、パネル側に下の余白を足して隠れないようにする（パネルは縦スクロールできる） */
+body.ld-peeking .olay{padding-bottom:158px}
 /* 📍 効果登録：登録済みの項目へ飛んだ時の強調 */
 .fx-hit{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px;background:rgba(245,197,66,.16)}
 /* 📜 つまんで動かしている間は、はっきり浮かせて見せる */
@@ -268,22 +277,34 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
     max-height:calc(100dvh - 132px);
   }
   #logDock .ld-title{font-size:14px}
-  #logDock .ld-chips{max-height:62px;gap:5px;padding:7px 9px}
-  #logDock .ld-chip{font-size:12px;padding:4px 11px}
+  #logDock .ld-chips{max-height:96px;gap:5px;padding:7px 9px}
+  #logDock .ld-chip{font-size:12px;padding:4px 11px;line-height:1.4}
   #logDock .ld-body{font-size:14px;line-height:1.65;padding:9px 11px;gap:6px}
   #logDock .ld-turn{font-size:13px;padding:5px 10px}
 }
-#logDock .ld-head{display:flex;align-items:center;gap:6px;padding:7px 9px;border-bottom:1px solid var(--line);background:#111a2c;cursor:move;touch-action:none}
+#logDock .ld-head{display:flex;align-items:center;gap:5px;padding:7px 9px;border-bottom:1px solid var(--line);background:#111a2c;cursor:move;touch-action:none}
 #logDock .ld-head button{cursor:pointer}
+/* 📜 見出しのボタンは、絵文字が上下で切れないように大きさを固定して中央に置く（縮まないようにもする） */
+#logDock .ld-head .btn{
+  flex:0 0 auto;box-sizing:border-box;
+  min-width:34px;height:30px;padding:0 7px;
+  font-size:14px;line-height:1;font-weight:800;
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:8px;
+}
+@media (max-width:560px){
+  #logDock .ld-head .btn{min-width:32px;height:28px;font-size:13px;padding:0 6px}
+  #logDock .ld-head{gap:4px;padding:6px 7px}
+}
 /* ↔ 隅をつかんで大きさを変える（マウスでもタッチでも） */
 #logDock .ld-grip{position:absolute;right:0;bottom:0;width:20px;height:20px;cursor:nwse-resize;touch-action:none;z-index:5;
   background:linear-gradient(135deg,transparent 46%,var(--line) 46%,var(--line) 56%,transparent 56%,transparent 72%,var(--line) 72%,var(--line) 82%,transparent 82%)}
 #logDock .ld-grip.ld-grip-l{right:auto;left:0;cursor:nesw-resize;transform:scaleX(-1)}
 #logDock.ld-sizing{user-select:none}
 #logDock.ld-moving{opacity:.94;border-color:var(--accent)}
-#logDock .ld-title{font-weight:900;font-size:12.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#logDock .ld-chips{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid var(--line);max-height:88px;overflow-y:auto}
-#logDock .ld-chip{font-size:10.5px;padding:2px 8px;border-radius:12px;border:1px solid var(--line);background:transparent;color:#9fb0c8;cursor:pointer;font-weight:700;white-space:nowrap}
+#logDock .ld-title{font-weight:900;font-size:12.5px;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#logDock .ld-chips{display:flex;flex:0 0 auto;flex-wrap:wrap;align-content:flex-start;gap:4px;padding:6px 8px;border-bottom:1px solid var(--line);max-height:108px;overflow-y:auto;background:rgba(255,255,255,.02)}
+#logDock .ld-chip{font-size:10.5px;padding:3px 9px;line-height:1.4;border-radius:12px;border:1px solid var(--line);background:transparent;color:#9fb0c8;cursor:pointer;font-weight:700;white-space:nowrap;flex:0 0 auto}
 #logDock .ld-body{overflow-y:auto;padding:6px 8px;display:flex;flex-direction:column;gap:3px;font-size:12px;line-height:1.5;flex:1 1 auto}
 #logDock .ld-turn{position:sticky;top:0;z-index:2;margin:4px 0 2px;padding:3px 8px;border-radius:8px;font-weight:900;font-size:11.5px;background:#16203a;border:1px solid var(--line)}
 @media(max-width:900px){#logDock{left:6px;right:6px;width:auto;max-height:44dvh;top:calc(76px + env(safe-area-inset-top))}}
@@ -657,6 +678,10 @@ body.shake{animation:bodyShake .4s ease-out}
 .panelbox .fxrow .fxr-cond input{width:100%;flex:1 1 auto;text-align:left;padding:10px 8px}
 .fxrow .fxr-cond input{width:100%;flex:1 1 auto;text-align:left}
 .card.marked{outline:2px solid #ff9f43;outline-offset:-2px}
+/* 🛡 追加されたシールドの「追加元」タグ（オレンジ枠の盾に付く） */
+.card .addtag{position:absolute;left:0;bottom:0;right:0;background:rgba(255,159,67,.92);color:#2a1400;
+  font-size:8.5px;font-weight:900;line-height:1.3;padding:1px 2px;text-align:center;z-index:4;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:0 0 5px 5px;pointer-events:none}
 .vcard{touch-action:pan-y}
 #fxBanner{position:fixed;top:calc(50px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:450;background:linear-gradient(180deg,#d9a8ff,var(--resolve));color:#1a0a2a;border-radius:12px;padding:8px 12px;display:none;align-items:center;gap:8px;font-weight:800;font-size:12px;box-shadow:0 6px 18px rgba(0,0,0,.5);max-width:94vw;flex-wrap:wrap}
 #fxBanner.show{display:flex}
@@ -2092,10 +2117,10 @@ body.shake{animation:bodyShake .4s ease-out}
 <div id="logDock">
   <div class="ld-head">
     <span class="ld-title" id="ldTitle">📜 ログ</span>
-    <button class="btn small ghost" id="ldDeck" style="padding:3px 8px;font-size:11px" title="山札の公開情報（確認済み・表向き・横差し）を見る">🔍</button>
-    <button class="btn small ghost" id="ldSize" style="padding:3px 8px;font-size:11px" title="ログの大きさを切り替え（大きく → 下半分 → 帯）。下半分・帯にすると盤面を触れます">🗕</button>
-    <button class="btn small ghost" id="ldFull" style="padding:3px 8px;font-size:11px" title="全画面のログを開く">⛶</button>
-    <button class="btn small ghost" id="ldClose" style="padding:3px 8px;font-size:11px">✕</button>
+    <button class="btn small ghost" id="ldDeck" title="山札の公開情報（確認済み・表向き・横差し）を見る">🔍</button>
+    <button class="btn small ghost" id="ldSize" title="ログの大きさを切り替え（大きく → 下半分 → 帯）。下半分・帯にすると盤面を触れます">大</button>
+    <button class="btn small ghost" id="ldFull" title="全画面のログを開く">⛶</button>
+    <button class="btn small ghost" id="ldClose" title="ログを閉じる">✕</button>
   </div>
   <div class="ld-chips" id="ldChips"></div>
   <div class="ld-body" id="ldBody"></div>
@@ -2863,9 +2888,25 @@ window.syncLogOverPanel=()=>{
     if(o&&o.classList.contains("open")){open=true;break;}
   }
   const v=on&&open;
+  const shown=!!(d&&d.classList.contains("show"));
+  // 📜 パネルが開いている時、ログが画面の4割以上を占めていると対象選択パネルを覆い隠してしまう。
+  //    その場合だけ画面下の帯に退避し、パネルが閉じたら元の大きさに戻す。
+  let peek=false;
+  if(v&&shown&&d){
+    if(d.classList.contains("ld-peek"))peek=true; // すでに退避中なら維持（測り直すと元に戻ってしまう）
+    else{
+      const r=d.getBoundingClientRect();
+      peek=(r.height>window.innerHeight*0.40)||(r.width*r.height>window.innerWidth*window.innerHeight*0.34);
+    }
+  }
   if(d)d.classList.toggle("ld-over",v);
   if(f)f.classList.toggle("ld-over",v);
-  if(v&&d&&d.classList.contains("show")&&typeof renderLogDock==="function"){try{renderLogDock();}catch(e){}}
+  if(d)d.classList.toggle("ld-peek",peek);
+  document.body.classList.toggle("ld-peeking",peek);
+  if(!v&&d){ // パネルが閉じたら自由配置・プリセットを再適用して元の大きさへ
+    if(typeof applyLogBox==="function")try{applyLogBox();}catch(e){}
+  }
+  if(v&&shown&&typeof renderLogDock==="function"){try{renderLogDock();}catch(e){}}
 };
 {try{
    const obs=new MutationObserver(()=>syncLogOverPanel());
@@ -2904,7 +2945,7 @@ window.syncLogOverPanel=()=>{
    try{if(db)idbPut("misc","logSize",S.logSize);}catch(e){}
    toast(S.logSize==="ld-half"?"📜 ログを下半分にしました":S.logSize==="ld-mini"?"📜 ログを帯にしました":"📜 ログを大きくしました");
  };
- const label={"":"🗕","ld-half":"🗗","ld-mini":"🗖"};
+ const label={"":"大","ld-half":"半","ld-mini":"帯"}; // 🗕🗗🗖 は環境によって潰れるので文字にする
  const tips={"":"いま：大きく（押すと下半分へ）","ld-half":"いま：下半分（押すと帯へ）","ld-mini":"いま：帯（押すと大きくへ）"};
  window.applyLogDockSize=()=>{
    const d=document.getElementById("logDock");if(!d)return;
@@ -6035,7 +6076,7 @@ const FX_TYPES=[
   ["tutorDMPS","山札から条件に合うカードをn枚 手札へ（デュエプレ式・候補のみ表示／無ければ不発）"],
   ["retrieveHand","↩ マナ/墓地/シールド等からn枚 手札に戻す（条件欄に「墓地:」「マナ:クリーチャー」「相手のマナ:」のようにゾーンを書くと選択をスキップして固定・ゾーン省略時は実行時選択）"],
   ["retrieveManaGrave","↩ マナと墓地から合計n枚 手札に戻す（両ゾーンを組み合わせて自由に選択・条件欄で対象指定・ベートーベン型）"],
-  ["meteoburn","☄ メテオバーン：このクリーチャーの下のカードをn枚墓地に置く（置けない/キャンセル時は、この行より下に登録した効果を中止・マーキュリー/ヴィーナス型の1枚ずつ形式）"],
+  ["meteoburn","☄ メテオバーン：このクリーチャーの下のカードをn枚墓地に置く（使うかどうかを毎回確認。使わない/枚数不足なら、この行より下に登録した効果を中止・マーキュリー/ヴィーナス型の1枚ずつ形式／条件欄に「強制」と書くと確認なしで実行）"],
   ["untapFilt","🔄 アンタップ：自分の対象クリーチャーをすべてアンタップする（条件欄で対象指定・カード名で自身のみも可・ターン終了時アンタップ／聖霊王ナルカミ／パーフェクト・エイティー型）"],
   ["graveToManaAllTap","⚰→🔷 自分の墓地から条件に合うカードをすべてタップしてマナゾーンに置く（使用可能マナは増えない・パラスラプト型／条件欄で対象指定）"],
   ["drawAsk","🃏 カードを引く（枚数は実行時に入力・エレメントのカード枚数分など盤面を数えて引くゾグジグス型・0でスキップ）"],
@@ -7270,13 +7311,29 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
   if(put>0&&zone==="deck"){shuffle(Z.deck);toast("🔀 山札をシャッフル");}
   renderAll();
 }
+/* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
+   個々の効果に手を入れず、効果を1件処理し終えたタイミングで印だけ付いている盾を拾って刻む。 */
+function stampShieldSrc(label){
+  if(!label)return;
+  for(const pp of (S.vs?[0,1]:[0])){
+    const Z2=zonesOf(pp);
+    if(!Z2||!Z2.shield)continue;
+    for(const sh of Z2.shield){
+      if(!sh||!sh.mark||sh._addedBy)continue;
+      sh._addedBy=label;sh._addedTurn=S.turn|0;
+      (sh.under||[]).forEach(u=>{if(u&&!u._addedBy){u._addedBy=label;u._addedTurn=S.turn|0;}});
+    }
+  }
+}
 async function runFxList(pi,list,srcCard,inPump){
   // inPump=true のとき、内部の踏み倒し系ハンドラは waitFxIdle で待たない（pumpFx から呼ばれた時のハング防止）。
   const op=pi===0?1:0;
+  const _srcLbl=srcCard?faceNameOf(srcCard):"";
   for(const f of list){
+    try{stampShieldSrc(_srcLbl);}catch(e){} // 前の効果で増えた盾を取りこぼさないよう、各行の頭でも刻む
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
-    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap",
+    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn",
       // 🔧 条件欄を「対象の絞り込み／書式」として使う効果（ゾーン条件式として判定してはいけない）
       "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
       "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck"]);
@@ -7296,7 +7353,11 @@ async function runFxList(pi,list,srcCard,inPump){
     if(f.opt){
       const lbl=(FX_LABEL[f.t]||f.t).replace("n",f.n).split("（")[0];
       const doIt=await ask(`❓ 任意効果${srcCard?`（${faceNameOf(srcCard)}）`:""}\n「${lbl}${f.cond?`／条件:${f.cond}`:""}」を行いますか？`);
-      if(!doIt){toast(`（任意効果をスキップ）`);continue;}
+      if(!doIt){
+        // ☄ メテオバーンは「コスト」なので、払わないなら続く効果も発動しない
+        if(f.t==="meteoburn"){toast("☄ メテオバーンしなかったため、この効果は発動しない");break;}
+        toast(`（任意効果をスキップ）`);continue;
+      }
     }
     // 🗡 前提コスト：このカードを破壊する。破壊しないなら、この効果は行わない
     //    （「このクリーチャーを破壊してもよい。そうした場合、〜」＝アナリス型）
@@ -8125,6 +8186,8 @@ async function runFxList(pi,list,srcCard,inPump){
           const _nonCre=TZ.battle.filter(x=>!isCreatureReg(getReg(x))).length;
           const _filtOut=pickFilt?TZ.battle.filter(x=>isCreatureReg(getReg(x))&&!lockFilterOk(pickFilt,getReg(x),x)).length:0;
           toast(`対象の${unit}がいません（対象：${S.players[tp].label}の場${_tot}枚${_nonCre?`・非クリーチャー${_nonCre}`:""}${pickFilt?`・条件「${pickFilt}」外${_filtOut}`:""}${_ncCut?`・選ばれない${_ncCut}`:""}）`);
+          // ⚡ 「パネルが出なかった」原因が後から追えるように、案内ではなく記録としてログに残す
+          logOnly(`⚡ ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${act}の対象がいないため選択パネルを出しませんでした（対象：${S.players[tp].label}の場${_tot}枚${_nonCre?`・非クリーチャー${_nonCre}`:""}${pickFilt?`・条件「${pickFilt}」に合わない${_filtOut}`:""}${_ncCut?`・選ばれない${_ncCut}`:""}）`);
           break;
         }
         const j=await pickCard(`🎯 ${chooser?chooser+"：":""}${act}する${unit}を選択${pickFilt?`（${pickFilt}）`:""}（${i+1}/${n}${isElem?"個":"体"}目・キャンセルで終了）`,pool,{sub:x=>x.tapped?"タップ":""});
@@ -8445,6 +8508,13 @@ async function runFxList(pi,list,srcCard,inPump){
       if(srcLive&&un){
         // 場に残っている＝通常のメテオバーン（下をn枚墓地へ。足りない場合は以降の効果を停止）
         if(un.length<n){toast(`☄ メテオバーン：下のカードが${n}枚ないため効果は発動しない（${un.length}枚）`);break;}
+        // ☄ メテオバーンは「下のカードを墓地に置いてもよい。そうしたら〜」のコストなので、既定で使うかどうかを確認する。
+        //    条件欄に「強制」（または「必ず」）と書いた時だけ確認なしで実行する。
+        //    ❓任意にチェックしている場合は上の共通確認で既に聞いているので、ここでは聞かない。
+        if(!f.opt&&!/強制|必ず/.test(String(f.cond||""))){
+          const useMb=await ask(`☄ メテオバーン（《${faceNameOf(srcLive)}》${mbTag}）\n下のカードを${n}枚墓地に置いて、続く効果を発動しますか？\n（「いいえ」ならメテオバーンせず、この効果は発動しません）`);
+          if(!useMb){toast(`☄ メテオバーンしませんでした（この効果は発動しない）`);logOnly(`☄ ${S.players[pi].label}：《${faceNameOf(srcLive)}》のメテオバーンを使わなかった`);break;}
+        }
         // 🔎 どのクリーチャーの処理か一目で分かるよう、対象カードをハイライトして名前を出す
         //    （複数のクリーチャーが同時に出た時に、どれのメテオバーンか迷わないように必ず表示する）
         HILITE_ID=srcLive.id;renderAll();
@@ -9692,6 +9762,7 @@ async function runFxList(pi,list,srcCard,inPump){
     }
     renderAll();
   }
+  try{stampShieldSrc(_srcLbl);}catch(e){} // 🛡 最後の効果で増えた盾にも追加元を刻む
 }
 const fxQueue=[];let fxRunning=false;
 let fxInsertAt=null; // 🔢 深さ優先の挿入位置。処理中カードの「出た時」で新たに出たカードのCIPは、次の兄弟より先に解決させる（1枚の効果解決が終わるまで割り込ませない）
@@ -9730,6 +9801,10 @@ function lockFilterOk(filt,r,c,lockPi,face){
     .replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
     .replace(/パワ[−ｰ-]/g,"パワー")
     .replace(/＜/g,"<").replace(/＞/g,">").replace(/＝/g,"=")
+    .replace(/(\d+)\s*コスト\s*(以上|以下)/g,"コスト$1$2")   // 「6コスト以上」→「コスト6以上」（書き順のゆれを吸収）
+    .replace(/(\d+)\s*パワー\s*(以上|以下)/g,"パワー$1$2")   // 「6000パワー以下」→「パワー6000以下」
+    .replace(/コスト\s*(\d+)\s*(以上|以下)/g,"コスト$1$2")
+    .replace(/パワー\s*(\d+)\s*(以上|以下)/g,"パワー$1$2")
     .replace(/(^|[／\/・、,])(\d{3,})(以下|以上)/g,"$1パワー$2$3"); // 「4000以下」だけでもパワーとして解釈（3桁以上＝パワー値）
   const civMap={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature","ゼロ":"zero","無色":"zero"};
   // 🃏 ツインパクトは面によってコストが違う。face==="spell"（呪文面として評価）なら下面コスト(cost2)を使う。
@@ -18690,6 +18765,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         }else{
         ns.faceup=false;
         ns.mark=S.turn>0;
+        ns._addedBy=`${faceNameOf(c)}（EXライフ）`;ns._addedTurn=S.turn|0;
         ns.exFor=c.id;
         ns.under=ns.under||[];
         Z.shield.push(ns);}
@@ -19560,6 +19636,17 @@ function cardEl(pi,zone,c){
   if(S.msel.some(s=>s.p===pi&&s.zone===zone&&s.id===c.id))el.classList.add("msel");
   if(PENDING&&PENDING.list.some(s=>s.id===c.id))el.classList.add("msel");
   if(c.mark)el.classList.add("marked");
+  // 🛡 対戦中に増えたシールドは、どのカードで追加したかを小さなタグとツールチップで示す
+  if(c.mark&&zone==="shield"&&c._addedBy){
+    el.title=`🛡 ${c._addedBy} で追加${c._addedTurn?`（ターン${c._addedTurn}）`:""}`;
+    if(showBLab){
+      const tg=document.createElement("span");
+      tg.className="addtag";
+      tg.textContent=`+${String(c._addedBy).replace(/（.*$/,"").slice(0,6)}`;
+      tg.title=el.title;
+      el.appendChild(tg);
+    }
+  }
   if(zone==="shield"){
     const shz=(S.zoneScale&&S.zoneScale.shield)||100;
     if(shz!==100)el.style.zoom=shz/100;
@@ -23389,7 +23476,14 @@ function openCardSheet(ctx){
     },"",true));
   }
   if(c.mark){
-    box.appendChild(actBtn("マーク色を戻す",()=>{c.mark=false;rerender();}));
+    if(c._addedBy){
+      const info=document.createElement("div");
+      info.className="hint";
+      info.style.cssText="margin:2px 0 4px;color:#ffbe7a;font-weight:700";
+      info.textContent=`🛡 このシールドは 《${c._addedBy}》 で追加されました${c._addedTurn?`（ターン${c._addedTurn}）`:""}`;
+      box.appendChild(info);
+    }
+    box.appendChild(actBtn(c._addedBy?"マーク色と追加元の記録を消す":"マーク色を戻す",()=>{c.mark=false;delete c._addedBy;delete c._addedTurn;rerender();}));
   }
   {
     const rM=getReg(c);
@@ -23659,7 +23753,7 @@ function openDeckMenu(pi){
   },"",true));
   box.appendChild(actBtn("上を1枚 墓地へ",()=>{if(Z.deck.length){snap();const c=Z.deck.shift();c.faceup=true;Z.grave.push(c);logOnly(`🪦 ${S.players[pi].label}：山札の上1枚を墓地へ → ${cn(c)}`);sfx("grave");renderAll();}closeSheet();}));
   box.appendChild(actBtn("上を1枚 マナへ",()=>{if(Z.deck.length){snap();const c=Z.deck.shift();c.faceup=true;Z.mana.push(c);logOnly(`💎 ${S.players[pi].label}：山札の上1枚をマナへ → ${cn(c)}`);renderAll();}closeSheet();}));
-  box.appendChild(actBtn("上を1枚 シールドへ（裏）",()=>{if(!shieldCapOk(Z)){toast("🛡 シールド上限（10枚）：追加できません");return;}if(Z.deck.length){snap();const c=Z.deck.shift();c.faceup=false;Z.shield.push(c);logOnly(`🛡 ${S.players[pi].label}：山札の上1枚を裏向きのシールドに追加`);renderAll();}closeSheet();}));
+  box.appendChild(actBtn("上を1枚 シールドへ（裏）",()=>{if(!shieldCapOk(Z)){toast("🛡 シールド上限（10枚）：追加できません");return;}if(Z.deck.length){snap();const c=Z.deck.shift();c.faceup=false;if(S.turn>0){c.mark=true;c._addedBy="手動（山札から）";c._addedTurn=S.turn|0;}Z.shield.push(c);logOnly(`🛡 ${S.players[pi].label}：山札の上1枚を裏向きのシールドに追加`);renderAll();}closeSheet();}));
   box.appendChild(actBtn("上を1枚 シールドへ（表向き）",async ()=>{
     if(!Z.deck.length){toast("山札がありません");return;}
     let mode=0;
