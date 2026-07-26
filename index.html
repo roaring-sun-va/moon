@@ -3167,6 +3167,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 const memImages=new Map(), memDecks=new Map();
+let IMG_RECV_N=0,IMG_RECV_TM=null; // 🖼 受け取った画像の保存件数（まとめて1回だけ知らせる）
 let PENDING=null;
 const arrived=new Set();
 let ENTERED_CNT=0;
@@ -20548,6 +20549,17 @@ function setupConn(conn){
           const blob=new Blob([msg.buf],{type:"image/jpeg"});
           imgURL.setBlob(msg.key,blob);
           if(msg.key!=="__back__"&&!dispName.has(msg.key))dispName.set(msg.key,msg.name||msg.key);
+          // 🖼 受け取った画像は端末にも保存する（これまではメモリだけで、再読み込みで消えていた）
+          (async()=>{
+            try{
+              if(db)await idbPut("images",msg.key,blob);else memImages.set(msg.key,blob);
+              if(!imgOrder.has(msg.key)){imgOrder.set(msg.key,++imgSeq);await persistImgOrder();}
+              await persistNames();
+              IMG_RECV_N=(IMG_RECV_N|0)+1;
+              clearTimeout(IMG_RECV_TM);
+              IMG_RECV_TM=setTimeout(()=>{toast(`🖼 受け取った画像${IMG_RECV_N}枚を保存しました（次に開いた時も残ります）`);IMG_RECV_N=0;},1200);
+            }catch(e){console.warn("imgSave",e);}
+          })();
           renderAll();
         }catch(e){}
       }
@@ -20567,8 +20579,17 @@ function setupConn(conn){
       if((msg.chunk|0)+1>=(msg.total|0)){
         sfx("ok");
         toast(`📥 ${FX_INBOX.from} からカード登録${cnt}件を受信しました\n「📦 カード登録の受け渡し」→「受け取った登録を確認して取り込む」で反映できます`);
+        // ✅ 送り主に「届いた」ことを返す（送れたかどうか分からない不安の解消）
+        try{if(ONLINE.conn&&ONLINE.conn.open)ONLINE.conn.send({t:"fxack",n:cnt,who:S.players[S.seat|0].label});}catch(e){}
         if(S.turn<=0)showFxDiffPanel(); // 対戦前なら、そのまま確認画面を開く
       }else toast(`📥 カード登録を受信中… ${cnt}件`);
+    }
+    else if(msg&&msg.t==="fxack"){
+      // ✅ 相手に届いたという返事
+      sfx("ok");
+      const who=String(msg.who||"相手").slice(0,12);
+      toast(`✅ ${who} にカード登録${msg.n|0}件が届きました\n（相手側の「受け取った登録を確認して取り込む」で反映されます）`);
+      logOnly(`✅ カード登録の送信が ${who} に届いた（${msg.n|0}件）`);
     }
     else if(msg&&msg.t==="link"){
       if(msg.base&&msg.faces&&!LINKS.has(msg.base))LINKS.set(msg.base,msg.faces);
@@ -20680,6 +20701,37 @@ async function shrinkImageBlob(blob,maxW=480,q=0.8){
     return out||blob;
   }catch(e){return blob;}
   finally{if(tmpURL)URL.revokeObjectURL(tmpURL);}
+}
+/* 🖼 指定したカードキーの画像を送る（カード登録の受け渡しからも使う）。
+   多面カードの各面も一緒に送る。1枚ずつ縮小してから送るので、枚数が多いと時間がかかる。 */
+async function olSendImagesForKeys(keys0){
+  if(!ONLINE.conn||!ONLINE.conn.open){toast("⚠ まだ相手とつながっていないため画像を送れません");return 0;}
+  const base=[...new Set(keys0)].filter(k=>imgURL.has(k));
+  const extra=[];
+  for(const k of base){const l=LINKS.get(k);if(l)for(const f of l)if(imgURL.has(f))extra.push(f);}
+  const all=[...new Set([...base,...extra])];
+  if(!all.length){toast("送信できる画像がありません（画像が登録されていないカードです）");return 0;}
+  toast(`🖼 画像を送信中…（${all.length}枚・枚数が多いと数分かかります）`);
+  let sent=0;
+  for(const k of all){
+    if(!ONLINE.conn||!ONLINE.conn.open){toast("⚠ 接続が切れたため画像の送信を中断しました");break;}
+    const blob=db?await idbGet("images",k):memImages.get(k);
+    if(!blob)continue;
+    const small=await shrinkImageBlob(blob);
+    const buf=await small.arrayBuffer();
+    try{ONLINE.conn.send({t:"img",key:k,name:dispName.get(k)||k,buf});}
+    catch(e){toast("⚠ 画像の送信に失敗しました（残りは中断）");break;}
+    sent++;
+    if(sent%8===0)toast(`🖼 画像送信中… ${sent}/${all.length}`);
+    await new Promise(r=>setTimeout(r,40));
+  }
+  for(const k of base){
+    const l=LINKS.get(k);
+    if(l&&ONLINE.conn&&ONLINE.conn.open){try{ONLINE.conn.send({t:"link",base:k,faces:l});}catch(e){}}
+  }
+  toast(`🖼 画像送信完了（${sent}枚）`);
+  logOnly(`🖼 画像を${sent}枚 送信しました`);
+  return sent;
 }
 async function olSendDeckImages(names){
   if(!ONLINE.conn||!ONLINE.conn.open)return;
@@ -21344,7 +21396,10 @@ function fxShareKeys(scope,deckNames){
 }
 /* 分割して送る（一度に大量に送るとつながりが詰まるため、画像と同じく数十件ずつ間隔を空ける） */
 async function olSendFx(keys,label){
-  if(!ONLINE.conn||!ONLINE.conn.open){toast("先にオンライン接続してください");return;}
+  if(!ONLINE.conn||!ONLINE.conn.open){
+    toast("⚠ まだ相手とつながっていないため送れません。\n合言葉の部屋を作るだけでは送信できません。相手が同じ合言葉で「部屋に入る」まで待ってから送ってください。\n（1人で保存したい場合は「📤 書き出し」→「📦 カード登録だけの共有パック」でファイルに出せます）");
+    return;
+  }
   if(!keys.length){toast("送るカード登録がありません");return;}
   const CH=25, total=Math.ceil(keys.length/CH);
   const me=S.players[S.seat|0].label;
@@ -21362,7 +21417,8 @@ async function olSendFx(keys,label){
     if(total>4&&i%4===3)toast(`📤 カード登録を送信中… ${Math.min((i+1)*CH,keys.length)}/${keys.length}`);
     await new Promise(r=>setTimeout(r,60));
   }
-  toast(`📤 カード登録${keys.length}件を送信しました（${label}）`);
+  toast(`📤 カード登録${keys.length}件を送信しました（${label}）\n相手に届くと「✅ …に届きました」と表示されます`);
+  logOnly(`📤 カード登録${keys.length}件を送信（${label}）`);
 }
 /* 📦 受け取った登録の差分を見て、採用するものを選ぶ画面 */
 function showFxDiffPanel(){
@@ -21476,7 +21532,7 @@ function showFxDiffPanel(){
 }
 $("olFxShare").addEventListener("click",async ()=>{
   const inb=fxInboxCount();
-  const j=await askChoice(`📦 カード登録の受け渡し（合言葉でつないだ相手と）\n※ 画像は含みません（画像は「自分のデッキを相手に送る」から）`,
+  const j=await askChoice(`📦 カード登録の受け渡し（合言葉でつないだ相手と）\n※ 送ったあとに「画像も送りますか？」と聞きます（画像は容量が大きいので枚数にご注意）`,
     ["📤 全部を送る",
      "📤 いま選んでいるデッキで使うカードだけ送る",
      "📤 最近2週間に更新した分だけ送る",
@@ -21496,6 +21552,19 @@ $("olFxShare").addEventListener("click",async ()=>{
   if(!keys.length){toast("送る対象のカード登録がありません");return;}
   if(!await ask(`📤 カード登録 ${keys.length}件を送信します（${label}）\nよろしいですか？`))return;
   await olSendFx(keys,label);
+  // 🖼 画像も一緒に送れるようにする（画像は容量が大きいので、枚数を見せてから確認する）
+  if(ONLINE.conn&&ONLINE.conn.open){
+    const imgKeys=[];
+    for(const k of keys){
+      if(imgURL.has(k))imgKeys.push(k);
+      const l=LINKS.get(k);if(l)for(const f of l)if(imgURL.has(f))imgKeys.push(f);
+    }
+    const nImg=new Set(imgKeys).size;
+    if(nImg){
+      const yes=await ask(`🖼 画像も送りますか？（${nImg}枚）\n1枚ずつ縮小して送るため、枚数が多いと数分かかります。\n途中で対戦を始めたり画面を閉じたりしないでください。`);
+      if(yes)await olSendImagesForKeys([...new Set(imgKeys)]);
+    }else toast("🖼 このカードの画像は登録されていないため、画像は送りません");
+  }
 });
 /* 📦 もらったカード登録をローカルに取り込む共通処理（同梱・ファイル・合言葉のすべてで使う）
    ・未登録 → そのまま採用
