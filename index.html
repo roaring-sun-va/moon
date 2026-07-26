@@ -5355,6 +5355,9 @@ const FX_TYPES=[
   ["grantStayBlk","🛡⚓ 自分の「ブロッカー」を持つクリーチャーすべてに『離れる時、パワーが0より大きいならかわりにとどまる』を次の自分のターン開始時まで付与（Shin-Ka Musical型）"],
   ["handStFree","⚡ 自分の手札の「S・トリガー」持ちを1枚、コストを支払わずに実行（クリーチャー→召喚／呪文→詠唱・条件欄で追加対象指定可）"],
   ["handCastSpell","🔮 自分の手札から条件に合う呪文を1枚、コストを支払わずに唱えてもよい（条件欄で文明/コスト指定・シャッフ型）"],
+  ["handManaCastSpell","🔮 自分の手札またはマナゾーンから条件に合う呪文を1枚、コストを支払わずに唱えてもよい（条件欄で名前/文明/コスト指定・デンジャデオン型）"],
+  ["deckSearchTop","🔎 山札から条件に合うカードを探索し、1枚を公開して山札の一番上に置く（デュエプレ式・3種提示／条件欄で対象を指定・ハチマ型）"],
+  ["foeShieldToMana","🛡→🌱 相手のシールドをn枚選んで、持ち主のマナゾーンに置く（ブレイクせず直接マナ）"],
   ["diaBliz","🔷 マナから条件のカードをランダムに手札上限(10)まで戻す→戻した数だけ山札からマナ加速（自身と同名は除外・条件欄で種族等指定・ダイヤモンド・ブリザード型）"],
   ["battleAsk","相手のクリーチャーとバトルする（対象選択・確認つき）"],
   ["hold","⏸ 処理中にする（攻撃を保留して手動で解決。もう一度攻撃で続行）"],
@@ -5389,7 +5392,7 @@ const FX_TYPES=[
   ["millUntilCre","山札の上から、クリーチャーがn体墓地に置かれるまで置く（ヴォルグ・サンダー型・対象プレイヤー選択）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["turnEndUntapAll","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap","drawAsk"]);
+const FX_NO_N=new Set(["turnEndUntapAll","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap","drawAsk"]);
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
@@ -6473,7 +6476,8 @@ async function runFxList(pi,list,srcCard,inPump){
     const n=Math.max(1,f.n|0);
     const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap",
       // 🔧 条件欄を「対象の絞り込み／書式」として使う効果（ゾーン条件式として判定してはいけない）
-      "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS"]);
+      "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
+      "handManaCastSpell","deckSearchTop"]);
     // 🪧 「召喚時のみ」の効果：このカードの出た方法を1回だけ確認してゲート
     if(f.sumOnly&&srcCard){
       if(srcCard._wasSummon==null){
@@ -7817,6 +7821,79 @@ async function runFxList(pi,list,srcCard,inPump){
           }
         }
       }
+    }else if(f.t==="handManaCastSpell"){
+      // 🔮 手札またはマナゾーンから条件に合う呪文を1枚、コストを支払わず唱えてもよい（黄金卍罠＝デンジャデオン型）
+      //    マナから唱えた呪文は、解決後の行き先（墓地など）は通常の呪文と同じ扱いにする
+      const filt=String(f.cond||"").trim();
+      const isSp=x=>{const rx=getReg(x);return rx&&(rx.ctype==="spell"||rx.twin||rx.ctype==="twinpact")&&(!filt||lockFilterOk(filt,rx,x,null,"spell"));};
+      const cands=[...Z.hand.filter(isSp).map(x=>({x,from:"hand"})),...Z.mana.filter(isSp).map(x=>({x,from:"mana"}))];
+      if(!cands.length){toast(`手札とマナに条件に合う呪文がありません${filt?`（${filt}）`:""}`);}
+      else{
+        const j=await askChoice(`🔮 手札またはマナゾーンから呪文を1枚、コストを支払わず唱える${filt?`（${filt}）`:""}`,
+          [...cands.map(o=>{const rx=getReg(o.x);return `${o.from==="hand"?"手札":"マナ"}：${faceNameOf(o.x)}${rx&&rx.twin?"（ツインパクト・呪文面）":""}`;}),"唱えない"]);
+        if(j!==null&&j<cands.length){
+          const sel=cands[j].x, src=cands[j].from;
+          const arr=(src==="hand")?Z.hand:Z.mana;
+          const hi=arr.findIndex(x=>x.id===sel.id);
+          if(hi>=0){
+            snap();
+            arr.splice(hi,1);
+            sel.faceup=true;sel.tapped=false;
+            {const rSel=getReg(sel);if(rSel&&rSel.twin)sel.face=1;} // ツインパクトは呪文面で唱える
+            if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
+            Z.resolve.push(sel);emitEvent(pi,"spell",sel);enqueueFx(pi,sel);
+            toast(`🔮 ${src==="hand"?"手札":"マナゾーン"}の ${faceNameOf(sel)} をコストを支払わず唱えた（解決中へ）`);
+            sfx("ok");renderAll();await waitFxIdle(inPump);
+          }
+        }
+      }
+    }else if(f.t==="deckSearchTop"){
+      // 🔎 山札から条件に合うカードを探索し、1枚を公開して山札の一番上に置く（デュエプレ式・候補を絞って提示）
+      const filt=String(f.cond||"").trim();
+      const pool=Z.deck.filter(x=>{const rx=getReg(x);return !filt||(rx&&lockFilterOk(filt,rx,x));});
+      if(!pool.length){toast(`山札に条件に合うカードがありません${filt?`（${filt}）`:""}（不発）`);}
+      else{
+        // デュエプレの探索：候補をランダムに3種まで提示する
+        const uniq=[];
+        for(const x of pool){const k=normName(x.name);if(!uniq.some(u=>normName(u.name)===k))uniq.push(x);}
+        for(let i=uniq.length-1;i>0;i--){const r2=Math.floor(Math.random()*(i+1));[uniq[i],uniq[r2]]=[uniq[r2],uniq[i]];}
+        const show=uniq.slice(0,3);
+        const j=await pickCard(`🔎 探索：山札の一番上に置くカードを選択${filt?`（${filt}）`:""}`,show,{hint:"タップで選択／キャンセルで置かない"});
+        if(j===null){toast("（公開しなかった）");}
+        else{
+          const sel=show[j];
+          const di=Z.deck.findIndex(x=>x.id===sel.id);
+          if(di>=0){
+            snap();
+            const cc=Z.deck.splice(di,1)[0];
+            shuffleDeck(Z);                 // 先に山札をシャッフルしてから一番上に置く
+            cc.faceup=false;cc.tapped=false;
+            Z.deck.unshift(cc);
+            renderAll();
+            toast(`🔎 ${faceNameOf(cc)} を公開し、山札をシャッフルして一番上に置いた`);
+            logOnly(`🔎 探索：${S.players[pi].label} が ${faceNameOf(cc)} を山札の一番上に置いた`);
+          }
+        }
+      }
+    }else if(f.t==="foeShieldToMana"){
+      // 🛡→🌱 相手のシールドをn枚選んで、持ち主のマナゾーンに置く（ブレイクではないのでS・トリガーは使えない）
+      const OZ=zonesOf(op);
+      let moved=0;
+      for(let i=0;i<n;i++){
+        const sh=OZ.shield.slice();
+        if(!sh.length){if(i===0)toast("相手のシールドがありません");break;}
+        const j=sh.length===1?0:await pickCard(`🛡 マナゾーンに置く相手のシールドを選択（${i+1}/${n}つ目）`,sh,{hint:"タップで選択"});
+        if(j===null)break;
+        const t=sh[j];
+        const idx=OZ.shield.findIndex(x=>x.id===t.id);
+        if(idx<0)continue;
+        const rm=OZ.shield.splice(idx,1)[0];
+        if(rm.under&&rm.under.length)rm.under.splice(0).forEach(u=>{u.faceup=true;u.tapped=false;OZ.mana.push(u);});
+        rm.faceup=true;rm.tapped=false;rm.sideways=false;rm.mark=false;
+        OZ.mana.push(rm);
+        moved++;
+      }
+      if(moved){sfx("move");renderAll();toast(`🛡→🌱 相手のシールドを${moved}つマナゾーンに置いた（ブレイクではないのでS・トリガーは使えません）`);}
     }else if(f.t==="tempBlockerAll"){
       // 🛡 自分の〔対象〕すべてに「ブロッカー」を付与（次の自分のターン開始時まで）。f.cond＝対象条件（空欄＝全員）
       const filt=String(f.cond||"").trim();
@@ -24309,17 +24386,48 @@ $("btnViewDeck").addEventListener("click",async ()=>{
   const total=(d.main||[]).reduce((a,x)=>a+cntOf(x),0);
   ttl.textContent=`🖼 ${name}（メイン${total}枚）`;
   ol.appendChild(ttl);
+  // 🔢 横に何枚並べるか（「現在のリスト」と同じ設定を共有。既定8枚）
+  const colsNow=()=>Math.max(4,Math.min(12,+B._listCols||8));
+  const wrap=document.createElement("div");
+  wrap.style.cssText="width:100%;max-width:min(1280px,96vw);display:flex;flex-direction:column;gap:8px";
+  if(window.innerWidth>=700){
+    const cw=document.createElement("label");
+    cw.style.cssText="display:inline-flex;gap:4px;align-items:center;font-size:12px;color:#cbd3df;align-self:flex-end";
+    const cs=document.createElement("select");
+    cs.style.cssText="width:auto;font-size:12px;padding:1px 6px";
+    for(const v of [4,5,6,7,8,9,10,12]){
+      const o=document.createElement("option");
+      o.value=v;o.textContent=v;
+      if(colsNow()===v)o.selected=true;
+      cs.appendChild(o);
+    }
+    cs.onchange=async()=>{
+      B._listCols=parseInt(cs.value,10)||8;
+      try{if(db)await idbPut("misc","listCols",B._listCols);}catch(e){}
+      wrap.querySelectorAll("[data-deckgrid]").forEach(el=>{el.style.gridTemplateColumns=`repeat(${colsNow()},minmax(0,1fr))`;});
+    };
+    cw.appendChild(document.createTextNode("横"));
+    cw.appendChild(cs);
+    cw.appendChild(document.createTextNode("枚"));
+    wrap.appendChild(cw);
+  }
+  ol.appendChild(wrap);
   for(const [lb,arr] of secs){
     if(!arr.length)continue;
     const h=document.createElement("div");
     h.style.cssText="color:#9aa4b2;font-size:12px;font-weight:700;align-self:flex-start";
     h.textContent=`■ ${lb}（${arr.reduce((a,x)=>a+cntOf(x),0)}枚・${arr.length}種）`;
-    ol.appendChild(h);
+    wrap.appendChild(h);
     const g2=document.createElement("div");
-    g2.style.cssText="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;align-self:stretch";
+    if(window.innerWidth>=700){
+      g2.dataset.deckgrid="1";
+      g2.style.cssText=`display:grid;grid-template-columns:repeat(${colsNow()},minmax(0,1fr));gap:8px;align-self:stretch`;
+    }else{
+      g2.style.cssText="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;align-self:stretch";
+    }
     for(const it of arr){
       const cell=document.createElement("div");
-      cell.style.cssText="position:relative;width:92px;flex:0 0 auto";
+      cell.style.cssText=(window.innerWidth>=700)?"position:relative;min-width:0":"position:relative;width:92px;flex:0 0 auto";
       const u=imgURL.get(normName(it.name))||imgURL.get(it.name);
       if(u){
         const im=document.createElement("img");
@@ -24333,7 +24441,7 @@ $("btnViewDeck").addEventListener("click",async ()=>{
         cell.appendChild(ph);
       }
       const nm=document.createElement("div");
-      nm.style.cssText="font-size:9px;color:#cbd3df;text-align:center;line-height:1.2;margin-top:2px;word-break:break-word";
+      nm.style.cssText=`font-size:${window.innerWidth>=700?11:9}px;color:#cbd3df;text-align:center;line-height:1.25;margin-top:3px;word-break:break-word`;
       nm.textContent=it.name;
       cell.appendChild(nm);
       if(cntOf(it)>1){
@@ -24344,7 +24452,7 @@ $("btnViewDeck").addEventListener("click",async ()=>{
       }
       g2.appendChild(cell);
     }
-    ol.appendChild(g2);
+    wrap.appendChild(g2);
   }
   const cl=document.createElement("button");
   cl.className="btn small";cl.textContent="閉じる";
@@ -25616,7 +25724,9 @@ function bBuildCivBar(){
 function fitDeckListGrid(g,cardCount,headBlocks){
   if(!g)return;
   if(B._listBig){ // 「大きく表示」を選んでいる時は自動縮小しない
-    g.style.gridTemplateColumns="repeat(auto-fill,minmax(96px,1fr))";
+    // 横に並べる枚数は「横◯枚」で指定（既定8枚）。狭い画面では今までどおり幅に合わせて自動で詰める
+    const cols=Math.max(4,Math.min(12,+B._listCols||8));
+    g.style.gridTemplateColumns=(window.innerWidth>=700)?`repeat(${cols},minmax(0,1fr))`:"repeat(auto-fill,minmax(96px,1fr))";
     return;
   }
   const W=g.clientWidth||g.parentElement&&g.parentElement.clientWidth||600;
@@ -25729,6 +25839,28 @@ $("bListView").addEventListener("click",()=>{
       tg.title="デッキ全体をスクロールなしで見るか、カードを大きく見るかを切り替えます";
       tg.onclick=()=>{B._listBig=!B._listBig;paint();};
       bar.appendChild(tg);
+      if(B._listBig&&window.innerWidth>=700){
+        // 🔢 横に何枚並べるか（確認しやすい枚数に変えられる）
+        const cw=document.createElement("label");
+        cw.style.cssText="display:inline-flex;gap:4px;align-items:center;font-size:11px;white-space:nowrap";
+        const cs=document.createElement("select");
+        cs.style.cssText="width:auto;font-size:11px;padding:1px 4px";
+        for(const v of [4,5,6,7,8,9,10,12]){
+          const o=document.createElement("option");
+          o.value=v;o.textContent=v;
+          if((+B._listCols||8)===v)o.selected=true;
+          cs.appendChild(o);
+        }
+        cs.onchange=async()=>{
+          B._listCols=parseInt(cs.value,10)||8;
+          try{if(db)await idbPut("misc","listCols",B._listCols);}catch(e){}
+          paint();
+        };
+        cw.appendChild(document.createTextNode("横"));
+        cw.appendChild(cs);
+        cw.appendChild(document.createTextNode("枚"));
+        bar.appendChild(cw);
+      }
       if(B._listMode==="flat"){
         const hint=document.createElement("span");
         hint.className="hint";hint.style.cssText="font-size:11px";
@@ -25983,6 +26115,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   const lk=db?await idbGet("misc","faceLinks"):null;
   if(lk)for(const [k,v] of Object.entries(lk))LINKS.set(k,v);
   {const bo=db?await idbGet("misc","builtinOff"):null;if(bo!==null&&bo!==undefined)BUILTIN_OFF=!!bo;}
+  {const lc=db?await idbGet("misc","listCols"):null;if(lc)B._listCols=+lc||8;}
   await applyBuiltinCardFx(); // 📦 同梱データは土台。ユーザー自身の登録は上書きしない
   const so=db?await idbGet("misc","sound"):null;
   if(so!==null&&so!==undefined)S.sound=!!so;
