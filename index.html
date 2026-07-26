@@ -20535,6 +20535,32 @@ function setupConn(conn){
   conn.on("data",msg=>{
     if(msg&&msg.t==="state")applyRemote(msg);
     else if(msg&&msg.t==="log")logRecv(msg.e);
+    else if(msg&&msg.t==="deckSave"){
+      // 🃏 デッキ単位で送られてきたものを、相手の端末のデッキ一覧に保存する
+      (async()=>{
+        try{
+          const d=msg.deck||{};
+          const from=String(msg.from||"相手").slice(0,12);
+          let nm=`${String(msg.name||"受信デッキ").slice(0,40)}（${from}から）`;
+          const exist=await deckNames();
+          if(exist.includes(nm)){ // 同名があれば連番を付けて上書きを避ける
+            let i=2;while(exist.includes(`${nm} ${i}`))i++;
+            nm=`${nm} ${i}`;
+          }
+          await saveDeck(nm,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],null);
+          sfx("ok");
+          toast(`🃏 デッキ「${nm}」を保存しました\n「🃏 デッキ」→「📋 デッキ一覧」から使えます`);
+          logOnly(`🃏 ${from} からデッキ「${nm}」を受信して保存`);
+          if(typeof refreshDeckSelects==="function")try{refreshDeckSelects();}catch(e){}
+          try{if(ONLINE.conn&&ONLINE.conn.open)ONLINE.conn.send({t:"deckAck",name:nm,who:S.players[S.seat|0].label});}catch(e){}
+        }catch(e){toast("⚠ 受信したデッキの保存に失敗しました");}
+      })();
+    }
+    else if(msg&&msg.t==="deckAck"){
+      sfx("ok");
+      toast(`✅ ${String(msg.who||"相手").slice(0,12)} の端末にデッキ「${String(msg.name||"").slice(0,50)}」が保存されました`);
+      logOnly(`✅ デッキの送信が届いた：${String(msg.name||"").slice(0,50)}`);
+    }
     else if(msg&&msg.t==="deck"){
       const seat=msg.seat|0;
       setPlayerDeck(seat,msg.name+"（相手の端末から）",msg.deck);
@@ -21425,11 +21451,20 @@ function showFxDiffPanel(){
   const items=FX_INBOX.items;
   const keys=Object.keys(items);
   if(!keys.length){toast("受け取ったカード登録はありません");return;}
-  // 3分類：new＝自分が持っていない／newer＝相手の方が新しい／old＝自分の方が新しい（または同じ）
+  // 5分類：new＝自分が持っていない／newer＝相手の方が新しい／old＝自分の方が新しい
+  //        same＝内容が同じ／unknown＝内容が違うが更新日時が同じ・不明（どちらが新しいか判断できない）
+  //  ※ 以前は「更新日時が同じ」も「自分の方が新しい」と表示していたため、実際は同じ内容なのに
+  //     自分の方が新しいと誤解される原因になっていた。
+  const _strip=r=>{try{const o=JSON.parse(JSON.stringify(r||{}));delete o._v;delete o._src;return JSON.stringify(o);}catch(e){return "";}};
   const clsOf=k=>{
     const cur=FXDB.get(k);
     if(!cur)return "new";
-    return (((items[k]||{})._v|0)>(cur._v|0))?"newer":"old";
+    const a1=_strip(cur),b1=_strip(items[k]);
+    if(a1&&a1===b1)return "same";
+    const iv=(items[k]||{})._v|0, cv=cur._v|0;
+    if(iv>cv)return "newer";
+    if(iv<cv)return "old";
+    return "unknown";
   };
   const sumOf=r=>{
     if(!r)return "（自分は未登録）";
@@ -21445,16 +21480,17 @@ function showFxDiffPanel(){
     if(c==="new")pick.add(k);
     else if(c==="newer"&&!(cur&&cur._src==="self"))pick.add(k);
   }
-  const order={new:0,newer:1,old:2};
+  const order={new:0,newer:1,unknown:2,old:3,same:4};
   keys.sort((a,b)=>(order[clsOf(a)]-order[clsOf(b)])||String(dispName.get(a)||a).localeCompare(String(dispName.get(b)||b),"ja"));
   const ol=document.createElement("div");
   ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:995;display:flex;flex-direction:column;padding:12px;gap:8px";
   const head=document.createElement("div");
   head.style.cssText="color:#fff;font-weight:900;font-size:15px;line-height:1.5";
-  const nNew=keys.filter(k=>clsOf(k)==="new").length;
-  const nUp=keys.filter(k=>clsOf(k)==="newer").length;
-  const nOld=keys.length-nNew-nUp;
-  head.textContent=`📦 ${FX_INBOX.from||"相手"} から受け取ったカード登録（${keys.length}件）\n🆕 自分が持っていない ${nNew}／⬆ 相手の方が新しい ${nUp}／✅ 自分の方が新しい ${nOld}`;
+  const cnt=c0=>keys.filter(k=>clsOf(k)===c0).length;
+  const nNew=cnt("new"),nUp=cnt("newer"),nOld=cnt("old"),nSame=cnt("same"),nUnk=cnt("unknown");
+  head.textContent=`📦 ${FX_INBOX.from||"相手"} から受け取ったカード登録（${keys.length}件）\n`
+    +`🆕 自分が持っていない ${nNew}／⬆ 相手の方が新しい ${nUp}／✅ 自分の方が新しい ${nOld}`
+    +`${nSame?`／＝ 内容が同じ ${nSame}`:""}${nUnk?`／❓ どちらが新しいか不明 ${nUnk}`:""}`;
   head.style.whiteSpace="pre-line";
   ol.appendChild(head);
   const tools=document.createElement("div");
@@ -21474,6 +21510,7 @@ function showFxDiffPanel(){
   const mk=(lb,fn)=>{const b=document.createElement("button");b.className="btn small";b.textContent=lb;b.onclick=fn;tools.appendChild(b);};
   mk("すべて選ぶ",()=>{keys.forEach(k=>pick.add(k));refresh();});
   mk("🆕 新規だけ",()=>{pick.clear();keys.forEach(k=>{if(clsOf(k)==="new")pick.add(k);});refresh();});
+  mk("🔀 内容が違うものだけ",()=>{pick.clear();keys.forEach(k=>{const c0=clsOf(k);if(c0!=="same")pick.add(k);});refresh();});
   mk("すべて外す",()=>{pick.clear();refresh();});
   tools.appendChild(countLbl);
   ol.appendChild(tools);
@@ -21486,7 +21523,11 @@ function showFxDiffPanel(){
     chk.className="fxchk";chk.style.cssText="font-size:17px;color:#93c5fd;flex:0 0 auto";
     const txt=document.createElement("div");
     txt.style.cssText="flex:1;color:#e2e8f0;font-size:13px;line-height:1.45;min-width:0";
-    const badge=c==="new"?"🆕 自分が持っていない":c==="newer"?"⬆ 相手の方が新しい":"✅ 自分の方が新しい";
+    const badge=c==="new"?"🆕 自分が持っていない"
+      :c==="newer"?"⬆ 相手の方が新しい"
+      :c==="same"?"＝ 内容が同じ（取り込む必要なし）"
+      :c==="unknown"?"❓ 内容が違うが、どちらが新しいか不明"
+      :"✅ 自分の方が新しい";
     const nm=FX_INBOX.names[k]||dispName.get(k)||k;
     txt.innerHTML="";
     const l1=document.createElement("div");l1.style.fontWeight="800";l1.textContent=`${badge}　${nm}`;
@@ -21539,7 +21580,7 @@ $("olFxShare").addEventListener("click",async ()=>{
      `📥 受け取った登録を確認して取り込む（${inb}件）`]);
   if(j===null)return;
   if(j===3){showFxDiffPanel();return;}
-  let keys=[],label="";
+  let keys=[],label="",_sendDeckObj=null;
   if(j===0){keys=fxShareKeys("all");label="全部";}
   else if(j===1){
     const n=$("stDeck0").value||S.players[0].deckName;
@@ -21548,10 +21589,22 @@ $("olFxShare").addEventListener("click",async ()=>{
     if(!d){toast("デッキが見つかりません");return;}
     const names=[...d.main,...(d.gr||[]),...(d.hy||[]),...(d.sp||[]),...(d.ex||[])].map(e=>e.name);
     keys=fxShareKeys("deck",names);label=`デッキ「${n}」で使うカード`;
+    _sendDeckObj={name:n,deck:{main:d.main,gr:d.gr||[],hy:d.hy||[],sp:d.sp||[],ex:d.ex||[]}};
   }else{keys=fxShareKeys("recent");label="最近2週間の更新分";}
   if(!keys.length){toast("送る対象のカード登録がありません");return;}
   if(!await ask(`📤 カード登録 ${keys.length}件を送信します（${label}）\nよろしいですか？`))return;
   await olSendFx(keys,label);
+  // 🃏 デッキ単位で送った時は、相手の端末にデッキそのものも作れるようにする
+  if(_sendDeckObj&&ONLINE.conn&&ONLINE.conn.open){
+    const tot=(_sendDeckObj.deck.main||[]).reduce((a2,e)=>a2+(e.count|0),0);
+    const yes=await ask(`🃏 デッキ「${_sendDeckObj.name}」そのものも相手の端末に作りますか？\n（相手の「📋 デッキ一覧」に「${_sendDeckObj.name}（あなたの名前から）」として保存されます・メイン${tot}枚）`);
+    if(yes){
+      try{
+        ONLINE.conn.send({t:"deckSave",name:_sendDeckObj.name,deck:_sendDeckObj.deck,from:S.players[S.seat|0].label});
+        toast(`🃏 デッキ「${_sendDeckObj.name}」を送信しました\n相手の端末に保存されると「✅ …保存されました」と出ます`);
+      }catch(e){toast("⚠ デッキの送信に失敗しました");}
+    }
+  }
   // 🖼 画像も一緒に送れるようにする（画像は容量が大きいので、枚数を見せてから確認する）
   if(ONLINE.conn&&ONLINE.conn.open){
     const imgKeys=[];
