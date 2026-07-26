@@ -24455,7 +24455,10 @@ $("btnViewDeck").addEventListener("click",async ()=>{
     }else{
       g2.style.cssText="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;align-self:stretch";
     }
-    for(const it of arr){
+    // 🗂 同じカードは枚数ぶん1枚ずつ並べる（デッキ画像と同じ並びで枚数を数えやすい）
+    const flat=[];
+    for(const it of arr){for(let ci=0;ci<Math.max(1,cntOf(it));ci++)flat.push(it);}
+    for(const it of flat){
       const cell=document.createElement("div");
       cell.style.cssText=(window.innerWidth>=700)?"position:relative;min-width:0":"position:relative;width:92px;flex:0 0 auto";
       const u=imgURL.get(normName(it.name))||imgURL.get(it.name);
@@ -24474,12 +24477,6 @@ $("btnViewDeck").addEventListener("click",async ()=>{
       nm.style.cssText=`font-size:${window.innerWidth>=700?11:9}px;color:#cbd3df;text-align:center;line-height:1.25;margin-top:3px;word-break:break-word`;
       nm.textContent=it.name;
       cell.appendChild(nm);
-      if(cntOf(it)>1){
-        const b=document.createElement("span");
-        b.style.cssText="position:absolute;right:2px;top:2px;background:#000d;color:#fff;font-size:11px;font-weight:900;border-radius:6px;padding:1px 5px";
-        b.textContent="×"+cntOf(it);
-        cell.appendChild(b);
-      }
       g2.appendChild(cell);
     }
     wrap.appendChild(g2);
