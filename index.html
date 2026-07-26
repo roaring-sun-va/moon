@@ -6492,6 +6492,34 @@ async function runFxList(pi,list,srcCard,inPump){
       const doIt=await ask(`❓ 任意効果${srcCard?`（${faceNameOf(srcCard)}）`:""}\n「${lbl}${f.cond?`／条件:${f.cond}`:""}」を行いますか？`);
       if(!doIt){toast(`（任意効果をスキップ）`);continue;}
     }
+    // 🔄 前提コスト：自分の他のクリーチャーn体を手札に戻す。戻せない／戻さないなら、この効果は行わない
+    //    （「自分の他のクリーチャー2体を手札に戻してもよい。そうした場合、〜」＝コーラレヒト型）
+    if((f.payBounce|0)>0){
+      const need=f.payBounce|0;
+      const pb=()=>zonesOf(pi).battle.filter(x=>x.id!==(srcCard?srcCard.id:null));
+      if(pb().length<need){toast(`（自分の他のクリーチャーが${need}体いないため、この効果はスキップ）`);continue;}
+      const yes=await ask(`🔄 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}自分の他のクリーチャーを${need}体、手札に戻しますか？\n（戻した場合だけ、続く効果を行います）`);
+      if(!yes){toast(`（手札に戻さなかったため、この効果はスキップ）`);continue;}
+      const ZB=zonesOf(pi);
+      const backs=[];
+      for(let bi=0;bi<need;bi++){
+        const ps=pb();
+        if(!ps.length)break;
+        const jb=ps.length===1?0:await pickCard(`🔄 手札に戻す自分のクリーチャーを選択（${bi+1}/${need}体目）`,ps,{hint:"タップで選択"});
+        if(jb===null)break;
+        const t=ps[jb];
+        const idx=ZB.battle.findIndex(y=>y.id===t.id);
+        if(idx<0)continue;
+        leaveBattleCleanup(ZB,t,"hand"); // 装備・封印・重なっていたカードを整理
+        ZB.battle.splice(idx,1);
+        t.tapped=false;t.sideways=false;t.rot=0;t.buff=null;t.seals=[];t.faceup=true;t.mark=false;
+        if(typeof toHand==="function")toHand(ZB,t);else ZB.hand.push(t);
+        backs.push(faceNameOf(t));
+      }
+      if(backs.length<need){toast(`（${need}体を戻せなかったため、この効果はスキップ）`);renderAll();continue;}
+      sfx("move");renderAll();
+      toast(`🔄 ${backs.join("、")} を手札に戻した`);
+    }
     if(f.cond&&!FILT_COND.has(f.t)&&!(typeof f.t==="string"&&f.t.startsWith("sp:"))){
       const _condStr=String(f.cond).trim();
       const _parseable=/(?:<=|>=|<|>|＝|=|以上|以下)/.test(_condStr)||/^(?:自分|相手)?(?:の)?(?:マナ|墓地|手札|盾|シールド|バトル|山札|革命|超次元|GR|デッキ)/.test(_condStr);
@@ -12462,6 +12490,18 @@ function fxRowEl(faceIdx,i){
   ocb.onchange=()=>{f.opt=ocb.checked;};
   optL.appendChild(ocb);
   optL.appendChild(document.createTextNode("❓任意"));
+  // 🔄 前提コスト：自分の他のクリーチャーn体を手札に戻したら実行（「そうした場合、〜」型）
+  const pbL=document.createElement("label");
+  pbL.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  pbL.title="この効果を行う前に、自分の他のクリーチャーをn体手札に戻します。戻せない／戻さない場合はこの効果を行いません（0＝なし）";
+  const pbN=document.createElement("input");
+  pbN.type="number";pbN.min="0";pbN.max="9";pbN.style.width="46px";
+  pbN.value=String(f.payBounce|0);
+  pbN.onchange=()=>{f.payBounce=parseInt(pbN.value,10)||0;};
+  pbL.appendChild(document.createTextNode("🔄戻す"));
+  pbL.appendChild(pbN);
+  pbL.appendChild(document.createTextNode("体"));
+  optL.appendChild(pbL);
   const del=document.createElement("button");
   del.className="btn small warn del";del.textContent="✕";
   del.onclick=()=>{FXEDIT.faces[faceIdx].splice(i,1);renderFxEditor();};
