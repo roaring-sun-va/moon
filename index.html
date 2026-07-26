@@ -6228,6 +6228,10 @@ const MODE_FX_ALIAS={
   "全ブロッカー付与":"tempBlockerAll","攻撃ブロック封じ":"lockFoeAtkBlock","攻撃封じ":"lockFoeAtkP",
   "相手シールド化":"foeToShield","シールド化":"foeToShield","シールド送り":"foeToShield","相手をシールド":"foeToShield",
   "両者タップ":"tapAnyN","どちらでもタップ":"tapAnyN","自分をゾーンへ":"selfToZone","自分パワーアップ":"tempPowSelf1k","めくってマナ":"flipTopMana","公開して手札":"revealTakeAll","公開して手札残り墓地":"revealTakeGrave","おつかい":"revealTakeGrave","自分タップ":"tapMyN","処理中":"pauseManual","手動処理":"pauseManual","盾ブレイク":"breakOneAsk","自分盾ブレイク":"breakMineAny","手札シールド化":"handShield","墓地山札":"graveToDeckAll","コスト合計踏み倒し":"sumRecruit","盾を見てブレイク":"breakMineRand","デッキ進化":"deckEvo",
+  // 今回追加した効果ぶん
+  "探索山上":"deckSearchTop","探索して山上":"deckSearchTop","山札の一番上":"deckSearchTop","トップ固定":"deckSearchTop",
+  "手札マナ詠唱":"handManaCastSpell","マナ詠唱":"handManaCastSpell","手札マナから呪文":"handManaCastSpell",
+  "相手盾マナ送り":"foeShieldToMana","相手シールドマナ":"foeShieldToMana","盾マナ送り":"foeShieldToMana",
 };
 // 逆引き：モード@記法の自動出力に使う日本語名（内部名を画面に出さない）
 const MODE_FX_JA=(()=>{const m={};for(const [ja,en] of Object.entries(MODE_FX_ALIAS))if(!m[en])m[en]=ja;return m;})();
@@ -8913,6 +8917,8 @@ function lockFilterOk(filt,r,c,lockPi,face){
     if(tk==="無色")return !!(r&&r.civs&&r.civs.includes("zero"));
     if(tk==="ブロッカー")return !!((r&&r.blocker)||(c&&c.buff&&c.buff.blocker)||gearBlockerOn(c));
     if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(c)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」・通常召喚状態や手札では「進化以外」（ヘブンズ・ゲート／爆進ダブル両対応）
+    // 🧬 NEOクリーチャー：山札や手札の状態でも種別として判定する（「進化」トークンは場でNEO進化している時だけ真になるため別に用意）
+    if(tk==="NEOクリーチャー"||tk==="NEO")return ["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype);
     if(tk==="クロスギア")return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));
      if(tk==="サイキック")return !!((r&&(r.ctype==="psychic"||r.ctype==="psyevo"))||(c&&c.isPsy));
      if(tk==="S・トリガー"||tk==="Sトリガー"||tk==="ST")return !!(r&&r.st);
@@ -8930,7 +8936,7 @@ function lockFilterOk(filt,r,c,lockPi,face){
   filt=String(filt).replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0)).replace(/＞/g,">").replace(/＜/g,"<").replace(/＝/g,"=");
   // 種族・名前のトークンは「いずれか（OR）」、コスト/パワー/タイプ/文明/多色単色/「以外」は「すべて（AND）」。
   // 例：「ボルシャック／ルピア／コスト7以下」＝（名前にボルシャック または ルピア）かつ コスト7以下
-  const isCons=tk=>/^コスト/.test(tk)||/^パワー\d+(?:以下|以上)$/.test(tk)||/^名前[:：]/.test(tk)||tk==="多色"||tk==="単色"||tk==="クリーチャー"||tk==="呪文"||tk==="ツインパクト"||tk==="ブロッカー"||tk==="進化"||tk==="クロスギア"||tk==="サイキック"||tk==="S・トリガー"||tk==="Sトリガー"||tk==="ST"||!!civMap[tk]||/以外$/.test(tk);
+  const isCons=tk=>/^コスト/.test(tk)||/^パワー\d+(?:以下|以上)$/.test(tk)||/^名前[:：]/.test(tk)||tk==="多色"||tk==="単色"||tk==="クリーチャー"||tk==="呪文"||tk==="ツインパクト"||tk==="ブロッカー"||tk==="進化"||tk==="NEOクリーチャー"||tk==="NEO"||tk==="クロスギア"||tk==="サイキック"||tk==="S・トリガー"||tk==="Sトリガー"||tk==="ST"||!!civMap[tk]||/以外$/.test(tk);
   // 「・」区切りの許容：ユーザーが「光/水・コスト5以下」のように中黒で区切っても動くようにする。
   //   ただし「ボルシャック・ドギラゴン」等のカード名を壊さないため、分割後の全ピースが制約語（コスト/パワー/文明/多色単色/タイプ/以外）の時だけ分割する。
   const splitDot=piece=>{
@@ -11231,7 +11237,7 @@ async function startAttack(pi,id){
   if(pick===null){renderAll();return;}
   const tg=targets[pick];
   c._atkFxDone=false; // 新規アタック宣言のたびにアタック時効果を再有効化（保留→再開は別経路なので影響なし）
-  c._allyAtkDone=false;
+  c._allyAtkDone=false;c._anyAtkDone=false; // 攻撃するたびに誘発し直せるよう毎回リセット
   c._sxAtkDone=false;
   c._mbDone=false;
   const wnames=watchNames(pi,tg.kind==="creature"?"atkC":"atkP");
@@ -11606,6 +11612,14 @@ async function execAttack(pi,id,tg){
       if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
     }
     c._sxAtkDone=true;
+  }
+  // ⚡ どちらのクリーチャーが攻撃した時でも誘発する（anyAtk）：自分と相手の両方の場を見る。
+  //    誘発ジョブ経由なので「各ターン1回」「条件式」「任意」の設定がそのまま効く
+  //    （黄金卍罠＝各ターン、初めてクリーチャーが攻撃する時／デンジャデオン型）
+  if(S.expert&&!c._anyAtkDone){
+    c._anyAtkDone=true;
+    runWatchFx(pi,"anyAtk",c);
+    runWatchFx(op,"anyAtk",c);
   }
   // ⚡ 味方全体付与の攻撃時誘発（allyAtk）：自分の場のクリーチャー／シールドのG城が「自分のクリーチャーが攻撃する時」を付与している場合
   if(S.expert&&!c._allyAtkDone){
@@ -12616,6 +12630,7 @@ const TRIG_EVS=[
   ["selfAtk","このクリーチャーが攻撃する時（対象問わず）"],
   ["selfWinBattle","このクリーチャーがバトルに勝った時"],
   ["allyAtk","自分のクリーチャーが攻撃する時（味方全体に付与・自身の攻撃も含む）"],
+  ["anyAtk","どちらのクリーチャーが攻撃する時でも（自分・相手の両方／「1️⃣各ターン1回」と合わせて「各ターン、初めてクリーチャーが攻撃する時」になります）"],
   ["selfAtkC","このクリーチャーがクリーチャーを攻撃する時"],
   ["selfAtkP","このクリーチャーがプレイヤー/盾を攻撃する時"],
   ["selfAtkEnd","このクリーチャーの攻撃の終わりに（条件式と組み合わせて「攻撃の後アンタップする」などに）"],
