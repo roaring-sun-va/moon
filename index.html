@@ -1747,6 +1747,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxCostFloor1"> コストは0にならない（軽減してもコスト1以上・ゼロ文明でも）</label>
         <label title="相手のターン中、相手が召喚以外の方法でクリーチャーをバトルゾーンに出した時、そのクリーチャーを手札に戻してもよい（出た時の効果は先に誘発します）"><input type="checkbox" id="fxStBounceCheat"> ↩ 相手のターン中、相手が召喚以外で出したクリーチャーを手札に戻してもよい（オニカマス型）</label>
         <label><input type="checkbox" id="fxStNoCheat"> 相手は召喚以外でクリーチャーを出せない（センノー型。侵略/チェンジ/蘇生/ST出しなど不可・GR召喚や墓地召喚は「召喚」なので可）</label>
+        <label title="相手の「このクリーチャーがバトルゾーンに出た時」で始まる能力を持つクリーチャーが出た時、そのクリーチャーを持ち主のマナゾーンに置く（黒豆だんしゃく型）。出た時の能力は先に解決されます。効果が未登録のカードは、出た時の能力を持つかどうかを確認します"><input type="checkbox" id="fxStCipToMana"> 🌱 相手の「出た時」能力を持つクリーチャーが出た時、そのクリーチャーをマナゾーンに置く（黒豆だんしゃく型）</label>
         <label title="このクリーチャーが自分のバトルゾーンにいる間、相手はシールドの「S・トリガー」を使えない（ブレイクパネルのST使用ボタンが無効化される。G・ストライクやニンジャ・ストライクは別能力なので使える）"><input type="checkbox" id="fxStNoST"> 🚫 常在：相手はS・トリガーを使えない（カース・トーテム/ギガ・ボルバ型）</label>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span style="font-size:12px;font-weight:700">常在ロック</span>
@@ -3203,6 +3204,9 @@ function markArrive(c){
       // 🤝 キズナ：バトルゾーンに出た時、自分のクリーチャー1体のキズナ能力を使う（自身のキズナ能力も選べる）
       {const rKz=getReg(c);
        if(S.expert&&rKz&&rKz.kizuna==="k")kizunaOnEnter(own,c);}
+      // 🌱 黒豆だんしゃく型：相手の「バトルゾーンに出た時」で始まる能力を持つクリーチャーが出た時、
+      //    そのクリーチャーを持ち主のマナゾーンに置く（どの経路で出ても効く）
+      if(S.expert&&S.vs)cipToManaCheck(own,c);
       // 🛡 シールド・フォース／シールド・プラス：どの経路（ドラッグ・パネル・踏み倒し・進化）で出ても盾指定を確認
       //    ※二重確認ガード：同じ到着でmarkArriveが複数回呼ばれても1.5秒以内は1回だけ
       const rgA=getReg(c);
@@ -4723,6 +4727,61 @@ function enqueueWatchJob(fn){
    （CRY-S-MAX ジャオウガ等の「自分のS-MAX進化クリーチャーが2体以上あれば、そのうちの1体を残し、残りをすべて手札に戻す」） */
 const SMAX_CT=["smaxevo","onismaxevo"];
 function isSmaxReg(r){return !!(r&&SMAX_CT.includes(r.ctype));}
+/* 🌱 「バトルゾーンに出た時」で始まる能力を持っているか。
+   true=持つ／false=持たない／null=効果が未登録で判断できない。
+   ・出た時の自動処理（効果欄）、出た時に選ぶ選択効果、超魂レイド、モモキングダム✕、超魂Xの付与cipを「持つ」とみなす
+   ・「召喚した時のみ」の効果しか無い場合は対象外（公式裁定：「召喚によって出た時」は始まり方が違う） */
+function hasEnterAbility(c){
+  const r=getReg(c);
+  if(!r)return null;
+  const rows=(r.faces&&r.faces[0])?r.faces[0]:[];
+  if(rows.some(f=>f&&f.t&&!f.sumOnly))return true;
+  if((r.modeN|0)>0&&!r.modeManual)return true;
+  if(r.soulRaid||r.momoKingX)return true;
+  if(typeof soulXCipFx==="function"){try{if(soulXCipFx(c).length)return true;}catch(e){}}
+  if(rows.length)return false; // 「召喚した時のみ」だけを持つ＝対象外
+  return false;
+}
+/* 🌱 黒豆だんしゃく型の処理。出た時の能力は先に解決されるので、効果キューが空くのを待ってからマナに置く。 */
+function cipToManaCheck(pi,c){
+  const foe=pi===0?1:0;
+  const rNew=getReg(c);
+  if(!rNew||!isCreatureReg(rNew))return;
+  if(c._cipManaChk)return;
+  const src=zonesOf(foe).battle.find(x=>{
+    const rx=getReg(x);
+    return x.id!==c.id&&rx&&rx.stCipToMana&&!isSealed(x)&&!isIgnored(x,foe);
+  });
+  if(!src)return;
+  c._cipManaChk=true;
+  const _sid=src.id,_own=pi,_foe=foe,_cid=c.id;
+  enqueueWatchJob(async()=>{
+    c._cipManaChk=false;
+    const live=zonesOf(_foe).battle.find(x=>x.id===_sid&&!isSealed(x)&&!isIgnored(x,_foe));
+    if(!live)return;                                      // 黒豆が場を離れていたら何もしない
+    const ZB=zonesOf(_own);
+    const idx=ZB.battle.findIndex(x=>x.id===_cid);
+    if(idx<0)return;                                      // 出たクリーチャーが既に場を離れていたら何もしない
+    const tgt=ZB.battle[idx];
+    let has=hasEnterAbility(tgt);
+    if(has===null){
+      has=await ask(`🌱 《${faceNameOf(live)}》（${S.players[_foe].label}）\n《${faceNameOf(tgt)}》は「バトルゾーンに出た時」で始まる能力を持っていますか？\n（持っていれば持ち主のマナゾーンに置きます。効果が未登録のため確認しています）`);
+      if(!has)return;
+    }
+    if(!has)return;
+    const idx2=ZB.battle.findIndex(x=>x.id===_cid);
+    if(idx2<0)return;
+    snap();
+    leaveBattleCleanup(ZB,tgt,"mana");                    // 装備・封印・重なっていたカードを整理
+    ZB.battle.splice(idx2,1);
+    tgt.faceup=true;tgt.tapped=false;tgt.sideways=false;tgt.rot=0;tgt.buff=null;tgt.seals=[];tgt.mark=false;
+    if(manaTapIn(tgt))tgt.tapped=true;                    // 多色はタップイン
+    ZB.mana.push(tgt);
+    sfx("move");renderAll();
+    toast(`🌱 ${faceNameOf(live)}：《${faceNameOf(tgt)}》は「出た時」能力を持つため、持ち主のマナゾーンへ`);
+    logOnly(`🌱 ${S.players[_foe].label} の《${faceNameOf(live)}》により、${S.players[_own].label} の《${faceNameOf(tgt)}》をマナゾーンへ（「出た時」能力を持つため）`);
+  });
+}
 function kizunaOnEnter(pi,c){
   enqueueWatchJob(async()=>{
     const Z=zonesOf(pi);
@@ -13028,7 +13087,7 @@ async function execAttack(pi,id,tg){
       if(c.sfActive&&rSF&&rSF.sforceFx==="break"&&rSF.sforceN){n+=rSF.sforceN;toast(`🛡✨ SF有効：ブレイク数＋${rSF.sforceN} → ${n}枚`);}
       if(c.buff&&c.buff.breakPlus){n+=c.buff.breakPlus;toast(`💥 バフ：ブレイク数＋${c.buff.breakPlus} → ${n}枚`);}
     }
-    const brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
+    let brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
     if(S.expert){
       const rA=getReg(c);
       if(((rA&&rA.cantAtkP)||(c.buff&&c.buff.cantAtkP))&&!isIgnored(c,pi)){
@@ -13049,15 +13108,31 @@ async function execAttack(pi,id,tg){
       }
     }
     emitEvent(pi,"atkP");
-    // ⏸ 「相手がプレイヤーを攻撃した時」誘発（サイバーダイス・ベガス型等）の解決が終わるまでブレイクを待つ。
-    //    誘発（テック団等）で攻撃クリーチャーが場を離れたらブレイクは行われない。
+    // ⏸ 攻撃時の誘発（サイバーダイス・ベガス型／黄金卍罠＝デンジャデオン型等）の解決が
+    //    完全に終わるまでブレイクを待つ。誘発の解決中にさらに誘発が積まれたり、
+    //    唱えた呪文の効果が後から解決されることがあるため、増えなくなるまで繰り返す。
+    //    （1回だけ待つ作りだと、トラップを唱えたのにブレイクが先に処理されてしまっていた）
     if(S.expert){
-      await WATCH_CHAIN;
-      await waitFxIdle();
+      for(let g=0;g<8;g++){
+        const _before=WATCH_CHAIN;
+        await WATCH_CHAIN;
+        await waitFxIdle();
+        if(WATCH_CHAIN===_before&&!fxRunning&&!fxQueue.length&&!TRIG_PENDING.length)break;
+      }
       if(!Z.battle.find(x=>x.id===id)){
         toast("攻撃クリーチャーが場を離れたため、ブレイクは行われませんでした");
         clearPendingAtk();renderAll();return;
       }
+      // 🛡 誘発の解決で相手のシールドが0枚になった場合、ブレイクは行われない。
+      //    宣言時はシールドを攻撃しているので、ここでダイレクトアタックに変わることはない。
+      if(!OZ.shield.length){
+        toast(`🛡 ${S.players[op].label} のシールドが0枚になったため、ブレイクは行われません\n（宣言時にシールドを攻撃しているので、ダイレクトアタックにはなりません）`);
+        logOnly(`🛡 ${S.players[op].label} のシールドが0枚になったため、《${faceNameOf(c)}》のブレイクは行われなかった（ダイレクトアタックにはならない）`);
+        await atkEnd();
+        clearPendingAtk();renderAll();return;
+      }
+      // 💥 ブレイク・ボーナスの回数も、待機後の実際の枚数で数え直す
+      brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
     }
     await breakShields(op,n,c);
     if(S.expert&&brokeN>0&&Z.battle.find(x=>x.id===id)){
@@ -13137,6 +13212,26 @@ async function execAttack(pi,id,tg){
           toast("⏸ 誘発処理後、攻撃が防がれなければもう一度ダイレクトアタックで勝敗を記録できます");
           return;
         }
+      }
+    }
+    // ⏸ 攻撃時の誘発（黄金卍罠＝デンジャデオン型など）の解決が終わるまで勝敗を記録しない
+    if(S.expert){
+      for(let g=0;g<8;g++){
+        const _before=WATCH_CHAIN;
+        await WATCH_CHAIN;
+        await waitFxIdle();
+        if(WATCH_CHAIN===_before&&!fxRunning&&!fxQueue.length&&!TRIG_PENDING.length)break;
+      }
+      if(!Z.battle.find(x=>x.id===id)){
+        toast("攻撃クリーチャーが場を離れたため、ダイレクトアタックは成立しません");
+        clearPendingAtk();renderAll();return;
+      }
+      // 🛡 誘発の解決で相手にシールドが追加された場合は、勝敗を記録しない
+      if(OZ.shield.length){
+        toast(`🛡 ${S.players[op].label} にシールドが${OZ.shield.length}枚追加されたため、ダイレクトアタックは成立しません\n（必要ならもう一度攻撃してシールドをブレイクしてください）`);
+        logOnly(`🛡 ${S.players[op].label} にシールドが追加されたため、《${faceNameOf(c)}》のダイレクトアタックは成立しなかった`);
+        await atkEnd();
+        clearPendingAtk();renderAll();return;
       }
     }
     if(S.vs&&S.turn>0)declareWin(pi,`💥 ダイレクトアタック成立`);
@@ -14520,6 +14615,7 @@ function renderFxEditor(){
   $("fxStNoCheat").checked=!!FXEDIT.stNoCheat;
   {const e=$("fxNoChooseOppTurn");if(e)e.checked=!!FXEDIT.noChooseOppTurn;}
   {const e=$("fxStBounceCheat");if(e)e.checked=!!FXEDIT.stBounceCheat;}
+  {const e=$("fxStCipToMana");if(e)e.checked=!!FXEDIT.stCipToMana;}
   {const e=$("fxStNoST");if(e)e.checked=!!FXEDIT.stNoST;}
   $("fxCostFloor1").checked=!!FXEDIT.costFloor1;
   $("fxNoUntap").checked=!!FXEDIT.noUntap;
@@ -15413,6 +15509,16 @@ function parseCardText(txt,mode){
       out._oriClause=mOri[0]; // extractEffects前に tForFx から除去する
     }
   }
+  // 🌱 黒豆だんしゃく「相手の、「（このクリーチャーが）バトルゾーンに出た時」で始まる能力を持つ
+  //    クリーチャーがバトルゾーンに出た時、そのクリーチャーを（持ち主の）マナゾーンに置く」
+  {
+    const mCip=t.match(/相手の[、,]?\s*[「『][^」』]{0,20}?(?:バトルゾーンに)?出た時[」』]で始まる能力を持つクリーチャーが(?:バトルゾーンに)?出た時[、,]?\s*そのクリーチャーを(?:持ち主の)?マナ(?:ゾーン)?に置く/);
+    if(mCip){
+      out.set.stCipToMana=true;
+      out.notes.push({msg:'🌱 常在「相手の「出た時」能力を持つクリーチャーが出たら、そのクリーチャーをマナゾーンへ」を設定しました',q:"出た時"});
+      out._cipManaClause=mCip[0];
+    }
+  }
   // ── 本文中の「[ゾーン]に〜がN枚以上/以下」条件を候補として通知（該当効果の条件欄に貼れる）──
   // 💰 「〔墓地に名前《X》…がN枚以上〕あれば、召喚コストをn少なくする」（クロス・NEX型）→ 代替コスト（コスト−n）＋条件式を自動設定
   {const mSR=t.match(/([^■。]{4,60}?)(?:あれば|なら)[、,]?(?:このクリーチャーの)?召喚コストを(\d+)少なく/);
@@ -15780,6 +15886,7 @@ function parseCardText(txt,mode){
   // 破壊された時（pig）誘発：その効果を誘発として登録し、出た時/常在の抽出からは除外する
   let tForFx=t;
   if(out._oriClause){tForFx=tForFx.replace(out._oriClause,"■");delete out._oriClause;} // 🌀 オリオティス節を除去（destroyPick等の誤検出防止）
+  if(out._cipManaClause){tForFx=tForFx.replace(out._cipManaClause,"■");delete out._cipManaClause;} // 🌱 黒豆だんしゃく節を除去（manaPick等の誤検出防止）
   {const mPig=t.match(/破壊された時[、,]?([\s\S]*?)(?=[■●]|$)/);
    if(mPig&&mPig[1]&&mPig[1].trim()){
      // 「そのターン中にn体以上破壊されていたら手札から出す」型は自身の破壊時（pig）ではないので誘発登録しない（文の除外だけ行う）
@@ -16442,6 +16549,7 @@ function openFxEditor(key){
     stNoCheat:cur?!!cur.stNoCheat:false,
     noChooseOppTurn:cur?!!cur.noChooseOppTurn:false,
     stBounceCheat:cur?!!cur.stBounceCheat:false,
+    stCipToMana:cur?!!cur.stCipToMana:false,
     stNoST:cur?!!cur.stNoST:false,
     costFloor1:cur?!!cur.costFloor1:false,
     noUntap:cur?!!cur.noUntap:false,
@@ -16809,6 +16917,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stNoCheat:$("fxStNoCheat").checked,
     noChooseOppTurn:$("fxNoChooseOppTurn")?$("fxNoChooseOppTurn").checked:false,
     stBounceCheat:$("fxStBounceCheat")?$("fxStBounceCheat").checked:false,
+    stCipToMana:$("fxStCipToMana")?$("fxStCipToMana").checked:false,
     stNoST:$("fxStNoST")?$("fxStNoST").checked:false,
     costFloor1:$("fxCostFloor1").checked,
     noUntap:$("fxNoUntap").checked,
@@ -17257,6 +17366,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.stNoCheat)attrs.push("常在：召喚以外で出せない");
     if(v.noChooseOppTurn)attrs.push("相手ターン中は相手に選ばれない");
     if(v.stBounceCheat)attrs.push("相手ターン中：相手が召喚以外で出したクリーチャーを手札へ");
+    if(v.stCipToMana)attrs.push("相手の「出た時」持ちが出たらマナゾーンへ");
     if(v.stNoST)attrs.push("🚫常在：相手はS・トリガーを使えない");
     if(v.costFloor1)attrs.push("コスト0にならない");
     if(v.noUntap)attrs.push("アンタップしない");
