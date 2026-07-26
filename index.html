@@ -12498,10 +12498,9 @@ function fxRowEl(faceIdx,i){
   pbN.type="number";pbN.min="0";pbN.max="9";pbN.style.width="46px";
   pbN.value=String(f.payBounce|0);
   pbN.onchange=()=>{f.payBounce=parseInt(pbN.value,10)||0;};
-  pbL.appendChild(document.createTextNode("🔄戻す"));
+  pbL.appendChild(document.createTextNode("🔄戻したら"));
   pbL.appendChild(pbN);
   pbL.appendChild(document.createTextNode("体"));
-  optL.appendChild(pbL);
   const del=document.createElement("button");
   del.className="btn small warn del";del.textContent="✕";
   del.onclick=()=>{FXEDIT.faces[faceIdx].splice(i,1);renderFxEditor();};
@@ -12520,7 +12519,7 @@ function fxRowEl(faceIdx,i){
   const top=document.createElement("div");top.className="fxr-top";
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(shb);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
-  bot.appendChild(sumL);bot.appendChild(sstL);bot.appendChild(optL);
+  bot.appendChild(sumL);bot.appendChild(sstL);bot.appendChild(optL);bot.appendChild(pbL);
   cnd.classList.add("fxr-cond-input");
   const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
   bot.appendChild(condWrap);
