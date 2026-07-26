@@ -1680,6 +1680,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxLibWin"> 常在：自分の山札が0枚になったら、負けるかわりに勝利する（シャコガイル型）</label>
         <label><input type="checkbox" id="fxPetensy"> 相手のターンの終わりに、そのターン クリーチャーが3体以上出ていれば、手札からコストを支払わずに使える（ペテンシー型）</label>
         <label><input type="checkbox" id="fxCostFloor1"> コストは0にならない（軽減してもコスト1以上・ゼロ文明でも）</label>
+        <label title="相手のターン中だけ、相手はこのクリーチャーを選べない（自分のターン中は選べる）"><input type="checkbox" id="fxNoChooseOppTurn"> 🚫 相手のターン中、相手はこのクリーチャーを選べない（オニカマス型）</label>
+        <label title="相手のターン中、相手が召喚以外の方法でクリーチャーをバトルゾーンに出した時、そのクリーチャーを手札に戻してもよい（出た時の効果は先に誘発します）"><input type="checkbox" id="fxStBounceCheat"> ↩ 相手のターン中、相手が召喚以外で出したクリーチャーを手札に戻してもよい（オニカマス型）</label>
         <label><input type="checkbox" id="fxStNoCheat"> 相手は召喚以外でクリーチャーを出せない（センノー型。侵略/チェンジ/蘇生/ST出しなど不可・GR召喚や墓地召喚は「召喚」なので可）</label>
         <label title="このクリーチャーが自分のバトルゾーンにいる間、相手はシールドの「S・トリガー」を使えない（ブレイクパネルのST使用ボタンが無効化される。G・ストライクやニンジャ・ストライクは別能力なので使える）"><input type="checkbox" id="fxStNoST"> 🚫 常在：相手はS・トリガーを使えない（カース・トーテム/ギガ・ボルバ型）</label>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -2779,7 +2781,18 @@ function markBuffTurn(c,keys){
 }
 /* 🌟 モモキングダム✕型：含まれるカード枚数＝自身＋下のカード。6枚未満で攻撃不可・相手に選ばれない。6枚到達でこのターン相手全体−99999。 */
 function stackCountOf(c){return 1+((c&&c.under)?c.under.length:0);}
-function momoUntouchable(x){const r=getReg(x);return !!(r&&r.momoKingX&&stackCountOf(x)<6);}
+function momoUntouchable(x){
+  const r=getReg(x);
+  if(r&&r.momoKingX&&stackCountOf(x)<6)return true;
+  // 🚫 相手のターン中だけ相手に選ばれない（オニカマス型）：持ち主のターンでない間だけ有効
+  if(r&&r.noChooseOppTurn){
+    try{
+      const own=[0,1].find(p=>zonesOf(p)&&zonesOf(p).battle&&zonesOf(p).battle.includes(x));
+      if(own!=null&&S.vs&&S.who!==own)return true;
+    }catch(e){}
+  }
+  return false;
+}
 async function momoCheckReach(pi,c){
   if(!c)return;
   const r=getReg(c);if(!r||!r.momoKingX)return;
@@ -13676,6 +13689,8 @@ function renderFxEditor(){
   {const e=$("fxStOriotisDestroy");if(e)e.checked=!!FXEDIT.stOriotisDestroy;}
   $("fxManaUntapN").value=FXEDIT.manaUntapN||0;
   $("fxStNoCheat").checked=!!FXEDIT.stNoCheat;
+  {const e=$("fxNoChooseOppTurn");if(e)e.checked=!!FXEDIT.noChooseOppTurn;}
+  {const e=$("fxStBounceCheat");if(e)e.checked=!!FXEDIT.stBounceCheat;}
   {const e=$("fxStNoST");if(e)e.checked=!!FXEDIT.stNoST;}
   $("fxCostFloor1").checked=!!FXEDIT.costFloor1;
   $("fxNoUntap").checked=!!FXEDIT.noUntap;
@@ -15591,6 +15606,8 @@ function openFxEditor(key){
     stOriotisDestroy:cur?!!cur.stOriotisDestroy:false,
     manaUntapN:cur?(cur.manaUntapN||0):0,
     stNoCheat:cur?!!cur.stNoCheat:false,
+    noChooseOppTurn:cur?!!cur.noChooseOppTurn:false,
+    stBounceCheat:cur?!!cur.stBounceCheat:false,
     stNoST:cur?!!cur.stNoST:false,
     costFloor1:cur?!!cur.costFloor1:false,
     noUntap:cur?!!cur.noUntap:false,
@@ -15955,6 +15972,8 @@ $("fxSave").addEventListener("click",async ()=>{
     stOriotisDestroy:$("fxStOriotisDestroy")?$("fxStOriotisDestroy").checked:false,
     manaUntapN:(parseInt($("fxManaUntapN").value,10)||0),
     stNoCheat:$("fxStNoCheat").checked,
+    noChooseOppTurn:$("fxNoChooseOppTurn")?$("fxNoChooseOppTurn").checked:false,
+    stBounceCheat:$("fxStBounceCheat")?$("fxStBounceCheat").checked:false,
     stNoST:$("fxStNoST")?$("fxStNoST").checked:false,
     costFloor1:$("fxCostFloor1").checked,
     noUntap:$("fxNoUntap").checked,
@@ -16399,6 +16418,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.stOriotis)attrs.push("常在：オリオティス");
     if(v.manaUntapN>0)attrs.push(`常在：相手ターン開始時マナ回復を${v.manaUntapN}枚に制限`);
     if(v.stNoCheat)attrs.push("常在：召喚以外で出せない");
+    if(v.noChooseOppTurn)attrs.push("相手ターン中は相手に選ばれない");
+    if(v.stBounceCheat)attrs.push("相手ターン中：相手が召喚以外で出したクリーチャーを手札へ");
     if(v.stNoST)attrs.push("🚫常在：相手はS・トリガーを使えない");
     if(v.costFloor1)attrs.push("コスト0にならない");
     if(v.noUntap)attrs.push("アンタップしない");
@@ -17435,6 +17456,32 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if(toZone==="battle"){
     if(S.expert){
       const foeN=pTo===0?1:0;
+      // ↩ オニカマス型：相手のターン中、相手が召喚以外で出したクリーチャーを手札に戻してもよい
+      //    （センノーと違い場には出るので、出た時の効果は先に誘発する）
+      {
+        const kamasu=zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stBounceCheat&&!isSealed(x)&&!isIgnored(x,foeN);});
+        const rNew=getReg(c);
+        if(kamasu&&S.who===pTo&&rNew&&isCreatureReg(rNew)&&!c._kamasuChk){
+          c._kamasuChk=true;
+          (async()=>{
+            const j=await askChoice(`↩ ${faceNameOf(kamasu)}：相手のターン中、召喚以外で出たクリーチャーを手札に戻せます\n《${c.name}》は【召喚】で出しましたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝そのまま。侵略・革命チェンジ・蘇生・トリガー出しは召喚以外）`,
+              ["召喚で出した（そのまま）","召喚以外だった","召喚以外だが戻さない"]);
+            c._kamasuChk=false;
+            if(j!==1)return;
+            const ZB=zonesOf(pTo);
+            const bi=ZB.battle.findIndex(x=>x.id===c.id);
+            if(bi<0)return;
+            snap();
+            leaveBattleCleanup(ZB,c,"hand"); // 装備・封印・重なっていたカードを整理
+            ZB.battle.splice(bi,1);
+            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.faceup=true;c.mark=false;
+            if(typeof toHand==="function")toHand(ZB,c);else ZB.hand.push(c);
+            sfx("move");renderAll();
+            toast(`↩ ${faceNameOf(kamasu)}：${c.name} を手札に戻した`);
+            logOnly(`↩ ${faceNameOf(kamasu)} により ${c.name} を手札へ（召喚以外で出たため）`);
+          })();
+        }
+      }
       const noCheat=zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoCheat&&!isSealed(x);});
       if(noCheat&&!c._noCheatChk){
         c._noCheatChk=true;
