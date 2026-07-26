@@ -12622,6 +12622,17 @@ function fxTrigRowEl(i){
   opw.onchange=()=>{f.opt=opw.checked;};
   optLw.appendChild(opw);
   optLw.appendChild(document.createTextNode("❓任意"));
+  // 🔄 前提コスト：自分の他のクリーチャーn体を手札に戻したら実行（「そうした場合、〜」型・コーラレヒト型）
+  const pbLw=document.createElement("label");
+  pbLw.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  pbLw.title="この効果を行う前に、自分の他のクリーチャーをn体手札に戻します。戻せない／戻さない場合はこの効果を行いません（0＝なし）";
+  const pbNw=document.createElement("input");
+  pbNw.type="number";pbNw.min="0";pbNw.max="9";pbNw.style.width="46px";
+  pbNw.value=String(f.payBounce|0);
+  pbNw.onchange=()=>{f.payBounce=parseInt(pbNw.value,10)||0;};
+  pbLw.appendChild(document.createTextNode("🔄戻したら"));
+  pbLw.appendChild(pbNw);
+  pbLw.appendChild(document.createTextNode("体"));
   const del=document.createElement("button");
   del.className="btn small warn del";del.textContent="✕";
   del.onclick=()=>{FXEDIT.watchFx.splice(i,1);renderFxEditor();};
@@ -12640,7 +12651,7 @@ function fxTrigRowEl(i){
   const top=document.createElement("div");top.className="fxr-top";
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(ev);top.appendChild(evb);top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
-  bot.appendChild(hld);bot.appendChild(onceL);bot.appendChild(optLw);
+  bot.appendChild(hld);bot.appendChild(onceL);bot.appendChild(optLw);bot.appendChild(pbLw);
   const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
   bot.appendChild(condWrap);
   row.appendChild(top);row.appendChild(bot);
