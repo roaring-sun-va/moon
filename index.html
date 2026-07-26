@@ -1645,7 +1645,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="◀鬼エンド▶ クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいて、自分のマナゾーンに指定の文明がすべてあれば、このカードを手札からコストを支払わずに出せる（一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）"><input type="checkbox" id="fxOniEnd"> 👹 鬼エンド（攻撃時・盾0のプレイヤーがいれば手札からコストなしで出す）／必要文明<input type="text" id="fxOniEndCiv" placeholder="例：火闇自然（空欄＝文明条件なし）" style="width:180px"></label>
         <label><input type="checkbox" id="fxAbyss"> アビスラッシュ（墓地から召喚・SA・ターン終わりに山下へ）</label>
         <label><input type="checkbox" id="fxYobinion"> ヨビニオン（召喚時、山上からコストの小さいクリーチャーが出るまでめくって出す）</label>
-        <label title="このクリーチャーがタップしていれば、相手が自分のターン中にクリーチャーを召喚するか呪文を唱えた時、そのターンの残りが飛ぶ（禁断機関 ViVy-R型）"><input type="checkbox" id="fxEndTurnOppPlay"> ⏭ タップ中なら、相手がクリーチャー召喚／呪文を唱えた時に相手のターンを終わらせる（ViVy-R型）</label>
+        <label title="このクリーチャーがタップしていれば、相手が自分のターン中にクリーチャーを召喚するか呪文を唱えた時、そのターンの残りが飛ぶ（禁断機関 ViVy-R型）。「〜した時」の誘発なので、実行した瞬間にタップしていれば誘発が確定し、そのあとデーモン・ハンド等でこのクリーチャーが除去されてもターンは飛びます"><input type="checkbox" id="fxEndTurnOppPlay"> ⏭ タップ中なら、相手がクリーチャー召喚／呪文を唱えた時に相手のターンを終わらせる（ViVy-R型）</label>
         <label><input type="checkbox" id="fxJD"> ジャストダイバー（出た時にアナウンスのみ・付与はメニューから手動）</label>
         <input type="text" id="fxPsyLink" placeholder="覚醒/ゴッド・リンク相手（カード名を「／」区切り・全員揃うと確認）" style="flex:1;min-width:200px">
         <input type="text" id="fxPsyLinkTo" placeholder="リンク後のカード名（空欄＝名前連結）" style="flex:1;min-width:170px">
@@ -4879,7 +4879,9 @@ function emitEvent(actor,type,card){
   if(type==="spell")runWatchFx(actor,"allySpell",card); // ⚡ 自分が呪文を唱えた時（スパーク型・条件欄=呪文名・ソロでも動く）
   if(S.vs)runWatchFx(actor===0?1:0,type,card);
   // ⏭ 禁断機関 ViVy-R型：相手のクリーチャーがタップしていれば、自分のターン中にクリーチャーを召喚するか
-  //    呪文を唱えた時、このターンの残りが飛ぶ（アンタップしていれば飛ばない＝解決時にもう一度確認する）
+  //    呪文を唱えた時、このターンの残りが飛ぶ。
+  //    「〜した時」の誘発なので、実行した瞬間にタップしていれば誘発は確定する。
+  //    そのあとデーモン・ハンド等で本体が除去されても／アンタップされても、ターンは飛ぶ。
   if((type==="summon"||type==="spell")&&S.expert&&S.vs&&S.turn>0&&actor===(S.who|0)&&!S._turnEndPend){
     const defT=actor===0?1:0;
     const stopper=zonesOf(defT).battle.find(x=>{
@@ -4888,18 +4890,19 @@ function emitEvent(actor,type,card){
     });
     if(stopper){
       S._turnEndPend=true;
-      const _actor=actor,_defT=defT,_sid=stopper.id;
+      const _actor=actor,_defT=defT;
+      const _sname=faceNameOf(stopper);                        // 誘発した瞬間の名前を控える（このあと除去されても表示できるように）
+      const _what=(type==="spell")?"呪文を唱えた":"クリーチャーを召喚した";
+      sfx("flip");
+      logOnly(`⏭ ${_sname}（${S.players[_defT].label}）：${S.players[_actor].label} が${_what}ため、このターンの残りが飛ぶ（誘発確定）`);
       enqueueWatchJob(async()=>{
         S._turnEndPend=false;
         if(_actor!==(S.who|0)||S.turn<=0)return;              // すでにターンが変わっていたら何もしない
-        const live=zonesOf(_defT).battle.find(x=>x.id===_sid&&x.tapped&&!isSealed(x)&&!isIgnored(x,_defT));
-        if(!live)return;                                       // 離場・アンタップ・封印されたら飛ばない
-        sfx("flip");
-        logOnly(`⏭ ${faceNameOf(live)}（${S.players[_defT].label}）：${S.players[_actor].label} が${type==="spell"?"呪文を唱えた":"クリーチャーを召喚した"}ため、このターンの残りが飛ぶ`);
-        const yes=await ask(`⏭ 《${faceNameOf(live)}》はタップしています。\n${S.players[_actor].label} が${type==="spell"?"呪文を唱えた":"クリーチャーを召喚した"}ため、このターンの残りが飛びます。\n\n今すぐターンを終わりますか？\n（出た時の処理などが残っている場合は「いいえ」で保留し、済んでから「次のターン ▶」を押してください）`);
+        const gone=!zonesOf(_defT).battle.some(x=>faceNameOf(x)===_sname&&(()=>{const rx=getReg(x);return rx&&rx.endTurnOppPlay;})());
+        const yes=await ask(`⏭ 《${_sname}》がタップしている状態で、${S.players[_actor].label} が${_what}ため、このターンの残りが飛びます。${gone?`\n※《${_sname}》はこのあと場を離れましたが、実行した時点で誘発しているためターンは飛びます。`:""}\n\n今すぐターンを終わりますか？\n（出た時の処理などが残っている場合は「いいえ」で保留し、済んでから「次のターン ▶」を押してください）`);
         if(!yes){toast("⏭ ターンをとばす処理を保留しました（準備ができたら「次のターン ▶」を押してください）");return;}
         if(_actor!==(S.who|0))return;
-        toast(`⏭ ${S.players[_actor].label} のターンの残りをとばしました（${faceNameOf(live)}）`);
+        toast(`⏭ ${S.players[_actor].label} のターンの残りをとばしました（${_sname}）`);
         nextTurn();
       });
     }
