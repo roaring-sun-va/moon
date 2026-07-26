@@ -3227,6 +3227,12 @@ function cantLeaveBattle(pi,c,quiet){
   }
   return false;
 }
+/* 🅳 D2フィールド／横向きカードの向き。
+   通常は持ち主側に合わせた向き、Dスイッチ中は180度回した向きにする。
+   状態は c.dSw（真＝Dスイッチ中）で持つので、視点を切り替えても保たれる。 */
+function d2BaseRot(pi){return (pi===(S.seat|0))?270:90;}
+function applyD2Rot(pi,c){const b=d2BaseRot(pi);c.rot=c.dSw?(b===270?90:270):b;}
+function isD2Reg(r){return !!(r&&(r.d2||r.ctype==="d2"||r.fieldKind==="d2"));}
 function markArrive(c){
   c.dealIdx=null;c._pfAsked=false;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
   c._oriNew=true; // 🌀 オリオティス判定用：次のsummonイベントで消費される永続フラグ（1秒TTLのarrivedだと2体同時出しで取りこぼす）
@@ -3694,6 +3700,7 @@ function normalizeCard(c){
   if(c.face==null)c.face=0;
   if(c.rot==null)c.rot=0;
   if(c.mark==null)c.mark=false;
+  if(c.dSw==null)c.dSw=false; // 🅳 Dスイッチの状態（古い保存データ向けの既定値）
   if(c.buff===undefined)c.buff=null;
   c.under.forEach(normalizeCard);c.seals.forEach(normalizeCard);c.gear.forEach(normalizeCard);
 }
@@ -3944,7 +3951,7 @@ function dealPlayer(pi,pick){
       for(let s=0;s<sealN&&P.zones.deck.length;s++){
         const sc=P.zones.deck.shift();sc.faceup=false;c.seals.push(sc);
       }
-      if(reg&&(reg.d2||reg.wide))c.rot=(S.players.indexOf(P)===S.seat)?270:90;
+      if(reg&&(reg.d2||reg.wide))applyD2Rot(S.players.indexOf(P),c);
       P.zones.battle.push(c);
     }
   }
@@ -4503,6 +4510,7 @@ async function finishNextTurn(cur){
     else{
       const rc=getReg(c);
       if(rc&&rc.gimmick==="complex"&&(c.under?c.under.length:0)<8){/* COMPLEX：下7枚以下はアンタップしない */}
+      else if(S.expert&&isSealed(c)&&c.tapped){toast(`🔏 ${faceNameOf(c)} は封印されているためアンタップしない（封印を外すまでタップのまま）`);}
       else if(S.expert&&rc&&rc.noUntap&&c.tapped){toast(`⤵ ${faceNameOf(c)} はアンタップしない（常在）`);}
       else c.tapped=false;
     }
@@ -6000,6 +6008,8 @@ const FX_TYPES=[
   ["tapOpN","相手のクリーチャーをn体まで選んでタップ（「〜体までタップ」型）"],
   ["tapAnyN","⤵ クリーチャーをn体まで選んでタップ（両者どちらのクリーチャーでも対象・神光のカルマ ウイ型）"],
   ["untapSelf","🔄 このクリーチャー自身をアンタップする（「攻撃の終わりに」と組み合わせて2回攻撃などに）"],
+  ["sealFoe","🔏 相手のクリーチャーをn体選び、それぞれに封印を1つ付ける（そのプレイヤーの山札の上から1枚を裏向きで置く・条件欄で対象を絞れる）"],
+  ["sealSelf","🔏 自分のクリーチャーをn体選び、それぞれに封印を1つ付ける（自分の山札の上から1枚を裏向きで置く・条件欄で対象を絞れる）"],
   ["foeFreezeAll","❄ 相手のクリーチャーすべては、次の相手のターンのはじめにアンタップしない（ボルパンサー型・タップはしない）"],
   ["zenithSpark","🌟 自分の手札から最もコストの大きいカードをランダムに1枚表向きにし、そのコスト以下の相手クリーチャーをすべてタップ。表向きにしたのがゼニスなら、それらは次の相手のターン開始時にアンタップしない（創世と終焉のゼニスパーク型）"],
   ["turnEndUntapAll","🌙 このターン終了時、自分のクリーチャーをすべてアンタップする（ジャスティスの誓い型・唱えた/出したターンのみ）"],
@@ -7040,6 +7050,7 @@ const MODE_FX_ALIAS={
   "墓地肥やし":"mill","ミル":"mill","山札墓地":"mill","自分墓地肥やし":"mill","山上墓地":"mill",
   "相手墓地肥やし":"millOpp","相手ミル":"millOpp",
   "ドロー":"draw","引く":"draw",
+  "封印":"sealFoe","相手封印":"sealFoe","自分封印":"sealSelf",
   "マナ加速":"charge","ブースト":"charge","チャージ":"charge","マナブースト":"charge",
   "タップマナ":"chargeTap","タップイン加速":"chargeTap",
   "公開":"reveal","見る":"look","のぞき見":"look",
@@ -7334,7 +7345,7 @@ async function runFxList(pi,list,srcCard,inPump){
     try{stampShieldSrc(_srcLbl);}catch(e){} // 前の効果で増えた盾を取りこぼさないよう、各行の頭でも刻む
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
-    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn",
+    const FILT_COND=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf",
       // 🔧 条件欄を「対象の絞り込み／書式」として使う効果（ゾーン条件式として判定してはいけない）
       "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
       "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck"]);
@@ -7703,6 +7714,44 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       if(cnt>0){sfx("move");toast(`⤵ 相手のクリーチャー${cnt}体をタップ`);}
       renderAll();
+    }else if(f.t==="sealFoe"||f.t==="sealSelf"){
+      // 🔏 封印：対象のクリーチャーの上に、そのクリーチャーの持ち主の山札の上から1枚を裏向きで置く。
+      //    封印がある間はそのクリーチャーの能力は無効で、攻撃もブロックもできない（既存の isSealed 判定を使う）。
+      const tp=(f.t==="sealFoe")?op:pi;
+      if(f.t==="sealFoe"&&!S.vs){toast("（ソロのため封印はスキップ）");continue;}
+      const TZ=zonesOf(tp);
+      const filt=String(f.cond||"").trim();
+      let done=0,snapped=false;
+      for(let i=0;i<n;i++){
+        let pool=TZ.battle.filter(x=>isCreatureReg(getReg(x)));
+        if(filt)pool=pool.filter(x=>lockFilterOk(filt,getReg(x),x));
+        // 🚫 「選ばれない」は相手の効果の対象にならない（自分のクリーチャーに付ける場合は対象にできる）
+        if(tp!==pi)pool=pool.filter(x=>{const rx=getReg(x);return !(((rx&&rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,tp));});
+        if(!pool.length){
+          if(i===0){
+            const _tot=TZ.battle.length;
+            toast(`🔏 封印を付けられるクリーチャーがいません（対象：${S.players[tp].label}の場${_tot}枚${filt?`・条件「${filt}」外`:""}）`);
+            logOnly(`🔏 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}封印の対象がいないため選択パネルを出しませんでした（対象：${S.players[tp].label}の場${_tot}枚${filt?`・条件「${filt}」`:""}）`);
+          }
+          break;
+        }
+        const j=pool.length===1?0:await pickCard(`🔏 封印を付ける${tp===pi?"自分":"相手"}のクリーチャーを選択${filt?`（${filt}）`:""}（${i+1}/${n}体目・キャンセルで終了）`,pool,{hint:"タップで選択／封印がある間は能力が無効・攻撃もブロックもできません"});
+        if(j===null)break;
+        const t=pool[j];
+        if(typeof canSeal==="function"&&!canSeal(tp,t))continue; // 🔏 封印されない（パーフェクト・エイティー型）
+        if(!TZ.deck.length){toast(`（${S.players[tp].label}の山札がないため封印を付けられません）`);break;}
+        if(!snapped){snap();snapped=true;}
+        const sc=TZ.deck.shift();
+        sc.faceup=false;sc.tapped=false;sc.sideways=false;sc.seen=false;sc.mark=false;
+        t.seals=t.seals||[];
+        t.seals.push(sc);
+        done++;
+        sfx("flip");renderAll();
+        toast(`🔏 ${faceNameOf(t)} に封印を1つ付けた（封印${t.seals.length}個・${S.players[tp].label}の山札の上から）${t.tapped?"\n※タップされたままになります（封印中はアンタップしません）":""}`);
+        logOnly(`🔏 ${S.players[pi].label}${srcCard?`：《${faceNameOf(srcCard)}》`:""} が ${S.players[tp].label} の《${faceNameOf(t)}》に封印を付けた（封印${t.seals.length}個）`);
+        if(S.vs&&!TZ.deck.length)declareWin(tp===0?1:0,`山札破壊：${S.players[tp].label} の山札が0枚`);
+      }
+      if(done)renderAll();
     }else if(f.t==="untapSelf"){
       // 🔄 このクリーチャー自身をアンタップする（攻撃の終わりの誘発などから使う）
       const me=srcCard;
@@ -10797,19 +10846,30 @@ async function faceupDestroyRep(pi,c,n,kindLabel){
   const Z=zonesOf(pi);
   const rRep=getReg(c);
   const canShield=!!(rRep&&rRep.underRepShield)&&Z.shield.length>0; // 🛡 「〜するか、自分のシールドを1つ墓地に置いてもよい」（カリスマックス型）
-  const pool=()=>Z.battle.filter(x=>x.id!==(c?c.id:null)&&x.faceup!==false);
+  // 🧬 進化クリーチャーの下にあるカードも「自分の表向きのカード」として選べるようにする
+  //    （host=null なら盤面のカード本体、host があればそのクリーチャーの下のカード）
+  const pool=()=>{
+    const out=[];
+    for(const x of Z.battle){
+      if(x.id!==(c?c.id:null)&&x.faceup!==false)out.push({card:x,host:null});
+      if(x.under&&x.under.length)for(const u of x.under){
+        if(u&&u.faceup!==false&&u.id!==(c?c.id:null))out.push({card:u,host:x});
+      }
+    }
+    return out;
+  };
   const avail=pool().length;
   if(!avail&&!canShield)return false;
   let mode=0;
   if(canShield){
     const opts=[];
-    if(avail)opts.push(`自分の表向きのカードを${n}枚破壊する${avail<n?`（${avail}枚しかないのであるだけ）`:""}`);
+    if(avail)opts.push(`自分の表向きのカードを${n}枚破壊する（進化元も選べます・候補${avail}枚）${avail<n?`※${avail}枚しかないのであるだけ`:""}`);
     opts.push("自分のシールドを1つ墓地に置く");
     const j=await askChoice(`${kindLabel}\nかわりに、どちらを行いますか？（キャンセル＝置き換えない）`,opts);
     if(j===null)return false;
     mode=(avail&&j===0)?0:1;
   }else{
-    const y=await ask(`${kindLabel}\nかわりに自分の表向きのカードを${n}枚破壊しますか？${avail<n?`\n（表向きのカードは${avail}枚しかありません。あるだけ破壊します）`:""}`);
+    const y=await ask(`${kindLabel}\nかわりに自分の表向きのカードを${n}枚破壊しますか？\n（進化クリーチャーの下のカードも選べます・候補${avail}枚）${avail<n?`\n※${avail}枚しかないので、あるだけ破壊します`:""}`);
     if(!y)return false;
   }
   snap();
@@ -10833,11 +10893,26 @@ async function faceupDestroyRep(pi,c,n,kindLabel){
   for(let i=0;i<n;i++){
     const ps=pool();
     if(!ps.length)break;
-    const j=ps.length===1?0:await pickCard(`💥 破壊する自分の表向きのカードを選択（${i+1}/${n}枚目）`,ps,{hint:"タップで選択"});
+    const j=ps.length===1?0:await pickCard(
+      `💥 破壊する自分の表向きのカードを選択（${i+1}/${n}枚目）`,
+      ps.map(o=>o.card),
+      {hint:"タップで選択（進化クリーチャーの下のカードも選べます）",sub:(x,ix)=>ps[ix]&&ps[ix].host?`⬇${faceNameOf(ps[ix].host)}の下`:""});
     if(j===null)break;
     const t=ps[j];
-    names.push(faceNameOf(t));
-    await destroyCreature(pi,t,{});
+    if(t.host){
+      // 🧬 下のカードは「破壊」ではなく、そのまま墓地へ置く（進化元は場のクリーチャーではないため）
+      const hi=t.host.under.findIndex(u=>u.id===t.card.id);
+      if(hi<0)continue;
+      const rm=t.host.under.splice(hi,1)[0];
+      rm.faceup=true;rm.tapped=false;rm.sideways=false;rm.rot=0;rm.buff=null;rm.mark=false;rm.isCross=false;
+      Z.grave.push(rm);
+      names.push(`${faceNameOf(rm)}（${faceNameOf(t.host)}の下）`);
+      if(typeof queueToGrave==="function"){try{queueToGrave(pi,rm);}catch(e){}} // ⚡ 墓地に置かれた時（ゾルザーク型）は解決後に発火
+      renderAll();
+    }else{
+      names.push(faceNameOf(t.card));
+      await destroyCreature(pi,t.card,{});
+    }
   }
   renderAll();
   if(!names.length)return false;
@@ -11455,7 +11530,7 @@ function processBroken(op,stack,label){
         stDefer.push({c,zone:"resolve"});
       }else if(zone==="battle"){
         c.faceup=true;Z.battle.push(c);markArrive(c);sfx("move");
-        const r=getReg(c);if(r&&(r.d2||r.wide))c.rot=(op===S.seat)?270:90;
+        const r=getReg(c);if(r&&(r.d2||r.wide))applyD2Rot(op,c);
         logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を出した（${stDefer.length+1}番目・出た時効果はパネル完了後）`);
         bumpEv("stTrig",op);
         stDefer.push({c,zone:"battle"});
@@ -12371,19 +12446,33 @@ function clearPendingAtk(){
    「攻撃の終わりに、条件を満たしていればこのクリーチャーをアンタップする」などに使う。 */
 async function runSelfAtkEnd(pi,c){
   if(!S.expert||!c)return;
-  if(!zonesOf(pi).battle.some(x=>x.id===c.id))return; // 攻撃後に場を離れていたら発火しない
-  if(isSealed(c)||isIgnored(c,pi))return;
   const r=getReg(c);
   if(!r||!r.watchFx)return;
   const list=r.watchFx.filter(w=>w.ev==="selfAtkEnd"&&w.t);
   if(!list.length)return;
+  // 🔬 不発だった理由を必ず知らせる（無言でスキップすると「登録したのに動かない」の原因が分からない）
+  if(!zonesOf(pi).battle.some(x=>x.id===c.id)){
+    toast(`⚡ ${faceNameOf(c)} の「攻撃の終わりに」は不発：攻撃のあとバトルゾーンにいません`);
+    return;
+  }
+  if(isSealed(c)||isIgnored(c,pi)){
+    toast(`⚡ ${faceNameOf(c)} の「攻撃の終わりに」は不発：${isSealed(c)?"封印されています":"能力を無視されています"}`);
+    return;
+  }
   for(const w of list){
     // 条件式（例：盾<=2／マナ>=6／鬼エンド）を満たしていなければスキップ
-    if(w.cond&&!zoneCondOk(w.cond,pi,c))continue;
+    if(w.cond&&!zoneCondOk(w.cond,pi,c)){
+      toast(`⚡ ${faceNameOf(c)} の「攻撃の終わりに」は不発：条件「${w.cond}」を満たしていません`);
+      logOnly(`⚡ ${faceNameOf(c)}：攻撃の終わりの効果は条件「${w.cond}」未達のため不発`);
+      continue;
+    }
     if(w.once){
       S._watchOnce=S._watchOnce||{};
       const k=`${c.id}:selfAtkEnd:${w.cond||""}`;
-      if(S._watchOnce[k]===`${S.turn}:${S.who}`)continue;
+      if(S._watchOnce[k]===`${S.turn}:${S.who}`){
+        toast(`1️⃣ ${faceNameOf(c)} の「攻撃の終わりに」はこのターン使用済みです`);
+        continue;
+      }
       S._watchOnce[k]=`${S.turn}:${S.who}`;
     }
     if(w.opt){
@@ -15101,6 +15190,14 @@ function extractEffects(text,mode){
       const mCo=cl.match(/コスト(\d+)(以下|以上)/);
       const mcond=mPw?`パワー${mPw[1]}${mPw[2]}`:mCo?`コスト${mCo[1]}${mCo[2]}`:"";
       fx.push({t:"manaPick",n:numOf(cl,/(\d+)体/),cond:mcond});
+    }
+    // 🔏 封印を付ける（「相手のクリーチャー1体に封印を1つ付ける」「自分のクリーチャー…」）
+    if(/クリーチャー[^。■]{0,24}?封印を?\d*\s*(?:つ|個)?(?:付ける|置く|つける)/.test(cl)&&!/外す|取り除く|はずす/.test(cl)){
+      const isSelf=/自分の[^。■]{0,12}?クリーチャー/.test(cl)&&!/相手の[^。■]{0,12}?クリーチャー/.test(cl);
+      const mPw=cl.match(/パワー(\d+)(以下|以上)/);
+      const mCo=cl.match(/コスト(\d+)(以下|以上)/);
+      const scond=mPw?`パワー${mPw[1]}${mPw[2]}`:mCo?`コスト${mCo[1]}${mCo[2]}`:"";
+      fx.push({t:isSelf?"sealSelf":"sealFoe",n:numOf(cl,/(\d+)体/),cond:scond,opt:/してもよい/.test(cl)});
     }
     // 全タップ（スパーク）
     // ❄ 「相手のクリーチャーは（すべて）次の相手のターン開始時まで（はじめに）アンタップしない」（初不/ボルパンサー型・タップはしない）
@@ -18669,7 +18766,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       }
     }
     const reg=getReg(c);
-    if(reg&&(reg.d2||reg.wide))c.rot=(pTo===S.seat)?270:90;
+    if(reg&&(reg.d2||reg.wide))applyD2Rot(pTo,c);
     if(S.expert&&reg&&reg.gimmick==="complex"&&!reg.complexArc){c.tapped=true;c.under=c.under||[];toast(`⬛ ${c.name} はタップして出る（下に8枚でアンタップ）`);}
     if(S.expert&&reg&&reg.gimmick==="complex"&&reg.complexArc){c.under=c.under||[];}
     if(S.expert&&reg&&reg.tapIn&&(!reg.gimmick||reg.gimmick!=="complex")){c.tapped=true;toast(`⤵ ${c.name} はタップして出る`);}
@@ -19877,6 +19974,28 @@ function cardEl(pi,zone,c){
   }
   // ⚙ クロスギア（未クロス）は攻撃もタップもしないので、代わりに「クロスする」ボタンを出す
   const isGearCard=(()=>{const rG=getReg(c);return !!(rG&&(rG.ctype==="crossgear"||rG.ctype==="evocrossgear"));})();
+  // 🅳 D2フィールドは攻撃もタップもしないので、代わりに「Dスイッチ」ボタンを出す
+  const isD2Card=isD2Reg(getReg(c));
+  // 🅳 視点を切り替えても向きが崩れないよう、描画のたびに向きを作り直す
+  if(zone==="battle"&&isD2Card)applyD2Rot(pi,c);
+  if(zone==="battle"&&isD2Card&&!hidden&&c.faceup&&(!S.vs||pi===S.seat)&&showBBtn){
+    const on=!!c.dSw;
+    const db=document.createElement("button");
+    db.textContent="D";
+    db.title=on?"Dスイッチを戻す（元の向きに戻す）":"Dスイッチ（上下逆さにする）";
+    db.style.cssText=`position:absolute;left:-6px;top:26%;z-index:7;width:26px;height:26px;border-radius:50%;border:2px solid #22d3ee;background:${on?"#22d3ee":"#04222a"};color:${on?"#052a30":"#22d3ee"};font-size:13px;font-weight:900;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.6);padding:0;line-height:1`;
+    db.addEventListener("click",ev=>{
+      ev.stopPropagation();ev.preventDefault();
+      snap();
+      c.dSw=!c.dSw;applyD2Rot(pi,c);
+      sfx("flip");
+      toast(c.dSw?`🅳 Dスイッチ発動！：${faceNameOf(c)}`:`🅳 Dスイッチを戻しました：${faceNameOf(c)}`);
+      logOnly(c.dSw?`🅳 ${S.players[pi].label}：《${faceNameOf(c)}》のDスイッチを発動`:`🅳 ${S.players[pi].label}：《${faceNameOf(c)}》のDスイッチを戻した`);
+      renderAll();
+    });
+    db.addEventListener("pointerdown",ev=>ev.stopPropagation());
+    el.appendChild(db);
+  }
   if(zone==="battle"&&isGearCard&&!hidden&&c.faceup&&(!S.vs||pi===S.seat)&&showBBtn){
     const xb=document.createElement("button");
     xb.textContent="🔗";
@@ -19890,7 +20009,7 @@ function cardEl(pi,zone,c){
     xb.addEventListener("pointerdown",ev=>ev.stopPropagation());
     el.appendChild(xb);
   }
-  if((zone==="battle"||zone==="mana")&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!(zone==="battle"&&isGearCard)){
+  if((zone==="battle"||zone==="mana")&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!(zone==="battle"&&(isGearCard||isD2Card))){
     const tb=document.createElement("button");
     tb.textContent=c.tapped?"⤴":"⤵";
     tb.title=c.tapped?"アンタップ":"タップ";
@@ -19904,7 +20023,7 @@ function cardEl(pi,zone,c){
     tb.addEventListener("pointerdown",ev=>ev.stopPropagation());
     el.appendChild(tb);
   }
-  if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden&&!isSealed(c)&&showBBtn&&!isGearCard){
+  if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden&&!isSealed(c)&&showBBtn&&!isGearCard&&!isD2Card){
     const ab=document.createElement("button");
     ab.textContent="⚔";
     ab.title="攻撃";
@@ -21982,9 +22101,15 @@ function showCardPreview(ctx){
     bar.appendChild(b);
   };
   const isGearQ=(()=>{const rG=getReg(c);return !!(rG&&(rG.ctype==="crossgear"||rG.ctype==="evocrossgear"));})();
+  const isD2Q=isD2Reg(getReg(c));
   if(ctx.zone==="battle"&&isGearQ)mk("🔗 クロスする",()=>{crossGearTo(ctx.p,ctx.id);},true);
-  if(ctx.zone==="battle"&&S.vs&&ctx.p===S.who&&!c.tapped&&c.faceup&&!isSealed(c)&&!isGearQ)mk("⚔ 攻撃",()=>startAttack(ctx.p,ctx.id),true);
-  if(ctx.zone!=="hand"&&!(ctx.zone==="battle"&&isGearQ))mk(c.tapped?"⤴ アンタップ":"⤵ タップ",()=>{c.tapped=!c.tapped;sfx("move");renderAll();});
+  if(ctx.zone==="battle"&&isD2Q)mk(c.dSw?"🅳 Dスイッチを戻す":"🅳 Dスイッチ",()=>{
+    snap();c.dSw=!c.dSw;applyD2Rot(ctx.p,c);sfx("flip");
+    toast(c.dSw?`🅳 Dスイッチ発動！：${faceNameOf(c)}`:`🅳 Dスイッチを戻しました：${faceNameOf(c)}`);
+    renderAll();
+  },true);
+  if(ctx.zone==="battle"&&S.vs&&ctx.p===S.who&&!c.tapped&&c.faceup&&!isSealed(c)&&!isGearQ&&!isD2Q)mk("⚔ 攻撃",()=>startAttack(ctx.p,ctx.id),true);
+  if(ctx.zone!=="hand"&&!(ctx.zone==="battle"&&(isGearQ||isD2Q)))mk(c.tapped?"⤴ アンタップ":"⤵ タップ",()=>{c.tapped=!c.tapped;sfx("move");renderAll();});
   if(c.faceup)mk("⚙ 効果登録",()=>{openFxEditor(faceKeyOf(c));});
   mk("📋 メニュー",()=>{onCardTap(ctx);});
   ol.appendChild(bar);
@@ -22627,13 +22752,17 @@ function openCardSheet(ctx){
         mugetsuGate(ctx.p,ctx.id);
       },"",true));
     }
-    box.appendChild(actBtn("封印を付ける（自分の山上から）",()=>{
+    box.appendChild(actBtn(`🔏 封印を付ける（${S.players[ctx.p].label}の山札の上から）`,()=>{
       if(!canSeal(ctx.p,c))return;
       const Z2=zonesOf(ctx.p);
-      if(!Z2.deck.length){toast("山札がありません");return;}
-      const sc=Z2.deck.shift();sc.faceup=false;
+      if(!Z2.deck.length){toast(`${S.players[ctx.p].label}の山札がありません`);return;}
+      snap();
+      const sc=Z2.deck.shift();sc.faceup=false;sc.tapped=false;sc.sideways=false;sc.seen=false;sc.mark=false;
       c.seals=c.seals||[];c.seals.push(sc);
-      sfx("flip");toast(`封印を付けた（封${c.seals.length}）`);rerender();
+      sfx("flip");
+      toast(`🔏 ${faceNameOf(c)} に封印を付けた（封印${c.seals.length}個）`);
+      logOnly(`🔏 ${S.players[ctx.p].label} の《${faceNameOf(c)}》に封印を付けた（封印${c.seals.length}個・手動）`);
+      rerender();
     }));
     {
       const rT=getReg(c);
@@ -23133,11 +23262,13 @@ function openCardSheet(ctx){
       closeSel();renderAll();
     },"",true));
   }
-  if(reg&&reg.d2&&ctx.zone==="battle"){
-    box.appendChild(actBtn(c.rot===270?"Dスイッチ解除（横向きに戻す）":"⤵ Dスイッチ（上下逆さに）",()=>{
-      c.rot=(c.rot===270)?90:270;
+  if(isD2Reg(reg)&&ctx.zone==="battle"){
+    box.appendChild(actBtn(c.dSw?"🅳 Dスイッチを戻す（元の向きに戻す）":"🅳 Dスイッチ（上下逆さに）",()=>{
+      snap();
+      c.dSw=!c.dSw;applyD2Rot(ctx.p,c);
       sfx("flip");
-      toast(c.rot===270?`Dスイッチ発動！：${faceNameOf(c)}`:"Dスイッチを戻しました");
+      toast(c.dSw?`🅳 Dスイッチ発動！：${faceNameOf(c)}`:`🅳 Dスイッチを戻しました：${faceNameOf(c)}`);
+      logOnly(c.dSw?`🅳 ${S.players[ctx.p].label}：《${faceNameOf(c)}》のDスイッチを発動`:`🅳 ${S.players[ctx.p].label}：《${faceNameOf(c)}》のDスイッチを戻した`);
       rerender();
     },"primary"));
   }
