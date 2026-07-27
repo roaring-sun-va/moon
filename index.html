@@ -8277,7 +8277,7 @@ async function runFxList(pi,list,srcCard,inPump){
           if(idx<0)continue;
           const removed=TZ.battle.splice(idx,1)[0];
           const _um=(removed.under&&removed.under.length)?removed.under.splice(0):[];
-          if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>{gg.faceup=true;TZ.grave.push(gg);});}
+          if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>gearOut(TZ,gg));}
           removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;
           if(isMana){TZ.mana.push(removed);toast(`💎 ${faceNameOf(removed)} をマナゾーンへ`);}
           else{removed.mark=false;TZ.hand.push(removed);toast(`↩ ${faceNameOf(removed)} を手札に戻した`);}
@@ -8318,7 +8318,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(idx<0)continue;
         const removed=TZ.battle.splice(idx,1)[0];
         const _um2=(removed.under&&removed.under.length)?removed.under.splice(0):[];
-        if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>{gg.faceup=true;TZ.grave.push(gg);});}
+        if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>gearOut(TZ,gg));}
         removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;removed.mark=false;
         TZ.hand.push(removed);
         _um2.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];if(typeof toHand==="function")toHand(TZ,u);else TZ.hand.push(u);});
@@ -8913,7 +8913,7 @@ async function runFxList(pi,list,srcCard,inPump){
       snap();
       const mv=Zs.battle.splice(bi,1)[0];
       const _um=(mv.under&&mv.under.length)?mv.under.splice(0):[];
-      if(mv.gear&&mv.gear.length){mv.gear.splice(0).forEach(gg=>{gg.faceup=true;Zs.grave.push(gg);});}
+      if(mv.gear&&mv.gear.length){mv.gear.splice(0).forEach(gg=>gearOut(Zs,gg));}
       mv.tapped=false;mv.sideways=false;mv.rot=0;mv.buff=null;mv.seals=[];mv.faceup=true;mv.mark=false;
       const put=(card)=>{
         if(zn==="mana")Zs.mana.push(card);
@@ -9361,7 +9361,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const bi=OZ.battle.findIndex(y=>y.id===x.id);if(bi<0)continue;
         const cc=OZ.battle.splice(bi,1)[0];
         // 進化元・クロスギアの整理（Ω処理と同様：進化元は墓地・ギアは場に残す）
-        if(cc.gear&&cc.gear.length){const gs=cc.gear.splice(0);gs.forEach(g=>{g.faceup=true;OZ.battle.push(g);});}
+        if(cc.gear&&cc.gear.length){const gs=cc.gear.splice(0);gs.forEach(g=>gearOut(OZ,g));}
         if(cc.under&&cc.under.length){const us=cc.under.splice(0);us.forEach(u=>{u.faceup=true;OZ.grave.push(u);});}
         cc.faceup=false;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;cc.seals=[];cc.mark=S.turn>0;
         if(!shieldCapOk(OZ)){cc.faceup=true;OZ.grave.push(cc);toGraveA++;} // 🛡 10枚超過は墓地
@@ -9505,7 +9505,7 @@ async function runFxList(pi,list,srcCard,inPump){
           if(idx<0)continue;
           const removed=OZt.battle.splice(idx,1)[0];
           const _um=(removed.under&&removed.under.length)?removed.under.splice(0):[];
-          if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>{gg.faceup=true;OZt.grave.push(gg);});}
+          if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>gearOut(OZt,gg));}
           removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;removed.mark=false;removed.neoEvo=false;removed.isCross=false;
           if(typeof toHand==="function")toHand(OZt,removed);else OZt.hand.push(removed);
           _um.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];if(typeof toHand==="function")toHand(OZt,u);else OZt.hand.push(u);});
@@ -9543,7 +9543,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(idx<0)continue;
         const removed=OZ2.battle.splice(idx,1)[0];
         if(removed.under&&removed.under.length){removed.under.splice(0).forEach(u=>{u.faceup=true;OZ2.grave.push(u);});}
-        if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>{gg.faceup=true;OZ2.grave.push(gg);});}
+        if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>gearOut(OZ2,gg));}
         removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;removed.mark=S.turn>0;
         if(isTuck){
           if(!SZ.shield.length){SZ.shield.push(removed);toast(`🛡 重ねる盾が無いため ${faceNameOf(removed)} を新しい盾に（表向き）`);}
@@ -10469,7 +10469,7 @@ async function offerSoulRaid(pi,c){
   renderAll();
 }
 function gearOut(Z,g){
-  if(g.isCross){g.tapped=false;g.isCross=false;Z.battle.push(g);return;} // 外れた時点でクロス状態は解除（単体のギアに戻る）
+  if(g.isCross){g.tapped=false;g.isCross=false;g.faceup=true;g.sideways=false;Z.battle.push(g);return;} // 外れた時点でクロス状態は解除（単体のギアに戻る・進化元は下に付いたまま）
   const rg=getReg(g);
   if(rg&&["aura","gigaaura"].includes(rg.ctype)){g.faceup=true;g.face=0;g.rot=0;g.tapped=false;Z.grave.push(g);return;}
   g.face=0;g.rot=0;g.tapped=false;Z.hyper.push(g);
@@ -10854,7 +10854,7 @@ async function offerTrueEscape(pi,c){
     if(idx<0){renderAll();return true;}
     const cc=Z.battle.splice(idx,1)[0];
     if(cc.under&&cc.under.length)cc.under.splice(0).forEach(u=>{u.faceup=true;Z.grave.push(u);});
-    if(cc.gear&&cc.gear.length)cc.gear.splice(0).forEach(g=>{g.faceup=true;Z.grave.push(g);});
+    if(cc.gear&&cc.gear.length)cc.gear.splice(0).forEach(g=>gearOut(Z,g));
     if(cc.seals&&cc.seals.length)cc.seals.splice(0).forEach(s=>{s.faceup=true;Z.grave.push(s);});
     cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;cc.mark=false;cc.faceup=true;cc.seals=[];
     Z.hand.push(cc);
@@ -17917,7 +17917,7 @@ async function repLeaveReplace(pi,c,reg){
 function etOmegaToHand(ownerP,c,curArr){
   const Z=zonesOf(ownerP);
   if(curArr){const ix=curArr.findIndex(x=>x.id===c.id);if(ix>=0)curArr.splice(ix,1);}
-  if(c.gear&&c.gear.length){const gs=c.gear.splice(0);gs.forEach(g=>{g.faceup=true;Z.battle.push(g);});}
+  if(c.gear&&c.gear.length){const gs=c.gear.splice(0);gs.forEach(g=>gearOut(Z,g));}
   if(c.under&&c.under.length){const us=c.under.splice(0);us.forEach(u=>{u.faceup=true;Z.grave.push(u);});}
   c.tapped=false;c.sideways=false;c.faceup=true;c.buff=null;c.seals=[];c.rot=0;c.mark=false;
   Z.hand.push(c);
@@ -19226,6 +19226,7 @@ const HOTKEY_ACTS=[
   ["handes","ランダムハンデス（相手の手札から見ないで1枚）","R"],
   ["turn","次のターン","N"],
   ["freeplay","⚡ 踏み倒しモードのON/OFF","F"],
+  ["expert","⚡ EXモード（効果の自動処理）のON/OFF","E"],
   ["log","📜 ログの小窓を開く/閉じる","L"],
   ["logFull","📜 全画面のログを開く（空欄＝未割り当て）",""],
 ];
@@ -19305,6 +19306,12 @@ async function runHotkey(act){
     afterHandDiscard(op,c);
   }else if(act==="turn"){
     nextTurn();
+  }else if(act==="expert"){
+    // ⚡ EXモード：上部の「EX」ボタンと同じ動作（効果の自動処理を止めたい時に）
+    S.expert=!S.expert;
+    try{if(db)await idbPut("misc","expert",S.expert);}catch(e){}
+    sfx("flip");renderAll();
+    toast(S.expert?"⚡EXモード：登録カードの効果を自動処理します":"EXモード解除（効果は手動で処理します）");
   }else if(act==="freeplay"){
     // ⚡ 踏み倒しモード：下部バーの「踏倒」ボタンと同じ動作
     S.freePlay=!S.freePlay;
@@ -27064,7 +27071,7 @@ $("btnHelp").addEventListener("click",()=>{
       <b>■ ショートカット・PC操作</b><br>
       ・<b>⌘Z / Ctrl+Z</b>：1手戻る（やり直しは <b>⌘⇧Z / Ctrl+Shift+Z</b>）。画面上部の「↩戻る」ボタンでも戻せます<br>
       ・<b>⌘/Ctrl＋クリック（タップ）</b>：各パネルで複数選択／ビルダーでは−1枚。上部の「複数選択」ボタンでも切替<br>
-      ・<b>ショートカットキー</b>（設定でON）：既定は <b>D</b>ドロー／<b>B</b>ブースト／<b>T</b>盾追加／<b>G</b>GR召喚／<b>V</b>山上を墓地へ／<b>R</b>ランダムハンデス／<b>N</b>次のターン／<b>F</b>踏み倒しON・OFF／<b>L</b>ログの小窓の開閉。設定内の一覧で自由に変更でき、空欄にすると未割り当てになります<br>
+      ・<b>ショートカットキー</b>（設定でON）：既定は <b>D</b>ドロー／<b>B</b>ブースト／<b>T</b>盾追加／<b>G</b>GR召喚／<b>V</b>山上を墓地へ／<b>R</b>ランダムハンデス／<b>N</b>次のターン／<b>F</b>踏み倒しON・OFF／<b>E</b>EXモードON・OFF／<b>L</b>ログの小窓の開閉。設定内の一覧で自由に変更でき、空欄にすると未割り当てになります<br>
       ・盾に追加されたカードはオレンジ枠でマーク（カードメニューで解除可）／攻撃中の処理は上部バナーから「再開/中止」<br><br>
 
       <b>■ 登録パターン具体例（カードの文章 → こう登録）</b><br>
