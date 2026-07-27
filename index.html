@@ -638,6 +638,19 @@ body.shake{animation:bodyShake .4s ease-out}
 .vname{font-size:9px;color:var(--muted);margin-top:3px;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;text-align:center}
 
 .dl-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:6px;background:#0f1524}
+/* 📁 デッキのフォルダ移動（つかんで運ぶ） */
+.dl-grip{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-right:6px;
+  border-radius:6px;border:1px solid var(--line);background:#141c2e;color:var(--muted);
+  font-size:12px;cursor:grab;touch-action:none;vertical-align:middle;flex:0 0 auto}
+.dl-grip:active{cursor:grabbing}
+.dl-item.dl-dragging{opacity:.45}
+.dl-drop-on{outline:2px dashed var(--accent)!important;outline-offset:2px;background:rgba(245,197,66,.10)}
+#dlRootDrop{display:none;margin:6px 0;padding:9px 10px;border:1px dashed var(--line);border-radius:10px;
+  font-size:12px;font-weight:800;color:var(--muted);text-align:center}
+#dlBody.dl-dragmode #dlRootDrop{display:block}
+#dlGhost{position:fixed;z-index:9999;pointer-events:none;padding:6px 10px;border-radius:8px;
+  border:1px solid var(--accent);background:rgba(15,21,36,.96);color:var(--accent);
+  font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.6);white-space:nowrap}
 .dl-item .dl-name{font-weight:800;color:var(--accent);cursor:pointer;font-size:13px}
 .dl-grid{display:none;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px;margin-top:8px}
 .dl-item.open .dl-grid{display:grid}
@@ -885,6 +898,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの見出しをつかんで、好きな場所へ動かせます。右下・左下の隅をつかむと大きさ（幅と高さ）を変えられます。位置と大きさは次回も覚えています"><input type="checkbox" id="optLogDrag" checked> ✋ ログの見出しをつかんで移動する（隅のつかみ手で大きさ変更）</label><button class="btn small ghost" id="btnLogBoxReset" title="自由に動かしたログの位置と大きさを、既定（右上・幅340px）に戻します">↺ ログの位置と大きさを戻す</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="画面の右端から左へ払うとログが開き、右へ払うと閉じます。カードのドラッグと当たる場合はオフにしてください"><input type="checkbox" id="optLogSwipe" checked> ➡ 画面の右端から左へ払ってログを開く（右へ払って閉じる）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="確認パネルや効果パネルが開いている間も、ログを手前に重ねて表示します。パネルの操作が隠れて邪魔な場合はオフにしてください"><input type="checkbox" id="optLogOverPanel" checked> 🪟 確認パネルが開いている間もログを手前に表示する</label></div>
+    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="オフ（既定）＝出したクリーチャーの「出た時」を先に解決してから、盤面のカスミ／アジサイ／キューティ・ルピア型の「自分のクリーチャーが出た時」を処理します。オンにすると盤面側を先に処理します"><input type="checkbox" id="optAllyEnterFirst"> ⏱ 盤面の「自分のクリーチャーが出た時」を、出たカードの出た時より先に処理する</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの文中に出てくるカード名を、《》が付いていなくても見つけて絵札を添えます。誤って別の言葉に絵札が付く場合や、動作が重い場合はオフにしてください"><input type="checkbox" id="optLogAutoImg" checked> 🎴 ログの文中のカード名にも絵札を付ける（《》なしでも自動で探す）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="オンライン対戦中、自分の操作のログを相手の端末にも送って、両者が同じ流れを追えるようにします。自分だけが中身を知っているカード（非公開で見た山札・サーチで手札に加えたカード等）は、カード名を送らず「処理だけ」を送ります"><input type="checkbox" id="optLogShare" checked> 🌐 オンライン対戦でログを相手にも送る（非公開のカード名は送らない）</label></div>
     <div class="row">
@@ -1095,7 +1109,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <div class="row" style="align-items:center;gap:8px">
       <button class="btn small" id="dlNewFolder">📁 新規フォルダ</button>
       <button class="btn small" id="dlPackMode">📤 まとめて渡す</button>
-      <span class="hint" style="margin:0">デッキ名を「フォルダ名/デッキ名」にしてもフォルダ分けされます</span>
+      <span class="hint" style="margin:0">デッキ名を「フォルダ名/デッキ名」にしてもフォルダ分けされます／行の左の <b>⠿</b> をつかんでフォルダの見出しに落とすと移動できます</span>
     </div>
     <div class="row" id="dlPackBar" style="display:none;align-items:center;gap:8px;background:#0f1524;border:1px solid var(--line);border-radius:10px;padding:8px">
       <span id="dlPackCount" style="font-size:12px;font-weight:800;color:var(--accent)">0個 選択中</span>
@@ -1173,6 +1187,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <button class="btn small ghost" id="bReset">クリア</button>
       <button class="btn small" id="bCancel">閉じる</button>
       <button class="btn small" id="bListView">📋 リスト確認</button>
+      <button class="btn small" id="bFxEdit" title="カードの効果登録を開きます。閉じると、作りかけのデッキをそのまま保ったままビルダーに戻ります">⚙ カード登録</button>
       <button class="btn small" id="bImage">🖼 デッキ画像</button>
       <button class="btn primary small" id="bApply">反映</button>
     </div>
@@ -2843,6 +2858,13 @@ window.addEventListener("resize",()=>{try{applyLogBox();}catch(e){}});
    S.logFab=cb.checked;
    if(typeof applyLogFab==="function")applyLogFab();
    try{if(db)await idbPut("misc","logFab",S.logFab?1:0);}catch(e){}
+ });}
+{const cb=document.getElementById("optAllyEnterFirst");
+ if(cb)cb.addEventListener("change",async()=>{
+   if(typeof S==="undefined"||!S)return;
+   S.allyEnterFirst=cb.checked;
+   try{if(db)await idbPut("misc","allyEnterFirst",S.allyEnterFirst?1:0);}catch(e){}
+   toast(S.allyEnterFirst?"⏱ 盤面の「出た時」誘発を先に処理します":"⏱ 出したカードの「出た時」を先に解決します（既定）");
  });}
 {const cb=document.getElementById("optLogAutoImg");
  if(cb)cb.addEventListener("change",async()=>{
@@ -4957,17 +4979,17 @@ function runWatchFx(pi,type,trigCard){
           for(const k of _oks)S._watchOnce[k]=`${S.turn}:${S.who}`;
         };
         if(S.expert&&S.vs&&fxRunning){
-          TRIG_PENDING.push({pi,fx,c,onceKeys:_oks});
+          TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type});
         }else if(S.expert&&(type==="allyEnter"||type==="allyEvo")){
-          // 🕐 出た時の誘発（キューティ・ルピア型＝盤面に居るカードの常在的な誘発）は、
-          //    出たカード自身のCIPより先に処理する（デュエプレ実機の挙動）。
-          //    この時点ではまだCIPポンプが起動していないことがあるため、1マイクロタスク待ってから判定し、
-          //    ポンプ稼働中なら保留キューへ回す。保留キューはCIP解決の直前に処理されるので、
-          //    CIPの途中で墓地に落ちたカードの「墓地に置かれた時」（ゾルザーク型）よりも先に解決される。
-          Promise.resolve().then(()=>{
-            if(fxRunning)TRIG_PENDING.push({pi,fx,c,onceKeys:_oks});
-            else enqueueWatchJob(_job);
-          });
+          // 🕐 「自分のクリーチャーが出た時」の誘発（カスミ／アジサイ／キューティ・ルピア型）は、
+          //    既定では出たカード自身の「出た時（CIP）」を解決してから処理する。
+          //    設定「盤面の『出た時』誘発をCIPより先に処理する」をONにすると従来の順番になる。
+          if(S.allyEnterFirst){
+            Promise.resolve().then(()=>{
+              if(fxRunning)TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type});
+              else enqueueWatchJob(_job);
+            });
+          }else enqueueWatchJob(_job); // 効果キューが空くまで待つ＝CIPが先
         }else{
           enqueueWatchJob(_job);
         }
@@ -5242,8 +5264,8 @@ async function searchZone(pi,zone,kinds){
   for(const c of src)if(match(c)&&!nameSet.has(normName(c.name)))nameSet.set(normName(c.name),c.name);
   const namesAll=[...nameSet.values()];
   if(!namesAll.length){toast("条件に合うカードがありません（タイプ/コストでの絞り込みは効果登録が必要です）");return;}
-  const pickN=shuffle(namesAll.slice()).slice(0,kinds);
-  const j=await askChoice(`🔎 提示された${pickN.length}種から1枚選択（種類単位でランダム提示）`,[...pickN,"選ばない"]);
+  const pickN=shuffle(namesAll.slice()).slice(0,kinds); // 名前でまとめた一覧から種類単位でランダム提示
+  const j=await askChoice(`🔎 提示された${pickN.length}種から1枚選択（種類単位でランダム提示・山札にある枚数は分かりません）`,[...pickN,"選ばない"]);
   if(j===null||j>=pickN.length){
     if(zone==="deck"){shuffleDeck(Z);renderAll();toast("選ばずに終了→山札をシャッフルしました");}
     return;
@@ -7178,6 +7200,18 @@ async function runModeChoice(pi,reg,c,inPump,faceUsed,force){
     }
   }
 }
+/* 🔎 デュエプレの探索の候補づくり：同じカード名は1枚にまとめ（＝何枚あるか分からないようにする）、
+   種類が多ければランダムに cap 種だけ提示する。cap=0 なら全種類を提示。 */
+function searchCandidates(pool,cap){
+  const byName=new Map();
+  for(const x of pool){const nm=normName(faceNameOf(x));if(!byName.has(nm))byName.set(nm,x);}
+  let reps=[...byName.values()];
+  if(cap>0&&reps.length>cap){
+    for(let k=reps.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[reps[k],reps[j]]=[reps[j],reps[k]];}
+    reps=reps.slice(0,cap);
+  }
+  return reps;
+}
 /* 🔎 探索/超探索の踏み倒し共通処理：山札から条件に合うカードをn体バトルゾーンへ。
    searchN=3（探索）/5（超探索）＝候補をカード名でユニーク化し、種類が多ければランダムにsearchN種だけ提示（デュエプレ仕様）。searchN=0＝全部提示（確定）。 */
 async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
@@ -7190,14 +7224,8 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
   for(let i=0;i<n;i++){
     let pool=src.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x));});
     if(!pool.length){if(i===0)toast(`${zoneJa}に該当カードなし${filt?`（${filt}）`:""}`);break;}
-    if(searchN>0){
-      const byName=new Map();
-      for(const x of pool){const nm=faceNameOf(x);if(!byName.has(nm))byName.set(nm,x);}
-      let reps=[...byName.values()];
-      if(reps.length>searchN){for(let k=reps.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[reps[k],reps[j]]=[reps[j],reps[k]];}reps=reps.slice(0,searchN);}
-      pool=reps;
-    }
-    const j=await pickCard(`🔎 ${labelJa}（${i+1}/${n}）：${zoneJa}から出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:searchN>0?`${searchN}種まで提示／タップで選択・キャンセルで終了`:"タップで選択・キャンセルで終了"});
+    if(searchN>0)pool=searchCandidates(pool,searchN); // 🔎 同名は1枚にまとめてから種類単位で提示
+    const j=await pickCard(`🔎 ${labelJa}（${i+1}/${n}）：${zoneJa}から出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:searchN>0?`${searchN}種まで提示（同名は1枚にまとめています）／タップで選択・キャンセルで終了`:"タップで選択・キャンセルで終了"});
     if(j===null)break;
     const tgt=pool[j];
     const di=src.findIndex(x=>x.id===tgt.id);
@@ -7684,11 +7712,9 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🔎 超探索：コスト${num}の呪文は山札にありません → シャッフル`);
         shuffle(Z.deck);
       }else{
-        // 超探索＝候補から最大5枚をランダム提示して1枚選ぶ
-        const pool=cands.slice();
-        for(let a=pool.length-1;a>0;a--){const b=Math.floor(Math.random()*(a+1));[pool[a],pool[b]]=[pool[b],pool[a]];}
-        const show=pool.slice(0,5);
-        const j=await pickCard(`🔎 超探索：コスト${num}の呪文（${show.length}枚提示）\n1枚公開して手札に加えてもよい（キャンセル＝加えない）`,show);
+        // 超探索＝同名は1枚にまとめ（山札に何枚あるか分からないように）、そこから最大5種をランダム提示して1枚選ぶ
+        const show=searchCandidates(cands,5);
+        const j=await pickCard(`🔎 超探索：コスト${num}の呪文（${show.length}種提示）\n1枚公開して手札に加えてもよい（キャンセル＝加えない）`,show);
         if(j!==null){
           const sel=show[j];
           const di=Z.deck.findIndex(x=>x.id===sel.id);
@@ -8785,11 +8811,8 @@ async function runFxList(pi,list,srcCard,inPump){
       const pool=Z.deck.filter(x=>{const rx=getReg(x);return !filt||(rx&&lockFilterOk(filt,rx,x));});
       if(!pool.length){toast(`山札に条件に合うカードがありません${filt?`（${filt}）`:""}（不発）`);}
       else{
-        // デュエプレの探索：候補をランダムに3種まで提示する
-        const uniq=[];
-        for(const x of pool){const k=normName(x.name);if(!uniq.some(u=>normName(u.name)===k))uniq.push(x);}
-        for(let i=uniq.length-1;i>0;i--){const r2=Math.floor(Math.random()*(i+1));[uniq[i],uniq[r2]]=[uniq[r2],uniq[i]];}
-        const show=uniq.slice(0,3);
+        // デュエプレの探索：同名は1枚にまとめ、そこからランダムに3種まで提示する
+        const show=searchCandidates(pool,3);
         const j=await pickCard(`🔎 探索：山札の一番上に置くカードを選択${filt?`（${filt}）`:""}`,show,{hint:"タップで選択／キャンセルで置かない"});
         if(j===null){toast("（公開しなかった）");}
         else{
@@ -10217,7 +10240,10 @@ async function pumpFx(){
     // ▶ 効果処理の演出待ち：連続処理（キューが多い）時は短縮して詰まり感を軽減
     // ⏱ APNAP：オリオティス所有者がターンプレイヤーなら、出た時(CIP)より先に判定
     if(ORI_QUEUE.length&&ORI_QUEUE.some(o=>S.who===o.defO))await drainOriotis(true);
-    if(TRIG_PENDING.length&&TRIG_PENDING.some(t=>S.who===t.pi))await drainTrig(true); // ⏱ ターンプレイヤーの誘発はCIPより先
+    // ⏱ ターンプレイヤーの誘発はCIPより先。ただし「自分のクリーチャーが出た時」（カスミ／アジサイ／
+    //    キューティ・ルピア型）は、出たカード自身の出た時を先に解決してから処理する（設定で切替可）
+    {const _skipAlly=!S.allyEnterFirst;
+     if(TRIG_PENDING.length&&TRIG_PENDING.some(t=>S.who===t.pi&&!(_skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"))))await drainTrig(true,_skipAlly);}
     HILITE_ID=c.id;renderAll(); // 🔶 処理中のカードを黄色ハイライト
     // ⚡ どのカードの効果を処理中か常時表示（同時に複数体出た時に取り違えないように・残り待機数も出す）
     {const _bi=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
@@ -12253,13 +12279,15 @@ async function fireToGrave(pi,c){
    ポンプ内から実行するため runFxList は inPump=true で呼ぶ（waitFxIdleデッドロック防止）。 */
 let TRIG_PENDING=[];
 let TRIG_DRAINING=false;
-async function drainTrig(activeOnly){
+async function drainTrig(activeOnly,skipAlly){
   if(TRIG_DRAINING||!TRIG_PENDING.length)return;
   TRIG_DRAINING=true;
   try{
     let g=0;
+    // skipAlly＝CIPの直前に流す時。「自分のクリーチャーが出た時」の誘発はCIPのあとに回す
+    const late=t=>!!(skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"));
     while(g++<60){
-      const ix=TRIG_PENDING.findIndex(t=>activeOnly?(S.who===t.pi):true);
+      const ix=TRIG_PENDING.findIndex(t=>(activeOnly?(S.who===t.pi):true)&&!late(t));
       if(ix<0)break;
       const t=TRIG_PENDING.splice(ix,1)[0];
       toast(`⚡誘発処理：${faceNameOf(t.c)}`);
@@ -14443,6 +14471,11 @@ function fxQuickInit(){
 /* 📍 効果登録：いま何が登録されているかを拾い、タップでその欄まで飛べる一覧を作る。
    「戦闘・属性」だけで数百項目あるため、登録済みの箇所だけを抜き出して確認できるようにする。 */
 function fxJumpLabelOf(el){
+  // 同じ行に複数の欄がある場合に取り違えないよう、まず「その欄のすぐ手前にある文字」を見る
+  for(let n=el.previousSibling;n;n=n.previousSibling){
+    const t=(n.textContent||"").trim();
+    if(t)return t;
+  }
   const lb=el.closest("label");
   if(lb){
     const t=(lb.textContent||"").trim();
@@ -14455,6 +14488,21 @@ function fxJumpLabelOf(el){
     if(t)return t;
   }
   return (el.getAttribute("placeholder")||el.getAttribute("title")||el.id||"項目").trim();
+}
+/* 📍 その欄が「実際に登録された」状態かどうか。
+   HTMLに書かれている初期値（value/checked/selected属性）と違う時だけ「登録済み」とみなす。
+   ※以前は「値が空でなければ登録済み」としていたため、value="3" のような既定値の数値欄まで
+     どのカードでも一覧に並んでいた。 */
+function fxJumpIsSet(el){
+  if(el.type==="checkbox"||el.type==="radio")return el.checked!==el.defaultChecked;
+  if(el.tagName==="SELECT"){
+    let di=-1;
+    for(let i=0;i<el.options.length;i++){if(el.options[i].defaultSelected){di=i;break;}}
+    if(di<0)di=0; // 既定指定がなければ先頭を「未設定」とみなす
+    return el.selectedIndex!==di;
+  }
+  const dv=String(el.defaultValue==null?"":el.defaultValue).trim();
+  return String(el.value||"").trim()!==dv;
 }
 /* 隠れているか（ツインパクト下面など、そもそも使わない欄かどうか）。
    折りたたみグループの中や、しぼり込みで一時的に隠れている行は「隠れている」とは見なさない。 */
@@ -14504,13 +14552,13 @@ function buildFxJump(){
     if(el.closest("#fxList0")||el.closest("#fxList1")||el.closest("#fxTrigList"))return;
     if(el.id==="fxFinder"||el.id==="fxTwin")return;
     if(fxHiddenBox(el))return;
-    if(el.type==="checkbox"||el.type==="radio"){if(el.checked)push(el,fxJumpLabelOf(el));return;}
+    if(!fxJumpIsSet(el))return; // HTMLの初期値のままの欄は「登録済み」に出さない
+    if(el.type==="checkbox"||el.type==="radio"){push(el,fxJumpLabelOf(el));return;}
     if(el.tagName==="SELECT"){
-      if(el.selectedIndex>0)push(el,`${fxJumpLabelOf(el)}＝${(el.options[el.selectedIndex]||{}).text||""}`);
+      push(el,`${fxJumpLabelOf(el)}＝${(el.options[el.selectedIndex]||{}).text||""}`);
       return;
     }
-    const v=String(el.value||"").trim();
-    if(v&&v!=="0")push(el,`${fxJumpLabelOf(el)}＝${v}`);
+    push(el,`${fxJumpLabelOf(el)}＝${String(el.value||"").trim()}`);
   });
   for(const it of items){
     const b=document.createElement("button");
@@ -16816,7 +16864,17 @@ function openFxEditor(key){
   if(FXEDIT._namedHit){const h=FXEDIT._namedHit;setTimeout(()=>toast(`⭐ ${FXEDIT.name} の固有効果を自動反映しました。${h.note||""}\n⚠ 確認してから保存してください`),200);}
   $("fxOlay").classList.add("open");
 }
-function fxBackToSettings(){$("fxOlay").classList.remove("open");openDeckPanel();}
+/* ⚙ 効果登録を閉じた時の戻り先。ビルダーなど、開いた場所へ戻したい時に設定する。
+   ビルダーへ戻す時は bSeed() を呼ばない＝作りかけのデッキをそのまま保つ。 */
+let FX_RETURN=null;
+function fxBackToSettings(){
+  $("fxOlay").classList.remove("open");
+  if(typeof FX_RETURN==="function"){
+    const f=FX_RETURN;FX_RETURN=null;
+    try{f();return;}catch(e){console.warn("fxReturn",e);}
+  }
+  openDeckPanel();
+}
 /* 名前辞書を一覧・検索するダイアログ（どのカードが固有対応済みか確認できる） */
 async function showNamedList(){
   const q=(await askText("⭐ 固有カード辞書を検索（カード名の一部・空欄で全件）",""))||"";
@@ -18589,10 +18647,16 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         const rNew=getReg(c);
         if(kamasu&&rNew&&isCreatureReg(rNew)&&!c._kamasuChk){
           c._kamasuChk=true;
-          (async()=>{
-            const j=await askChoice(`↩ ${S.players[foeN].label} の《${faceNameOf(kamasu)}》\n（相手のターン中・相手が召喚以外で出したクリーチャーだけが対象）\n\n${S.players[pTo].label} が出した《${faceNameOf(c)}》は【召喚】でしたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝そのまま。侵略・革命チェンジ・蘇生・トリガー出しは召喚以外）`,
-              ["召喚で出した（そのまま）","召喚以外だった → 手札に戻す","召喚以外だが戻さない"]);
+          // ⏱ APNAP：オニカマスの持ち主はターンプレイヤーではないので、
+          //    出したクリーチャーの「出た時」が先に解決される。効果キューが空くまで待ってから確認する。
+          const _kid=kamasu.id;
+          enqueueWatchJob(async()=>{
             c._kamasuChk=false;
+            const live=zonesOf(foeN).battle.find(x=>x.id===_kid&&!isSealed(x)&&!isIgnored(x,foeN));
+            if(!live)return;                                   // 出た時の効果でオニカマスが離れていたら発動しない
+            if(!zonesOf(pTo).battle.some(x=>x.id===c.id))return; // 出たクリーチャーが既に場を離れていたら何もしない
+            const j=await askChoice(`↩ ${S.players[foeN].label} の《${faceNameOf(live)}》\n（相手のターン中・相手が召喚以外で出したクリーチャーだけが対象）\n\n${S.players[pTo].label} が出した《${faceNameOf(c)}》は【召喚】でしたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝そのまま。侵略・革命チェンジ・蘇生・トリガー出しは召喚以外）`,
+              ["召喚で出した（そのまま）","召喚以外だった → 手札に戻す","召喚以外だが戻さない"]);
             if(j!==1)return;
             const ZB=zonesOf(pTo);
             const bi=ZB.battle.findIndex(x=>x.id===c.id);
@@ -18603,9 +18667,9 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
             c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.faceup=true;c.mark=false;
             if(typeof toHand==="function")toHand(ZB,c);else ZB.hand.push(c);
             sfx("move");renderAll();
-            toast(`↩ ${faceNameOf(kamasu)}：${faceNameOf(c)} を手札に戻した`);
-            logOnly(`↩ ${S.players[foeN].label} の《${faceNameOf(kamasu)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》を手札へ（召喚以外で出たため）`);
-          })();
+            toast(`↩ ${faceNameOf(live)}：${faceNameOf(c)} を手札に戻した`);
+            logOnly(`↩ ${S.players[foeN].label} の《${faceNameOf(live)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》を手札へ（召喚以外で出たため）`);
+          });
         }
       }
       const noCheat=zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoCheat&&!isSealed(x);});
@@ -19161,7 +19225,9 @@ const HOTKEY_ACTS=[
   ["mill","山上1枚を墓地へ","V"],
   ["handes","ランダムハンデス（相手の手札から見ないで1枚）","R"],
   ["turn","次のターン","N"],
-  ["log","ゲームログを開く","L"],
+  ["freeplay","⚡ 踏み倒しモードのON/OFF","F"],
+  ["log","📜 ログの小窓を開く/閉じる","L"],
+  ["logFull","📜 全画面のログを開く（空欄＝未割り当て）",""],
 ];
 function hotkeyMap(){
   const def={};HOTKEY_ACTS.forEach(([k,_,d])=>def[k]=d);
@@ -19239,7 +19305,18 @@ async function runHotkey(act){
     afterHandDiscard(op,c);
   }else if(act==="turn"){
     nextTurn();
+  }else if(act==="freeplay"){
+    // ⚡ 踏み倒しモード：下部バーの「踏倒」ボタンと同じ動作
+    S.freePlay=!S.freePlay;
+    sfx("flip");renderAll();
+    toast(S.freePlay?"⚡踏み倒しモード：ON（プレイしてもマナを自動タップしません）":"踏み倒しモード：OFF（コスト分を自動タップ）");
   }else if(act==="log"){
+    // 📜 ログの小窓（浮かぶログ）を開閉。全画面で見たい時は小窓の⛶から
+    if(typeof openLogDock==="function"){
+      const on=openLogDock();
+      if(!on)toast("📜 ログを閉じました");
+    }else openGameLog();
+  }else if(act==="logFull"){
     openGameLog();
   }
 }
@@ -19253,7 +19330,7 @@ document.addEventListener("keydown",e=>{
   const k=e.key.toUpperCase();
   const map=hotkeyMap();
   for(const [act] of HOTKEY_ACTS){
-    if(map[act]===k){e.preventDefault();runHotkey(act);return;}
+    if(map[act]&&map[act]===k){e.preventDefault();runHotkey(act);return;} // 空欄＝未割り当ては無視
   }
 });
 function renderHotkeyEditor(){
@@ -26460,6 +26537,94 @@ function renderCostCurve(){
 /* ================= デッキ一覧 ================= */
 let DL_PACK_MODE=false;
 const DL_PACK_SEL=new Set();
+/* 📁 デッキをフォルダへ移動する共通処理。folder="" ならフォルダなしへ戻す。 */
+async function moveDeckToFolder(n,folder){
+  const d=await getDeck(n);
+  if(!d){toast("デッキが見つかりません");return false;}
+  const base=n.includes("/")?n.slice(n.indexOf("/")+1):n;
+  const nn=folder?`${folder}/${base}`:base;
+  if(nn===n)return false;
+  const exist=await deckNames();
+  if(exist.includes(nn)){
+    if(!await ask(`「${nn}」はすでにあります。上書きしますか？`))return false;
+  }
+  await saveDeck(nn,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover);
+  if(db)await idbDel("decks",n);else memDecks.delete(n);
+  await refreshDeckSelects();
+  toast(folder?`📁 「${base}」を「${folder}」に移動しました`:`📂 「${base}」をフォルダから出しました`);
+  return true;
+}
+/* 📁 デッキ一覧：行のつかみ手を持って、フォルダの見出しに落とすと移動する（マウスでも指でも動く） */
+function dlAttachDrag(grip,name){
+  let st=null;
+  const clearHi=()=>document.querySelectorAll(".dl-drop-on").forEach(e=>e.classList.remove("dl-drop-on"));
+  const targetAt=(x,y)=>{
+    const el=document.elementFromPoint(x,y);
+    if(!el)return null;
+    return el.closest("[data-dlfolder]");
+  };
+  grip.addEventListener("pointerdown",ev=>{
+    ev.preventDefault();ev.stopPropagation();
+    const item=grip.closest(".dl-item");
+    st={x:ev.clientX,y:ev.clientY,moved:false,item,pid:ev.pointerId,tgt:null};
+    try{grip.setPointerCapture(ev.pointerId);}catch(e){}
+  });
+  grip.addEventListener("pointermove",ev=>{
+    if(!st)return;
+    if(!st.moved){
+      if(Math.abs(ev.clientX-st.x)+Math.abs(ev.clientY-st.y)<8)return;
+      st.moved=true;
+      const body=document.getElementById("dlBody");
+      if(body)body.classList.add("dl-dragmode");
+      if(st.item)st.item.classList.add("dl-dragging");
+      const g=document.createElement("div");
+      g.id="dlGhost";
+      g.textContent=`📦 ${name.includes("/")?name.slice(name.indexOf("/")+1):name}`;
+      document.body.appendChild(g);
+      st.ghost=g;
+    }
+    if(st.ghost){st.ghost.style.left=(ev.clientX+14)+"px";st.ghost.style.top=(ev.clientY+14)+"px";}
+    // 📜 画面の上下端に寄せると一覧が自動でスクロールする（離れたフォルダにも運べるように）
+    {
+      const sc=document.getElementById("deckListOlay");
+      if(sc){
+        const vh=window.innerHeight,EDGE=70;
+        if(ev.clientY<EDGE)sc.scrollTop-=Math.max(6,(EDGE-ev.clientY)/3);
+        else if(ev.clientY>vh-EDGE)sc.scrollTop+=Math.max(6,(ev.clientY-(vh-EDGE))/3);
+      }
+    }
+    clearHi();
+    const t=targetAt(ev.clientX,ev.clientY);
+    st.tgt=t;
+    if(t)t.classList.add("dl-drop-on");
+  });
+  const end=async ev=>{
+    if(!st)return;
+    const {moved,tgt,item,ghost,pid}=st;
+    st=null;
+    try{grip.releasePointerCapture(pid);}catch(e){}
+    clearHi();
+    if(ghost)ghost.remove();
+    if(item)item.classList.remove("dl-dragging");
+    const body=document.getElementById("dlBody");
+    if(body)body.classList.remove("dl-dragmode");
+    if(!moved||!tgt)return;
+    const folder=tgt.getAttribute("data-dlfolder")||"";
+    const cur=name.includes("/")?name.split("/")[0]:"";
+    if(folder===cur)return;
+    if(await moveDeckToFolder(name,folder))renderDeckList();
+  };
+  grip.addEventListener("pointerup",end);
+  grip.addEventListener("pointercancel",()=>{
+    if(!st)return;
+    const {item,ghost}=st;st=null;
+    clearHi();
+    if(ghost)ghost.remove();
+    if(item)item.classList.remove("dl-dragging");
+    const body=document.getElementById("dlBody");
+    if(body)body.classList.remove("dl-dragmode");
+  });
+}
 async function renderDeckList(){
   const body=$("dlBody");body.innerHTML="";
   const q=(($("dlSearch")&&$("dlSearch").value)||"").trim();
@@ -26482,6 +26647,14 @@ async function renderDeckList(){
     groups.get(folder).push([n,d]);
   }
   if(!groups.size){body.innerHTML="<div class='hint'>検索に一致するデッキがありません</div>";return;}
+  // 📂 ドラッグ中だけ出る「フォルダから出す」用のドロップ先
+  {
+    const root=document.createElement("div");
+    root.id="dlRootDrop";
+    root.setAttribute("data-dlfolder","");
+    root.textContent="📂 ここに落とすとフォルダから出します";
+    body.appendChild(root);
+  }
   const folders=[...groups.keys()].sort((a,b)=>(a||"～～").localeCompare(b||"～～","ja"));
   for(const folder of folders){
     let container=body;
@@ -26489,8 +26662,10 @@ async function renderDeckList(){
       const det=document.createElement("details");
       det.open=!!q;
       det.style.cssText="border:1px solid var(--line);border-radius:10px;margin:6px 0;padding:2px 8px 6px";
+      det.setAttribute("data-dlfolder",folder); // 📁 ここに落とすとこのフォルダへ移動
       const sum=document.createElement("summary");
       sum.style.cssText="cursor:pointer;font-weight:800;padding:6px 2px;list-style-position:inside";
+      sum.setAttribute("data-dlfolder",folder);
       sum.textContent=`📁 ${folder}（${groups.get(folder).length}）`;
       if(!groups.get(folder).length){
         const delB=document.createElement("button");
@@ -26514,6 +26689,16 @@ async function renderDeckList(){
     const item=document.createElement("div");item.className="dl-item";
     const nm=document.createElement("div");nm.className="dl-name";
     const dispN=folder?n.slice(folder.length+1):n;
+    if(!DL_PACK_MODE){
+      // ⠿ つかんでフォルダの見出しに落とすと移動できる
+      const grip=document.createElement("span");
+      grip.className="dl-grip";
+      grip.textContent="⠿";
+      grip.title="つかんでフォルダの見出しに落とすと、そのフォルダへ移動します";
+      grip.addEventListener("click",e=>{e.stopPropagation();});
+      dlAttachDrag(grip,n);
+      nm.appendChild(grip);
+    }
     {
       const ck=d.cover||(d.main&&d.main.length?normName(d.main[0].name):null);
       if(ck&&imgURL.has(ck)){
@@ -26567,6 +26752,7 @@ async function renderDeckList(){
       const el=vCardEl(e.name,{cnt:e.count});el.classList.add("picked");
       el.addEventListener("click",()=>{
         $("deckListOlay").classList.remove("open");
+        FX_RETURN=()=>{$("deckListOlay").classList.add("open");renderDeckList();}; // 閉じたらデッキ一覧に戻る
         openFxEditor(normName(e.name));
       });
       grid.appendChild(el);
@@ -26590,6 +26776,23 @@ async function renderDeckList(){
       setPlayerDeck(1,n,d);
       toast(`相手デッキ：${n}`);
     },"",true));
+    row.appendChild(actBtn("🧩 編成",async ()=>{
+      // 🧩 このデッキを編集欄に読み込んでから、そのままデッキビルダーを開く
+      if(DECK_DIRTY&&!await ask("編集欄に未保存の変更があります。破棄してこのデッキを編成しますか？"))return;
+      $("deckName").value=n;
+      $("deckText").value=listToText(d.main);
+      $("grText").value=listToText(d.gr||[]);
+      $("hyText").value=listToText(d.hy||[]);
+      $("exText").value=listToText(d.ex||[]);
+      $("spText").value=listToText(d.sp||[]);
+      DECK_DIRTY=false;updateEditingBanner();
+      renderCostCurve();
+      if(!dispName.size){toast("先に画像を登録してください");return;}
+      $("deckListOlay").classList.remove("open");
+      $("deckOlay").classList.add("open");
+      bSeed();bSetMode("main");reopenBuilder();
+      toast(`🧩 「${dispN}」を編成します（閉じると編集欄に反映されます）`);
+    },"primary",true));
     row.appendChild(actBtn("🖼 表紙",async ()=>{
       const k=await pickImage(`「${dispN}」の表紙カードを選ぶ`);
       if(!k)return;
@@ -26615,11 +26818,8 @@ async function renderDeckList(){
         nn=f+"/"+base;
       }
       if(nn===n)return;
-      await saveDeck(nn,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover);
-      if(db)await idbDel("decks",n);else memDecks.delete(n);
-      await refreshDeckSelects();
-      toast(`📁 「${nn}」に移動しました`);
-      renderDeckList();
+      const tf=nn.includes("/")?nn.split("/")[0]:"";
+      if(await moveDeckToFolder(n,tf))renderDeckList();
     },"",true));
     row.appendChild(actBtn("改名",async ()=>{
       const nn=(window.prompt(`新しい名前（「フォルダ名/デッキ名」でフォルダ分け）`,n)||"").trim();
@@ -26864,7 +27064,7 @@ $("btnHelp").addEventListener("click",()=>{
       <b>■ ショートカット・PC操作</b><br>
       ・<b>⌘Z / Ctrl+Z</b>：1手戻る（やり直しは <b>⌘⇧Z / Ctrl+Shift+Z</b>）。画面上部の「↩戻る」ボタンでも戻せます<br>
       ・<b>⌘/Ctrl＋クリック（タップ）</b>：各パネルで複数選択／ビルダーでは−1枚。上部の「複数選択」ボタンでも切替<br>
-      ・<b>ショートカットキー</b>（設定でON）：ドロー/ブースト/シールド追加/GR召喚などにキーを割り当て可（設定内の一覧で変更）<br>
+      ・<b>ショートカットキー</b>（設定でON）：既定は <b>D</b>ドロー／<b>B</b>ブースト／<b>T</b>盾追加／<b>G</b>GR召喚／<b>V</b>山上を墓地へ／<b>R</b>ランダムハンデス／<b>N</b>次のターン／<b>F</b>踏み倒しON・OFF／<b>L</b>ログの小窓の開閉。設定内の一覧で自由に変更でき、空欄にすると未割り当てになります<br>
       ・盾に追加されたカードはオレンジ枠でマーク（カードメニューで解除可）／攻撃中の処理は上部バナーから「再開/中止」<br><br>
 
       <b>■ 登録パターン具体例（カードの文章 → こう登録）</b><br>
@@ -27341,10 +27541,16 @@ function bBuildCivBar(){
    セクション見出しと集計ぶんの高さを引いた残りに、全カードが収まる列数を探す。 */
 function fitDeckListGrid(g,cardCount,headBlocks){
   if(!g)return;
+  // 🔢 横に何枚並べるか。0＝自動（画面に収まる枚数を計算）／それ以外はその枚数で固定。既定は8枚。
+  const colsSet=(B._listCols===0)?0:Math.max(4,Math.min(12,+B._listCols||8));
+  const wide=window.innerWidth>=700;
   if(B._listBig){ // 「大きく表示」を選んでいる時は自動縮小しない
-    // 横に並べる枚数は「横◯枚」で指定（既定8枚）。狭い画面では今までどおり幅に合わせて自動で詰める
-    const cols=Math.max(4,Math.min(12,+B._listCols||8));
-    g.style.gridTemplateColumns=(window.innerWidth>=700)?`repeat(${cols},minmax(0,1fr))`:"repeat(auto-fill,minmax(96px,1fr))";
+    g.style.gridTemplateColumns=(wide&&colsSet)?`repeat(${colsSet},minmax(0,1fr))`:"repeat(auto-fill,minmax(96px,1fr))";
+    return;
+  }
+  // 1画面に収めるモードでも、枚数を指定していればその枚数で並べる
+  if(wide&&colsSet){
+    g.style.gridTemplateColumns=`repeat(${colsSet},minmax(0,1fr))`;
     return;
   }
   const W=g.clientWidth||g.parentElement&&g.parentElement.clientWidth||600;
@@ -27457,20 +27663,22 @@ $("bListView").addEventListener("click",()=>{
       tg.title="デッキ全体をスクロールなしで見るか、カードを大きく見るかを切り替えます";
       tg.onclick=()=>{B._listBig=!B._listBig;paint();};
       bar.appendChild(tg);
-      if(B._listBig&&window.innerWidth>=700){
-        // 🔢 横に何枚並べるか（確認しやすい枚数に変えられる）
+      if(window.innerWidth>=700){
+        // 🔢 横に何枚並べるか（どちらの表示モードでも効く。0＝自動で画面に収める）
         const cw=document.createElement("label");
         cw.style.cssText="display:inline-flex;gap:4px;align-items:center;font-size:11px;white-space:nowrap";
+        cw.title="横に並べる枚数。「自動」は画面に収まるように枚数と大きさを自動で決めます";
         const cs=document.createElement("select");
         cs.style.cssText="width:auto;font-size:11px;padding:1px 4px";
-        for(const v of [4,5,6,7,8,9,10,12]){
+        for(const v of [0,4,5,6,7,8,9,10,12]){
           const o=document.createElement("option");
-          o.value=v;o.textContent=v;
-          if((+B._listCols||8)===v)o.selected=true;
+          o.value=v;o.textContent=v?String(v):"自動";
+          if((B._listCols===0?0:(+B._listCols||8))===v)o.selected=true;
           cs.appendChild(o);
         }
         cs.onchange=async()=>{
-          B._listCols=parseInt(cs.value,10)||8;
+          const v=parseInt(cs.value,10);
+          B._listCols=(v===0)?0:(v||8);
           try{if(db)await idbPut("misc","listCols",B._listCols);}catch(e){}
           paint();
         };
@@ -27670,6 +27878,21 @@ async function exportDeckImage(){
   },"image/png");
 }
 {const bi=document.getElementById("bImage");if(bi)bi.addEventListener("click",exportDeckImage);}
+/* 🧩 ビルダーを「作りかけのまま」開き直す（bSeedを呼ばないので枚数が消えない） */
+function reopenBuilder(){
+  bBuildCivBar();
+  $("builderOlay").classList.add("open");
+  bRender();
+}
+{const b=document.getElementById("bFxEdit");
+ if(b)b.addEventListener("click",async()=>{
+   // ⚙ ビルダーからカードの効果登録へ。閉じたら作りかけのデッキを保ったままビルダーに戻る
+   const k=await pickImage("効果を登録するカードを選ぶ");
+   if(!k)return;
+   $("builderOlay").classList.remove("open");
+   FX_RETURN=()=>{reopenBuilder();toast("🧩 ビルダーに戻りました（作りかけのデッキはそのままです）");};
+   openFxEditor(k);
+ });}
 $("bReset").addEventListener("click",()=>{B.counts[B.mode].clear();bRender();});
 $("bCancel").addEventListener("click",()=>{
   // 💾 「反映」を押さずに閉じても編集を失わないよう、閉じる時に自動でデッキリストへ反映（名前順）
@@ -27678,6 +27901,7 @@ $("bCancel").addEventListener("click",()=>{
   $("grText").value=toText(B.counts.gr);
   $("hyText").value=toText(B.counts.hy);
   $("exText").value=toText(B.counts.ex);
+  markDeckDirty();updateEditingBanner(); // 💾 未保存の変更として扱う（パネルを開き直した時に消えないように）
   $("builderOlay").classList.remove("open");
   $("deckStatus").textContent=`ビルダーの編集を保持しました：メイン${listTotal(parseList($("deckText").value))}枚。「保存して使用」で開始。`;
   renderCostCurve();
@@ -27688,6 +27912,7 @@ $("bApply").addEventListener("click",()=>{
   $("grText").value=toText(B.counts.gr);
   $("hyText").value=toText(B.counts.hy);
   $("exText").value=toText(B.counts.ex);
+  markDeckDirty();updateEditingBanner(); // 💾 未保存の変更として扱う
   $("builderOlay").classList.remove("open");
   $("deckStatus").textContent=`ビルダーから反映：メイン${listTotal(parseList($("deckText").value))}枚。「保存して使用」で開始。`;
   renderCostCurve();
@@ -27733,7 +27958,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   const lk=db?await idbGet("misc","faceLinks"):null;
   if(lk)for(const [k,v] of Object.entries(lk))LINKS.set(k,v);
   {const bo=db?await idbGet("misc","builtinOff"):null;if(bo!==null&&bo!==undefined)BUILTIN_OFF=!!bo;}
-  {const lc=db?await idbGet("misc","listCols"):null;if(lc)B._listCols=+lc||8;}
+  {const lc=db?await idbGet("misc","listCols"):null;if(lc!=null&&lc!=="")B._listCols=(+lc===0)?0:(+lc||8);}
   {const ls=db?await idbGet("misc","logSize"):null;if(ls!=null)S.logSize=String(ls||"");}
   {const lb=db?await idbGet("misc","logBox"):null;
    if(lb){try{const b=JSON.parse(lb);if(b&&["l","t","w","h"].every(k=>typeof b[k]==="number"))S.logBox=b;}catch(e){}}
@@ -27743,6 +27968,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
    const e=$("optLogFabAvoid");if(e)e.checked=S.logFabAvoid;}
   {const lsh=db?await idbGet("misc","logShare"):null;S.logShare=(lsh==null)?true:!!lsh;
    const e=$("optLogShare");if(e)e.checked=S.logShare;}
+  {const ae=db?await idbGet("misc","allyEnterFirst"):null;S.allyEnterFirst=!!ae;
+   const e=$("optAllyEnterFirst");if(e)e.checked=S.allyEnterFirst;}
   {const la=db?await idbGet("misc","logAutoImg"):null;S.logAutoImg=(la==null)?true:!!la;
    const e=$("optLogAutoImg");if(e)e.checked=S.logAutoImg;}
   {const lo=db?await idbGet("misc","logOverPanel"):null;S.logOverPanel=(lo==null)?true:!!lo;
