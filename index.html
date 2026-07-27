@@ -1640,6 +1640,11 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="1">×1軽減</option>
           <option value="2">×2（ダブル）</option>
         </select>
+        <select id="fxSymFace" style="width:auto;flex:0 0 126px" title="ツインパクトで、シンパシーが書かれている面を選びます。上面だけに書かれているのに下面まで軽減される場合はここを「上面だけ」にしてください">
+          <option value="">両面に効く</option>
+          <option value="0">上面だけ</option>
+          <option value="1">下面だけ</option>
+        </select>
         <span style="font-size:12px;font-weight:700">G・ゼロ</span>
         <input type="text" id="fxGZero" placeholder="条件（例：バトル:進化>=1／文章でも可）空欄=なし" title="条件がゾーン条件式なら自動で判定します。文章で書いた場合は、召喚時に文面を見せて満たしているか確認します" style="flex:1;min-width:130px">
       </div>
@@ -6225,7 +6230,7 @@ function cardInfoText(key){
   const K=[["sa","SA"],["blocker","ブロッカー"],["slayer","スレイヤー"],["st","S・トリガー"],["gs","G・ストライク"],["machf","マッハファイター"],["jd","ジャストダイバー"],["noBlock","ブロックされない"],["noAtked","攻撃されない"],["noChoose","選ばれない"],["cantAtk","攻撃できない"],["cantAtkP","プレイヤー攻撃不可"],["guardman","ガードマン"],["escape","エスケープ"],["escapePS","エスケープP'S"],["exlife","EXライフ"],["mad","マッドネス"],["charger","チャージャー"],["battleSelfKill","バトル後自壊"],["atkPSelfKill","プレイヤー攻撃後に自壊"],["auraTapIn","相手タップイン"],["auraTapInPow","パワー小タップイン(両者・チリ型)"],["stLockBoth","ロック両者適用"],["stLockPsy","サイキック出せない"],["altCostKill","代替コスト後自壊"]];
   for(const [k2,lb] of K)if(r[k2])kw.push(lb);
   if(r.breaks&&r.breaks>1)kw.push(`${r.breaks===2?"W":r.breaks===3?"T":r.breaks+""}・ブレイカー`);
-  if(r.sympathy)kw.push(`シンパシー(${r.sympathy}${r.symX>1?`×${r.symX}`:""})`);
+  if(r.sympathy)kw.push(`シンパシー(${r.sympathy}${r.symX>1?`×${r.symX}`:""}${r.symFace==="0"?"・上面だけ":r.symFace==="1"?"・下面だけ":""})`);
   if(r.gzero)kw.push(`G・ゼロ(${r.gzero})`);
   if(r.altCost!=null)kw.push(`代替コスト[${r.altCost}]${r.altCond?`(${r.altCond})`:""}`);
   if(r.firstRed)kw.push(`最初の召喚-${r.firstRed}${r.firstRedF?`(${r.firstRedF})`:""}`);
@@ -6576,7 +6581,13 @@ async function autoTapCost(pi,c){
       toast(`⬆ 相手の常在効果：コスト＋${upN}（計${cost}）`);
     }
   }
-  if((paySide==="creature"||paySide==="spell")&&r.sympathy){ // 💞 呪文のシンパシー（ゾグジグス型）も対応
+  // 💞 ツインパクトで片面にしか書かれていないシンパシーは、その面を支払う時だけ効かせる
+  const _symFaceOk=(()=>{
+    const sf=String(r.symFace||"");
+    if(!sf)return true;                       // 未指定＝両面（従来どおり）
+    return (sf==="1")?(paySide==="spell"):(paySide==="creature");
+  })();
+  if((paySide==="creature"||paySide==="spell")&&r.sympathy&&_symFaceOk){ // 💞 呪文のシンパシー（ゾグジグス型）も対応
     const sc=sympathyCount(pi,c,r.sympathy);
     const zL=SYM_ZLBL[sc.zone]||sc.zone;
     const tL=sc.toks.length?sc.toks.join("／"):"カード";
@@ -10750,7 +10761,14 @@ function dispCost(c,pi){
       if((!g.civ||(r.civs&&r.civs.includes(g.civ)))&&wOK)cost-=g.n;
     }
     // 💞 シンパシー（表示に反映・墓地/マナ等のゾーン指定対応・クリーチャーのみ）
-    if(r.sympathy){ // 💞 呪文のシンパシー（ゾグジグス型）も表示に反映
+    // 💞 ツインパクトで片面だけのシンパシーは、その面を見ている時だけ表示に反映する
+    const _sfOk=(()=>{
+      const sf=String(r.symFace||"");
+      if(!sf)return true;
+      const fi2=(r.twin&&(c&&(c.face|0))===1)?1:0;
+      return String(fi2)===sf;
+    })();
+    if(r.sympathy&&_sfOk){ // 💞 呪文のシンパシー（ゾグジグス型）も表示に反映
       const cnt=sympathyCount(pi,c,r.sympathy).cnt;
       if(cnt>0){const mult=r.symX||1;const civ0S=r.civs||[];const civFloorS=(civ0S.length===1&&civ0S[0]==="zero")?0:Math.max(1,civ0S.length||1);cost-=Math.min(cnt*mult,Math.max(0,cost-civFloorS));}
     }
@@ -11937,6 +11955,7 @@ async function breakShields(op,count,attacker,forceIdx){
         toast(`🌙 《${faceNameOf(sh)}》の下の${kids.length}枚はシールドの重なりとしてブレイク（S・トリガー／G・ストライク判定へ）`);
       }
       OZ.grave.push(sh);
+      queueToGrave(op,sh); // ⚡ 「墓地に置かれた時」の誘発（ゾルザーク／キューブリック型）
       sfx("grave");
       toast(`🏰 G城：《${faceNameOf(sh)}》は離れるかわりに墓地へ（手札に加わらない・S・トリガーなし）`);
       continue;
@@ -11998,9 +12017,16 @@ async function breakShields(op,count,attacker,forceIdx){
   const aRep=attacker?getReg(attacker):null;
   if(S.expert&&aRep&&aRep.shieldBurn){
     // ボルメテウス型：ブレイクした盾は手札に加えるかわりに墓地へ（S・トリガー不可）
-    stack.forEach(c=>{c.tapped=false;c.faceup=true;c.mark=false;c.sideways=false;OZ.grave.push(c);});
+    stack.forEach(c=>{
+      c.tapped=false;c.faceup=true;c.mark=false;c.sideways=false;
+      delete c._addedBy;delete c._addedTurn;
+      OZ.grave.push(c);
+      queueToGrave(op,c); // ⚡ 「墓地に置かれた時」（ゾルザーク／キューブリック型）は焼却でも誘発する
+    });
     sfx("grave");renderAll();
     toast(`🔥 シールド焼却（${faceNameOf(attacker)}）：ブレイクした${stack.length}枚は手札に加えず墓地へ（S・トリガー不可）`);
+    logOnly(`🔥 シールド焼却：${stack.map(x=>`《${faceNameOf(x)}》`).join("")} を${S.players[op].label}の墓地へ`);
+    await drainToGrave(); // ⚡ 溜めた「墓地に置かれた時」をここで解決する
   }else if(S.expert&&aRep&&aRep.qqqx){
     // Q.Q.QX型：ブレイクした盾を相手の山札の上から4枚目に横向きで差し込む
     stack.forEach(c=>{
@@ -12108,6 +12134,8 @@ async function breakShields(op,count,attacker,forceIdx){
       }
     }
   }
+  // ⚡ ブレイクの流れで墓地に落ちたカードの「墓地に置かれた時」（ゾルザーク／キューブリック型）をここで解決
+  if(typeof drainToGrave==="function"){try{await drainToGrave();}catch(e){}}
   // ⚡ キリフダッシュ：本家準拠で「相手のシールドをブレイクした攻撃側」に案内（S・トリガー/GS等の処理終了後）
   if(attacker){
     const atkPi=op===0?1:0;
@@ -14888,6 +14916,7 @@ function renderFxEditor(){
   $("fxStCrePTevo").checked=!!FXEDIT.stCrePTevo;
   $("fxInvCiv").value=FXEDIT.invCiv||"";
   $("fxSymX").value=String(FXEDIT.symX||1);
+  {const e=$("fxSymFace");if(e)e.value=String(FXEDIT.symFace||"");}
   $("fxPInvade").checked=!!FXEDIT.pInvade;
   $("fxPKakumei").checked=!!FXEDIT.pKakumei;
   $("fxSoulRaid").checked=!!FXEDIT.soulRaid;
@@ -16829,6 +16858,7 @@ function openFxEditor(key){
     stLockCreF:cur&&cur.stLockCreF||"",
     invCiv:cur&&cur.invCiv||"",
     symX:cur&&(+cur.symX||1)||1,
+    symFace:cur&&cur.symFace!=null?String(cur.symFace):"",
     pInvade:cur?!!cur.pInvade:false,
     pKakumei:cur?!!cur.pKakumei:false,
     soulRaid:cur?!!cur.soulRaid:false,
@@ -17207,6 +17237,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stLockCreF:$("fxStLockCreF").value.trim(),
     invCiv:$("fxInvCiv").value||"",
     symX:+$("fxSymX").value||1,
+    symFace:$("fxSymFace")?String($("fxSymFace").value||""):"",
     pInvade:$("fxPInvade").checked,
     pKakumei:$("fxPKakumei").checked,
     soulRaid:$("fxSoulRaid").checked,
@@ -22526,12 +22557,24 @@ function attachPointer(el,ctx){
           if(S.expert&&ctx.zone==="battle"&&tgt.zone==="grave"&&!(S.multi&&S.msel.some(x=>x.id===ctx.id))){
             const fD=findCard(ctx.p,ctx.zone,ctx.id);
             const rD=fD&&getReg(fD.card);
-            const hasDeathFx=rD&&((rD.watchFx&&rD.watchFx.some(wx=>wx.ev==="pig"||wx.ev==="toGrave"||wx.ev==="selfLeave"))||rD.etOmega||rD.escapePS||rD.repLeave);
+            // 💀 破壊された時／離れた時の効果に加えて、置換（エスケープ等）を持っているかも見る。
+            //    これを見ていなかったため、パネルの「破壊」では出るのにドラッグでは置換が出なかった。
+            const _hasRepl=rD&&(
+              rD.escape||rD.trueEscape||rD.exlife||rD.shieldGo||rD.leaveSacF||
+              rD.starEvo||["starevo","charismaevo","smaxevo","onismaxevo"].includes(rD.ctype)||
+              rD.gneo||["gneo","gneodream"].includes(rD.ctype)
+            );
+            // 付与された置換（味方からのエスケープ付与）と、身代わり／離場置換を持つ盤面のカードも見る
+            const _hasGrantRepl=S.expert&&(
+              (typeof allyGrant==="function"&&(allyGrant(ctx.p,"agEsc")||allyGrant(ctx.p,"agTEsc")))||
+              zonesOf(ctx.p).battle.some(x=>x.id!==ctx.id&&(()=>{const r2=getReg(x);return r2&&(r2.seiba||r2.stLeaveRep);})())
+            );
+            const hasDeathFx=(rD&&((rD.watchFx&&rD.watchFx.some(wx=>wx.ev==="pig"||wx.ev==="toGrave"||wx.ev==="selfLeave"))||rD.etOmega||rD.escapePS||rD.repLeave))||_hasRepl||_hasGrantRepl;
             const hasLeaveWatchers=S.expert&&[0,1].some(pp=>zonesOf(pp).battle.some(x=>{const rx=getReg(x);return rx&&rx.watchFx&&rx.watchFx.some(wx=>wx.ev==="myLeave"||wx.ev==="allyLeave"||wx.ev==="oppLeave"||wx.ev==="anyLeave");}));
             if(fD&&isSealed(fD.card)){toast(`🔒 ${fD.card.name} は封印されている！（離れません）`);}
             else if(hasDeathFx||hasLeaveWatchers){
               (async()=>{
-                const y=await ask(`《${faceNameOf(fD.card)}》を墓地へ。\n「破壊」として扱いますか？\n（はい＝破壊された時/離れた時などの効果が発動・Ω等の置換も働く／いいえ＝ただ墓地へ移すだけ）`);
+                const y=await ask(`《${faceNameOf(fD.card)}》を墓地へ。\n「破壊」として扱いますか？\n（はい＝破壊された時/離れた時の効果が発動し、エスケープ・EXライフ・スター進化・セイバー・Ω等の置換も選べます／いいえ＝ただ墓地へ移すだけ）`);
                 snap();
                 if(y){sfx("grave");await destroyCreature(ctx.p,fD.card);}
                 else{sfx("grave");fD.card._skipDestroy=true;try{moveCardX(ctx.p,ctx.zone,ctx.id,tgt.p,tgt.zone);}finally{delete fD.card._skipDestroy;}}
