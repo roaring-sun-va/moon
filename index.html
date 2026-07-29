@@ -639,6 +639,11 @@ body.shake{animation:bodyShake .4s ease-out}
 .vname{font-size:9px;color:var(--muted);margin-top:3px;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;text-align:center}
 
 #builderOlay .bshort{display:none}
+/* 🗂 デッキ編成の折りたたみ（使い方／絞り込み／内訳）は、閉じている時は横に並べて1行にまとめる */
+#bFolds{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;flex:0 0 auto}
+#bFolds>details{flex:0 0 auto;margin:2px 0!important}
+#bFolds>details[open]{flex:1 0 100%}
+#bFolds>details>summary{white-space:nowrap}
 /* 📏 デッキ編成：カードを小さく並べた時の詰めた表示 */
 #bGrid.bg-small .vcard .vname{font-size:8px;line-height:1.15;-webkit-line-clamp:2;margin-top:1px}
 #bGrid.bg-small .vcard .cnt{font-size:10px;padding:0 3px;min-width:14px}
@@ -705,8 +710,11 @@ body.shake{animation:bodyShake .4s ease-out}
   #builderOlay .panelbox{max-height:98dvh;padding:8px}
   #builderOlay .row{gap:4px;margin-top:4px}
   #builderOlay .btn.small{padding:5px 8px;font-size:11px;border-radius:8px}
-  #builderOlay #bSearch{padding:6px 8px;font-size:13px}
-  #builderOlay #bTypeFilter{padding:5px;font-size:11px}
+  #builderOlay #bSearch{padding:4px 8px;font-size:16px;min-width:0} /* 16px未満にするとiOSで入力時に拡大されるため */
+  #builderOlay #bTypeFilter{padding:4px;font-size:11px}
+  #builderOlay details>summary{font-size:10.5px}
+  #builderOlay #bCivBar{margin-top:2px}
+  #builderOlay .panelbox>.row:first-child{margin-top:0}
   #builderOlay #bCivBar .btn{padding:4px 9px;font-size:11px}
   #builderOlay #bGrid{gap:5px;padding:2px;min-height:44dvh}
   #builderOlay #bGrid .vcard .vname{font-size:9px;line-height:1.2;-webkit-line-clamp:2}
@@ -1227,10 +1235,13 @@ body.shake{animation:bodyShake .4s ease-out}
       <button class="btn small" id="bImage" title="デッキ画像を書き出す">🖼<span class="blbl"> デッキ画像</span><span class="bshort"> 画像</span></button>
       <button class="btn primary small" id="bApply">反映</button>
     </div>
+    <div id="bFolds">
     <details id="bHelpBox" style="margin:2px 0">
       <summary style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">❔ 使い方</summary>
       <div class="hint" style="margin:4px 0 0">タップで＋1（⌘/Ctrl＋タップで−1）。上限（4枚／超GR2枚）に達した状態でタップすると「制限なしカード」として5枚以上も指定できます。ゲーム外タブはタップで枚数を直接入力。特殊カード（禁断など）はテキスト欄に直接入力してください。</div>
     </details>
+    <details id="bFilterBox" style="margin:2px 0">
+      <summary id="bFilterSum" style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">🔎 絞り込み（タイプ・文明・採用中）</summary>
     <div class="row">
       <select id="bTypeFilter" style="width:auto;flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px;font-size:12px">
         <option value="">全タイプ</option>
@@ -1257,10 +1268,12 @@ body.shake{animation:bodyShake .4s ease-out}
       </select>
     </div>
     <div class="row" id="bCivBar" style="gap:5px;flex-wrap:wrap;margin-top:-4px"></div>
+    </details>
     <details id="bSummaryBox" style="margin:2px 0">
       <summary style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">📊 内訳（文明・種類・防御）</summary>
       <div id="bSummary" style="margin-top:2px"></div>
     </details>
+    </div>
     <div id="bGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;overflow-y:auto;flex:1 1 auto;min-height:120px;padding:4px"></div>
   </div>
 </div>
@@ -2503,7 +2516,7 @@ function openDeckKnownInfo(){
     wrap.appendChild(nd);
   }
   g.appendChild(wrap);
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 /* 📜 ログの絞り込み状態（種類チップと「案内も表示」） */
 const LOGF={cats:new Set(LOG_CATS.map(c=>c[0])),hint:false};
@@ -2650,7 +2663,7 @@ function openGameLog(){
   redraw();
   wrap.appendChild(chips);wrap.appendChild(body);
   g.appendChild(wrap);
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 /* 📜 盤面に浮かぶログボタン：タップで開閉、長押しで大きさ切替 */
 {const fab=document.getElementById("logFab");
@@ -14822,6 +14835,8 @@ function el0IsText(el){
    b.textContent=willOpen?"📍 登録済みの項目を隠す":"📍 登録済みの項目を見る";
  });}
 function renderFxEditor(){
+  {const fp=document.getElementById("fxPeek");
+   if(fp&&!(typeof B!=="undefined"&&B&&B._fxFromBuilder))fp.style.display="";}
   fxUiPolish();
   fxQuickInit();
   $("fxTwin").checked=FXEDIT.twin;
@@ -17545,7 +17560,7 @@ function pickImage(title,hint){
     search.oninput=render;
     $("vCancel").onclick=()=>{closeViewer();$("vCancel").onclick=defaultVCancel;if(fb)fb.style.display="none";res(null);};
     render();
-    $("viewerOlay").classList.add("open");
+    $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
   });
 }
 $("btnFxReg").addEventListener("click",async ()=>{
@@ -17974,7 +17989,7 @@ async function bulkTagRace(){
     closeViewer();
     toast(`🏷 種族「${rc}」を${cnt}枚に付与しました`);
   };
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 {const bt=document.getElementById("regBulkRaceBtn");if(bt)bt.onclick=bulkTagRace;}
 {const bt=document.getElementById("regBatchBtn");if(bt)bt.onclick=startBatchRegister;}
@@ -20568,7 +20583,7 @@ function renderPlayer(pi){
         });
       });
       if(!shown)g.innerHTML="<div class='hint'>表向きの盾はありません</div>";
-      $("viewerOlay").classList.add("open");
+      $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
     }
   });
   swrap.appendChild(sb);
@@ -21437,7 +21452,7 @@ function showSavedLog(log){
   if(log.length)renderLogInto(wrap,{time:true,dot:true},log);
   else wrap.innerHTML="<div class='hint'>ログが保存されていません</div>";
   g.appendChild(wrap);
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 function pct(a,b){return b?Math.round(a/b*1000)/10:0;}
 function showMatchDetail(m){
@@ -21471,7 +21486,7 @@ function showMatchDetail(m){
   back.onclick=()=>openStatsPanel();
   wrap.appendChild(back);
   g.appendChild(wrap);
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 /* 📗 デッキ単位の詳細戦績：全体/先攻/後攻の勝率と、対面ごとの内訳（デッキ別勝率の行タップで表示） */
 function openDeckStatsPanel(dk,days){
@@ -21547,7 +21562,7 @@ function openDeckStatsPanel(dk,days){
   back.onclick=()=>openStatsPanel(days);
   wrap.appendChild(back);
   g.appendChild(wrap);
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 function openStatsPanel(days){
   const g=$("vGrid");g.innerHTML="";
@@ -21802,7 +21817,7 @@ function openStatsPanel(days){
     wrap.appendChild(ops);
   }
   g.appendChild(wrap);
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 async function declareWin(winner,reason,askFirst=true){
   if(!S.vs){toast(`🏆 ${reason}`);return;}
@@ -23335,7 +23350,7 @@ function openCardSheet(ctx){
           sfx("ok");renderAll();
           await waitFxIdle();renderAll();
         };
-        $("viewerOlay").classList.add("open");
+        $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
       },"primary",true));
     }
   }
@@ -23433,7 +23448,7 @@ function openCardSheet(ctx){
           toast(`∞ ムゲンクライム！ ${faceNameOf(c)}（クリーチャー${rG.mugen}体＋マナ${rG.mugen}枚タップ）`);
           await waitFxIdle();renderAll();
         };
-        $("viewerOlay").classList.add("open");
+        $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
       },"",true));
     }
   }
@@ -24790,7 +24805,7 @@ async function mugetsuGate(pi,hostId,needN){
     sfx("ok");renderAll();
     toast(`🌑 無月の門！ ${faceNameOf(host)} の下に${names.length}枚：${names.join("、")}`);
   };
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 function openStackPanel(p,zone,id){
   stCtx={p,zone,id};stSel=new Set();
@@ -24930,6 +24945,8 @@ function vCardEl(name,opts={}){
   return el;
 }
 function closeViewer(){
+  if(typeof B!=="undefined"&&B)B._viewerBack=null;
+  if(typeof updateVPeek==="function")try{updateVPeek();}catch(e){}
   {const g=document.getElementById("vGrid");if(g){g.classList.remove("decklist");g.style.gridTemplateColumns="";}}
   {if(B&&B._listRzFn){window.removeEventListener("resize",B._listRzFn);B._listRzFn=null;}}$("viewerOlay").classList.remove("open");}
 const defaultVCancel=closeViewer;
@@ -24941,6 +24958,8 @@ function pickCard(title,cards,opts={}){
   return _serialDlg(PICK_GATE,()=>new Promise(res=>{
     const g=$("vGrid");g.innerHTML="";
     $("vTitle").textContent=title;
+    if(typeof B!=="undefined"&&B)B._viewerBack=null; // 対戦中の選択パネルは「盤面を見る」
+    if(typeof updateVPeek==="function")try{updateVPeek();}catch(e){}
     $("vHint").textContent=opts.hint||"タップで選択　／　👁 盤面を見る で盤面を確認できます";
     $("vSearch").style.display="none";
     {const tf=document.getElementById("vTypeFilter");if(tf)tf.style.display="none";}
@@ -24975,7 +24994,7 @@ function pickCard(title,cards,opts={}){
       };
     }
     $("vCancel").onclick=()=>finish(null);
-    $("viewerOlay").classList.add("open");
+    $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
   }));
 }
 function openExileViewer(pi){
@@ -24996,7 +25015,7 @@ function openExileViewer(pi){
     }});
     g.appendChild(el);
   });
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 function openHyperViewer(pi){
   const Z=zonesOf(pi);
@@ -25018,7 +25037,7 @@ function openHyperViewer(pi){
     }});
     g.appendChild(el);
   });
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 let MV_MENU=false;
 function openManaViewer(pi){MV_MENU=false;renderManaViewer(pi);}
@@ -25062,7 +25081,7 @@ function renderManaViewer(pi){
     }});
     g.appendChild(el);
   });
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 function openOppHandViewer(op){
   const Z=zonesOf(op);
@@ -25072,10 +25091,10 @@ function openOppHandViewer(op){
   $("vOk").style.display="none";$("vStatus").textContent="";
   const g=$("vGrid");g.innerHTML="";
   Z.hand.forEach(c=>g.appendChild(vCardEl(c.name)));
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 let gvMulti=false;
-function openGraveViewer(pi){gvMulti=false;renderGraveViewer(pi);$("viewerOlay").classList.add("open");}
+function openGraveViewer(pi){gvMulti=false;renderGraveViewer(pi);$("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();}
 function renderGraveViewer(pi){
   const Z=zonesOf(pi);
   $("vTitle").textContent=`墓地（${Z.grave.length}枚）　[${S.players[pi].label}]`;
@@ -25154,7 +25173,7 @@ function openShieldViewer(pi){
     });
   });
   if(!Z.shield.length)g.innerHTML="<div class='hint' style='grid-column:1/-1'>シールドはありません</div>";
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 function openZeronPanel(pi,c){
   const names=[["te","手札の儀"],["bo","墓地の儀"],["ha","破壊の儀"],["fu","復活の儀"]];
@@ -25297,6 +25316,7 @@ function openZeronPanel(pi,c){
   document.body.appendChild(ol);
 }
 function openDeckViewer(pi){
+  B._viewerBack=B._viewerBack||"deck"; // ◀ 戻り先＝デッキ画面（ビルダー経由なら上書きしない）
   if(qqqxBlock(pi,"確認"))return;
   const Z=zonesOf(pi);
   let dvMode=false;
@@ -25349,7 +25369,7 @@ function openDeckViewer(pi){
   $("vSearch").style.display="none";$("vStatus").textContent="";
   updateBar();
   build();
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 
 /* ================= 画像管理（改名/削除） ================= */
@@ -25618,7 +25638,7 @@ function openImageManager(){
     openDeckPanel();
   };
   render();
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 
 /* ================= スリーブ ================= */
@@ -25652,7 +25672,7 @@ function openSleevePicker(pi){
   };
   search.oninput=render;
   render();
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 function openMatPicker(pi){
   if(!imgURL.size){toast("先に画像を登録してください");return;}
@@ -25689,7 +25709,7 @@ function openMatPicker(pi){
   };
   search.oninput=render;
   render();
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 $("btnMat0").addEventListener("click",()=>openMatPicker(0));
 $("btnMat1").addEventListener("click",()=>openMatPicker(1));
@@ -25769,7 +25789,7 @@ function pickCards(pi,n,title,exclude){
       $("vCancel").onclick=defaultVCancel;
       res(null);
     };
-    $("viewerOlay").classList.add("open");
+    $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
   }));
 }
 async function startCustom(withShields){
@@ -26025,7 +26045,29 @@ $("peekChip").addEventListener("click",()=>{
 {const fp=document.getElementById("fxPeek");if(fp)fp.addEventListener("click",()=>{
   $("fxOlay").classList.remove("open");PEEK="fxOlay";$("peekChip").classList.add("show");
 });}
+/* 👁/◀ 確認パネルの左上ボタン。
+   対戦中は「盤面を見る」（一時的に隠して盤面を確認）、
+   デッキ編成やデッキ画面から開いたデッキ一覧では「編成に戻る／デッキ画面に戻る」にする。 */
+window.updateVPeek=()=>{
+  const b=document.getElementById("vPeek");if(!b)return;
+  const back=(typeof B!=="undefined"&&B&&B._viewerBack)||"";
+  if(back){
+    b.textContent=back==="builder"?"◀ 編成に戻る":"◀ デッキ画面に戻る";
+    b.title="このデッキ一覧を閉じて、元の画面に戻ります";
+    b.dataset.vmode="back";
+  }else{
+    b.textContent="👁 盤面を見る";
+    b.title="このパネルを一時的に隠して盤面を確認します（「📋 パネルに戻る」で戻れます）";
+    b.dataset.vmode="peek";
+  }
+};
 {const vp=document.getElementById("vPeek");if(vp)vp.addEventListener("click",()=>{
+  if(vp.dataset.vmode==="back"){
+    const oc=$("vCancel").onclick;
+    if(typeof oc==="function")oc();  // 「閉じる」と同じ動き＝元の画面に戻る
+    else closeViewer();
+    return;
+  }
   $("viewerOlay").classList.remove("open");PEEK="viewerOlay";$("peekChip").classList.add("show");
 });}
 {const rp=document.getElementById("rvPeek");if(rp)rp.addEventListener("click",()=>{
@@ -27730,6 +27772,7 @@ function bRender(){
       return dispName.get(a).localeCompare(dispName.get(b),"ja");
     });
   {const pk=document.getElementById("bOnlyPicked");if(pk&&pk._paint)pk._paint();}
+  bUpdateFilterSum();
   if(onlyPicked&&!keys.length){
     const h=document.createElement("div");h.className="hint";h.style.cssText="grid-column:1/-1;margin:8px 4px";
     h.textContent="このタブにはまだカードが入っていません（「✅ 採用中だけ」を解除すると全カードから選べます）";
@@ -27840,6 +27883,28 @@ $("bTabEx").addEventListener("click",()=>bSetMode("ex"));
 $("bTypeFilter").addEventListener("change",bRender);
 // 🎨 デッキビルダーの文明フィルタバーを構築（光/水/闇/火/自然/ゼロ＋多色＋クリア）
 /* 🔢 デッキ編成のカード一覧を横に何枚並べるか。0＝自動（画面幅に合わせる） */
+/* 🔎 たたんでいる時でも、いま何で絞っているか分かるように見出しに書く */
+function bUpdateFilterSum(){
+  const el=document.getElementById("bFilterSum");if(!el)return;
+  const box=document.getElementById("bFilterBox");
+  const CVJ={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};
+  const parts=[];
+  {const tf=document.getElementById("bTypeFilter");
+   if(tf&&tf.value){const o=tf.options[tf.selectedIndex];if(o)parts.push(o.text.split("（")[0]);}}
+  if(B.civSel&&B.civSel.size)parts.push([...B.civSel].map(c=>CVJ[c]||c).join("・"));
+  if(B.civEx&&B.civEx.size)parts.push("✕"+[...B.civEx].map(c=>CVJ[c]||c).join("・"));
+  if(B.civMulti)parts.push("多色");
+  if(B.twin==="only")parts.push("ツインパクトのみ");
+  else if(B.twin==="none")parts.push("✕ツインパクト");
+  if(B.onlyPicked)parts.push("採用中だけ");
+  {const q=document.getElementById("bSearch");if(q&&q.value.trim())parts.push(`「${q.value.trim()}」`);}
+  const box2=document.getElementById("bFilterBox");
+  const open=!!(box2&&box2.open);
+  let txt=parts.length?`🔎 絞り込み：${parts.join(" / ")}`:"🔎 絞り込み";
+  if(!open&&txt.length>26)txt=txt.slice(0,26)+"…"; // 閉じている時は1行に収める
+  el.textContent=txt;
+  if(box)box.style.borderLeft=parts.length?"3px solid var(--accent)":"";
+}
 function bApplyCols(){
   const g=document.getElementById("bGrid");if(!g)return;
   const n=Math.max(0,Math.min(14,+B._bCols||0));
@@ -27965,6 +28030,7 @@ function fitDeckListGrid(g,cardCount,headBlocks){
 }
 $("bListView").addEventListener("click",()=>{
   $("builderOlay").classList.remove("open");
+  B._viewerBack="builder"; // ◀ 戻り先＝デッキ編成
   const prevCancel=$("vCancel").onclick;
   $("vCancel").onclick=()=>{
     closeViewer();
@@ -28150,7 +28216,7 @@ $("bListView").addEventListener("click",()=>{
    clearTimeout(B._listRz);window.removeEventListener("resize",B._listRzFn||(()=>{}));
    B._listRzFn=()=>{clearTimeout(B._listRz);B._listRz=setTimeout(_r,180);};
    window.addEventListener("resize",B._listRzFn);}
-  $("viewerOlay").classList.add("open");
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 });
 $("bSearch").addEventListener("input",bRender);
 /* 🖼 デッキ画像保存：デッキ名＋文明配分のヘッダーと、同名カードを全て並べた一覧をPNGで書き出す。
@@ -28187,7 +28253,7 @@ async function exportDeckImage(){
   const dname=($("deckName")&&$("deckName").value.trim())||"デッキ";
   toast("🖼 デッキ画像を作成中…");
   // レイアウト（横10枚・カード比率 5:7）
-  const PAD=28,COLS=10,CW=132,CH=Math.round(CW*7/5),GAP=8,HEAD=104,SECH=34;
+  const PAD=28,COLS=8,CW=160,CH=Math.round(CW*7/5),GAP=8,HEAD=104,SECH=34; // 🖼 横8枚を基準（1枚を大きく）
   let h=HEAD+PAD;
   for(const sc of secs){const rows=Math.ceil(sc.keys.length/COLS);h+=SECH+rows*(CH+GAP);}
   h+=PAD;
@@ -28279,6 +28345,12 @@ function bFitBuilderUI(){
   const wide=window.innerWidth>=700;
   const h=document.getElementById("bHelpBox");if(h)h.open=wide;
   const su=document.getElementById("bSummaryBox");if(su)su.open=wide;
+  const fb=document.getElementById("bFilterBox");
+  if(fb){
+    fb.open=wide;
+    if(!fb.dataset.bound){fb.dataset.bound="1";fb.addEventListener("toggle",()=>bUpdateFilterSum());}
+  }
+  bUpdateFilterSum();
 }
 function reopenBuilder(){
   bBuildCivBar();bFitBuilderUI();
@@ -28291,7 +28363,9 @@ function reopenBuilder(){
    const k=await pickImage("効果を登録するカードを選ぶ");
    if(!k)return;
    $("builderOlay").classList.remove("open");
-   FX_RETURN=()=>{reopenBuilder();toast("🧩 ビルダーに戻りました（作りかけのデッキはそのままです）");};
+   B._fxFromBuilder=true; // 👁 ビルダー経由では「盤面を見る」を出さない（戻り先が盤面ではないため）
+   {const fp=document.getElementById("fxPeek");if(fp)fp.style.display="none";}
+   FX_RETURN=()=>{B._fxFromBuilder=false;{const fp=document.getElementById("fxPeek");if(fp)fp.style.display="";}reopenBuilder();toast("🧩 ビルダーに戻りました（作りかけのデッキはそのままです）");};
    openFxEditor(k);
  });}
 $("bReset").addEventListener("click",()=>{B.counts[B.mode].clear();bRender();});
