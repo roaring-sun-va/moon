@@ -638,6 +638,7 @@ body.shake{animation:bodyShake .4s ease-out}
 .vcard.picked .thumb{box-shadow:0 0 0 2px var(--accent)}
 .vname{font-size:9px;color:var(--muted);margin-top:3px;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;text-align:center}
 
+#builderOlay .bshort{display:none}
 .dl-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:6px;background:#0f1524}
 /* 📁 デッキのフォルダ移動（つかんで運ぶ） */
 .dl-grip{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-right:6px;
@@ -707,7 +708,14 @@ body.shake{animation:bodyShake .4s ease-out}
   /* 📱 スマホでは一覧のカード名も詰める（縦の枚数を稼ぐ） */
   #viewerOlay #vGrid.decklist .vcard .vname{font-size:9px;line-height:1.2;-webkit-line-clamp:2}
   #builderOlay details>summary{padding:2px 0}
-  #builderOlay .blbl{display:none} /* 狭い画面ではボタンを絵文字だけにして1行に収める */
+  #builderOlay .blbl{display:none} /* 狭い画面では短いラベルに切り替える */
+  #builderOlay .bshort{display:inline}
+  /* 📱 デッキ作成画面も余白を詰める（入力欄の文字は16px未満にしない＝iOSで勝手に拡大されるため） */
+  #deckOlay{padding:4px!important}
+  #deckOlay .panelbox{padding:8px;max-height:98dvh}
+  #deckOlay .row{gap:4px;margin-top:4px}
+  #deckOlay .btn.small{padding:5px 8px;font-size:11px}
+  #deckOlay .hint{font-size:10.5px;margin:2px 0}
 }
 /* 🛡 追加されたシールドの「追加元」タグ（オレンジ枠の盾に付く） */
 .card .addtag{position:absolute;left:0;bottom:0;right:0;background:rgba(255,159,67,.92);color:#2a1400;
@@ -1204,9 +1212,9 @@ body.shake{animation:bodyShake .4s ease-out}
       <input type="text" id="bSearch" placeholder="絞り込み" style="flex:1;min-width:100px">
       <button class="btn small ghost" id="bReset">クリア</button>
       <button class="btn small" id="bCancel">閉じる</button>
-      <button class="btn small" id="bListView" title="現在のリストを確認">📋<span class="blbl"> リスト確認</span></button>
-      <button class="btn small" id="bFxEdit" title="カードの効果登録を開きます。閉じると、作りかけのデッキをそのまま保ったままビルダーに戻ります">⚙<span class="blbl"> カード登録</span></button>
-      <button class="btn small" id="bImage" title="デッキ画像を書き出す">🖼<span class="blbl"> デッキ画像</span></button>
+      <button class="btn small" id="bListView" title="いまのデッキの中身を一覧で確認します">📋<span class="blbl"> リスト確認</span><span class="bshort"> リスト</span></button>
+      <button class="btn small" id="bFxEdit" title="カードの効果登録を開きます。閉じると、作りかけのデッキをそのまま保ったままビルダーに戻ります">⚙<span class="blbl"> カード登録</span><span class="bshort"> 登録</span></button>
+      <button class="btn small" id="bImage" title="デッキ画像を書き出す">🖼<span class="blbl"> デッキ画像</span><span class="bshort"> 画像</span></button>
       <button class="btn primary small" id="bApply">反映</button>
     </div>
     <details id="bHelpBox" style="margin:2px 0">
@@ -26245,7 +26253,7 @@ $("btnViewDeck").addEventListener("click",async ()=>{
   ttl.textContent=`🖼 ${name}（メイン${total}枚）`;
   ol.appendChild(ttl);
   // 🔢 横に何枚並べるか（「現在のリスト」と同じ設定を共有。既定8枚）
-  const colsNow=()=>Math.max(4,Math.min(12,+B._listCols||8));
+  const colsNow=()=>Math.max(4,Math.min(16,+B._listCols||8));
   const wrap=document.createElement("div");
   wrap.style.cssText="width:100%;max-width:min(1280px,96vw);display:flex;flex-direction:column;gap:8px";
   if(window.innerWidth>=700){
@@ -26325,9 +26333,31 @@ $("btnViewDeck").addEventListener("click",async ()=>{
     paintSecs();
   };
   tools.appendChild(bSort);
+  // 🔢 横に何枚並べるか（「現在のリスト」と同じ設定を共有。スマホでも使える）
+  {
+    const cw=document.createElement("label");
+    cw.style.cssText="display:inline-flex;gap:4px;align-items:center;font-size:12px;color:#cbd3df;white-space:nowrap";
+    cw.title="横に並べる枚数。スマホでは多めにすると一覧が見やすくなります";
+    const cs=document.createElement("select");
+    cs.style.cssText="width:auto;font-size:12px;padding:2px 6px";
+    for(const v of [4,5,6,7,8,9,10,12,14,16]){
+      const o=document.createElement("option");o.value=v;o.textContent=v;
+      if(colsNow()===v)o.selected=true;
+      cs.appendChild(o);
+    }
+    cs.onchange=async()=>{
+      B._listCols=Math.max(4,Math.min(16,parseInt(cs.value,10)||8));
+      try{if(db)await idbPut("misc","listCols",B._listCols);}catch(e){}
+      paintSecs();
+    };
+    cw.appendChild(document.createTextNode("横"));
+    cw.appendChild(cs);
+    cw.appendChild(document.createTextNode("枚"));
+    tools.appendChild(cw);
+  }
   const hint=document.createElement("span");
   hint.style.cssText="font-size:11px;color:#9aa4b2";
-  hint.textContent="「自分の並び」ではカードをドラッグして入れ替えられます（同じカードはまとめて動きます）";
+  hint.textContent="「自分の並び」ではカードをドラッグして入れ替えられます（同じカードはまとめて動きます・PCのみ）";
   tools.appendChild(hint);
   wrap.insertBefore(tools,body);
   // 並びの描画
@@ -26343,19 +26373,17 @@ $("btnViewDeck").addEventListener("click",async ()=>{
       h.textContent=`■ ${lb}（${arr.reduce((a,x)=>a+cntOf(x),0)}枚・${arr.length}種）`;
       body.appendChild(h);
       const g2=document.createElement("div");
-      if(window.innerWidth>=700){
-        g2.dataset.deckgrid="1";
-        g2.style.cssText=`display:grid;grid-template-columns:repeat(${colsNow()},minmax(0,1fr));gap:8px;align-self:stretch`;
-      }else{
-        g2.style.cssText="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;align-self:stretch";
-      }
+      const narrow=window.innerWidth<700;
+      g2.dataset.deckgrid="1";
+      // 📱 スマホでも「横◯枚」で並べる（以前は幅92px固定で横3枚しか入らなかった）
+      g2.style.cssText=`display:grid;grid-template-columns:repeat(${colsNow()},minmax(0,1fr));gap:${narrow?4:8}px;align-self:stretch`;
       // 🗂 同じカードは枚数ぶん1枚ずつ並べる（デッキ画像と同じ並びで枚数を数えやすい）
       const flat=[];
       for(const it of view){for(let ci=0;ci<Math.max(1,cntOf(it));ci++)flat.push(it);}
       const canDrag=(B._viewSort==="deck")&&window.innerWidth>=700;
       for(const it of flat){
         const cell=document.createElement("div");
-        cell.style.cssText=(window.innerWidth>=700)?"position:relative;min-width:0":"position:relative;width:92px;flex:0 0 auto";
+        cell.style.cssText="position:relative;min-width:0";
         const u=imgURL.get(normName(it.name))||imgURL.get(it.name);
         if(u){
           const im=document.createElement("img");
@@ -26369,7 +26397,7 @@ $("btnViewDeck").addEventListener("click",async ()=>{
           cell.appendChild(ph);
         }
         const nm=document.createElement("div");
-        nm.style.cssText=`font-size:${window.innerWidth>=700?11:9}px;color:#cbd3df;text-align:center;line-height:1.25;margin-top:3px;word-break:break-word`;
+        nm.style.cssText=`font-size:${narrow?8.5:11}px;color:#cbd3df;text-align:center;line-height:1.2;margin-top:2px;word-break:break-word;${narrow?"display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;":""}`;
         nm.textContent=it.name;
         cell.appendChild(nm);
         if(canDrag){
@@ -27652,9 +27680,24 @@ function bRender(){
     return twMode==="only"?isTw:!isTw;
   };
   const counts=B.counts[B.mode];
+  const onlyPicked=!!B.onlyPicked; // ✅ いま入れているカードだけ表示
   const keys=Array.from(dispName.keys())
-    .filter(k=>(!q||k.includes(q))&&typeMatch(k,tf)&&civOk(k)&&twinOk(k))
-    .sort((a,b)=>dispName.get(a).localeCompare(dispName.get(b),"ja"));
+    .filter(k=>(!q||k.includes(q))&&typeMatch(k,tf)&&civOk(k)&&twinOk(k)&&(!onlyPicked||(counts.get(k)||0)>0))
+    .sort((a,b)=>{
+      if(onlyPicked){ // 採用中だけの時はコスト順→名前順で、デッキの形が分かりやすいように
+        const ra=FXDB.get(a),rb=FXDB.get(b);
+        const ca=(ra&&ra.cost!=null&&ra.cost!=="")?+ra.cost:99;
+        const cb=(rb&&rb.cost!=null&&rb.cost!=="")?+rb.cost:99;
+        if(ca!==cb)return ca-cb;
+      }
+      return dispName.get(a).localeCompare(dispName.get(b),"ja");
+    });
+  {const pk=document.getElementById("bOnlyPicked");if(pk&&pk._paint)pk._paint();}
+  if(onlyPicked&&!keys.length){
+    const h=document.createElement("div");h.className="hint";h.style.cssText="grid-column:1/-1;margin:8px 4px";
+    h.textContent="このタブにはまだカードが入っていません（「✅ 採用中だけ」を解除すると全カードから選べます）";
+    g.appendChild(h);
+  }
   for(const k of keys){
     const n=counts.get(k)||0;
     const el=vCardEl(dispName.get(k),{cnt:n});
@@ -27778,9 +27821,24 @@ function bBuildCivBar(){
   tw._paint=twPaint;
   tw.onclick=()=>{B.twin=B.twin==="" ? "only" : (B.twin==="only"?"none":"");twPaint();bRender();};
   twPaint();bar.appendChild(tw);
+  // ✅ いまデッキに入れているカードだけを表示する（枚数の増減はそのまま行える）
+  const pk=document.createElement("button");pk.type="button";pk.id="bOnlyPicked";
+  pk.title="いまこのタブ（メイン/超GR/超次元/ゲーム外）に入れているカードだけを表示します。タップで枚数の増減もそのままできます";
+  const pkPaint=()=>{
+    const cnts=B.counts[B.mode]||new Map();
+    let kinds=0,tot=0;
+    cnts.forEach(v=>{if(v>0){kinds++;tot+=v;}});
+    pk.textContent=B.onlyPicked?`✅ 採用中だけ（${kinds}種/${tot}枚）`:`✅ 採用中だけ`;
+    pk.style.background=B.onlyPicked?"#ffd166":"transparent";
+    pk.style.color=B.onlyPicked?"#0b0f1a":"#ffd166";
+  };
+  pk.style.cssText="font-size:12px;padding:4px 11px;border:1px solid #ffd166;border-radius:14px;background:transparent;color:#ffd166;cursor:pointer;font-weight:700";
+  pk._paint=pkPaint;
+  pk.onclick=()=>{B.onlyPicked=!B.onlyPicked;pkPaint();bRender();};
+  pkPaint();bar.appendChild(pk);
   const cl=document.createElement("button");cl.type="button";cl.textContent="フィルタクリア";cl.className="btn small ghost";cl.style.cssText="font-size:11px;padding:3px 9px";
   cl.onclick=()=>{
-    B.civSel.clear();B.civEx.clear();B.civMulti=false;B.twin="";
+    B.civSel.clear();B.civEx.clear();B.civMulti=false;B.twin="";B.onlyPicked=false;
     mb.style.background="transparent";mb.style.color="#f6a";
     [...bar.querySelectorAll("button")].forEach(x=>{if(x._paint)x._paint();});
     bRender();
