@@ -3318,7 +3318,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.21";
+const APP_VER="v10.22";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -12729,6 +12729,7 @@ async function fireToGrave(pi,c,from){
    ポンプ内から実行するため runFxList は inPump=true で呼ぶ（waitFxIdleデッドロック防止）。 */
 let TRIG_PENDING=[];
 let TRIG_DRAINING=false;
+let TRIG_LOG_SIG=""; // ⏳ 同じ待機状態を二重にログしないためのガード
 /* ⏱ デュエプレの解決優先度（dmwiki「TCG版との差異点」の頻出順に準拠）：
    「出た時」(CIP)はfxQueue側で常に最優先。TRIG_PENDING内は
    自分のクリーチャーが出た時 → 破壊された時・墓地に置かれた時系 → 攻撃する時系 → その他。
@@ -12765,6 +12766,16 @@ async function drainTrig(activeOnly,skipAlly){
   if(TRIG_DRAINING||!TRIG_PENDING.length)return;
   TRIG_DRAINING=true;
   try{
+    // ⏳ 誘発が2件以上待機している場合、その時点の一覧を「実際の解決順」でログに記録（後から見返せるように）。
+    //    同じ待機状態は二重に記録しない
+    if(TRIG_PENDING.length>=2){
+      const sig=TRIG_PENDING.map(t=>t.c.id+":"+(t.ev||""))
+        .join("|");
+      if(sig!==TRIG_LOG_SIG){
+        TRIG_LOG_SIG=sig;
+        logOnly(`⏳ 誘発${TRIG_PENDING.length}件が待機（解決順）：${trigQueuePreview().replace(/^⏳ 待機誘発（解決順）：/,"")}`);
+      }
+    }
     let g=0;
     // skipAlly＝CIPの直前に流す時。「自分のクリーチャーが出た時」の誘発はCIPのあとに回す
     const late=t=>!!(skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"));
@@ -12799,6 +12810,7 @@ async function drainTrig(activeOnly,skipAlly){
     }
   }finally{
     TRIG_DRAINING=false;
+    if(!TRIG_PENDING.length)TRIG_LOG_SIG=""; // ⏳ さばき切ったら次の待機はあらためて記録
     // ⏳ すべて処理し終えて他のキューも空なら、処理中バッジを消す
     if(!TRIG_PENDING.length&&!fxQueue.length&&!fxRunning)try{setFxNowChip("");}catch(e){}
   }
