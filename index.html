@@ -262,6 +262,14 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 #logDock.ld-peek .ld-chips{display:none}
 /* 帯のぶん、パネル側に下の余白を足して隠れないようにする（パネルは縦スクロールできる） */
 body.ld-peeking .olay{padding-bottom:158px}
+/* 💾 効果登録：保存・閉じるの行を画面下に貼り付けて、どこまでスクロールしても押せるようにする */
+#fxFootBar{
+  position:sticky;bottom:0;z-index:8;
+  background:linear-gradient(180deg,rgba(13,17,25,.72),rgba(13,17,25,.97) 42%);
+  border-top:1px solid var(--line);
+  margin:6px -14px -14px;padding:9px 14px calc(9px + env(safe-area-inset-bottom,0px));
+  backdrop-filter:blur(3px);
+}
 /* 📍 効果登録：登録済みの項目へ飛んだ時の強調 */
 .fx-hit{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px;background:rgba(245,197,66,.16)}
 /* 📜 つまんで動かしている間は、はっきり浮かせて見せる */
@@ -715,6 +723,15 @@ body.shake{animation:bodyShake .4s ease-out}
   #builderOlay details>summary{font-size:10.5px}
   #builderOlay #bCivBar{margin-top:2px}
   #builderOlay .panelbox>.row:first-child{margin-top:0}
+  /* 📱 デッキ一覧を開いた時のカードもスマホでは小さく（横に多く並べる） */
+  #deckListOlay{padding:4px!important}
+  #deckListOlay .panelbox{padding:8px;max-height:98dvh}
+  #deckListOlay .dl-item{padding:6px 7px;margin-top:5px}
+  .dl-grid{grid-template-columns:repeat(auto-fill,minmax(50px,1fr));gap:4px;margin-top:6px}
+  .dl-grid .vcard .vname{font-size:7.5px;line-height:1.15;-webkit-line-clamp:1;margin-top:1px}
+  .dl-grid .vcard .cnt{min-width:14px;height:14px;font-size:9px;top:-4px;right:-3px}
+  .dl-grid .vcard.picked::after{width:12px;height:12px;font-size:8px;top:1px;left:1px}
+  .dl-grid .vcard.picked{outline-width:2px!important}
   #builderOlay #bCivBar .btn{padding:4px 9px;font-size:11px}
   #builderOlay #bGrid{gap:5px;padding:2px;min-height:44dvh}
   #builderOlay #bGrid .vcard .vname{font-size:9px;line-height:1.2;-webkit-line-clamp:2}
@@ -1317,6 +1334,8 @@ body.shake{animation:bodyShake .4s ease-out}
     <div class="row" style="margin:0 0 4px 0;justify-content:space-between;align-items:center">
       <h2 id="fxTitle" style="margin:0">カード効果を登録</h2>
       <button class="btn small ghost" id="fxPeek" style="padding:4px 10px;flex:0 0 auto">👁 盤面を見る</button>
+      <button class="btn primary small" id="fxSaveTop" style="padding:4px 12px;flex:0 0 auto" title="下までスクロールしなくても保存できます">💾 保存</button>
+      <button class="btn small ghost" id="fxCancelTop" style="padding:4px 10px;flex:0 0 auto" title="保存せずに閉じます">✕ 閉じる</button>
     </div>
     <div class="row" style="margin-top:0">
       <div id="fxThumb" style="width:72px;flex:0 0 auto"></div>
@@ -2115,7 +2134,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="hint" style="margin-top:2px">選んだ選択肢に「＠コマンド」があればエキスパート時に自動実行。無い選択肢は宣言のみ（従来どおり手動処理）。</div>
       </div>
     </section>
-    <div class="row" style="justify-content:flex-end">
+    <div class="row" id="fxFootBar" style="justify-content:flex-end">
       <button class="btn small warn" id="fxDelete">登録を削除</button>
       <button class="btn small ghost" id="fxCancel">閉じる</button>
       <button class="btn primary small" id="fxSave">保存</button>
@@ -14834,6 +14853,8 @@ function el0IsText(el){
    c.style.display=willOpen?"flex":"none";
    b.textContent=willOpen?"📍 登録済みの項目を隠す":"📍 登録済みの項目を見る";
  });}
+{const t=document.getElementById("fxSaveTop");if(t)t.addEventListener("click",()=>{const b=document.getElementById("fxSave");if(b)b.click();});}
+{const t=document.getElementById("fxCancelTop");if(t)t.addEventListener("click",()=>{const b=document.getElementById("fxCancel");if(b)b.click();});}
 function renderFxEditor(){
   {const fp=document.getElementById("fxPeek");
    if(fp&&!(typeof B!=="undefined"&&B&&B._fxFromBuilder))fp.style.display="";}
