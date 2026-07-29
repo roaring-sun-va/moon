@@ -3318,7 +3318,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.22";
+const APP_VER="v10.26";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -3463,6 +3463,14 @@ function markArrive(c){
       if(S.expert&&rgA&&(rgA.sforce||rgA.splus)&&!(c._sfAskedAt&&Date.now()-c._sfAskedAt<1500)){
         c._sfAskedAt=Date.now();
         askShieldForcePlus(own,c,rgA);
+      }
+      // 🔒 出る時の置換ロック（ヤドック/シフォン/コナユキ/マバユキ/アルカディアス型）：どの経路（効果パネル・
+      //    踏み倒し・光臨・リアニメイト等）で出ても判定する（v10.23＝カルマシフォンPENDINGの根治）。
+      //    ドラッグ・moveCardX経由は本体側で処理（c._mvxRep）。1.5秒ガードで同一到着の二重判定を防止
+      if(S.expert&&!c._mvxRep&&!(c._repChkAt&&Date.now()-c._repChkAt<1500)){
+        c._repChkAt=Date.now();
+        c._repPending=false; // 過去の置換保留の残りをリセット（今回の判定で必要なら下で再設定される）
+        if(!S.freePlay&&S.turn>0&&typeof applyEnterReplacement==="function")applyEnterReplacement(own,c,"defer");
       }
     }
   }catch(e){}
@@ -5282,23 +5290,36 @@ async function offerSealPeel(actor){
   }
 }
 function emitEvent(actor,type,card){
-  if(type==="summon")bumpEv("summons",actor);
+  // ⚡ 「クリーチャーが出た時」系の誘発ゲート（v10.24）：出たカードがクリーチャーの時だけ発火する。
+  //    クロスギア・D2フィールド・城・オーラなどクリーチャー以外のバトルゾーン配置では、
+  //    summon/oppSummon/oppSummonTapped/allyEnter/allyEvo を発火しない（ハデス型の誤反応対策）。
+  //    「相手がエレメントを出した時」（elem）は従来どおり全配置で発火。
+  //    出たカードは card 引数または直近の到着（LAST_ARRIVED）で判定。未登録・特定不能時は従来どおり発火（安全側）
+  let _sumCre=true;
+  if(type==="summon"){
+    const cA=card||LAST_ARRIVED;
+    if(cA&&zonesOf(actor)&&zonesOf(actor).battle&&zonesOf(actor).battle.includes(cA)){
+      const rA=getReg(cA);
+      if(rA&&!isCreatureReg(rA))_sumCre=false;
+    }
+  }
+  if(type==="summon"&&_sumCre)bumpEv("summons",actor);
   if(type==="spell")bumpEv("spells",actor);
   if(type==="summon")updatePeakBoard();
   if(!S.expert)return;
   if(type==="spell"){S.spellTurn=S.spellTurn||{};S.spellTurn[actor]=(S.spellTurn[actor]||0)+1;}
   const names=watchNames(actor,type);
-  if(names.length){
+  if(names.length&&(type!=="summon"||_sumCre)){
     sfx("flip");
     toast(`⚡誘発確認（${WATCH_LABEL[type]}時）：${names.join("、")}`);
   }
   if(type==="spell")runWatchFx(actor,"allySpell",card); // ⚡ 自分が呪文を唱えた時（スパーク型・条件欄=呪文名・ソロでも動く）
-  if(S.vs)runWatchFx(actor===0?1:0,type,card);
+  if(S.vs&&(type!=="summon"||_sumCre))runWatchFx(actor===0?1:0,type,card);
   // ⏭ 禁断機関 ViVy-R型：相手のクリーチャーがタップしていれば、自分のターン中にクリーチャーを召喚するか
   //    呪文を唱えた時、このターンの残りが飛ぶ。
   //    「〜した時」の誘発なので、実行した瞬間にタップしていれば誘発は確定する。
   //    そのあとデーモン・ハンド等で本体が除去されても／アンタップされても、ターンは飛ぶ。
-  if((type==="summon"||type==="spell")&&S.expert&&S.vs&&S.turn>0&&actor===(S.who|0)&&!S._turnEndPend){
+  if(((type==="summon"&&_sumCre)||type==="spell")&&S.expert&&S.vs&&S.turn>0&&actor===(S.who|0)&&!S._turnEndPend){
     const defT=actor===0?1:0;
     const stopper=zonesOf(defT).battle.find(x=>{
       const rx=getReg(x);
@@ -5370,7 +5391,7 @@ function emitEvent(actor,type,card){
       for(const x of newsOri)x._oriNew=false;
     }
   }
-  if(type==="summon"){
+  if(type==="summon"&&_sumCre){
     // ⚡ 自分のクリーチャーが出た時（allyEnter）：出た側のバトルゾーンの誘発を確認（ソロでも動く）
     runWatchFx(actor,"allyEnter",LAST_ARRIVED);
     // ⚡ 自分の他のクリーチャーが進化した時（allyEvo）：出たカードが進化（下敷きあり/NEO/進化ctype）なら発火
@@ -5382,8 +5403,10 @@ function emitEvent(actor,type,card){
   if(type==="summon"&&S.vs){
     const def=actor===0?1:0;
     const DZ=zonesOf(def);
-    runWatchFx(def,"oppSummon");
-    runWatchFx(def,"oppSummonTapped");
+    if(_sumCre){
+      runWatchFx(def,"oppSummon");
+      runWatchFx(def,"oppSummonTapped");
+    }
     // 🏯 超鯱城型（G城）：相手のマナ枚数よりコストが大きい相手クリーチャーが出た時、それを破壊
     {
       const arrived=LAST_ARRIVED;const aReg=arrived&&getReg(arrived);
@@ -5693,10 +5716,8 @@ function battleEntryOk(pi,c){
     toast(`⛔ ロック（要確認）：${turnLockLabel(tlU)}。\n《${faceNameOf(c)}》は${pw}未登録のため安全側でブロックしました。\n${pw}を登録するか「踏倒:ON」で通してください。`);
     return false;
   }
-  // 置換ロック（マバユキ/アルカディアス/ヤドック型）は注意喚起のみ（この経路では手動判断）
-  const foe=pi===0?1:0;
-  const rep=zonesOf(foe).battle.find(x=>{const rx=getReg(x);return rx&&rx.repIn;});
-  if(rep)toast(`⚠ ${faceNameOf(rep)} の置換ロックが場にあります。条件に該当する場合は手動で置換してください`);
+  // 置換ロック（マバユキ/アルカディアス/ヤドック/シフォン型）はv10.23から配置後に
+  // markArrive → applyEnterReplacement で実処理されるため、この経路の事前警告は廃止
   return true;
 }
 const EFFECTS=[
@@ -6260,6 +6281,7 @@ function manaTapIn(c){
 const FX_TYPES=[
   ["draw","n枚ドロー"],
   ["drawFoe","🃏 相手はカードをn枚引く（ViVy-R型・「各プレイヤーはn枚引く」は自分のドロー行→この行の順で登録すると解決プレイヤー先行の処理順になる）"],
+  ["oriJudge","⚖ 各プレイヤーは、自身の最大マナ以上のコストを持つクリーチャーをすべて、ランダムな順番で自身の山札の一番下に置く（オリオティス・ジャッジ型・デュエプレ版＝「以上」。条件欄に「より大きい」でTCG版の判定に）"],
   ["tapAllOp","相手のクリーチャーをすべてタップ（スパーク型）（すでにタップしているクリーチャーも対象／条件欄に「フリーズ」でアンタップしない）"],
   ["tapOpN","相手のクリーチャーをn体まで選んでタップ（「〜体までタップ」型）（すでにタップしているクリーチャーも選べます／条件欄に「フリーズ」と書くと、選んだクリーチャーは次のターンのはじめにアンタップしません）"],
   ["tapAnyN","⤵ クリーチャーをn体まで選んでタップ（両者どちらのクリーチャーでも対象・神光のカルマ ウイ型）（自分/相手どちらでも・すでにタップしているクリーチャーも選べます／条件欄に「フリーズ」でアンタップしない）"],
@@ -7083,7 +7105,13 @@ async function destroyCreature(pi,c,opts){
     }
     // 🏃 エスケープP'S：破壊される時、パワー0超なら かわりにランダム盾1つを手札へ（STは使えない・各ターン1回）
     {
-      const hasEsc=(rDC&&rDC.escapePS&&!isIgnored(c,pi))||gearEscapePSOn(c);
+      const _ownEsc=!!(rDC&&rDC.escapePS&&!isIgnored(c,pi));
+      let hasEsc=_ownEsc||gearEscapePSOn(c);
+      // 🃏 デュエプレ：エスケープP'Sが②ギア付与のみで、①自身のエターナルΩがある場合はΩを優先（wiki優先度・下のΩ処理で置換）
+      if(hasEsc&&!_ownEsc&&S.gameMode!=="tcg"&&etOmegaCat(pi,c,rDC)===1){
+        logOnly(`⚡ 置換競合（デュエプレ自動裁定）：《${faceNameOf(c)}》の破壊置換 → ①自身のエターナルΩを優先（②ギア付与のエスケープP'Sより先に適用）`);
+        hasEsc=false;
+      }
       if(hasEsc){
         const pw=dispPower(c);
         const key=`${S.turn}:${S.who}`;
@@ -7107,8 +7135,15 @@ async function destroyCreature(pi,c,opts){
     {
       const _lrs=stLeaveRepSource(pi,c);
       if(_lrs){
-        if(hasEtOmega(pi,c,rDC)){
-          const j=await askChoice(`《${faceNameOf(c)}》の離場置換をどちらにしますか？`,
+        const _eoCat=etOmegaCat(pi,c,rDC);
+        if(_eoCat===1&&S.gameMode!=="tcg"){
+          // 🃏 デュエプレ：wiki優先度＝①自身の能力（エターナルΩ）＞②「与える」常在で付与（盾ブレイク置換）を自動裁定
+          logOnly(`⚡ 置換競合（デュエプレ自動裁定）：《${faceNameOf(c)}》の離場置換 → ①自身のエターナルΩを優先（②付与の《${faceNameOf(_lrs)}》より先に適用）`);
+          etOmegaToHand(pi,c,zonesOf(pi).battle);
+          return;
+        }
+        if(_eoCat){
+          const j=await askChoice(`《${faceNameOf(c)}》の離場置換をどちらにしますか？${_eoCat===2?"\n（どちらも②付与の置換＝優先同順のため手動選択）":""}`,
             [`♻ ランダム盾ブレイク＋場に残る（${faceNameOf(_lrs)} の常在）`,"♾ エターナルΩ（かわりに手札へ）"]);
           if(j===1){etOmegaToHand(pi,c,zonesOf(pi).battle);return;}
         }
@@ -7312,6 +7347,7 @@ const MODE_FX_ALIAS={
   "墓地肥やし":"mill","ミル":"mill","山札墓地":"mill","自分墓地肥やし":"mill","山上墓地":"mill",
   "相手墓地肥やし":"millOpp","相手ミル":"millOpp",
   "ドロー":"draw","引く":"draw","相手ドロー":"drawFoe","相手に引かせる":"drawFoe",
+  "オリオティスジャッジ":"oriJudge","オリオティス・ジャッジ":"oriJudge",
   "封印":"sealFoe","相手封印":"sealFoe","自分封印":"sealSelf",
   "マナ加速":"charge","ブースト":"charge","チャージ":"charge","マナブースト":"charge",
   "タップマナ":"chargeTap","タップイン加速":"chargeTap",
@@ -8364,6 +8400,68 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!S.vs){toast("（ソロのため相手のドローはスキップ）");continue;}
       draw(op,n);
       toast(`🃏 ${S.players[op].label}が${n}枚引いた`);
+    }else if(f.t==="oriJudge"){
+      // ⚖ オリオティス・ジャッジ型：各プレイヤーは、自身の最大マナ（マナゾーンの枚数）以上のコストを持つ
+      //    クリーチャーをすべて、ランダムな順番で自身の山札の一番下に置く（デュエプレ版＝「以上」。
+      //    条件欄に「より大きい」でTCG版の「より大きい」判定に切替）。
+      //    解決プレイヤーから順に処理（デュエプレ）。封印中はクリーチャー扱いでないため対象外。
+      //    コスト未登録のクリーチャーは判定できないため対象外（通知・必要なら手動で）。
+      //    エターナルΩは離場置換として適用（オリオティス常在と同じ扱い）。サイキックは超次元へ・GRはGR下へ（通常処理）
+      const gtMode=/より大きい|超/.test(String(f.cond||""));
+      const sidesOJ=S.vs?[pi,op]:[pi];
+      for(const p of sidesOJ){
+        const PZ=zonesOf(p);
+        const manaN=PZ.mana.length;
+        const unk=[];
+        const hits=PZ.battle.filter(x=>{
+          if(isSealed(x))return false;
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))return false;
+          if(rx.cost==null||isNaN(+rx.cost)){unk.push(faceNameOf(x));return false;}
+          return gtMode?(+rx.cost>manaN):(+rx.cost>=manaN);
+        });
+        if(unk.length)toast(`⚖ コスト未登録のため判定対象外：${unk.map(nm=>`《${nm}》`).join("")}（必要なら手動で山札の下へ）`);
+        if(!hits.length){toast(`⚖ ${S.players[p].label}：最大マナ${manaN}${gtMode?"より大きい":"以上の"}コストのクリーチャーはいない`);continue;}
+        // ランダムな順番に並べ替え（Fisher–Yates）
+        for(let i2=hits.length-1;i2>0;i2--){const j2=Math.floor(Math.random()*(i2+1));[hits[i2],hits[j2]]=[hits[j2],hits[i2]];}
+        const movedOJ=[];
+        for(const hc of hits){
+          if(!PZ.battle.some(x=>x.id===hc.id))continue; // 途中の置換等で既に離れていたら中止
+          if(hasEtOmega(p,hc,getReg(hc))){etOmegaToHand(p,hc,PZ.battle);continue;} // ♾ 離れるかわりに手札へ
+          const biOJ=PZ.battle.findIndex(x=>x.id===hc.id);
+          if(biOJ<0)continue;
+          PZ.battle.splice(biOJ,1);
+          hc._leaveUnder=(hc.under&&hc.under.length)||0;
+          if(S.expert)runWatchFx(p,"selfLeave",hc); // ☄ 離れた時（ミルザム型）誘発
+          if(hc.gear&&hc.gear.length){const gs=hc.gear.splice(0);gs.forEach(g=>gearOut(PZ,g));}
+          if(hc.seals&&hc.seals.length){const sl=hc.seals.splice(0);sl.forEach(x2=>{x2.faceup=true;PZ.grave.push(x2);});}
+          const sendBottomOJ=x=>{
+            const rx2=getReg(x);
+            if(x.isPsy||(rx2&&(rx2.ctype==="psychic"||rx2.ctype==="psyevo"))){
+              x.face=0;x.rot=0;x.tapped=false;x.faceup=true;x.isPsy=false;
+              PZ.hyper.push(x);
+              toast(`🌌 サイキック：${x.name} は超次元ゾーンへ（通常処理）`);
+            }else if(x.isGR){
+              x.faceup=false;x.tapped=false;x.rot=0;
+              PZ.gr.push(x);
+              toast(`GR：${x.name} はGRゾーンの下へ（通常処理）`);
+            }else{
+              x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;
+              PZ.deck.push(x);
+            }
+          };
+          const usOJ=hc.under?hc.under.splice(0):[];
+          sendBottomOJ(hc);
+          usOJ.forEach(sendBottomOJ);
+          movedOJ.push(`《${faceNameOf(hc)}》`);
+        }
+        if(movedOJ.length){
+          sfx("grave");
+          toast(`⚖ ${S.players[p].label}（最大マナ${manaN}）：${movedOJ.join(" → ")} をランダムな順番で山札の一番下へ`);
+          logOnly(`⚖ オリオティス・ジャッジ型：${S.players[p].label}の ${movedOJ.join(" → ")} が山札の一番下へ（この順・最大マナ${manaN}${gtMode?"より大":"以上"}）`);
+        }
+        renderAll();
+      }
     }else if(f.t==="handes"){
       if(!S.vs){toast("（ソロのためハンデスはスキップ）");continue;}
       {
@@ -11472,25 +11570,30 @@ async function destroyWithReplace(pi,c){
   const r=getReg(c);
   const Z=zonesOf(pi);
   if(S.expert&&r){
+    // 🔁 破壊置換の候補を収集（3列目=wiki優先度カテゴリ：1=①自身の能力／2=②「与える」常在で付与／3=③バトルゾーンの他のカード）
     const opts=[];
-    if((r.escape||allyGrant(pi,"agEsc"))&&Z.shield.length)opts.push(["escape","🛡 エスケープ（盾を1枚手札に加えて、場に残る）"]);
-    if(r.trueEscape||allyGrant(pi,"agTEsc"))opts.push(["tescape","🛡 真・エスケープ（かわりにシールドを2枚手札に加えて場に残る）"]);
+    if(Z.shield.length&&(r.escape||allyGrant(pi,"agEsc"))){
+      const _own=!!r.escape;
+      opts.push(["escape",`🛡 エスケープ（盾を1枚手札に加えて、場に残る）${_own?"":"／付与"}`,_own?1:2]);
+    }
+    if(r.trueEscape||allyGrant(pi,"agTEsc")){
+      const _own=!!r.trueEscape;
+      opts.push(["tescape",`🛡 真・エスケープ（かわりにシールドを2枚手札に加えて場に残る）${_own?"":"／付与"}`,_own?1:2]);
+    }
     const exSh=Z.shield.findIndex(x=>x.exFor===c.id);
-    if(r.exlife&&(exSh>=0||Z.shield.length))opts.push(["exlife",exSh>=0?"💠 EXライフ（EX盾を墓地に置いて、場に残る）":"💠 EXライフ（盾を1枚墓地に置いて、場に残る）"]);
+    if(r.exlife&&(exSh>=0||Z.shield.length))opts.push(["exlife",exSh>=0?"💠 EXライフ（EX盾を墓地に置いて、場に残る）":"💠 EXライフ（盾を1枚墓地に置いて、場に残る）",1]);
     if((r.starEvo||["starevo","charismaevo","smaxevo","onismaxevo"].includes(r.ctype))&&c.under&&c.under.length)
-      opts.push(["starTop","⭐ スター進化（自身のみ離れ、下は重なったまま場に残る）"]);
-    if((r.gneo||r.ctype==="gneo"||r.ctype==="gneodream")&&c.under&&c.under.length)opts.push(["gneoBottom","🔄 G・NEO進化（一番下が離れ、上のカードは場に残る）"]);
-    if(r.shieldGo)opts.push(["sgo","🏰 シールド・ゴー（墓地の代わりに表向きの盾になる）"]);
+      opts.push(["starTop","⭐ スター進化（自身のみ離れ、下は重なったまま場に残る）",1]);
+    if((r.gneo||r.ctype==="gneo"||r.ctype==="gneodream")&&c.under&&c.under.length)opts.push(["gneoBottom","🔄 G・NEO進化（一番下が離れ、上のカードは場に残る）",1]);
+    if(r.shieldGo)opts.push(["sgo","🏰 シールド・ゴー（墓地の代わりに表向きの盾になる）",1]);
     if(r.leaveSacF){
       const sacPool=Z.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&isCreatureReg(r2)&&lockFilterOk(r.leaveSacF,r2,x);})());
-      if(sacPool.length)opts.push(["leavesac",`🎲 身代わり（他の${r.leaveSacF}のコスト最小1体をランダム破壊して場に残る）`]);
+      if(sacPool.length)opts.push(["leavesac",`🎲 身代わり（他の${r.leaveSacF}のコスト最小1体をランダム破壊して場に残る）`,1]);
     }
     if(Z.battle.some(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&r2.seiba;})()))
-      opts.push(["seiba","⚔ セイバー（他のクリーチャーを身代わりに破壊）"]);
-    if(opts.length){
-      const j=await askChoice(`💀 ${faceNameOf(c)} が破壊されます。置換しますか？`,[...opts.map(o=>o[1]),"そのまま破壊"]);
-      if(j!==null&&j<opts.length){
-        const kind=opts[j][0];
+      opts.push(["seiba","⚔ セイバー（他のクリーチャーを身代わりに破壊）",3]);
+    // 選ばれた置換の実処理。true=処理完了（呼び出し側はreturn）／false=途中キャンセル（そのまま破壊へ）
+    const applyKind=async(kind)=>{
         if(kind==="leavesac"){
           const sacPool=Z.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&isCreatureReg(r2)&&lockFilterOk(r.leaveSacF,r2,x);})());
           if(sacPool.length){
@@ -11502,7 +11605,7 @@ async function destroyWithReplace(pi,c){
             await destroyWithReplace(pi,sac);
             renderAll();
           }
-          return;
+          return true;
         }
         if(kind==="escape"||kind==="exlife"){
           let si;
@@ -11523,22 +11626,23 @@ async function destroyWithReplace(pi,c){
               toast(`💠 EXライフ！ ${faceNameOf(c)} は場に残る`);
               sfx("grave");
             }
-            renderAll();return;
+            renderAll();return true;
           }
+          return false;
         }else if(kind==="tescape"){
-          if(!Z.shield.length){toast("シールドがありません（真・エスケープは発動できません）");return;}
+          if(!Z.shield.length){toast("シールドがありません（真・エスケープは発動できません）");return true;}
           snap();
           const take=Math.min(2,Z.shield.length);
           for(let t2=0;t2<take;t2++){
             const j2=Z.shield.length===1?0:await askChoice(`🛡 手札に加えるシールドを選択（${t2+1}/${take}枚目）`,
               Z.shield.map((x,i2)=>`盾${i2+1}${x.faceup?`（表：${x.name}）`:""}${x.under&&x.under.length?` +${x.under.length}`:""}`));
-            if(j2===null){renderAll();return;}
+            if(j2===null){renderAll();return true;}
             const sc=Z.shield.splice(j2,1)[0];
             const stack=[sc,...(sc.under?sc.under.splice(0):[])];
             stack.forEach(x=>{x.faceup=true;x.tapped=false;Z.hand.push(x);});
           }
           toast(`🛡 真・エスケープ！ シールドを${take}枚手札に加え、${faceNameOf(c)} は場に残った`);
-          sfx("flip");renderAll();return;
+          sfx("flip");renderAll();return true;
         }else if(kind==="starTop"){
           snap();
           const arr=Z.battle;
@@ -11552,19 +11656,19 @@ async function destroyWithReplace(pi,c){
           c.faceup=true;c.tapped=false;
           Z.grave.push(c);
           toast(`⭐ スター進化：${faceNameOf(c)} だけが離れ、${faceNameOf(newTop)}（重なったまま）が場に残った`);
-          sfx("grave");renderAll();return;
+          sfx("grave");renderAll();return true;
         }else if(kind==="gneoBottom"){
           snap();
           const arr=Z.battle;
           const i=arr.findIndex(x=>x.id===c.id);
           const under=c.under||[];
-          if(!under.length){destroyCreature(pi,c);renderAll();return;}
+          if(!under.length){destroyCreature(pi,c);renderAll();return true;}
           const bottom=under.shift();
           bottom.faceup=true;bottom.tapped=false;
           arr[i]=c;
           Z.grave.push(bottom);
           toast(`🔄 G・NEO進化：一番下の《${faceNameOf(bottom)}》が離れ、${faceNameOf(c)} は場に残った`);
-          sfx("grave");renderAll();return;
+          sfx("grave");renderAll();return true;
         }else if(kind==="sgo"){
           snap();
           const arr=Z.battle;
@@ -11576,7 +11680,7 @@ async function destroyWithReplace(pi,c){
           c.faceup=true;c.tapped=false;c.rot=0;c.mark=S.turn>0;
           Z.shield.push(c);
           toast(`🏰 シールド・ゴー！ ${faceNameOf(c)} は盾になった`);
-          sfx("ok");renderAll();return;
+          sfx("ok");renderAll();return true;
         }else if(kind==="seiba"){
           const sabers=Z.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&r2.seiba;})());
           const k=sabers.length===1?0:await pickCard("身代わりにするセイバーを選択",sabers);
@@ -11584,8 +11688,34 @@ async function destroyWithReplace(pi,c){
             snap();
             destroyCreature(pi,sabers[k]);
             toast(`⚔ セイバー！ ${faceNameOf(sabers[k])} が身代わりになった`);
-            renderAll();return;
+            renderAll();return true;
           }
+          return false;
+        }
+        return false;
+    };
+    if(opts.length){
+      const cats=[...new Set(opts.map(o=>o[2]))].sort((a,b)=>a-b);
+      if(S.gameMode!=="tcg"&&cats.length>1){
+        // 🃏 デュエプレ：wiki優先度（①自身→②付与→③BZの他のカード）の順にカテゴリごとに適用を確認（自動裁定）
+        logOnly(`⚡ 置換競合（デュエプレ自動裁定）：《${faceNameOf(c)}》の破壊置換 ${opts.length}件 → ①自身の能力 → ②付与された能力 → ③他のカードの能力 の順に適用確認`);
+        for(let ci=0;ci<cats.length;ci++){
+          const ct=cats[ci];
+          const co=opts.filter(o=>o[2]===ct);
+          const lbl=ct===1?"①自身の能力":ct===2?"②付与された能力":"③他のカードの能力";
+          const last=(ci===cats.length-1);
+          const j=await askChoice(`💀 ${faceNameOf(c)} が破壊されます。置換しますか？（${lbl}・優先順）`,
+            [...co.map(o=>o[1]),last?"そのまま破壊":"適用しない（次の優先の置換へ）"]);
+          if(j!==null&&j<co.length){
+            if(await applyKind(co[j][0]))return;
+            break; // 途中キャンセル → そのまま破壊へ
+          }
+          // 「適用しない」→ 次のカテゴリへ（最終カテゴリなら抜けて破壊へ）
+        }
+      }else{
+        const j=await askChoice(`💀 ${faceNameOf(c)} が破壊されます。置換しますか？`,[...opts.map(o=>o[1]),"そのまま破壊"]);
+        if(j!==null&&j<opts.length){
+          if(await applyKind(opts[j][0]))return;
         }
       }
     }
@@ -15678,6 +15808,12 @@ function extractEffects(text,mode){
   }
   // 文をまたぐ効果（「。」で分割すると壊れるもの）を先に全文から検出し、検出部分は節処理から除外する
   let textFx=text;
+  // ❄ 「クリーチャー1体をタップしてもよい。それは次の持ち主のターン開始時にアンタップしない」（天恋妖精キョウメイ型）
+  //    タップ行とフリーズ文が「。」をまたぐため全文から検出し、条件欄「フリーズ」付きのタップ効果として登録。
+  //    「相手の」限定なら tapOpN、限定なしなら tapAnyN（両者どちらでも）。効果の実行順を保つため行の追加は末尾（return直前）で行う
+  let _tailTapFrz=null;
+  {const mTF=textFx.match(/(相手の)?クリーチャー(?:を)?(\d+)?体(?:を)?タップ(?:する|してもよい)?。?\s*それ(?:ら)?は[、,]?次の(?:持ち主の)?ターン(?:の)?(?:開始時|はじめ)に(?:は)?アンタップしない/);
+   if(mTF){_tailTapFrz={t:mTF[1]?"tapOpN":"tapAnyN",n:mTF[2]?+mTF[2]:1,cond:"フリーズ",opt:/してもよい/.test(mTF[0])};textFx=textFx.replace(mTF[0],"");}}
   // 🚫 「相手のクリーチャーn体を選ぶ。…そのクリーチャーは攻撃もブロックもできない」（次の自分のターン開始時まで）
   {const mAB=textFx.match(/相手のクリーチャー(\d+)?体?を選[びぶ][\s\S]{0,60}?攻撃もブロックもできない/);
    if(mAB){fx.push({t:"lockFoeAtkBlock",n:mAB[1]?+mAB[1]:1});textFx=textFx.replace(mAB[0],"");}}
@@ -16029,6 +16165,8 @@ function extractEffects(text,mode){
     // 🌟 [S]節（SSTボーナス）の効果には sstOnly を付与 → 実行時に盾が1枚以上なら自動スキップ
     if(_inSST)for(let i=_before;i<fx.length;i++)fx[i].sstOnly=true;
   }
+  // ❄ キョウメイ型のタップ＋フリーズは効果の記載順（ドロー等の後）を保つため末尾に追加
+  if(_tailTapFrz)fx.push(_tailTapFrz);
   // 重複除去
   const seen=new Set();
   return fx.filter(f=>{const k=f.t+":"+(f.n||"");if(seen.has(k))return false;seen.add(k);return true;});
@@ -16461,6 +16599,12 @@ function parseCardText(txt,mode){
   if(out.set.st&&/S・?トリガー[」』]?は?使えない/.test(tSelf)&&!/[■●]\s*S・?トリガー(?![はを])/.test(tSelf)&&!/S・?トリガー」?を与える/.test(tSelf))delete out.set.st;
   // P革命チェンジ検出時は通常革命チェンジフラグを外す（超次元からの誘発と混同しないため）
   if(out.set.pKakumei)delete out.set.kakumei;
+  // ⚖ オリオティス・ジャッジ型：「各プレイヤーは、自身の最大マナ以上のコストを持つクリーチャーをすべて、ランダムな順番で自身の山札の一番下に置く」
+  {const mOJ=t.match(/各プレイヤーは[^■。]{0,10}?自身の最大マナ(以上|より大きい|より多い)のコストを持つクリーチャーをすべて[^■。]*?山札の一番下に置く/);
+   if(mOJ){
+     out.fx.push({t:"oriJudge",n:1,cond:mOJ[1]==="以上"?"":"より大きい"});
+     out.notes.push({msg:`⚖ オリオティス・ジャッジ型（各プレイヤー・最大マナ${mOJ[1]}→ランダム順で山札の下）を効果に追加しました`,q:"オリオティス・ジャッジ"});
+   }}
   // 「相手プレイヤーを攻撃できない」は cantAtkP のみ（全攻撃不可の cantAtk は外す）
   if(out.set.cantAtkP)delete out.set.cantAtk;
   // 「相手のクリーチャー1体を選ぶ…そのクリーチャーは相手プレイヤーを攻撃できない」は相手への一時付与＝自身の常在ではないので外し、効果として登録
@@ -18640,6 +18784,20 @@ function etOmegaToHand(ownerP,c,curArr){
 }
 /* ♾ エターナルΩ判定：自身の登録Ω、または場の全体付与（stAuraOmegaF：対象フィルタ・「全て」対応）。
    自身のΩは無視状態で消えるが、付与は付与元の能力なので付与元が有効なら生きる */
+/* ♾ エターナルΩの由来（置換競合の優先判定用・v10.23）：1=①自身の能力／2=②「与える」常在で付与／0=なし */
+function etOmegaCat(pi,c,r){
+  if(r&&r.etOmega&&!isIgnored(c,pi))return 1;
+  if(!S.expert)return 0;
+  for(const b of zonesOf(pi).battle){
+    const rb=getReg(b);
+    if(!rb||!rb.stAuraOmegaF)continue;
+    if(isSealed(b)||isIgnored(b,pi))continue;
+    const f=String(rb.stAuraOmegaF).trim();
+    if(/^(全て|すべて|全部)$/.test(f))return 2;
+    if(lockFilterOk(f,r,c))return 2;
+  }
+  return 0;
+}
 function hasEtOmega(pi,c,r){
   if(r&&r.etOmega&&!isIgnored(c,pi))return true;
   if(!S.expert)return false;
@@ -18966,6 +19124,164 @@ function numDeclBlocked(card,pTo,kind){
   return null;
 }
 const NUMDECL_LABEL={lucky:"ラッキーナンバー",shuff:"シャッフ",ooparts:"オーパーツ",tenshi:"立ち上がれ"};
+/* ================================================================
+   🔒 バトルゾーンに「出る」時の置換ロック共通処理（v10.23）
+   ヤドック型（最大マナ超→マナ）／シフォン型（召喚以外→シールド化・任意）／
+   コナユキ型（召喚以外→マナ）／マバユキ・アルカディアス型（→山下/墓地）を1つの関数に集約。
+   これまでドラッグ経路（moveCardX）専用だった判定を、効果・パネル経由の配置
+   （markArrive経由）からも通す＝カルマシフォン型がパネル経由で反応しないPENDINGの根治。
+   置換ロックが複数ある時はデュエプレモードのみ自動裁定（wiki優先度：③バトルゾーン内は右にあるものから）。
+   封印中・能力無視中のロック元は適用しない（v10.23で追加・wiki準拠）。
+   pTo=出た側 c=出たカード mode="sync"（moveCardX：従来と同じ同期挙動）／"defer"（効果経由：必ずCIPを保留してから判定）
+   戻り値："replaced"=同期置換した（呼び出し側は以降を中断）／"pending"=非同期確認中（c._repPending=true）／false=対象外 */
+function applyEnterReplacement(pTo,c,mode){
+  if(!S.expert||c._viaMadness)return false;
+  if(typeof REPLAY!=="undefined"&&REPLAY&&REPLAY.on)return false;
+  const foeR=pTo===0?1:0;
+  const Z=zonesOf(pTo);
+  const rIn=getReg(c);
+  if(!isCreatureReg(rIn))return false;
+  const civMapR={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature","ゼロ":"zero"};
+  const matchR=(filt)=>{
+    if(!filt)return true;
+    const toksR=String(filt).split(/[／\/、,]/).map(x=>x.trim()).filter(Boolean);
+    return toksR.some(tk=>{
+      if(tk==="多色")return rIn&&rIn.civs&&rIn.civs.length>=2;
+      if(tk==="単色")return rIn&&rIn.civs&&rIn.civs.length===1&&rIn.civs[0]!=="zero";
+      if(civMapR[tk])return rIn&&rIn.civs&&rIn.civs.includes(civMapR[tk]);
+      return (rIn&&raceMatch(rIn,tk))||String(c.name).includes(tk);
+    });
+  };
+  const lockers=zonesOf(foeR).battle.filter(x=>{
+    const rx=getReg(x);
+    return rx&&rx.repIn&&!isSealed(x)&&!isIgnored(x,foeR)&&matchR(rx.repInF)&&(!rx.repInOppTurn||(S.vs&&S.who===pTo));
+  });
+  if(!lockers.length)return false;
+  let locker=lockers[0];
+  if(lockers.length>1&&S.gameMode!=="tcg"){
+    locker=lockers[lockers.length-1];
+    logOnly(`⚡ 置換競合（デュエプレ自動裁定）：出る時の置換ロックが${lockers.length}件 → バトルゾーンの右にある《${faceNameOf(locker)}》を適用（③BZ内は右から）`);
+  }
+  const rL=getReg(locker);
+  const dropStack=()=>{ // 場を離れる時のギア・下敷き整理（共通）
+    if(c.gear&&c.gear.length){const gs=c.gear.splice(0);gs.forEach(g=>gearOut(Z,g));}
+    if(c.under&&c.under.length){const us=c.under.splice(0);us.forEach(u=>{u.faceup=true;Z.grave.push(u);});}
+  };
+  const stay=()=>{ // 置換しない：保留していたCIPを解放
+    c._repPending=false;
+    if(zonesOf(pTo).battle.find(x=>x.id===c.id))enqueueFx(pTo,c);
+    renderAll();
+  };
+  if(rL.repIn==="manaOverMax"){
+    // ヤドック型：相手（pTo自身）の最大マナ（マナゾーンの総枚数）よりコストの大きいクリーチャーを、かわりにマナゾーンへ置換
+    const maxMana=Z.mana.length;
+    const cst=(rIn&&rIn.cost!=null&&!isNaN(+rIn.cost))?+rIn.cost:null;
+    const toMana=()=>{
+      const bi=Z.battle.findIndex(x=>x.id===c.id);
+      if(bi<0)return false;
+      Z.battle.splice(bi,1);
+      c.tapped=false;c.faceup=true;
+      dropStack();
+      Z.mana.push(c);
+      return true;
+    };
+    const toastMana=()=>toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name}${cst!=null?`（コスト${cst}）`:""}は最大マナ${maxMana}より大きいため、バトルゾーンに出るかわりにマナゾーンへ！\n（バトルゾーンを経由しないため、出た時効果は発動しません）`);
+    if(cst!=null){
+      if(cst<=maxMana)return false; // 条件を満たさない → 通常どおり出る
+      if(mode!=="defer"){
+        if(toMana()){sfx("grave");renderAll();toastMana();}
+        return "replaced";
+      }
+      // 効果経由：CIPを保留してから自動置換（⌘Zで置換前に戻れるようsnapを挟む）
+      c._repPending=true;
+      (async()=>{
+        await Promise.resolve();
+        snap();
+        if(toMana()){sfx("grave");renderAll();toastMana();}
+        // 置換後は_repPendingをtrueのまま維持＝遅れて呼ばれるenqueueFxを抑止（次の到着時にmarkArriveでリセット）
+      })();
+      return "pending";
+    }
+    // コスト未登録：プレイヤーに確認して判定
+    c._repPending=true;
+    (async()=>{
+      const yes=await ask(`🔒 ${faceNameOf(locker)}（置換ロック・ヤドック型）\n《${c.name}》のコストは、${S.players[pTo].label}の最大マナ（${maxMana}）より大きいですか？\n「はい」でマナゾーンへ置換します。`);
+      if(!yes){stay();return;}
+      snap();
+      if(toMana()){sfx("grave");renderAll();
+        toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name} はマナゾーンへ！（出た時効果は発動しません）`);}
+    })();
+    return "pending";
+  }
+  if(rL.repIn==="shield"||rL.repIn==="mana"){
+    // シフォン型（召喚以外→シールド化・任意）／コナユキ型（召喚以外→マナ）
+    // ※本来「召喚以外のみ」対象。設定でNCが未チェックでも、正規召喚をマナ送りしないよう必ず召喚確認を挟む。
+    const destR=rL.repIn;
+    const labelR=destR==="shield"?"シールド":"マナゾーン";
+    c._repPending=true;
+    (async()=>{
+      {
+        const j=await askChoice(`🔒 ${faceNameOf(locker)}：置換ロック（召喚以外のみ）\n《${c.name}》はどの方法で出しましたか？`,
+          ["召喚（コストを支払って手札から等）→そのまま","召喚以外（侵略/チェンジ/超次元/踏み倒し/侵略ZERO）→置換"]);
+        if(j!==1){stay();return;}
+      }
+      if(destR==="shield"){
+        const y=await ask(`🛡 ${faceNameOf(locker)}：${c.name} をシールド化しますか？\n（「してもよい」の任意効果）`);
+        if(!y){stay();return;}
+      }
+      const ZB7=zonesOf(pTo).battle;
+      const bi7=ZB7.findIndex(x=>x.id===c.id);
+      if(bi7<0)return;
+      snap();
+      ZB7.splice(bi7,1);
+      c.tapped=false;c.sideways=false;
+      dropStack();
+      if(destR==="shield"){c.faceup=false;Z.shield.push(c);}
+      else{c.faceup=true;Z.mana.push(c);}
+      sfx("grave");renderAll();
+      toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name} は出るかわりに${labelR}へ！（出た時効果は発動しません）`);
+    })();
+    return "pending";
+  }
+  if(rL.repInNC||rL.repIn==="deckBottom"){
+    c._repPending=true;
+    (async()=>{
+      const j=await askChoice(`🔒 ${faceNameOf(locker)}：置換ロック（召喚以外のみ）\n《${c.name}》はどの方法で出しましたか？`,
+        ["召喚（コストを支払って手札から等）→そのまま","召喚以外（侵略/チェンジ/超次元/踏み倒し/侵略ZERO）→置換"]);
+      if(j!==1){stay();return;}
+      const ZB6=zonesOf(pTo).battle;
+      const bi6=ZB6.findIndex(x=>x.id===c.id);
+      if(bi6<0)return;
+      snap();
+      ZB6.splice(bi6,1);
+      c.tapped=false;
+      if(c.under&&c.under.length){const us=c.under.splice(0);us.forEach(u=>{u.faceup=true;zonesOf(pTo).grave.push(u);});}
+      if(rL.repIn==="grave"){c.faceup=true;zonesOf(pTo).grave.push(c);}
+      else{c.faceup=false;zonesOf(pTo).deck.push(c);}
+      sfx("grave");renderAll();
+      toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name} は出るかわりに${rL.repIn==="grave"?"墓地":"山札の一番下"}へ！（出た時効果は発動しません）`);
+    })();
+    return "pending";
+  }
+  // マバユキ／アルカディアス型：出た方法を問わず山札の下（または墓地）へ
+  {
+    const uncond=()=>{
+      const bi=Z.battle.findIndex(x=>x.id===c.id);
+      if(bi<0)return false;
+      Z.battle.splice(bi,1);
+      c.tapped=false;
+      if(rL.repIn==="grave"){c.faceup=true;Z.grave.push(c);}
+      else{c.faceup=false;Z.deck.push(c);}
+      sfx("grave");renderAll();
+      toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name} はバトルゾーンに出るかわりに${rL.repIn==="grave"?"墓地":"山札の一番下"}へ！\n（バトルゾーンを経由しないため、出た時効果は発動しません）`);
+      return true;
+    };
+    if(mode!=="defer")return uncond()?"replaced":false;
+    c._repPending=true;
+    (async()=>{await Promise.resolve();snap();uncond();})();
+    return "pending";
+  }
+}
 function moveCardXRaw(pFrom,fromZone,id,pTo,toZone){
   return moveCardX(pFrom,fromZone,id,pTo,toZone,true);
 }
@@ -19262,7 +19578,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     // ♾ フォーエバー・プリンセス：墓地に置かれるかわりに墓地＋自身を山札へシャッフル（手札を捨てる/山札を削る等）
   }
   else placeCard(Z,toZone,c);
-  if(!_reorder)markArrive(c); // 🔧 配置後に呼ぶ（並べ替えでは出直し扱いにしない）
+  if(!_reorder){c._mvxRep=true;try{markArrive(c);}finally{delete c._mvxRep;}} // 🔧 配置後に呼ぶ（並べ替えでは出直し扱いにしない・置換ロックは本体側で判定するためフラグで除外）
   // 🛡 表向きでシールドに置く操作は誤操作しやすいので確認（城/Gキャッスルは除く）
   if(toZone==="shieldUp"&&S.expert&&!S.freePlay){
     const rgc=getReg(c);
@@ -19433,133 +19749,9 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       }
     }
     if(S.expert&&!c._viaMadness){
-      const foeR=pTo===0?1:0;
-      const rIn=getReg(c);
-      const civMapR={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature","ゼロ":"zero"};
-      const matchR=(filt)=>{
-        if(!filt)return true;
-        const toksR=String(filt).split(/[／\/、,]/).map(x=>x.trim()).filter(Boolean);
-        return toksR.some(tk=>{
-          if(tk==="多色")return rIn&&rIn.civs&&rIn.civs.length>=2;
-          if(tk==="単色")return rIn&&rIn.civs&&rIn.civs.length===1&&rIn.civs[0]!=="zero";
-          if(civMapR[tk])return rIn&&rIn.civs&&rIn.civs.includes(civMapR[tk]);
-          return (rIn&&raceMatch(rIn,tk))||String(c.name).includes(tk);
-        });
-      };
-      const locker=isCreatureReg(rIn)?zonesOf(foeR).battle.find(x=>{
-        const rx=getReg(x);
-        // repInOppTurn＝「相手のターン中のみ」（コナユキ'26型）：出した側(pTo)のターン中だけ置換
-        return rx&&rx.repIn&&matchR(rx.repInF)&&(!rx.repInOppTurn||(S.vs&&S.who===pTo));
-      }):null;
-      if(locker){
-        const rL=getReg(locker);
-        if(rL.repIn==="manaOverMax"){
-          // ヤドック型：相手（pTo自身）の最大マナ（マナゾーンの総枚数）よりコストの大きいクリーチャーを、かわりにマナゾーンへ置換
-          const maxMana=zonesOf(pTo).mana.length;
-          const cst=(rIn&&rIn.cost!=null&&!isNaN(+rIn.cost))?+rIn.cost:null;
-          const toMana=()=>{
-            const bi=Z.battle.findIndex(x=>x.id===c.id);
-            if(bi<0)return false;
-            Z.battle.splice(bi,1);
-            c.tapped=false;c.faceup=true;
-            if(c.gear&&c.gear.length){const gs=c.gear.splice(0);gs.forEach(g=>gearOut(Z,g));}
-            if(c.under&&c.under.length){const us=c.under.splice(0);us.forEach(u=>{u.faceup=true;Z.grave.push(u);});}
-            zonesOf(pTo).mana.push(c);
-            return true;
-          };
-          if(cst!=null){
-            if(cst>maxMana){
-              if(toMana()){sfx("grave");renderAll();
-                toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name}（コスト${cst}）は最大マナ${maxMana}より大きいため、バトルゾーンに出るかわりにマナゾーンへ！\n（バトルゾーンを経由しないため、出た時効果は発動しません）`);}
-              return;
-            }
-            // コスト≦最大マナ → 条件を満たさないので通常どおり出る（何もしない）
-          }else{
-            // コスト未登録：プレイヤーに確認して判定
-            c._repPending=true;
-            (async()=>{
-              const yes=await ask(`🔒 ${faceNameOf(locker)}（置換ロック・ヤドック型）\n《${c.name}》のコストは、${S.players[pTo].label}の最大マナ（${maxMana}）より大きいですか？\n「はい」でマナゾーンへ置換します。`);
-              c._repPending=false;
-              if(yes){
-                snap();
-                if(toMana()){sfx("grave");renderAll();
-                  toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name} はマナゾーンへ！（出た時効果は発動しません）`);}
-              }else{
-                if(zonesOf(pTo).battle.find(x=>x.id===c.id))enqueueFx(pTo,c);
-                renderAll();
-              }
-            })();
-          }
-        }else if(rL.repIn==="shield"||rL.repIn==="mana"){
-          // シフォン型（召喚以外→シールド化・任意）／コナユキ型（召喚以外→マナ）
-          // ※コナユキ/シフォンは本来「召喚以外のみ」対象。設定でNCが未チェックでも、正規召喚をマナ送りしないよう必ず召喚確認を挟む。
-          const destR=rL.repIn;
-          const labelR=destR==="shield"?"シールド":"マナゾーン";
-          c._repPending=true;
-          (async()=>{
-            {
-              const j=await askChoice(`🔒 ${faceNameOf(locker)}：置換ロック（召喚以外のみ）\n《${c.name}》はどの方法で出しましたか？`,
-                ["召喚（コストを支払って手札から等）→そのまま","召喚以外（侵略/チェンジ/超次元/踏み倒し/侵略ZERO）→置換"]);
-              if(j!==1){c._repPending=false;if(zonesOf(pTo).battle.find(x=>x.id===c.id))enqueueFx(pTo,c);renderAll();return;}
-            }
-            if(destR==="shield"){
-              const y=await ask(`🛡 ${faceNameOf(locker)}：${c.name} をシールド化しますか？\n（「してもよい」の任意効果）`);
-              if(!y){c._repPending=false;if(zonesOf(pTo).battle.find(x=>x.id===c.id))enqueueFx(pTo,c);renderAll();return;}
-            }
-            c._repPending=false;
-            const ZB7=zonesOf(pTo).battle;
-            const bi7=ZB7.findIndex(x=>x.id===c.id);
-            if(bi7<0)return;
-            snap();
-            ZB7.splice(bi7,1);
-            c.tapped=false;c.sideways=false;
-            if(c.gear&&c.gear.length){const gs=c.gear.splice(0);gs.forEach(g=>gearOut(zonesOf(pTo),g));}
-            if(c.under&&c.under.length){const us=c.under.splice(0);us.forEach(u=>{u.faceup=true;zonesOf(pTo).grave.push(u);});}
-            if(destR==="shield"){c.faceup=false;zonesOf(pTo).shield.push(c);}
-            else{c.faceup=true;zonesOf(pTo).mana.push(c);}
-            sfx("grave");renderAll();
-            toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name} は出るかわりに${labelR}へ！（出た時効果は発動しません）`);
-          })();
-        }else if(rL.repInNC||rL.repIn==="deckBottom"){
-          c._repPending=true;
-          (async()=>{
-            const j=await askChoice(`🔒 ${faceNameOf(locker)}：置換ロック（召喚以外のみ）\n《${c.name}》はどの方法で出しましたか？`,
-              ["召喚（コストを支払って手札から等）→そのまま","召喚以外（侵略/チェンジ/超次元/踏み倒し/侵略ZERO）→置換"]);
-            if(j!==1){
-              c._repPending=false;
-              if(zonesOf(pTo).battle.find(x=>x.id===c.id))enqueueFx(pTo,c);
-              renderAll();
-              return;
-            }
-            c._repPending=false;
-            const ZB6=zonesOf(pTo).battle;
-            const bi6=ZB6.findIndex(x=>x.id===c.id);
-            if(bi6<0)return;
-            snap();
-            ZB6.splice(bi6,1);
-            c.tapped=false;
-            if(c.under&&c.under.length){const us=c.under.splice(0);us.forEach(u=>{u.faceup=true;zonesOf(pTo).grave.push(u);});}
-            if(rL.repIn==="grave"){c.faceup=true;zonesOf(pTo).grave.push(c);}
-            else{c.faceup=false;zonesOf(pTo).deck.push(c);}
-            sfx("grave");renderAll();
-            toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name} は出るかわりに${rL.repIn==="grave"?"墓地":"山札の一番下"}へ！（出た時効果は発動しません）`);
-          })();
-        }else{
-        const bi=Z.battle.findIndex(x=>x.id===c.id);
-        if(bi>=0){
-          Z.battle.splice(bi,1);
-          c.tapped=false;
-          if(rL.repIn==="grave"){
-            c.faceup=true;Z.grave.push(c);
-          }else{
-            c.faceup=false;Z.deck.push(c);
-          }
-          sfx("grave");renderAll();
-          toast(`🔒 置換ロック（${faceNameOf(locker)}）：${c.name} はバトルゾーンに出るかわりに${rL.repIn==="grave"?"墓地":"山札の一番下"}へ！\n（バトルゾーンを経由しないため、出た時効果は発動しません）`);
-          return;
-        }
-        }
-      }
+      // 🔒 出る時の置換ロック：共通関数へ集約（v10.23）。同期置換（ヤドック型・コスト判明時）は以降の処理を中断
+      const _rep=applyEnterReplacement(pTo,c,"sync");
+      if(_rep==="replaced")return;
     }
     const reg=getReg(c);
     if(reg&&(reg.d2||reg.wide))applyD2Rot(pTo,c);
