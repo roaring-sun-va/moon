@@ -639,6 +639,12 @@ body.shake{animation:bodyShake .4s ease-out}
 .vname{font-size:9px;color:var(--muted);margin-top:3px;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;text-align:center}
 
 #builderOlay .bshort{display:none}
+/* 📏 デッキ編成：カードを小さく並べた時の詰めた表示 */
+#bGrid.bg-small .vcard .vname{font-size:8px;line-height:1.15;-webkit-line-clamp:2;margin-top:1px}
+#bGrid.bg-small .vcard .cnt{font-size:10px;padding:0 3px;min-width:14px}
+#bGrid.bg-tiny .vcard .vname{font-size:7.5px;-webkit-line-clamp:1}
+#bGrid.bg-tiny .vcard .cnt{font-size:9px;padding:0 2px;min-width:12px}
+#bGrid.bg-micro .vcard .vname{display:none}
 .dl-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:6px;background:#0f1524}
 /* 📁 デッキのフォルダ移動（つかんで運ぶ） */
 .dl-grip{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-right:6px;
@@ -1053,9 +1059,14 @@ body.shake{animation:bodyShake .4s ease-out}
         <span id="cardGapVal" style="font-size:12px;width:44px;text-align:right">5px</span>
       </div>
       <div class="row" style="align-items:center;gap:8px">
-        <span style="font-size:12px;font-weight:700">カードサイズ</span>
+        <span style="font-size:12px;font-weight:700" title="「対戦」がオン（相手あり）の時のカードの大きさ">カードサイズ<span style="font-size:10px;color:var(--muted)">（相手あり）</span></span>
         <input type="range" id="setCardScale" min="70" max="200" step="5" value="100" style="flex:1">
         <span id="cardScaleVal" style="font-size:12px;width:44px;text-align:right">100%</span>
+      </div>
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700" title="「対戦」がオフ（1人）の時のカードの大きさ。1人だと盤面が広いぶんカードが大きく出るので、ここで別に調整できます">カードサイズ<span style="font-size:10px;color:var(--muted)">（相手なし）</span></span>
+        <input type="range" id="setCardScaleSolo" min="50" max="200" step="5" value="100" style="flex:1">
+        <span id="cardScaleSoloVal" style="font-size:12px;width:44px;text-align:right">100%</span>
       </div>
       <div class="row"><label><input type="checkbox" id="setFitBoard" checked> カードを画面の高さに自動で収める（オフ＝サイズ設定をそのまま大きく反映し、はみ出す分は縦スクロール）</label></div>
       <div class="row"><label><input type="checkbox" id="setAutoTap"> コスト自動マナタップ（EX時：コスト登録済みカードを手札から出すと左から自動タップ）</label></div>
@@ -20874,7 +20885,9 @@ function baseCardH(){
   else b=S.vs
     ? Math.min(175,Math.max(56,(H-230)/6.6))
     : Math.min(185,Math.max(66,(H-170)/3.5));
-  return b*((S.cardScale||100)/100);
+  // 🎚 相手あり／なしで別々の倍率を使う（1人の時は盤面が広くカードが大きく出るため、別に詰められるように）
+  const sc=S.vs?(S.cardScale||100):(S.cardScaleSolo||100);
+  return b*(sc/100);
 }
 function fitBoard(){
   if(fitRaf)cancelAnimationFrame(fitRaf);
@@ -26045,6 +26058,8 @@ function openSettings(){
   $("cardGapVal").textContent=(S.cardGap||5)+"px";
   $("setCardScale").value=String(S.cardScale||100);
   $("cardScaleVal").textContent=(S.cardScale||100)+"%";
+  {const e=$("setCardScaleSolo");if(e){e.value=String(S.cardScaleSolo||100);}}
+  {const e=$("cardScaleSoloVal");if(e)e.textContent=(S.cardScaleSolo||100)+"%";}
   $("setFitBoard").checked=(S.fitBoard!==false);
   $("setNoUntapMana").checked=!!S.noUntapMana;
   $("setTapMultiMana").checked=!!S.tapMultiMana;
@@ -26147,6 +26162,13 @@ $("setCardScale").addEventListener("input",async ()=>{
   if(db)await idbPut("misc","cardScale",S.cardScale);
   fitBoard();renderAll();
 });
+{const e=document.getElementById("setCardScaleSolo");
+ if(e)e.addEventListener("input",async ()=>{
+   S.cardScaleSolo=+e.value||100;
+   {const v=document.getElementById("cardScaleSoloVal");if(v)v.textContent=S.cardScaleSolo+"%";}
+   try{if(db)await idbPut("misc","cardScaleSolo",S.cardScaleSolo);}catch(err){}
+   fitBoard();renderAll();
+ });}
 $("setFitBoard").addEventListener("change",async ()=>{
   S.fitBoard=$("setFitBoard").checked;
   if(db)await idbPut("misc","fitBoard",S.fitBoard);
@@ -27655,6 +27677,21 @@ function typeMatch(k,tf){
 function bRender(){
   const g=$("bGrid");g.innerHTML="";
   bApplyCols(); // 🔢 「横◯枚」の指定を反映
+  // 📏 カード1枚あたりの幅を見積もって、小さすぎる時はボタンを縮める／隠す
+  const _bw=(()=>{
+    const narrow=window.innerWidth<=640;
+    const gap=narrow?5:8;
+    const gw=g.clientWidth||(g.parentElement&&g.parentElement.clientWidth)||360;
+    const n=Math.max(0,Math.min(14,+B._bCols||0));
+    const cols=(n>=3)?n:Math.max(1,Math.floor((gw+gap)/((narrow?62:84)+gap)));
+    return Math.max(16,(gw-(cols-1)*gap)/cols);
+  })();
+  const _small=_bw<52;  // 名前を1行に詰める
+  const _tiny=_bw<34;   // ℹボタンを出すと絵柄が潰れる大きさ（長押しに切り替え）
+  const _micro=_bw<26;  // 名前も出せない大きさ
+  g.classList.toggle("bg-small",_small);
+  g.classList.toggle("bg-tiny",_tiny);
+  g.classList.toggle("bg-micro",_micro);
   // 📊 集計バー更新（作りながら文明別・タイプ別を確認）
   {const sm=$("bSummary");if(sm){sm.innerHTML="";sm.appendChild(buildDeckSummaryEl(B.counts[B.mode]||new Map()));}}
   const q=normName($("bSearch").value);
@@ -27702,21 +27739,40 @@ function bRender(){
     const n=counts.get(k)||0;
     const el=vCardEl(dispName.get(k),{cnt:n});
     if(n)el.classList.add("picked");
-    // ℹ️ 効果を見るボタン（タップで枚数が変わらないよう伝播停止）
-    {
+    el.style.position="relative";
+    // ℹ️ 効果を見るボタン（タップで枚数が変わらないよう伝播停止）。
+    //    カードが小さい時はℹを出すと絵柄が見えなくなるので、長押しで開く方式にする。
+    if(!_tiny){
       const ib=document.createElement("button");
       ib.type="button";ib.textContent="ℹ";
       ib.title="登録効果を見る・拡大画像・画像変更";
-      ib.style.cssText="position:absolute;left:3px;top:3px;z-index:6;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);background:rgba(10,14,22,.85);color:#9fc6ff;font-size:13px;font-weight:900;cursor:pointer;line-height:1";
+      const sz=Math.max(13,Math.min(22,Math.round(_bw*0.30)));
+      ib.style.cssText=`position:absolute;left:2px;top:2px;z-index:6;width:${sz}px;height:${sz}px;border-radius:50%;border:1px solid var(--line);background:rgba(10,14,22,.85);color:#9fc6ff;font-size:${Math.max(9,Math.round(sz*0.6))}px;font-weight:900;cursor:pointer;line-height:1;padding:0`;
       ib.addEventListener("click",ev=>{ev.stopPropagation();showCardInfo(k);});
-      el.style.position="relative";
       el.appendChild(ib);
+    }
+    // 👆 長押し（500ms）でカード情報。小さい表示でも詳細を見られるように
+    {
+      let lt=null,moved=false;
+      const clr=()=>{if(lt){clearTimeout(lt);lt=null;}};
+      el.addEventListener("pointerdown",ev=>{
+        moved=false;
+        clr();
+        lt=setTimeout(()=>{lt=null;el._longInfo=true;showCardInfo(k);},500);
+      });
+      el.addEventListener("pointermove",ev=>{if(!moved){moved=true;clr();}});
+      el.addEventListener("pointerup",clr);
+      el.addEventListener("pointercancel",clr);
+      el.addEventListener("pointerleave",clr);
     }
     // ➖ 1枚減らすボタン（モバイルで⌘不要に・枚数0の時は隠す）
     const mb=document.createElement("button");
     mb.type="button";mb.textContent="−";mb.className="dec-btn";
     mb.title="1枚減らす";
-    mb.style.cssText="position:absolute;right:3px;top:3px;z-index:6;width:24px;height:24px;border-radius:50%;border:1px solid #e57373;background:rgba(10,14,22,.9);color:#ff8a80;font-size:18px;font-weight:900;cursor:pointer;line-height:1;align-items:center;justify-content:center;padding:0;display:"+(n>0?"flex":"none");
+    {
+      const msz=Math.max(13,Math.min(24,Math.round(_bw*0.32)));
+      mb.style.cssText=`position:absolute;right:2px;top:2px;z-index:6;width:${msz}px;height:${msz}px;border-radius:50%;border:1px solid #e57373;background:rgba(10,14,22,.92);color:#ff8a80;font-size:${Math.max(11,Math.round(msz*0.75))}px;font-weight:900;cursor:pointer;line-height:1;align-items:center;justify-content:center;padding:0;display:`+(n>0?"flex":"none");
+    }
     mb.addEventListener("click",ev=>{
       ev.stopPropagation();
       const cur=counts.get(k)||0;
@@ -27730,6 +27786,7 @@ function bRender(){
     });
     el.appendChild(mb);
     el.addEventListener("click",async ev=>{
+      if(el._longInfo){el._longInfo=false;return;} // 長押しで情報を開いた時は枚数を変えない
       let next;
       const cur=counts.get(k)||0;
       if(ev.metaKey||ev.ctrlKey){
@@ -27850,7 +27907,7 @@ function bBuildCivBar(){
   {
     const cw=document.createElement("label");
     cw.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;color:#cbd3df;white-space:nowrap";
-    cw.title="カード一覧を横に何枚並べるか。数を増やすとカードが小さくなり、一度に多く見えます";
+    cw.title="カード一覧を横に何枚並べるか。数を増やすとカードが小さくなり、一度に多く見えます。小さくするとℹボタンは消えますが、カードを長押しすれば効果や拡大画像を見られます";
     const cs=document.createElement("select");
     cs.style.cssText="width:auto;font-size:11px;padding:2px 5px";
     for(const v of [0,3,4,5,6,7,8,9,10,12,14]){
@@ -28345,6 +28402,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   if(at!==null&&at!==undefined)S.autoTap=!!at;
   const cs=db?await idbGet("misc","cardScale"):null;
   if(cs)S.cardScale=+cs||100;
+  {const cs2=db?await idbGet("misc","cardScaleSolo"):null;S.cardScaleSolo=cs2?(+cs2||100):100;}
   const fb=db?await idbGet("misc","fitBoard"):null;
   if(fb!==null&&fb!==undefined)S.fitBoard=!!fb;
   const cg=db?await idbGet("misc","cardGap"):null;
