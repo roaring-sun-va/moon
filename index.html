@@ -3318,7 +3318,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.20";
+const APP_VER="v10.21";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -6259,6 +6259,7 @@ function manaTapIn(c){
 }
 const FX_TYPES=[
   ["draw","n枚ドロー"],
+  ["drawFoe","🃏 相手はカードをn枚引く（ViVy-R型・「各プレイヤーはn枚引く」は自分のドロー行→この行の順で登録すると解決プレイヤー先行の処理順になる）"],
   ["tapAllOp","相手のクリーチャーをすべてタップ（スパーク型）（すでにタップしているクリーチャーも対象／条件欄に「フリーズ」でアンタップしない）"],
   ["tapOpN","相手のクリーチャーをn体まで選んでタップ（「〜体までタップ」型）（すでにタップしているクリーチャーも選べます／条件欄に「フリーズ」と書くと、選んだクリーチャーは次のターンのはじめにアンタップしません）"],
   ["tapAnyN","⤵ クリーチャーをn体まで選んでタップ（両者どちらのクリーチャーでも対象・神光のカルマ ウイ型）（自分/相手どちらでも・すでにタップしているクリーチャーも選べます／条件欄に「フリーズ」でアンタップしない）"],
@@ -6308,8 +6309,8 @@ const FX_TYPES=[
   ["millOpp","相手の山札の上からn枚を墓地へ"],
   ["reveal","山上n枚を公開"],
   ["look","山上n枚を見る（非公開）"],
-  ["handes","相手の手札をランダムにn枚捨てさせる"],
-  ["peepDiscard","相手の手札を見てn枚選んで捨てさせる（ピーピングハンデス：ジェニー型）"],
+  ["handes","相手の手札をランダムにn枚捨てさせる（条件欄で対象を絞れる：呪文/クリーチャー/種族等＝デュエプレ版デクロワゾー・ジェニー型・ピーピングなし）"],
+  ["peepDiscard","相手の手札を見てn枚選んで捨てさせる（ピーピングハンデス：ジェニー型／条件欄で対象を絞るとヤミノカムスター型：呪文のみ等）"],
   ["peepShield","相手の手札を見てn枚選び、裏向きの新しいシールドに（パクリオ型）"],
   ["selfShieldMove","自分のシールドをn枚、墓地/マナ/手札へ（行き先は実行時選択：ジャドク丸型）"],
   ["selfDiscard","自分の手札からn枚選んで捨てる（バレッドゥ型：捨て終わるまで解決が完了しない）"],
@@ -7310,7 +7311,7 @@ let FX_HOLD=false;
 const MODE_FX_ALIAS={
   "墓地肥やし":"mill","ミル":"mill","山札墓地":"mill","自分墓地肥やし":"mill","山上墓地":"mill",
   "相手墓地肥やし":"millOpp","相手ミル":"millOpp",
-  "ドロー":"draw","引く":"draw",
+  "ドロー":"draw","引く":"draw","相手ドロー":"drawFoe","相手に引かせる":"drawFoe",
   "封印":"sealFoe","相手封印":"sealFoe","自分封印":"sealSelf",
   "マナ加速":"charge","ブースト":"charge","チャージ":"charge","マナブースト":"charge",
   "タップマナ":"chargeTap","タップイン加速":"chargeTap",
@@ -8356,18 +8357,36 @@ async function runFxList(pi,list,srcCard,inPump){
       S.turnLock.push(L3);
       sfx("ok");renderAll();
       toast(`🚫 次の相手のターン、${S.players[op].label} はクリーチャーを${n}体しか出せない（体数制限ロック）`);
+    }else if(f.t==="drawFoe"){
+      // 🃏 相手はカードをn枚引く（ViVy-R型）。「各プレイヤーはn枚引く」は効果行を
+      //    「自分のドロー行→この行」の順に並べれば、デュエプレの「解決プレイヤーから順に処理」を再現できる。
+      //    手札上限（超過はドローにならない）・山札切れ・「引いた時」誘発は通常ドローと同じ経路
+      if(!S.vs){toast("（ソロのため相手のドローはスキップ）");continue;}
+      draw(op,n);
+      toast(`🃏 ${S.players[op].label}が${n}枚引いた`);
     }else if(f.t==="handes"){
       if(!S.vs){toast("（ソロのためハンデスはスキップ）");continue;}
       {
         const hb=handesBlockedBy(op);
         if(hb){toast(`🛡 ${faceNameOf(hb)}：手札は相手の効果によって捨てられない！`);continue;}
       }
+      // 🎯 条件欄で対象を絞れる（呪文／クリーチャー／種族など＝条件付きランダムハンデス・デュエプレ版デクロワゾー/ジェニー型）。
+      //    ピーピングは付随しない（デュエプレ仕様）。条件指定時、効果未登録の手札は判定できないため対象外（あれば通知）
+      const hFilt=String(f.cond||"").trim();
       for(let i=0;i<n&&OZ.hand.length;i++){
-        const j=randInt(OZ.hand.length);
+        let j;
+        if(hFilt){
+          let unreg=0;
+          const idxPool=[];
+          OZ.hand.forEach((hc,ix)=>{const rx=getReg(hc);if(!rx){unreg++;return;}if(lockFilterOk(hFilt,rx,hc))idxPool.push(ix);});
+          if(i===0&&unreg)toast(`（効果未登録の手札${unreg}枚は条件「${hFilt}」を判定できないため対象外）`);
+          if(!idxPool.length){if(i===0)toast(`ハンデス：条件（${hFilt}）に合う手札がありません（不発）`);break;}
+          j=idxPool[randInt(idxPool.length)];
+        }else j=randInt(OZ.hand.length);
         const c=OZ.hand.splice(j,1)[0];
         c.faceup=true;OZ.grave.push(c);
         bumpEv("handes",pi);
-        toast(`ハンデス：${c.name} を墓地へ`);
+        toast(`ハンデス：${c.name} を墓地へ${hFilt?`（条件：${hFilt}からランダム）`:""}`);
         afterHandDiscard(op,c);
       }
       sfx("grave");
@@ -8378,11 +8397,23 @@ async function runFxList(pi,list,srcCard,inPump){
         const hb=handesBlockedBy(op);
         if(hb){toast(`🛡 ${faceNameOf(hb)}：手札は相手の効果によって捨てられない！`);continue;}
       }
+      // 🎯 条件欄で捨てさせる対象を絞れる（呪文／クリーチャー等＝ヤミノカムスター型）。
+      //    手札全体は見た扱いなのでログに記録し、選択パネルには条件に合うカードのみ提示
+      const pFilt=String(f.cond||"").trim();
       for(let i=0;i<n;i++){
         if(!OZ.hand.length){toast("相手の手札がありません");break;}
-        const j=await pickCard(`👁 ピーピングハンデス（${i+1}/${n}枚目）\n${S.players[op].label}の手札から捨てさせるカードを選択`,OZ.hand,{hint:"相手の手札を公開中／タップで捨てる（キャンセルで終了）"});
+        let pool=OZ.hand,poolIdx=null;
+        if(pFilt){
+          if(i===0)logPriv(pi,`👁 ${S.players[pi].label}：${S.players[op].label}の手札を見た → ${cnList(OZ.hand)}`,`${S.players[pi].label}が${S.players[op].label}の手札を見た`);
+          poolIdx=[];
+          OZ.hand.forEach((hc,ix)=>{const rx=getReg(hc);if(rx&&lockFilterOk(pFilt,rx,hc))poolIdx.push(ix);});
+          if(!poolIdx.length){toast(`👁 ピーピングハンデス：条件（${pFilt}）に合う手札がありません（見た手札はログに記録）`);break;}
+          pool=poolIdx.map(ix=>OZ.hand[ix]);
+        }
+        const j=await pickCard(`👁 ピーピングハンデス（${i+1}/${n}枚目）${pFilt?`／条件：${pFilt}`:""}\n${S.players[op].label}の手札から捨てさせるカードを選択`,pool,{hint:pFilt?"条件に合うカードのみ提示（見た手札全体はログに記録）／タップで捨てる（キャンセルで終了）":"相手の手札を公開中／タップで捨てる（キャンセルで終了）"});
         if(j===null)break;
-        const cD=OZ.hand.splice(j,1)[0];
+        const realIx=poolIdx?poolIdx[j]:j;
+        const cD=OZ.hand.splice(realIx,1)[0];
         cD.faceup=true;cD.tapped=false;OZ.grave.push(cD);
         bumpEv("handes",pi);
         toast(`👁 ハンデス：${cD.name} を墓地へ`);
