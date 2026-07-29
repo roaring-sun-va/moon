@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v10.3</title>
+<title>DM Re:Vault v10.5</title>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="googlebot" content="noindex, nofollow, noarchive">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -57,6 +57,7 @@ body.vs .pboard{gap:3px}
   #topbar{gap:5px}
   #topScroll{gap:5px}
   #topbar .wm{display:none}
+  #topbar .verchip{display:none} /* 狭い画面ではロゴだけにする（設定画面で確認できます） */
   #topbar h1{font-size:18px}
   #topbar .btn.small{font-size:11px;padding:4px 8px}
   #turnBadge{font-size:11px;padding:3px 7px}
@@ -262,6 +263,9 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 #logDock.ld-peek .ld-chips{display:none}
 /* 帯のぶん、パネル側に下の余白を足して隠れないようにする（パネルは縦スクロールできる） */
 body.ld-peeking .olay{padding-bottom:158px}
+/* 🏷 バージョン表記（タイトルの右に小さく） */
+.verchip{font-size:10px;font-weight:800;color:var(--muted);margin-left:6px;letter-spacing:.02em;vertical-align:middle;white-space:nowrap}
+@media (max-width:640px){.verchip{font-size:9px;margin-left:4px}}
 /* 💾 効果登録：保存・閉じるの行を画面下に貼り付けて、どこまでスクロールしても押せるようにする */
 #fxFootBar{
   position:sticky;bottom:0;z-index:8;
@@ -811,7 +815,7 @@ body.shake{animation:bodyShake .4s ease-out}
 <body>
 
 <div id="topbar">
-  <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span></h1>
+  <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span><span class="verchip" id="appVer">v10.5</span></h1>
   <div id="topScroll">
     <span id="turnBadge">ターン 0</span>
     <button class="btn small ex" id="btnExpert">EX</button>
@@ -946,7 +950,7 @@ body.shake{animation:bodyShake .4s ease-out}
 
 <div class="olay" id="settingsOlay">
   <div class="panelbox">
-    <h2>⚙ 設定</h2>
+    <h2>⚙ 設定 <span class="verchip" id="setVer" style="font-size:11px">v10.5</span></h2>
     <div class="row"><button class="btn small primary" id="btnTutorial" style="flex:1">📖 はじめての方へ（使い方チュートリアル）</button></div>
     <div class="row"><button class="btn small" id="btnHelp" style="flex:1">❓ 使い方・条件式リファレンス</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="盤面の右下に、ログを開く丸ボタンを浮かべます。スマホ・iPadで片手で出し入れしやすくなります"><input type="checkbox" id="optLogFab" checked> 📜 ログを開く丸ボタンを盤面に浮かべる（スマホ・iPad向け）</label></div>
@@ -3083,7 +3087,20 @@ window.syncLogOverPanel=()=>{
  });}
 {const b=document.getElementById("ldFull");if(b)b.addEventListener("click",()=>{openGameLog();});}
 {const b=document.getElementById("ldDeck");if(b)b.addEventListener("click",()=>{openDeckKnownInfo();});}
-function dlgReset(){$("askNum").style.display="none";$("askTxt").style.display="none";$("askChoices").style.display="none";$("askYN").style.display="";}
+function dlgReset(){
+  $("askNum").style.display="none";$("askTxt").style.display="none";$("askChoices").style.display="none";$("askYN").style.display="";
+  /* 👁 「盤面を見る」は対戦中だけ。デッキ編成やカード登録から出た確認では戻り先が盤面ではないので隠す */
+  {const p=document.getElementById("askPeek");
+   if(p){
+     const started=(typeof S!=="undefined"&&S&&(S.turn|0)>0);
+     let editing=false;
+     for(const id of ["builderOlay","deckOlay","deckListOlay","settingsOlay","fxOlay","regOlay","startOlay"]){
+       const o=document.getElementById(id);
+       if(o&&o.classList.contains("open")){editing=true;break;}
+     }
+     p.style.display=(started&&!editing)?"":"none";
+   }}
+}
 /* 🚦 モーダルの直列化：ask系（askOlay）とpickCard系（viewerOlay）は1つのDOMを共有しているため、
    開いている最中に別の要求が来ると内容とボタンが上書きされ、先のPromiseが永遠に解決されず
    「処理が詰まる／後から別の操作をすると溜まっていた確認が出てくる」原因になっていた。
@@ -3283,6 +3300,13 @@ let BUILTIN_NEWER=null;     // 自分の登録より同梱データが新しか�
 const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
+/* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
+const APP_VER="v10.5";
+try{
+  document.title=`DM Re:Vault ${APP_VER}`;
+  const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
+  const _v2=document.getElementById("setVer");if(_v2)_v2.textContent=APP_VER;
+}catch(e){}
 const memImages=new Map(), memDecks=new Map();
 let IMG_RECV_N=0,IMG_RECV_TM=null; // 🖼 受け取った画像の保存件数（まとめて1回だけ知らせる）
 let PENDING=null;
@@ -14856,8 +14880,14 @@ function el0IsText(el){
 {const t=document.getElementById("fxSaveTop");if(t)t.addEventListener("click",()=>{const b=document.getElementById("fxSave");if(b)b.click();});}
 {const t=document.getElementById("fxCancelTop");if(t)t.addEventListener("click",()=>{const b=document.getElementById("fxCancel");if(b)b.click();});}
 function renderFxEditor(){
+  /* 👁 「盤面を見る」は、対戦が始まっていて、閉じた時の戻り先が盤面の時だけ出す。
+     デッキ編成・デッキ一覧・登録一覧などから開いた時は戻り先が盤面ではないので出さない。 */
   {const fp=document.getElementById("fxPeek");
-   if(fp&&!(typeof B!=="undefined"&&B&&B._fxFromBuilder))fp.style.display="";}
+   if(fp){
+     const started=(typeof S!=="undefined"&&S&&(S.turn|0)>0);
+     const fromPanel=!!(typeof FX_RETURN!=="undefined"&&FX_RETURN);
+     fp.style.display=(started&&!fromPanel)?"":"none";
+   }}
   fxUiPolish();
   fxQuickInit();
   $("fxTwin").checked=FXEDIT.twin;
@@ -24442,7 +24472,7 @@ function openRevealPanel(pi,mode="reveal"){
   rvPi=pi;rvSel=null;rvMode=mode;rvMulti=new Set();
   RV_CIP_DEFER=[]; // 🔀 このパネルを開いている間、パネルから出したカードの出た時は閉じるまで保留
   renderRevealPanel();
-  $("revealOlay").classList.add("open");
+  $("revealOlay").classList.add("open");if(typeof syncRvPeek==="function")syncRvPeek();
 }
 function renderRevealPanel(){
   const arr=rvArr();
@@ -26091,6 +26121,10 @@ window.updateVPeek=()=>{
   }
   $("viewerOlay").classList.remove("open");PEEK="viewerOlay";$("peekChip").classList.add("show");
 });}
+window.syncRvPeek=()=>{
+  const p=document.getElementById("rvPeek");if(!p)return;
+  p.style.display=((typeof S!=="undefined"&&S&&(S.turn|0)>0))?"":"none";
+};
 {const rp=document.getElementById("rvPeek");if(rp)rp.addEventListener("click",()=>{
   $("revealOlay").classList.remove("open");PEEK="revealOlay";$("peekChip").classList.add("show");
 });}
@@ -27244,7 +27278,7 @@ function idbAll(store){
 async function exportAll(withImages){
   if(!db){toast("保存DBが利用できません");return;}
   toast("エクスポート準備中…");
-  const data={v:1,app:"DM Re:Vault",date:new Date().toISOString()};
+  const data={v:1,app:"DM Re:Vault",ver:(typeof APP_VER!=="undefined"?APP_VER:""),date:new Date().toISOString()};
   data.misc=await idbAll("misc");
   delete data.misc.bgmData;
   data.decks=await idbAll("decks");
@@ -28384,9 +28418,7 @@ function reopenBuilder(){
    const k=await pickImage("効果を登録するカードを選ぶ");
    if(!k)return;
    $("builderOlay").classList.remove("open");
-   B._fxFromBuilder=true; // 👁 ビルダー経由では「盤面を見る」を出さない（戻り先が盤面ではないため）
-   {const fp=document.getElementById("fxPeek");if(fp)fp.style.display="none";}
-   FX_RETURN=()=>{B._fxFromBuilder=false;{const fp=document.getElementById("fxPeek");if(fp)fp.style.display="";}reopenBuilder();toast("🧩 ビルダーに戻りました（作りかけのデッキはそのままです）");};
+   FX_RETURN=()=>{reopenBuilder();toast("🧩 ビルダーに戻りました（作りかけのデッキはそのままです）");};
    openFxEditor(k);
  });}
 $("bReset").addEventListener("click",()=>{B.counts[B.mode].clear();bRender();});
