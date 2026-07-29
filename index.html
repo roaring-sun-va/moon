@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v10.5</title>
+<title>DM Re:Vault v10.8</title>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="googlebot" content="noindex, nofollow, noarchive">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -742,6 +742,17 @@ body.shake{animation:bodyShake .4s ease-out}
   #builderOlay #bGrid .vcard .cnt{font-size:10px;padding:0 4px}
   /* 📱 スマホでは一覧のカード名も詰める（縦の枚数を稼ぐ） */
   #viewerOlay #vGrid.decklist .vcard .vname{font-size:9px;line-height:1.2;-webkit-line-clamp:2}
+  /* 📱 カード選択・画像管理も、デッキ編成と同じようにカードを小さく詰める */
+  #viewerOlay{padding:4px!important}
+  #viewerOlay .panelbox{padding:9px;max-height:98dvh}
+  #viewerOlay #vGrid:not(.decklist){grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:5px;padding:2px;max-height:56dvh}
+  #viewerOlay #vGrid:not(.decklist) .vcard .vname{font-size:8px;line-height:1.15;-webkit-line-clamp:2;margin-top:1px}
+  #viewerOlay #vGrid:not(.decklist) .vcard .cnt{min-width:15px;height:15px;font-size:9px}
+  #viewerOlay #vTitle{font-size:14px}
+  #viewerOlay #vHint{font-size:10.5px;margin:2px 0}
+  #viewerOlay #vSearch{padding:5px 8px;font-size:16px} /* 16px未満はiOSで拡大されるため下げない */
+  #viewerOlay .row{gap:5px;margin-top:5px}
+  #viewerOlay .btn.small{padding:5px 8px;font-size:11px}
   #builderOlay details>summary{padding:2px 0}
   #builderOlay .blbl{display:none} /* 狭い画面ではボタンを絵文字だけにして、カードの表示枚数を稼ぐ */
   /* 📱 デッキ作成画面も余白を詰める（入力欄の文字は16px未満にしない＝iOSで勝手に拡大されるため） */
@@ -815,7 +826,7 @@ body.shake{animation:bodyShake .4s ease-out}
 <body>
 
 <div id="topbar">
-  <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span><span class="verchip" id="appVer">v10.5</span></h1>
+  <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span><span class="verchip" id="appVer">v10.8</span></h1>
   <div id="topScroll">
     <span id="turnBadge">ターン 0</span>
     <button class="btn small ex" id="btnExpert">EX</button>
@@ -950,7 +961,7 @@ body.shake{animation:bodyShake .4s ease-out}
 
 <div class="olay" id="settingsOlay">
   <div class="panelbox">
-    <h2>⚙ 設定 <span class="verchip" id="setVer" style="font-size:11px">v10.5</span></h2>
+    <h2>⚙ 設定 <span class="verchip" id="setVer" style="font-size:11px">v10.8</span></h2>
     <div class="row"><button class="btn small primary" id="btnTutorial" style="flex:1">📖 はじめての方へ（使い方チュートリアル）</button></div>
     <div class="row"><button class="btn small" id="btnHelp" style="flex:1">❓ 使い方・条件式リファレンス</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="盤面の右下に、ログを開く丸ボタンを浮かべます。スマホ・iPadで片手で出し入れしやすくなります"><input type="checkbox" id="optLogFab" checked> 📜 ログを開く丸ボタンを盤面に浮かべる（スマホ・iPad向け）</label></div>
@@ -958,7 +969,13 @@ body.shake{animation:bodyShake .4s ease-out}
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの見出しをつかんで、好きな場所へ動かせます。右下・左下の隅をつかむと大きさ（幅と高さ）を変えられます。位置と大きさは次回も覚えています"><input type="checkbox" id="optLogDrag" checked> ✋ ログの見出しをつかんで移動する（隅のつかみ手で大きさ変更）</label><button class="btn small ghost" id="btnLogBoxReset" title="自由に動かしたログの位置と大きさを、既定（右上・幅340px）に戻します">↺ ログの位置と大きさを戻す</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="画面の右端から左へ払うとログが開き、右へ払うと閉じます。カードのドラッグと当たる場合はオフにしてください"><input type="checkbox" id="optLogSwipe" checked> ➡ 画面の右端から左へ払ってログを開く（右へ払って閉じる）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="確認パネルや効果パネルが開いている間も、ログを手前に重ねて表示します。パネルの操作が隠れて邪魔な場合はオフにしてください"><input type="checkbox" id="optLogOverPanel" checked> 🪟 確認パネルが開いている間もログを手前に表示する</label></div>
-    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="オフ（既定）＝出したクリーチャーの「出た時」を先に解決してから、盤面のカスミ／アジサイ／キューティ・ルピア型の「自分のクリーチャーが出た時」を処理します。オンにすると盤面側を先に処理します"><input type="checkbox" id="optAllyEnterFirst"> ⏱ 盤面の「自分のクリーチャーが出た時」を、出たカードの出た時より先に処理する</label></div>
+    <div class="row" style="flex-direction:column;align-items:flex-start;gap:2px">
+      <label style="font-size:12px;display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="optAllyEnterFirst"> ⏱ 「出た時」が重なった時、見ている側を先に処理する</label>
+      <div class="hint" style="margin:0 0 0 24px;font-size:10.5px;line-height:1.45">
+        クリーチャーを出すと「出したカード自身の出た時」と「それを見ているカスミ・アジサイ・キューティ・ルピア等の出た時」が同時に誘発します。<br>
+        <b>オフ（既定・推奨）</b>＝出したカード自身の効果から処理。<b>オン</b>＝盤面で見ているカードの効果から処理。
+      </div>
+    </div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの文中に出てくるカード名を、《》が付いていなくても見つけて絵札を添えます。誤って別の言葉に絵札が付く場合や、動作が重い場合はオフにしてください"><input type="checkbox" id="optLogAutoImg" checked> 🎴 ログの文中のカード名にも絵札を付ける（《》なしでも自動で探す）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="オンライン対戦中、自分の操作のログを相手の端末にも送って、両者が同じ流れを追えるようにします。自分だけが中身を知っているカード（非公開で見た山札・サーチで手札に加えたカード等）は、カード名を送らず「処理だけ」を送ります"><input type="checkbox" id="optLogShare" checked> 🌐 オンライン対戦でログを相手にも送る（非公開のカード名は送らない）</label></div>
     <div class="row">
@@ -2947,7 +2964,7 @@ window.addEventListener("resize",()=>{try{applyLogBox();}catch(e){}});
    if(typeof S==="undefined"||!S)return;
    S.allyEnterFirst=cb.checked;
    try{if(db)await idbPut("misc","allyEnterFirst",S.allyEnterFirst?1:0);}catch(e){}
-   toast(S.allyEnterFirst?"⏱ 盤面の「出た時」誘発を先に処理します":"⏱ 出したカードの「出た時」を先に解決します（既定）");
+   toast(S.allyEnterFirst?"⏱ 見ている側（カスミ等）の「出た時」から処理します":"⏱ 出したカード自身の「出た時」から処理します（既定）");
  });}
 {const cb=document.getElementById("optLogAutoImg");
  if(cb)cb.addEventListener("change",async()=>{
@@ -3301,7 +3318,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.5";
+const APP_VER="v10.8";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -4147,7 +4164,7 @@ function startGame(picks){
   fxQueue.length=0;fxRunning=false;
   WATCH_CHAIN=Promise.resolve();
   MOVE_TAP_CHAIN=Promise.resolve();
-  FX_HOLD=false;GAME_PAUSE=false;LABY_RUN=false;try{ORI_QUEUE.length=0;TOGRAVE_PENDING.length=0;TRIG_PENDING.length=0;}catch(e){}{const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
+  FX_HOLD=false;GAME_PAUSE=false;LABY_RUN=false;ALLY_WAIT=0;try{ORI_QUEUE.length=0;TOGRAVE_PENDING.length=0;TRIG_PENDING.length=0;}catch(e){}{const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
   MUGETSU_BUSY=false;MUGETSU_TE_DONE=false;MUGETSU_ASKED={};MUGETSU_PENDING=new Set();MUGETSU_THIS_TRIG=new Set();
   S._watchOnce={};S.pendingAtk=null;MOVE_BLOCKED=false;
   try{$("fxBanner").classList.remove("show");}catch(e){}
@@ -4955,6 +4972,7 @@ function enqueueWatchJob(fn){
   WATCH_CHAIN=WATCH_CHAIN.then(async()=>{
     try{await waitFxIdle();await fn();}catch(e){console.warn(e);}
   });
+  return WATCH_CHAIN; // 呼び出し側で完了を待てるように返す
 }
 /* 👑 S-MAX進化は自分の場に1体だけ。2体以上になったら1体を残し、残りをすべて手札に戻す
    （CRY-S-MAX ジャオウガ等の「自分のS-MAX進化クリーチャーが2体以上あれば、そのうちの1体を残し、残りをすべて手札に戻す」） */
@@ -5150,7 +5168,16 @@ function runWatchFx(pi,type,trigCard){
               if(fxRunning)TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type});
               else enqueueWatchJob(_job);
             });
-          }else enqueueWatchJob(_job); // 効果キューが空くまで待つ＝CIPが先
+          }else{
+            // 効果キューが空くまで待つ＝出したカード自身のCIPが先。
+            // さらに、この誘発が終わるまで「墓地に置かれた時」（ゾルザーク型）を待たせる。
+            ALLY_WAIT++;
+            const _pr=enqueueWatchJob(_job);
+            Promise.resolve(_pr).catch(()=>{}).then(()=>{
+              ALLY_WAIT=Math.max(0,ALLY_WAIT-1);
+              if(ALLY_WAIT===0)Promise.resolve(drainToGrave()).catch(()=>{});
+            });
+          }
         }else{
           enqueueWatchJob(_job);
         }
@@ -12621,7 +12648,11 @@ function queueToGrave(pi,c){
   const rG=getReg(c);
   if(rG&&rG.watchFx&&rG.watchFx.some(w=>w.ev==="toGrave"))TOGRAVE_PENDING.push({pi,c});
 }
+/* ⚡ 解決の順番は「出したカード自身の出た時 → 盤面の『自分のクリーチャーが出た時』 → 墓地に置かれた時」。
+   盤面側の誘発が待っている間は、墓地の誘発（ゾルザーク型）を先に流さないための待ち数。 */
+var ALLY_WAIT=0; // 宣言より前の関数からも参照するためvar
 async function drainToGrave(){
+  if(ALLY_WAIT>0)return; // 盤面の「自分のクリーチャーが出た時」を先に処理する
   if(TOGRAVE_DRAINING)return;
   TOGRAVE_DRAINING=true;
   try{
@@ -17563,15 +17594,48 @@ function pickImage(title,hint){
     const g=$("vGrid");
     const fb=$("vTypeFilter");
     if(fb){fb.style.display="";fb.value="";fb.onchange=()=>{tf=fb.value;render();};}
+    const pickApplyCols=()=>{
+      const n=Math.max(0,Math.min(12,+B._pickCols||0));
+      if(n>=3){g.style.gridTemplateColumns=`repeat(${n},minmax(0,1fr))`;return;}
+      g.style.gridTemplateColumns=`repeat(auto-fill,minmax(${window.innerWidth<=640?62:84}px,1fr))`;
+    };
     const render=()=>{
       g.innerHTML="";
+      pickApplyCols();
+      const narrowPick=window.innerWidth<=640;
       const bar=document.createElement("div");
-      bar.style.cssText="grid-column:1/-1;display:flex;gap:8px;align-items:center;margin:0 0 4px";
+      bar.style.cssText=`grid-column:1/-1;display:flex;gap:${narrowPick?5:8}px;align-items:center;flex-wrap:wrap;margin:0 0 4px`;
       const sb=document.createElement("button");
       sb.className="btn small";
-      sb.textContent=pickSort==="added"?"並び順：追加した順（タップで名前順へ）":"並び順：名前順（タップで追加した順へ）";
+      // 狭い画面では文言を短くして、文明フィルタが画面外にはみ出さないようにする
+      sb.textContent=narrowPick
+        ? (pickSort==="added"?"↕ 追加順":"↕ 名前順")
+        : (pickSort==="added"?"並び順：追加した順（タップで名前順へ）":"並び順：名前順（タップで追加した順へ）");
+      sb.title="タップで「名前順 ⇄ 追加した順」を切り替えます";
       sb.onclick=()=>{pickSort=(pickSort==="added"?"name":"added");render();};
       bar.appendChild(sb);
+      // 🔢 横に何枚並べるか（カードの大きさが変わる。0＝自動）
+      {
+        const cw=document.createElement("label");
+        cw.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;color:#cbd3df;white-space:nowrap";
+        cw.title="横に並べる枚数。増やすとカードが小さくなり、一度に多く見えます";
+        const cs=document.createElement("select");
+        cs.style.cssText="width:auto;font-size:11px;padding:2px 5px";
+        for(const v of [0,3,4,5,6,7,8,10,12]){
+          const o=document.createElement("option");o.value=v;o.textContent=v?String(v):"自動";
+          if((+B._pickCols||0)===v)o.selected=true;
+          cs.appendChild(o);
+        }
+        cs.onchange=async()=>{
+          B._pickCols=Math.max(0,Math.min(12,parseInt(cs.value,10)||0));
+          try{if(db)await idbPut("misc","pickCols",B._pickCols);}catch(e){}
+          pickApplyCols();
+        };
+        cw.appendChild(document.createTextNode("横"));
+        cw.appendChild(cs);
+        cw.appendChild(document.createTextNode("枚"));
+        bar.appendChild(cw);
+      }
       // 🎨 文明フィルタ（光/水/闇/火/自然/ゼロ＋クリア）
       const CV=[["light","光","#ffe082"],["water","水","#7fd7ff"],["dark","闇","#c58cff"],["fire","火","#ff8a80"],["nature","自然","#a5e88a"],["zero","ゼロ","#cfd8dc"]];
       for(const [id,lb,col] of CV){
@@ -26103,14 +26167,23 @@ window.updateVPeek=()=>{
   const b=document.getElementById("vPeek");if(!b)return;
   const back=(typeof B!=="undefined"&&B&&B._viewerBack)||"";
   if(back){
+    b.style.display="";
     b.textContent=back==="builder"?"◀ 編成に戻る":"◀ デッキ画面に戻る";
     b.title="このデッキ一覧を閉じて、元の画面に戻ります";
     b.dataset.vmode="back";
-  }else{
-    b.textContent="👁 盤面を見る";
-    b.title="このパネルを一時的に隠して盤面を確認します（「📋 パネルに戻る」で戻れます）";
-    b.dataset.vmode="peek";
+    return;
   }
+  // 👁 盤面を見るのは、対戦中で編集系の画面を開いていない時だけ
+  const started=(typeof S!=="undefined"&&S&&(S.turn|0)>0);
+  let editing=false;
+  for(const id of ["builderOlay","deckOlay","deckListOlay","settingsOlay","fxOlay","regOlay","startOlay"]){
+    const o=document.getElementById(id);
+    if(o&&o.classList.contains("open")){editing=true;break;}
+  }
+  b.style.display=(started&&!editing)?"":"none";
+  b.textContent="👁 盤面を見る";
+  b.title="このパネルを一時的に隠して盤面を確認します（「📋 パネルに戻る」で戻れます）";
+  b.dataset.vmode="peek";
 };
 {const vp=document.getElementById("vPeek");if(vp)vp.addEventListener("click",()=>{
   if(vp.dataset.vmode==="back"){
@@ -28488,6 +28561,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   {const bo=db?await idbGet("misc","builtinOff"):null;if(bo!==null&&bo!==undefined)BUILTIN_OFF=!!bo;}
   {const lc=db?await idbGet("misc","listCols"):null;if(lc!=null&&lc!=="")B._listCols=(+lc===0)?0:(+lc||8);}
   {const bc=db?await idbGet("misc","builderCols"):null;if(bc!=null&&bc!=="")B._bCols=Math.max(0,Math.min(14,+bc||0));}
+  {const pc=db?await idbGet("misc","pickCols"):null;if(pc!=null&&pc!=="")B._pickCols=Math.max(0,Math.min(12,+pc||0));}
   {const ls=db?await idbGet("misc","logSize"):null;if(ls!=null)S.logSize=String(ls||"");}
   {const lb=db?await idbGet("misc","logBox"):null;
    if(lb){try{const b=JSON.parse(lb);if(b&&["l","t","w","h"].every(k=>typeof b[k]==="number"))S.logBox=b;}catch(e){}}
