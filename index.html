@@ -3318,7 +3318,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.26";
+const APP_VER="v10.27";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -10272,7 +10272,7 @@ async function runFxList(pi,list,srcCard,inPump){
       let w;
       if(preset){w=preset;}
       else{
-        const word=window.prompt("🤖 デュエプレ式サーチ：探すカードの条件（名前の一部／種族／「／」区切りOK）","");
+        const word=window.prompt("🤖 デュエプレ式サーチ：探すカードの条件（名前の一部／種族／「／」区切りOK・「種族:ゼニス」＝種族のみで判定し名前は見ない）","");
         if(word===null)continue;
         w=word.trim();
       }
@@ -10395,6 +10395,11 @@ function lockFilterOk(filt,r,c,lockPi,face){
     // 🏷 「名前:X」＝カード名にXを含む（AND側で使える名前条件。例：ドラゴン／名前:ボルシャック＝ボルシャックと名の付くドラゴン）
     const mNm=tk.match(/^名前[:：](.+)$/);
     if(mNm)return String((c&&faceNameOf(c))||(c&&c.name)||(r&&r.name)||"").includes(mNm[1]);
+    // 🧬 「種族:X」＝登録された種族のみで判定（カード名は見ない）。
+    //    素の種族語は名前一致にもフォールバックするため、《ゼニス・スパーク》（名前にゼニス・種族ゼニスではない）の
+    //    ような誤ヒットを避けたい時はこちらを使う（例：種族:ゼニス／種族:オラクル＝OR側で使える）
+    const mRc=tk.match(/^種族[:：](.+)$/);
+    if(mRc)return !!(r&&raceMatch(r,mRc[1]));
     // 動的コスト：「コスト<=マナ:スノーフェアリー」＝ロック元(lockPi)のそのゾーンの対象枚数以下のコスト
     const mDyn=tk.match(/^コスト(<=|>=|以下|以上)?(マナ|墓地|手札|盾|シールド|バトル|山札)[：:](.*)$/)||tk.match(/^コスト<=(マナ|墓地|手札|盾|シールド|バトル|山札)[：:]?(.*)$/);
     if(mDyn&&lockPi!=null){
@@ -11587,22 +11592,42 @@ async function destroyWithReplace(pi,c){
     if((r.gneo||r.ctype==="gneo"||r.ctype==="gneodream")&&c.under&&c.under.length)opts.push(["gneoBottom","🔄 G・NEO進化（一番下が離れ、上のカードは場に残る）",1]);
     if(r.shieldGo)opts.push(["sgo","🏰 シールド・ゴー（墓地の代わりに表向きの盾になる）",1]);
     if(r.leaveSacF){
-      const sacPool=Z.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&isCreatureReg(r2)&&lockFilterOk(r.leaveSacF,r2,x);})());
-      if(sacPool.length)opts.push(["leavesac",`🎲 身代わり（他の${r.leaveSacF}のコスト最小1体をランダム破壊して場に残る）`,1]);
+      // 🎲 身代わりプール：バトルゾーンのエレメント全般が対象（クリーチャー限定を廃止・v10.27）。
+      //    種族オラクルのクロスギア等も対象になる。装備中（クロス中）のギアも「バトルゾーンにある」ため含める。
+      //    対象種別を絞りたい場合は対象欄の条件（例：オラクル／クリーチャー）で指定する
+      const sacPool=[
+        ...Z.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&lockFilterOk(r.leaveSacF,r2,x);})()),
+        ...Z.battle.flatMap(h=>(h.gear||[]).filter(g=>{const r2=getReg(g);return r2&&lockFilterOk(r.leaveSacF,r2,g);}))
+      ];
+      if(sacPool.length)opts.push(["leavesac",`🎲 身代わり（他の${r.leaveSacF}のコスト最小1枚をランダム破壊して場に残る）`,1]);
     }
     if(Z.battle.some(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&r2.seiba;})()))
       opts.push(["seiba","⚔ セイバー（他のクリーチャーを身代わりに破壊）",3]);
     // 選ばれた置換の実処理。true=処理完了（呼び出し側はreturn）／false=途中キャンセル（そのまま破壊へ）
     const applyKind=async(kind)=>{
         if(kind==="leavesac"){
-          const sacPool=Z.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&isCreatureReg(r2)&&lockFilterOk(r.leaveSacF,r2,x);})());
+          // 🎲 身代わり：エレメント全般が対象（クロスギア含む・v10.27）。装備中ギアはホストから外して墓地へ
+          const sacPool=[
+            ...Z.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return r2&&lockFilterOk(r.leaveSacF,r2,x);})()),
+            ...Z.battle.flatMap(h=>(h.gear||[]).filter(g=>{const r2=getReg(g);return r2&&lockFilterOk(r.leaveSacF,r2,g);}))
+          ];
           if(sacPool.length){
             let minC=Infinity;
             for(const x of sacPool){const r2=getReg(x);const cv=(r2&&r2.cost!=null&&!isNaN(+r2.cost))?+r2.cost:99;if(cv<minC)minC=cv;}
             const mins=sacPool.filter(x=>{const r2=getReg(x);const cv=(r2&&r2.cost!=null&&!isNaN(+r2.cost))?+r2.cost:99;return cv===minC;});
             const sac=mins[Math.floor(Math.random()*mins.length)];
-            toast(`🎲 身代わり：コスト最小（${minC}）の${r.leaveSacF}${mins.length>1?`（${mins.length}体からランダム）`:""} → ${faceNameOf(sac)} を破壊`);
-            await destroyWithReplace(pi,sac);
+            toast(`🎲 身代わり：コスト最小（${minC}）の${r.leaveSacF}${mins.length>1?`（${mins.length}枚からランダム）`:""} → ${faceNameOf(sac)} を破壊`);
+            const host=Z.battle.find(h=>h.gear&&h.gear.some(g=>g.id===sac.id));
+            if(host){
+              // 装備中のクロスギア：ホストから外して墓地へ（クリーチャーは場に残る）
+              const gi=host.gear.findIndex(g=>g.id===sac.id);
+              const g=host.gear.splice(gi,1)[0];
+              g.isCross=false;g.tapped=false;g.faceup=true;g.sideways=false;
+              Z.grave.push(g);
+              sfx("grave");
+            }else{
+              await destroyWithReplace(pi,sac);
+            }
             renderAll();
           }
           return true;
@@ -19146,6 +19171,8 @@ function applyEnterReplacement(pTo,c,mode){
     if(!filt)return true;
     const toksR=String(filt).split(/[／\/、,]/).map(x=>x.trim()).filter(Boolean);
     return toksR.some(tk=>{
+      const mRc=tk.match(/^種族[:：](.+)$/); // 🧬 種族のみで判定（名前は見ない）
+      if(mRc)return !!(rIn&&raceMatch(rIn,mRc[1]));
       if(tk==="多色")return rIn&&rIn.civs&&rIn.civs.length>=2;
       if(tk==="単色")return rIn&&rIn.civs&&rIn.civs.length===1&&rIn.civs[0]!=="zero";
       if(civMapR[tk])return rIn&&rIn.civs&&rIn.civs.includes(civMapR[tk]);
