@@ -702,14 +702,13 @@ body.shake{animation:bodyShake .4s ease-out}
   #builderOlay #bSearch{padding:6px 8px;font-size:13px}
   #builderOlay #bTypeFilter{padding:5px;font-size:11px}
   #builderOlay #bCivBar .btn{padding:4px 9px;font-size:11px}
-  #builderOlay #bGrid{grid-template-columns:repeat(auto-fill,minmax(62px,1fr))!important;gap:5px;padding:2px;min-height:44dvh}
+  #builderOlay #bGrid{gap:5px;padding:2px;min-height:44dvh}
   #builderOlay #bGrid .vcard .vname{font-size:9px;line-height:1.2;-webkit-line-clamp:2}
   #builderOlay #bGrid .vcard .cnt{font-size:10px;padding:0 4px}
   /* 📱 スマホでは一覧のカード名も詰める（縦の枚数を稼ぐ） */
   #viewerOlay #vGrid.decklist .vcard .vname{font-size:9px;line-height:1.2;-webkit-line-clamp:2}
   #builderOlay details>summary{padding:2px 0}
-  #builderOlay .blbl{display:none} /* 狭い画面では短いラベルに切り替える */
-  #builderOlay .bshort{display:inline}
+  #builderOlay .blbl{display:none} /* 狭い画面ではボタンを絵文字だけにして、カードの表示枚数を稼ぐ */
   /* 📱 デッキ作成画面も余白を詰める（入力欄の文字は16px未満にしない＝iOSで勝手に拡大されるため） */
   #deckOlay{padding:4px!important}
   #deckOlay .panelbox{padding:8px;max-height:98dvh}
@@ -27655,6 +27654,7 @@ function typeMatch(k,tf){
 }
 function bRender(){
   const g=$("bGrid");g.innerHTML="";
+  bApplyCols(); // 🔢 「横◯枚」の指定を反映
   // 📊 集計バー更新（作りながら文明別・タイプ別を確認）
   {const sm=$("bSummary");if(sm){sm.innerHTML="";sm.appendChild(buildDeckSummaryEl(B.counts[B.mode]||new Map()));}}
   const q=normName($("bSearch").value);
@@ -27782,6 +27782,16 @@ $("bTabHy").addEventListener("click",()=>bSetMode("hy"));
 $("bTabEx").addEventListener("click",()=>bSetMode("ex"));
 $("bTypeFilter").addEventListener("change",bRender);
 // 🎨 デッキビルダーの文明フィルタバーを構築（光/水/闇/火/自然/ゼロ＋多色＋クリア）
+/* 🔢 デッキ編成のカード一覧を横に何枚並べるか。0＝自動（画面幅に合わせる） */
+function bApplyCols(){
+  const g=document.getElementById("bGrid");if(!g)return;
+  const n=Math.max(0,Math.min(14,+B._bCols||0));
+  if(n>=3){g.style.gridTemplateColumns=`repeat(${n},minmax(0,1fr))`;return;}
+  const narrow=window.innerWidth<=640;
+  g.style.gridTemplateColumns=`repeat(auto-fill,minmax(${narrow?62:84}px,1fr))`;
+}
+{let _bcRz=null;
+ window.addEventListener("resize",()=>{clearTimeout(_bcRz);_bcRz=setTimeout(()=>{try{bApplyCols();}catch(e){}},150);});}
 function bBuildCivBar(){
   const bar=$("bCivBar");if(!bar||bar.dataset.built)return;bar.dataset.built="1";
   const CV=[["light","光","#ffe082"],["water","水","#7fd7ff"],["dark","闇","#c58cff"],["fire","火","#ff8a80"],["nature","自然","#a5e88a"],["zero","ゼロ","#cfd8dc"]];
@@ -27836,6 +27846,28 @@ function bBuildCivBar(){
   pk._paint=pkPaint;
   pk.onclick=()=>{B.onlyPicked=!B.onlyPicked;pkPaint();bRender();};
   pkPaint();bar.appendChild(pk);
+  // 🔢 一覧を横に何枚並べるか（カードの大きさが変わる。0＝自動）
+  {
+    const cw=document.createElement("label");
+    cw.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;color:#cbd3df;white-space:nowrap";
+    cw.title="カード一覧を横に何枚並べるか。数を増やすとカードが小さくなり、一度に多く見えます";
+    const cs=document.createElement("select");
+    cs.style.cssText="width:auto;font-size:11px;padding:2px 5px";
+    for(const v of [0,3,4,5,6,7,8,9,10,12,14]){
+      const o=document.createElement("option");o.value=v;o.textContent=v?String(v):"自動";
+      if((+B._bCols||0)===v)o.selected=true;
+      cs.appendChild(o);
+    }
+    cs.onchange=async()=>{
+      B._bCols=Math.max(0,Math.min(14,parseInt(cs.value,10)||0));
+      try{if(db)await idbPut("misc","builderCols",B._bCols);}catch(e){}
+      bApplyCols();
+    };
+    cw.appendChild(document.createTextNode("横"));
+    cw.appendChild(cs);
+    cw.appendChild(document.createTextNode("枚"));
+    bar.appendChild(cw);
+  }
   const cl=document.createElement("button");cl.type="button";cl.textContent="フィルタクリア";cl.className="btn small ghost";cl.style.cssText="font-size:11px;padding:3px 9px";
   cl.onclick=()=>{
     B.civSel.clear();B.civEx.clear();B.civMulti=false;B.twin="";B.onlyPicked=false;
@@ -28271,6 +28303,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   if(lk)for(const [k,v] of Object.entries(lk))LINKS.set(k,v);
   {const bo=db?await idbGet("misc","builtinOff"):null;if(bo!==null&&bo!==undefined)BUILTIN_OFF=!!bo;}
   {const lc=db?await idbGet("misc","listCols"):null;if(lc!=null&&lc!=="")B._listCols=(+lc===0)?0:(+lc||8);}
+  {const bc=db?await idbGet("misc","builderCols"):null;if(bc!=null&&bc!=="")B._bCols=Math.max(0,Math.min(14,+bc||0));}
   {const ls=db?await idbGet("misc","logSize"):null;if(ls!=null)S.logSize=String(ls||"");}
   {const lb=db?await idbGet("misc","logBox"):null;
    if(lb){try{const b=JSON.parse(lb);if(b&&["l","t","w","h"].every(k=>typeof b[k]==="number"))S.logBox=b;}catch(e){}}
