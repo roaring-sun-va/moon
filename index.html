@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v10.8</title>
+<title>DM Re:Vault v10.15</title>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="googlebot" content="noindex, nofollow, noarchive">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -826,7 +826,7 @@ body.shake{animation:bodyShake .4s ease-out}
 <body>
 
 <div id="topbar">
-  <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span><span class="verchip" id="appVer">v10.8</span></h1>
+  <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span><span class="verchip" id="appVer">v10.15</span></h1>
   <div id="topScroll">
     <span id="turnBadge">ターン 0</span>
     <button class="btn small ex" id="btnExpert">EX</button>
@@ -961,7 +961,7 @@ body.shake{animation:bodyShake .4s ease-out}
 
 <div class="olay" id="settingsOlay">
   <div class="panelbox">
-    <h2>⚙ 設定 <span class="verchip" id="setVer" style="font-size:11px">v10.8</span></h2>
+    <h2>⚙ 設定 <span class="verchip" id="setVer" style="font-size:11px">v10.15</span></h2>
     <div class="row"><button class="btn small primary" id="btnTutorial" style="flex:1">📖 はじめての方へ（使い方チュートリアル）</button></div>
     <div class="row"><button class="btn small" id="btnHelp" style="flex:1">❓ 使い方・条件式リファレンス</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="盤面の右下に、ログを開く丸ボタンを浮かべます。スマホ・iPadで片手で出し入れしやすくなります"><input type="checkbox" id="optLogFab" checked> 📜 ログを開く丸ボタンを盤面に浮かべる（スマホ・iPad向け）</label></div>
@@ -1008,8 +1008,8 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row">
         <span style="font-size:12px;font-weight:700">ルール</span>
         <select id="setMode" style="width:auto;flex:1">
-          <option value="dmps">デュエプレモード（手札10枚:超過は墓地へ／盾10枚:追加不可／バトルゾーン7体:超過は出せない・効果は墓地へ）</option>
-          <option value="tcg">TCGモード（上限なし）</option>
+          <option value="dmps">デュエプレモード（手札10・盾10・バトルゾーン7・マナ99の上限／探索／山札の下はランダム順）</option>
+          <option value="tcg">TCGモード（上限なし／サーチは全候補から選択／山札の下は好きな順も可）</option>
         </select>
       </div>
       <div class="row" style="align-items:center;gap:8px">
@@ -3318,7 +3318,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.8";
+const APP_VER="v10.17";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -3399,7 +3399,9 @@ function pName(pi){
   const dn=String(P.deckName||"").trim();
   const base=dn.includes("/")?dn.slice(dn.indexOf("/")+1):dn; // 「フォルダ名/デッキ名」はデッキ名だけ
   if(!base)return P.label;
-  return `${P.label}・${base.length>16?base.slice(0,16)+"…":base}`;
+  // 🃏 を付けて「デッキ名」であることを明示する（デッキ名がキーカード名と同じことが多く、
+  //    カードの処理と取り違えやすいため）
+  return `${P.label}・🃏${base.length>16?base.slice(0,16)+"…":base}`;
 }
 /* 🅳 D2フィールドは自分と相手を合わせて1枚だけ。
    新しいD2フィールドが出た時、それ以外のD2フィールドは張り替えられて持ち主の墓地へ置かれる。
@@ -3427,7 +3429,7 @@ function d2FieldReplace(pi,c){
     sfx("grave");
     toast(`🅳 D2フィールドは両者合わせて1枚：《${faceNameOf(g)}》は張り替えられて墓地へ`);
     logOnly(`🅳 ${S.players[pi].label} が《${faceNameOf(c)}》を出したため、${S.players[o.p].label} の《${faceNameOf(g)}》は張り替えで墓地へ`);
-    if(typeof queueToGrave==="function"){try{queueToGrave(o.p,g);}catch(e){}} // ⚡ 墓地に置かれた時の誘発は解決後に発火
+    if(typeof queueToGrave==="function"){try{queueToGrave(o.p,g,"battle");}catch(e){}} // ⚡ 墓地に置かれた時の誘発は解決後に発火
   }
   renderAll();
 }
@@ -5077,9 +5079,30 @@ function smaxUniqueCheck(pi,justArrived){
     }
   });
 }
+/* 🔎 そのカードが今どこにいるかを日本語で返す（誘発が不発になった理由の記録用） */
+function whereIs(c){
+  if(!c)return "不明";
+  const ZN=[["battle","バトルゾーン"],["hand","手札"],["mana","マナ"],["grave","墓地"],["deck","山札"],["shield","シールド"],["resolve","解決中"],["hyper","超次元"],["gr","GR"],["ex","ゲーム外"]];
+  for(const p of (S.vs?[0,1]:[0])){
+    const Z=zonesOf(p);if(!Z)continue;
+    for(const [k,lb] of ZN){
+      if(Array.isArray(Z[k])&&Z[k].some(x=>x&&x.id===c.id))return `${S.players[p].label}の${lb}`;
+    }
+    // 重ねたカード・装備・封印の中も探す
+    for(const x of (Z.battle||[])){
+      if((x.under||[]).some(u=>u&&u.id===c.id))return `${S.players[p].label}の《${faceNameOf(x)}》の下`;
+      if((x.gear||[]).some(u=>u&&u.id===c.id))return `${S.players[p].label}の《${faceNameOf(x)}》にクロス中`;
+      if((x.seals||[]).some(u=>u&&u.id===c.id))return `${S.players[p].label}の《${faceNameOf(x)}》の封印`;
+    }
+  }
+  return "どのゾーンにも見つかりません";
+}
 function runWatchFx(pi,type,trigCard){
   if(!S.expert)return;
-  for(const c of zonesOf(pi).battle){
+  // 🃏 デュエプレモード：同一イベントで複数体が誘発する場合は「右にあるもの」から解決（wiki準拠）。
+  //    TCGモードは従来どおり左から（プレイヤーが順序を選ぶ前提の手動運用）。
+  const _scan=(S.gameMode!=="tcg")?[...zonesOf(pi).battle].reverse():zonesOf(pi).battle;
+  for(const c of _scan){
     const r=getReg(c);
     if(r&&r.watchFx&&r.watchFx.length){
       if(isSealed(c))continue;
@@ -5149,23 +5172,35 @@ function runWatchFx(pi,type,trigCard){
       if(fx.length&&_onceSkipped)toast(`1️⃣ ${faceNameOf(c)}：各ターン1回の効果${_onceSkipped}件はこのターン使用済みのためスキップ（残りの効果のみ実行）`);
       if(fx.length){
         const _oks=_onceKeys.slice();
+        // ⏱ 誘発時点のバトルゾーン位置を記録（デュエプレ「右にあるものから解決」の基準。離れた場合は離れた時点の位置を参照）
+        const _pos0=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
+        // 🔬 予約時点でバトルゾーンにいないはずはないが、万一あれば記録して原因を追えるようにする
+        if(!zonesOf(pi).battle.some(x=>x.id===c.id)){
+          logOnly(`🔬 ${faceNameOf(c)} の誘発（${type}）を予約しましたが、この時点でバトルゾーンにいません（現在：${whereIs(c)}）`);
+        }
         // ⏱ APNAP：CIPポンプ稼働中の誘発は保留キューへ（ターンプレイヤーの誘発はCIP前・非ターン側は全CIP後に処理）。
         //    ポンプ停止中（攻撃時誘発など）は従来通り即時ジョブ＝挙動不変。
         const _job=async()=>{
+          // ⚡ 誘発は「誘発した時点」で確定するので、解決するまでに誘発元が場を離れていても実行する
+          //    （デーモン・ハンド等で除去されてもターン終了が起きるのと同じ考え方）。
+          //    ただし、どこから解決されたかを追えるよう記録だけ残す。
+          if(!zonesOf(pi).battle.some(x=>x.id===c.id)){
+            logOnly(`⚡ ${faceNameOf(c)} の誘発（${type}）を解決（誘発時に場にいたため・現在：${whereIs(c)}）`);
+          }
           toast(`⚡誘発処理：${faceNameOf(c)}`);
           await runFxList(pi,fx,c);
           S._watchOnce=S._watchOnce||{};
           for(const k of _oks)S._watchOnce[k]=`${S.turn}:${S.who}`;
         };
         if(S.expert&&S.vs&&fxRunning){
-          TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type});
+          TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type,pos:_pos0});
         }else if(S.expert&&(type==="allyEnter"||type==="allyEvo")){
           // 🕐 「自分のクリーチャーが出た時」の誘発（カスミ／アジサイ／キューティ・ルピア型）は、
           //    既定では出たカード自身の「出た時（CIP）」を解決してから処理する。
           //    設定「盤面の『出た時』誘発をCIPより先に処理する」をONにすると従来の順番になる。
           if(S.allyEnterFirst){
             Promise.resolve().then(()=>{
-              if(fxRunning)TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type});
+              if(fxRunning)TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type,pos:_pos0});
               else enqueueWatchJob(_job);
             });
           }else{
@@ -5537,27 +5572,35 @@ function revealMaxMin(op,spellOnly){
 }
 
 /* ================= 汎用効果 ================= */
-// メクレイド残り処理：山上のめくり残りを「ランダム」または「好きな順」で山札の下へ
+/* 🃏 山札の下に置く並び順（モード分岐）：
+   デュエプレモード＝ランダム固定（本家では順番を指定できない）／TCGモード＝「好きな順に並べる」も選べる */
+async function orderForDeckBottom(rest,labelJa){
+  labelJa=labelJa||"残り";
+  if(S.gameMode==="tcg"&&rest.length>1){
+    const mode=await askChoice(`${labelJa}${rest.length}枚を山札の下へ。並び順は？（TCGモード）`,["ランダム","好きな順に並べる"]);
+    if(mode===1){
+      const ordered=[];const pool=[...rest];
+      while(pool.length>1){
+        const k=await askChoice(`山札の下から${ordered.length+1}番目に置くカードを選択（残り${pool.length}枚）`,pool.map(x=>faceNameOf(x)));
+        if(k===null)break;
+        ordered.push(pool.splice(k,1)[0]);
+      }
+      ordered.push(...pool);
+      toast(`${labelJa}${ordered.length}枚を指定順で山下へ：${ordered.map(x=>faceNameOf(x)).join(" → ")}`);
+      return ordered;
+    }
+  }
+  const ordered=[...rest];
+  for(let i=ordered.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ordered[i],ordered[j]]=[ordered[j],ordered[i]];}
+  if(rest.length>1)toast(`${labelJa}${ordered.length}枚をランダムな順で山札の下へ`);
+  return ordered;
+}
+// メクレイド残り処理：山上のめくり残りを山札の下へ（並び順はモードで分岐）
 async function mekureidoRest(Z,rest){
   if(!rest.length)return;
-  if(rest.length===1){rest[0].faceup=false;Z.deck.push(rest[0]);return;}
-  const mode=await askChoice(`残り${rest.length}枚を山札の下へ。並び順は？`,["ランダム","好きな順に並べる"]);
-  let ordered;
-  if(mode===1){
-    ordered=[];const pool=[...rest];
-    while(pool.length>1){
-      const k=await askChoice(`山札の下から${ordered.length+1}番目に置くカードを選択（残り${pool.length}枚）`,pool.map(x=>x.name));
-      if(k===null)break;
-      ordered.push(pool.splice(k,1)[0]);
-    }
-    ordered.push(...pool);
-    toast(`残り${ordered.length}枚を指定順で山下へ：${ordered.map(x=>x.name).join(" → ")}`);
-  }else{
-    ordered=[...rest];
-    for(let i=ordered.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ordered[i],ordered[j]]=[ordered[j],ordered[i]];}
-    toast(`残り${ordered.length}枚をランダムで山下へ`);
-  }
-  ordered.forEach(x=>{x.faceup=false;Z.deck.push(x);});
+  if(rest.length===1){rest[0].faceup=false;rest[0].seen=false;Z.deck.push(rest[0]);return;}
+  const ordered=await orderForDeckBottom(rest,"残り");
+  ordered.forEach(x=>{x.faceup=false;x.seen=false;Z.deck.push(x);});
 }
 // メクレイド本体（count枚めくる。3=通常／6=ダブル）
 async function mekureidoRun(count){
@@ -7197,7 +7240,7 @@ async function destroyCreature(pi,c,opts){
         toast(`⚡破壊された時の効果：${faceNameOf(c)}`);
         runFxList(pi,fx,c);
       }
-      const fxG=rp.watchFx.filter(w=>w.ev==="toGrave");
+      const fxG=rp.watchFx.filter(w=>w.ev==="toGrave"||w.ev==="toGraveBattle"); // 破壊＝バトルゾーンから墓地へ
       if(fxG.length){
         toast(`⚡墓地に置かれた時の効果：${faceNameOf(c)}`);
         runFxList(pi,fxG,c);
@@ -7397,6 +7440,8 @@ async function runModeChoice(pi,reg,c,inPump,faceUsed,force){
 /* 🔎 デュエプレの探索の候補づくり：同じカード名は1枚にまとめ（＝何枚あるか分からないようにする）、
    種類が多ければランダムに cap 種だけ提示する。cap=0 なら全種類を提示。 */
 function searchCandidates(pool,cap){
+  // 🃏 TCGモード：探索を使わず「山札から好きなカードを選ぶ」。全候補をそのまま提示（同名の枚数も見える）
+  if(S.gameMode==="tcg")return pool.slice();
   const byName=new Map();
   for(const x of pool){const nm=normName(faceNameOf(x));if(!byName.has(nm))byName.set(nm,x);}
   let reps=[...byName.values()];
@@ -7419,7 +7464,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
     let pool=src.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x));});
     if(!pool.length){if(i===0)toast(`${zoneJa}に該当カードなし${filt?`（${filt}）`:""}`);break;}
     if(searchN>0)pool=searchCandidates(pool,searchN); // 🔎 同名は1枚にまとめてから種類単位で提示
-    const j=await pickCard(`🔎 ${labelJa}（${i+1}/${n}）：${zoneJa}から出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:searchN>0?`${searchN}種まで提示（同名は1枚にまとめています）／タップで選択・キャンセルで終了`:"タップで選択・キャンセルで終了"});
+    const j=await pickCard(`🔎 ${labelJa}（${i+1}/${n}）：${zoneJa}から出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:(searchN>0&&S.gameMode!=="tcg")?`${searchN}種まで提示（同名は1枚にまとめています）／タップで選択・キャンセルで終了`:(searchN>0?"TCGモード：全候補を提示／タップで選択・キャンセルで終了":"タップで選択・キャンセルで終了")});
     if(j===null)break;
     const tgt=pool[j];
     const di=src.findIndex(x=>x.id===tgt.id);
@@ -7565,6 +7610,80 @@ function stampShieldSrc(label){
     }
   }
 }
+/* 🔮 返霊の支払い。墓地からn枚を選んで山札の一番下へ置く。何回支払えたかを返す（0＝不発）。
+   通常＝自分の墓地から1回／殲滅＝相手の墓地も使えて最大2回／地獄＝墓地が続く限り。 */
+async function payHenrei(pi,f,srcCard){
+  const need=Math.max(1,f.payHenrei|0);
+  const mode=f.henreiMode||"self";
+  const maxUse=(mode==="hell")?9:(mode==="anni")?2:1;
+  const label=(mode==="anni")?"殲滅返霊":(mode==="hell")?"地獄返霊":"返霊";
+  const op=pi===0?1:0;
+  const useOpp=(mode==="anni"&&S.vs);
+  let used=0;
+  for(let t=0;t<maxUse;t++){
+    const mine=zonesOf(pi).grave.length;
+    const theirs=useOpp?zonesOf(op).grave.length:0;
+    if(mine+theirs<need){
+      if(t===0)toast(`🔮 ${label}${need}：墓地が${mine+theirs}枚しかないため使えません`);
+      break;
+    }
+    const yes=await ask(`🔮 ${label}${need}${t>0?`（${t+1}回目）`:""}${srcCard?`\n《${faceNameOf(srcCard)}》`:""}\n墓地から${need}枚を山札の一番下に置いて、この効果を使いますか？\n（置かない場合、この効果は発動しません）`);
+    if(!yes)break;
+    const moved=[];       // 取り消し用に「どこから取ったか」も覚える
+    let ok=true;
+    for(let i=0;i<need;i++){
+      let zp=pi;
+      if(useOpp&&zonesOf(op).grave.length&&zonesOf(pi).grave.length){
+        const j=await askChoice(`🔮 ${label}：${i+1}枚目はどちらの墓地から？`,
+          [`自分（${pName(pi)}・${zonesOf(pi).grave.length}枚）`,`相手（${pName(op)}・${zonesOf(op).grave.length}枚）`]);
+        if(j===null){ok=false;break;}
+        zp=(j===0)?pi:op;
+      }else if(useOpp&&!zonesOf(pi).grave.length)zp=op;
+      const GZ=zonesOf(zp);
+      if(!GZ.grave.length){ok=false;break;}
+      const j2=(GZ.grave.length===1)?0:await pickCard(`🔮 ${label}：山札の一番下に置くカードを選択（${i+1}/${need}${S.gameMode==="tcg"?"・選んだ順に下へ":"・下に置く順はランダム"}）`,GZ.grave,{hint:"タップで選択"});
+      if(j2===null){ok=false;break;}
+      const sc=GZ.grave.splice(j2,1)[0];
+      sc.faceup=false;sc.tapped=false;sc.sideways=false;sc.seen=false;sc.mark=false;
+      GZ.deck.push(sc); // 持ち主の山札の一番下へ
+      moved.push({zp,sc});
+      renderAll();
+    }
+    if(!ok||moved.length<need){
+      // 途中でやめた分は墓地に戻す
+      for(let k=moved.length-1;k>=0;k--){
+        const {zp,sc}=moved[k];
+        const Z2=zonesOf(zp);
+        const di=Z2.deck.lastIndexOf(sc);
+        if(di>=0)Z2.deck.splice(di,1);
+        sc.faceup=true;
+        Z2.grave.push(sc);
+      }
+      renderAll();
+      if(t===0)toast(`🔮 ${label}：やめました（この効果は発動しません）`);
+      break;
+    }
+    // 🃏 デュエプレモード：山下に置く順はランダム（本家仕様）。TCGモードは選んだ順のまま
+    if(S.gameMode!=="tcg"&&moved.length>1){
+      const byOwner=new Map();
+      for(const o of moved){if(!byOwner.has(o.zp))byOwner.set(o.zp,[]);byOwner.get(o.zp).push(o.sc);}
+      for(const [zp2,cards] of byOwner){
+        if(cards.length<2)continue;
+        const DZ=zonesOf(zp2).deck;
+        for(const sc of cards){const di2=DZ.lastIndexOf(sc);if(di2>=0)DZ.splice(di2,1);}
+        for(let k2=cards.length-1;k2>0;k2--){const j3=Math.floor(Math.random()*(k2+1));[cards[k2],cards[j3]]=[cards[j3],cards[k2]];}
+        DZ.push(...cards);
+      }
+    }
+    used++;
+    sfx("move");
+    const nms=moved.map(o=>`《${faceNameOf(o.sc)}》`).join("");
+    toast(`🔮 ${label}${need} 成立：${nms} を山札の一番下へ${S.gameMode!=="tcg"&&moved.length>1?"（順番はランダム）":""}`);
+    logOnly(`🔮 ${S.players[pi].label}：${label}${need}（${nms} を山札の一番下へ）`);
+    renderAll();
+  }
+  return used;
+}
 async function runFxList(pi,list,srcCard,inPump){
   // inPump=true のとき、内部の踏み倒し系ハンドラは waitFxIdle で待たない（pumpFx から呼ばれた時のハング防止）。
   const op=pi===0?1:0;
@@ -7598,6 +7717,15 @@ async function runFxList(pi,list,srcCard,inPump){
     }
     // 🗡 前提コスト：このカードを破壊する。破壊しないなら、この効果は行わない
     //    （「このクリーチャーを破壊してもよい。そうした場合、〜」＝アナリス型）
+    // 🔮 返霊：墓地からn枚を山札の下に置いたら、この効果を使う（払えた回数だけ繰り返す）
+    if((f.payHenrei|0)>0){
+      const times=await payHenrei(pi,f,srcCard);
+      if(!times){toast("（返霊しなかったため、この効果は発動しません）");continue;}
+      for(let t=0;t<times;t++){
+        await runFxList(pi,[{...f,payHenrei:0}],srcCard,inPump);
+      }
+      continue;
+    }
     if(f.paySelfKill){
       if(!srcCard||!zonesOf(pi).battle.some(x=>x.id===srcCard.id)){toast("（このカードがバトルゾーンにないため、この効果はスキップ）");continue;}
       const yes=await ask(`🗡 《${faceNameOf(srcCard)}》を破壊しますか？\n（破壊した場合だけ、続く効果を行います）`);
@@ -7774,7 +7902,7 @@ async function runFxList(pi,list,srcCard,inPump){
       for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;dropped.push(`《${faceNameOf(c)}》`);if(!graveShuffleRepApply(c,pi)){Z.grave.push(c);_milled.push(c);}}
       if(dropped.length)toast(`🪦 墓地肥やし：${dropped.join("")} を墓地へ`); // 《》で囲むとログに絵札が出る
       sfx("grave");
-      for(const mc of _milled)queueToGrave(pi,mc); // ⚡ 山札→墓地：このカードの解決が終わってから発火（割り込まない・ゾルザーク型）
+      for(const mc of _milled)queueToGrave(pi,mc,"deck"); // ⚡ 山札→墓地：このカードの解決が終わってから発火（割り込まない・ゾルザーク型）
     }else if(f.t==="millUntilCre"){
       // 🗲 ヴォルグ・サンダー：対象プレイヤーの山札の上から、クリーチャーがn体墓地に置かれるまで置く
       // デュエプレは対象＝自分のみ。TCGは自分/相手を選択。フォーエバー・プリンセスが墓地に置かれる時は置換でシャッフル（クリーチャーとしてカウントしない）
@@ -7798,7 +7926,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const c=ZT.deck.shift();c.faceup=true;
         if(graveShuffleRepApply(c,tp)){reshuffled++;continue;} // プリンセス：墓地行きを置換→カウントせず継続
         ZT.grave.push(c);
-        queueToGrave(tp,c); // ⚡ 山札→墓地：解決完了後に「墓地に置かれた時」を発火（ゾルザーク型・割り込まない）
+        queueToGrave(tp,c,"deck"); // ⚡ 山札→墓地：解決完了後に「墓地に置かれた時」を発火（ゾルザーク型・割り込まない）
         const rc=getReg(c);
         if(rc&&isCreatureReg(rc))creM++;
       }
@@ -7808,7 +7936,7 @@ async function runFxList(pi,list,srcCard,inPump){
       renderAll();
     }else if(f.t==="millOpp"){
       const nmv3=[];
-      for(let i=0;i<n&&OZ.deck.length;i++){const c=OZ.deck.shift();c.faceup=true;nmv3.push(`《${faceNameOf(c)}》`);if(!graveShuffleRepApply(c,op)){OZ.grave.push(c);queueToGrave(op,c);}} // ⚡ toGrave誘発（解決後発火）
+      for(let i=0;i<n&&OZ.deck.length;i++){const c=OZ.deck.shift();c.faceup=true;nmv3.push(`《${faceNameOf(c)}》`);if(!graveShuffleRepApply(c,op)){OZ.grave.push(c);queueToGrave(op,c,"deck");}} // ⚡ toGrave誘発（解決後発火）
       sfx("grave");
       if(nmv3.length)toast(`🗑 相手の山札${nmv3.length}枚を墓地へ：${nmv3.join("")}`);
       if(S.vs&&!OZ.deck.length)declareWin(pi,`山札破壊：${S.players[op].label} の山札が0枚`);
@@ -7912,7 +8040,7 @@ async function runFxList(pi,list,srcCard,inPump){
       }else{
         // 超探索＝同名は1枚にまとめ（山札に何枚あるか分からないように）、そこから最大5種をランダム提示して1枚選ぶ
         const show=searchCandidates(cands,5);
-        const j=await pickCard(`🔎 超探索：コスト${num}の呪文（${show.length}種提示）\n1枚公開して手札に加えてもよい（キャンセル＝加えない）`,show);
+        const j=await pickCard(`🔎 ${S.gameMode==="tcg"?`サーチ：コスト${num}の呪文（TCGモード：全${show.length}枚提示）`:`超探索：コスト${num}の呪文（${show.length}種提示）`}\n1枚公開して手札に加えてもよい（キャンセル＝加えない）`,show);
         if(j!==null){
           const sel=show[j];
           const di=Z.deck.findIndex(x=>x.id===sel.id);
@@ -8026,7 +8154,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(!graveShuffleRepApply(dc,op)){OZh.grave.push(dc);ms.push(dc);}
       }
       if(ms.length)toast(`🪦 捨てた${dropped.length}枚×${per} → ${S.players[op].label} の山札から${ms.length}枚を墓地へ`);
-      for(const mc of ms)queueToGrave(op,mc);
+      for(const mc of ms)queueToGrave(op,mc,"deck");
       sfx("grave");renderAll();
     }else if(f.t==="elemKillCastGrave"){
       // 💥 自分のエレメントを好きな数破壊 → その合計コスト以下の呪文を相手の墓地からコストなしで唱える
@@ -10365,8 +10493,8 @@ function afterHandDiscard(owner,c){
   }
   // ⚡ 「このカードが（どこからでも）墓地に置かれた時」（ゾルザーク型toGrave）：手札を捨てて墓地に置かれた場合も発火
   const rG=getReg(c);
-  if(rG&&rG.watchFx&&rG.watchFx.some(w=>w.ev==="toGrave")&&!(rM&&rM.madness)){
-    queueToGrave(owner,c);
+  if(rG&&rG.watchFx&&rG.watchFx.some(w=>w.ev==="toGrave")&&!(rM&&rM.madness)){ // toGraveBattleは手札からでは発動しない
+    queueToGrave(owner,c,"hand"); // 手札から捨てられた＝「どこからでも」の方だけ発動
   }
 }
 function isSealed(c){return !!(c&&c.seals&&c.seals.length);}
@@ -10489,8 +10617,12 @@ async function pumpFx(){
     if(ORI_QUEUE.length&&ORI_QUEUE.some(o=>S.who===o.defO))await drainOriotis(true);
     // ⏱ ターンプレイヤーの誘発はCIPより先。ただし「自分のクリーチャーが出た時」（カスミ／アジサイ／
     //    キューティ・ルピア型）は、出たカード自身の出た時を先に解決してから処理する（設定で切替可）
+    // 🃏 デュエプレモード：同一プレイヤー内は「出た時」(CIP)が最優先（wiki準拠：新たな出た時は未解決の
+    //    破壊された時等より繰り上がる）。次のCIPの持ち主がターンプレイヤー自身なら、そのプレイヤーの
+    //    他の誘発はこのCIPの後に回す。非ターン側のCIPなら従来どおりターンプレイヤーの誘発が先（APNAP）。
     {const _skipAlly=!S.allyEnterFirst;
-     if(TRIG_PENDING.length&&TRIG_PENDING.some(t=>S.who===t.pi&&!(_skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"))))await drainTrig(true,_skipAlly);}
+     const _cipIsTurnP=(S.gameMode!=="tcg")&&(S.who===pi);
+     if(!_cipIsTurnP&&TRIG_PENDING.length&&TRIG_PENDING.some(t=>S.who===t.pi&&!(_skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"))))await drainTrig(true,_skipAlly);}
     HILITE_ID=c.id;renderAll(); // 🔶 処理中のカードを黄色ハイライト
     // ⚡ どのカードの効果を処理中か常時表示（同時に複数体出た時に取り違えないように・残り待機数も出す）
     {const _bi=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
@@ -11206,7 +11338,7 @@ async function faceupDestroyRep(pi,c,n,kindLabel){
       rm.faceup=true;rm.tapped=false;rm.sideways=false;rm.rot=0;rm.buff=null;rm.mark=false;rm.isCross=false;
       Z.grave.push(rm);
       names.push(`${faceNameOf(rm)}（${faceNameOf(t.host)}の下）`);
-      if(typeof queueToGrave==="function"){try{queueToGrave(pi,rm);}catch(e){}} // ⚡ 墓地に置かれた時（ゾルザーク型）は解決後に発火
+      if(typeof queueToGrave==="function"){try{queueToGrave(pi,rm,"battle");}catch(e){}} // ⚡ 墓地に置かれた時（ゾルザーク型）は解決後に発火
       renderAll();
     }else{
       names.push(faceNameOf(t.card));
@@ -12099,7 +12231,7 @@ async function breakShields(op,count,attacker,forceIdx){
         toast(`🌙 《${faceNameOf(sh)}》の下の${kids.length}枚はシールドの重なりとしてブレイク（S・トリガー／G・ストライク判定へ）`);
       }
       OZ.grave.push(sh);
-      queueToGrave(op,sh); // ⚡ 「墓地に置かれた時」の誘発（ゾルザーク／キューブリック型）
+      queueToGrave(op,sh,"shield"); // ⚡ 「墓地に置かれた時」の誘発（ゾルザーク／キューブリック型）
       sfx("grave");
       toast(`🏰 G城：《${faceNameOf(sh)}》は離れるかわりに墓地へ（手札に加わらない・S・トリガーなし）`);
       continue;
@@ -12165,7 +12297,7 @@ async function breakShields(op,count,attacker,forceIdx){
       c.tapped=false;c.faceup=true;c.mark=false;c.sideways=false;
       delete c._addedBy;delete c._addedTurn;
       OZ.grave.push(c);
-      queueToGrave(op,c); // ⚡ 「墓地に置かれた時」（ゾルザーク／キューブリック型）は焼却でも誘発する
+      queueToGrave(op,c,"shield"); // ⚡ 「墓地に置かれた時」（ゾルザーク／キューブリック型）は焼却でも誘発する
     });
     sfx("grave");renderAll();
     toast(`🔥 シールド焼却（${faceNameOf(attacker)}）：ブレイクした${stack.length}枚は手札に加えず墓地へ（S・トリガー不可）`);
@@ -12544,11 +12676,12 @@ async function startAttack(pi,id){
 }
 /* ⚡ カードが「どこからでも墓地に置かれた時（toGrave）」の誘発を発火する共通ヘルパ。
    moveCardXを通らない直接の墓地送り（mill＝山札→墓地など）でも呼ぶ。srcCardを渡すのでrunMode等も動く。 */
-async function fireToGrave(pi,c){
+async function fireToGrave(pi,c,from){
   if(!S.expert||!c)return;
   const rG=getReg(c);
   if(rG&&rG.watchFx){
-    const fxG=rG.watchFx.filter(w=>w.ev==="toGrave");
+    const f=from||"battle";
+    const fxG=rG.watchFx.filter(w=>w.ev==="toGrave"||(w.ev==="toGraveBattle"&&f==="battle"));
     if(fxG.length){toast(`⚡墓地に置かれた時の効果：${faceNameOf(c)}`);await runFxList(pi,fxG,c);}
   }
 }
@@ -12562,6 +12695,20 @@ async function fireToGrave(pi,c){
    ポンプ内から実行するため runFxList は inPump=true で呼ぶ（waitFxIdleデッドロック防止）。 */
 let TRIG_PENDING=[];
 let TRIG_DRAINING=false;
+/* ⏱ デュエプレの解決優先度（dmwiki「TCG版との差異点」の頻出順に準拠）：
+   「出た時」(CIP)はfxQueue側で常に最優先。TRIG_PENDING内は
+   自分のクリーチャーが出た時 → 破壊された時・墓地に置かれた時系 → 攻撃する時系 → その他。
+   同ランク内は「右にあるもの」から解決（場を離れている場合は予約時の位置を参照） */
+function trigRank(ev){
+  if(ev==="allyEnter"||ev==="allyEvo")return 0;
+  if(ev==="myDestroyed"||ev==="toGrave"||ev==="toGraveBattle"||ev==="pig"||ev==="selfLeave")return 1;
+  if(ev==="anyAtk"||ev==="allyAtk"||ev==="selfAtk"||ev==="atkP")return 2;
+  return 3;
+}
+function trigPos(t){
+  const bi=zonesOf(t.pi).battle.findIndex(x=>x.id===t.c.id);
+  return bi>=0?bi:(t.pos!=null?t.pos:-1);
+}
 async function drainTrig(activeOnly,skipAlly){
   if(TRIG_DRAINING||!TRIG_PENDING.length)return;
   TRIG_DRAINING=true;
@@ -12570,9 +12717,28 @@ async function drainTrig(activeOnly,skipAlly){
     // skipAlly＝CIPの直前に流す時。「自分のクリーチャーが出た時」の誘発はCIPのあとに回す
     const late=t=>!!(skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"));
     while(g++<60){
-      const ix=TRIG_PENDING.findIndex(t=>(activeOnly?(S.who===t.pi):true)&&!late(t));
+      let ix=-1;
+      if(S.gameMode!=="tcg"){
+        // 🃏 デュエプレモード：APNAP（ターンプレイヤー優先）→ 誘発種別ランク → 右にあるものから → 予約順
+        let bk=null;
+        for(let i2=0;i2<TRIG_PENDING.length;i2++){
+          const t=TRIG_PENDING[i2];
+          if(activeOnly&&S.who!==t.pi)continue;
+          if(late(t))continue;
+          const key=[(S.who===t.pi)?0:1,trigRank(t.ev),-trigPos(t),i2];
+          if(!bk||key[0]<bk.k[0]||(key[0]===bk.k[0]&&(key[1]<bk.k[1]||(key[1]===bk.k[1]&&(key[2]<bk.k[2]||(key[2]===bk.k[2]&&key[3]<bk.k[3])))))){bk={i:i2,k:key};}
+        }
+        ix=bk?bk.i:-1;
+        if(ix>0)logOnly(`⏱ 解決順（デュエプレ）：待機中の誘発から ${faceNameOf(TRIG_PENDING[ix].c)}（${TRIG_PENDING[ix].ev||"保留"}）を優先して解決`);
+      }else{
+        ix=TRIG_PENDING.findIndex(t=>(activeOnly?(S.who===t.pi):true)&&!late(t));
+      }
       if(ix<0)break;
       const t=TRIG_PENDING.splice(ix,1)[0];
+      // ⚡ 誘発元が場を離れていても、誘発した時点で確定しているので実行する（記録だけ残す）
+      if(!zonesOf(t.pi).battle.some(x=>x.id===t.c.id)){
+        logOnly(`⚡ ${faceNameOf(t.c)} の誘発（${t.ev||"保留"}）を解決（誘発時に場にいたため・現在：${whereIs(t.c)}）`);
+      }
       toast(`⚡誘発処理：${faceNameOf(t.c)}`);
       await runFxList(t.pi,t.fx,t.c,fxRunning);
       S._watchOnce=S._watchOnce||{};
@@ -12643,10 +12809,15 @@ async function drainOriotis(activeOnly){
    割り込まずに、そのカードの解決が完全に終わってから順に発火する（マガマガルピアの破壊まで終えてからゾルザーク）。*/
 let TOGRAVE_PENDING=[];
 let TOGRAVE_DRAINING=false;
-function queueToGrave(pi,c){
+/* ⚡ 墓地に置かれた時の誘発を予約する。from＝どのゾーンから墓地へ来たか（"battle"/"hand"/"deck"/"shield"/"mana"）。
+   「バトルゾーンから墓地に置かれた時」（toGraveBattle）は from==="battle" の時だけ発動する。 */
+function queueToGrave(pi,c,from){
   if(!S.expert||!c)return;
   const rG=getReg(c);
-  if(rG&&rG.watchFx&&rG.watchFx.some(w=>w.ev==="toGrave"))TOGRAVE_PENDING.push({pi,c});
+  if(!rG||!rG.watchFx)return;
+  const f=from||"battle";
+  const hit=rG.watchFx.some(w=>w.ev==="toGrave"||(w.ev==="toGraveBattle"&&f==="battle"));
+  if(hit)TOGRAVE_PENDING.push({pi,c,from:f});
 }
 /* ⚡ 解決の順番は「出したカード自身の出た時 → 盤面の『自分のクリーチャーが出た時』 → 墓地に置かれた時」。
    盤面側の誘発が待っている間は、墓地の誘発（ゾルザーク型）を先に流さないための待ち数。 */
@@ -12658,8 +12829,8 @@ async function drainToGrave(){
   try{
     let guard=0;
     while(TOGRAVE_PENDING.length&&guard++<60){
-      const {pi,c}=TOGRAVE_PENDING.shift();
-      await fireToGrave(pi,c);
+      const {pi,c,from}=TOGRAVE_PENDING.shift();
+      await fireToGrave(pi,c,from);
     }
   }finally{TOGRAVE_DRAINING=false;}
 }
@@ -12668,16 +12839,29 @@ function showResumeBtn(){
   if(!wrap){
     wrap=document.createElement("div");
     wrap.id="resumeAtkWrap";
-    wrap.style.cssText="position:fixed;left:50%;bottom:calc(150px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:100000;display:flex;flex-direction:column;align-items:center;gap:8px;background:rgba(10,14,22,.96);border:2px solid #d97706;border-radius:14px;padding:12px 16px;box-shadow:0 8px 28px rgba(0,0,0,.6);max-width:92vw";
+    // 📏 盤面を隠さないよう、下部バーのすぐ上に細い帯として置く（以前は画面中央の大きなパネルだった）
+    wrap.style.cssText="position:fixed;left:6px;right:6px;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:100000;display:flex;flex-direction:row;align-items:center;gap:8px;background:rgba(10,14,22,.94);border:1px solid #d97706;border-radius:12px;padding:6px 8px;box-shadow:0 6px 18px rgba(0,0,0,.5)";
     const msg=document.createElement("div");
     msg.id="resumeAtkMsg";
-    msg.style.cssText="color:#ffcf6a;font-size:12.5px;font-weight:700;text-align:center";
-    msg.textContent="⏸ 攻撃を保留中 — 効果を解決したら下のボタンで続行";
+    msg.style.cssText="color:#ffcf6a;font-size:11px;font-weight:700;flex:1 1 auto;min-width:0;line-height:1.3";
+    msg.textContent="⏸ 攻撃を保留中 — 効果を解決したら再開";
     const b=document.createElement("button");
     b.id="resumeAtkBtn";
     b.className="btn primary";
-    b.style.cssText="font-size:16px;padding:12px 28px;width:100%;box-shadow:0 6px 20px rgba(217,119,6,.6);animation:pulseBtn 1.2s ease-in-out infinite";
+    b.style.cssText="flex:0 0 auto;font-size:13px;padding:8px 14px;box-shadow:0 4px 14px rgba(217,119,6,.5);animation:pulseBtn 1.2s ease-in-out infinite";
     b.textContent="▶ 攻撃を再開";
+    // 🔽 邪魔な時は小さくたためる（たたむと右下の丸ボタンになり、押すとそのまま再開）
+    const mini=document.createElement("button");
+    mini.id="resumeAtkMini";
+    mini.className="btn small ghost";
+    mini.style.cssText="flex:0 0 auto;padding:6px 9px;font-size:12px";
+    mini.title="小さくたたむ（丸ボタンになります。押すとそのまま再開できます）";
+    mini.textContent="🔽";
+    mini.addEventListener("click",ev=>{
+      ev.stopPropagation();
+      wrap.dataset.mini="1";
+      applyResumeMini(wrap);
+    });
     b.addEventListener("click",async ()=>{
       const pa=S.pendingAtk;
       hideResumeBtn();
@@ -12687,10 +12871,57 @@ function showResumeBtn(){
       S.pendingAtk=null;
       await execAttack(pa.pi,c2.id,pa.tg);
     });
-    wrap.appendChild(msg);wrap.appendChild(b);
+    wrap.appendChild(msg);wrap.appendChild(b);wrap.appendChild(mini);
     document.body.appendChild(wrap);
   }
   wrap.style.display="flex";
+  applyResumeMini(wrap);
+}
+/* 🔽 攻撃再開の帯を、たたんだ状態（右下の丸ボタン）と広げた状態で切り替える */
+function applyResumeMini(wrap){
+  if(!wrap)return;
+  const msg=wrap.querySelector("#resumeAtkMsg");
+  const b=wrap.querySelector("#resumeAtkBtn");
+  const mini=wrap.querySelector("#resumeAtkMini");
+  const on=wrap.dataset.mini==="1";
+  if(on){
+    wrap.style.left="auto";
+    wrap.style.right="10px";
+    wrap.style.bottom="calc(102px + env(safe-area-inset-bottom,0px))";
+    wrap.style.padding="0";
+    wrap.style.borderRadius="50%";
+    wrap.style.background="rgba(10,14,22,.94)";
+    if(msg)msg.style.display="none";
+    if(mini)mini.style.display="none";
+    if(b){
+      b.textContent="▶";
+      b.style.cssText="flex:0 0 auto;width:52px;height:52px;border-radius:50%;font-size:20px;padding:0;box-shadow:0 4px 14px rgba(217,119,6,.6);animation:pulseBtn 1.2s ease-in-out infinite";
+      b.title="攻撃を再開（長押しで元の大きさに戻す）";
+      if(!b._miniLong){
+        b._miniLong=true;
+        let tm=null;
+        b.addEventListener("pointerdown",()=>{tm=setTimeout(()=>{tm=null;wrap.dataset.mini="";applyResumeMini(wrap);b._skipClick=true;},500);});
+        const clr=()=>{if(tm){clearTimeout(tm);tm=null;}};
+        b.addEventListener("pointerup",clr);
+        b.addEventListener("pointercancel",clr);
+        b.addEventListener("pointerleave",clr);
+        b.addEventListener("click",ev=>{if(b._skipClick){b._skipClick=false;ev.stopImmediatePropagation();ev.preventDefault();}},true);
+      }
+    }
+  }else{
+    wrap.style.left="6px";
+    wrap.style.right="6px";
+    wrap.style.bottom="calc(58px + env(safe-area-inset-bottom,0px))";
+    wrap.style.padding="6px 8px";
+    wrap.style.borderRadius="12px";
+    if(msg)msg.style.display="";
+    if(mini)mini.style.display="";
+    if(b){
+      b.textContent="▶ 攻撃を再開";
+      b.style.cssText="flex:0 0 auto;font-size:13px;padding:8px 14px;box-shadow:0 4px 14px rgba(217,119,6,.5);animation:pulseBtn 1.2s ease-in-out infinite";
+      b.title="保留していた攻撃を続行します";
+    }
+  }
 }
 /* ⚔ 進化などで攻撃中のクリーチャーが別カードに置き換わった時、保留中の攻撃を新カードに引き継ぐ */
 function transferAtkState(oldIds,newC){
@@ -13908,6 +14139,32 @@ function fxTypeSearchBtn(sel,getCur,onPick){
   };
   return fb;
 }
+/* 🔮 返霊：この効果を使う前に、墓地からn枚を山札の一番下に置く前提コスト。
+   通常＝自分の墓地から1回／殲滅＝相手の墓地も使え最大2回／地獄＝墓地が続く限り繰り返せる。
+   効果行にも誘発行にも同じ欄を出すので、作りを1つにまとめている。 */
+function fxHenreiEl(f){
+  const wrap=document.createElement("label");
+  wrap.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  wrap.title="この効果を使う前に、墓地からn枚を好きな順で山札の一番下に置きます。置かない／置けない場合はこの効果を行いません（0＝なし）";
+  const n=document.createElement("input");
+  n.type="number";n.min="0";n.max="9";n.style.width="46px";
+  n.value=String(f.payHenrei|0);
+  const sel=document.createElement("select");
+  sel.style.cssText="width:auto;font-size:11px;padding:1px 4px";
+  for(const [v,lb] of [["self","自分の墓地"],["anni","殲滅（相手の墓地も・最大2回）"],["hell","地獄（続く限り）"]]){
+    const o=document.createElement("option");o.value=v;o.textContent=lb;
+    if((f.henreiMode||"self")===v)o.selected=true;
+    sel.appendChild(o);
+  }
+  const sync=()=>{sel.style.display=((f.payHenrei|0)>0)?"":"none";};
+  n.onchange=()=>{f.payHenrei=parseInt(n.value,10)||0;sync();};
+  sel.onchange=()=>{f.henreiMode=sel.value;};
+  wrap.appendChild(document.createTextNode("🔮返霊"));
+  wrap.appendChild(n);
+  wrap.appendChild(sel);
+  sync();
+  return wrap;
+}
 function fxRowEl(faceIdx,i){
   const f=FXEDIT.faces[faceIdx][i];
   const row=document.createElement("div");row.className="fxrow";
@@ -14009,7 +14266,7 @@ function fxRowEl(faceIdx,i){
   const top=document.createElement("div");top.className="fxr-top";
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(shb);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
-  bot.appendChild(sumL);bot.appendChild(sstL);bot.appendChild(optL);bot.appendChild(pbL);bot.appendChild(skL);
+  bot.appendChild(sumL);bot.appendChild(sstL);bot.appendChild(optL);bot.appendChild(pbL);bot.appendChild(skL);bot.appendChild(fxHenreiEl(f));
   cnd.classList.add("fxr-cond-input");
   const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
   bot.appendChild(condWrap);
@@ -14024,7 +14281,8 @@ const TRIG_EVS=[
   ["onBreak","このクリーチャーがシールドをブレイクした時（ブレイク1枚ごとに1回・ブレイクボーナス）"],
   ["pig","このクリーチャーが破壊された時"],
   ["selfLeave","このクリーチャーがバトルゾーンを離れる時（破壊・手札・マナ・山札・盾送りすべて・ヴィーナス型メテオバーン）"],
-  ["toGrave","このクリーチャーがどこからでも墓地に置かれた時（キューブリック型・cnd欄でマナ条件など指定可）"],
+  ["toGraveBattle","このクリーチャーがバトルゾーンから墓地に置かれた時（破壊・離場で墓地へ。手札やマナ・山札から捨てられた時は発動しない）"],
+  ["toGrave","このカードがどこからでも墓地に置かれた時（手札から捨てられた時も発動・キューブリック型／cnd欄でマナ条件など指定可）"],
   ["tapAbility","タップ能力（攻撃の代わりにタップ）"],
   ["selfAtk","このクリーチャーが攻撃する時（対象問わず）"],
   ["selfWinBattle","このクリーチャーがバトルに勝った時"],
@@ -14151,7 +14409,7 @@ function fxTrigRowEl(i){
   const top=document.createElement("div");top.className="fxr-top";
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(ev);top.appendChild(evb);top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
-  bot.appendChild(hld);bot.appendChild(onceL);bot.appendChild(optLw);bot.appendChild(pbLw);bot.appendChild(skLw);
+  bot.appendChild(hld);bot.appendChild(onceL);bot.appendChild(optLw);bot.appendChild(pbLw);bot.appendChild(skLw);bot.appendChild(fxHenreiEl(f));
   const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
   bot.appendChild(condWrap);
   row.appendChild(top);row.appendChild(bot);
@@ -16051,6 +16309,14 @@ function parseCardText(txt,mode){
       if(/破壊/.test(mOri[1]))out.set.stOriotisDestroy=true;
       out.notes.push({msg:`🌀 常在「相手が自分のマナ枚数よりコストの大きいクリーチャーを出したら${out.set.stOriotisDestroy?"破壊":"山札の下へ"}」を設定しました`,q:"オリオティス"});
       out._oriClause=mOri[0]; // extractEffects前に tForFx から除去する
+    }
+  }
+  // 🔮 返霊N／殲滅返霊N／地獄返霊N：直後の効果の前提コストとして通知する
+  {
+    const mH=t.match(/(殲滅|地獄)?返霊\s*(\d+)/);
+    if(mH){
+      const md=mH[1]==="殲滅"?"殲滅返霊（相手の墓地も使えて最大2回）":mH[1]==="地獄"?"地獄返霊（墓地が続く限り繰り返し）":"返霊（自分の墓地から1回）";
+      out.notes.push({msg:`🔮 ${md}${mH[2]}を検出しました。攻撃時の誘発を作り、その行の「🔮返霊」に ${mH[2]} を入れて種類を選んでください`,q:"返霊"});
     }
   }
   // 🌱 黒豆だんしゃく「相手の、「（このクリーチャーが）バトルゾーンに出た時」で始まる能力を持つ
@@ -18204,6 +18470,11 @@ function placeCard(Z,toZone,c){
   else if(toZone==="deckBottom"){c.faceup=false;c.seen=false;Z.deck.push(c);}
   else if(toZone==="grBottom")Z.gr.push(c);
   else if(toZone==="hand")toHand(Z,c);
+  // 🌱 デュエプレモード：マナゾーンは99枚まで。100枚目以降はかわりに墓地へ（マナ置き時・墓地置き時の能力は発動しない）
+  else if(toZone==="mana"&&S.gameMode!=="tcg"&&Z.mana.length>=99){
+    c.faceup=true;c.tapped=false;Z.grave.push(c);
+    toast(`🌱 マナ上限（99枚）：${faceNameOf(c)} は墓地に置かれた`);
+  }
   else if(Z[toZone])Z[toZone].push(c);
   else toHand(Z,c);
 }
@@ -22764,7 +23035,7 @@ function attachPointer(el,ctx){
               (typeof allyGrant==="function"&&(allyGrant(ctx.p,"agEsc")||allyGrant(ctx.p,"agTEsc")))||
               zonesOf(ctx.p).battle.some(x=>x.id!==ctx.id&&(()=>{const r2=getReg(x);return r2&&(r2.seiba||r2.stLeaveRep);})())
             );
-            const hasDeathFx=(rD&&((rD.watchFx&&rD.watchFx.some(wx=>wx.ev==="pig"||wx.ev==="toGrave"||wx.ev==="selfLeave"))||rD.etOmega||rD.escapePS||rD.repLeave))||_hasRepl||_hasGrantRepl;
+            const hasDeathFx=(rD&&((rD.watchFx&&rD.watchFx.some(wx=>wx.ev==="pig"||wx.ev==="toGrave"||wx.ev==="toGraveBattle"||wx.ev==="selfLeave"))||rD.etOmega||rD.escapePS||rD.repLeave))||_hasRepl||_hasGrantRepl;
             const hasLeaveWatchers=S.expert&&[0,1].some(pp=>zonesOf(pp).battle.some(x=>{const rx=getReg(x);return rx&&rx.watchFx&&rx.watchFx.some(wx=>wx.ev==="myLeave"||wx.ev==="allyLeave"||wx.ev==="oppLeave"||wx.ev==="anyLeave");}));
             if(fD&&isSealed(fD.card)){toast(`🔒 ${fD.card.name} は封印されている！（離れません）`);}
             else if(hasDeathFx||hasLeaveWatchers){
@@ -25241,10 +25512,14 @@ function renderGraveViewer(pi){
 }
 function openShieldViewer(pi){
   const Z=zonesOf(pi);
+  const svMulti=!!S.multi; // 🖐 複数選択モード中は、タップで選択／解除にする
   $("vTitle").textContent=`🛡 シールド確認（${Z.shield.length}枚）　[${S.players[pi].label}]`;
-  $("vHint").textContent="表向きのカードのみ内容が見えます。タップで操作（確認/重ね/ブレイクなど）。「1-2」等は重なっているカードです。";
+  $("vHint").textContent=svMulti
+    ? "🖐 複数選択中：タップで選択／解除できます。選び終わったら閉じて、下の「操作」からまとめて処理してください。"
+    : "表向きのカードのみ内容が見えます。タップで操作（確認/重ね/ブレイクなど）。「1-2」等は重なっているカードです。上部の「複数選択」をオンにすると、ここで複数の盾を選べます。";
   $("vSearch").style.display="none";
-  $("vOk").style.display="none";$("vStatus").textContent="";
+  $("vOk").style.display="none";
+  $("vStatus").textContent=svMulti?`${S.msel.length}枚 選択中`:"";
   const g=$("vGrid");g.innerHTML="";
   Z.shield.forEach((sh,i)=>{
     const reveal=sh.faceup||sh.seen;
@@ -25263,7 +25538,14 @@ function openShieldViewer(pi){
       el.appendChild(ey);
     }
     if(sh.mark)el.style.outline="2px solid #ff9f43";
+    if(S.msel.some(x=>x.p===pi&&x.zone==="shield"&&x.id===sh.id))el.classList.add("picked");
     el.addEventListener("click",()=>{
+      if(svMulti){
+        const ix=S.msel.findIndex(x=>x.p===pi&&x.zone==="shield"&&x.id===sh.id);
+        if(ix>=0)S.msel.splice(ix,1);else S.msel.push({p:pi,zone:"shield",id:sh.id});
+        openShieldViewer(pi);renderAll(); // 選択状態を反映して開き直す
+        return;
+      }
       closeViewer();
       S.sel={p:pi,zone:"shield",id:sh.id};renderAll();
       openCardSheet({p:pi,zone:"shield",id:sh.id});
@@ -25280,6 +25562,12 @@ function openShieldViewer(pi){
           else{const np=document.createElement("div");np.className="nameplate";np.textContent="盾";th.appendChild(np);}}
       }
       ue.addEventListener("click",()=>{
+        if(svMulti){ // 重なっているカードは親の盾ごと選ぶ
+          const ix=S.msel.findIndex(x=>x.p===pi&&x.zone==="shield"&&x.id===sh.id);
+          if(ix>=0)S.msel.splice(ix,1);else S.msel.push({p:pi,zone:"shield",id:sh.id});
+          openShieldViewer(pi);renderAll();
+          return;
+        }
         closeViewer();
         S.sel={p:pi,zone:"shield",id:sh.id};renderAll();
         openCardSheet({p:pi,zone:"shield",id:sh.id});
@@ -26253,7 +26541,9 @@ $("setSpellAuto").addEventListener("change",async ()=>{
 $("setMode").addEventListener("change",async ()=>{
   S.gameMode=$("setMode").value;
   if(db)await idbPut("misc","gameMode",S.gameMode);
-  toast(S.gameMode==="tcg"?"TCGモード：上限なし":"デュエプレモード：手札10枚（超過は墓地へ）・シールド10枚（追加不可）・バトルゾーン7体（超過は墓地へ）");
+  toast(S.gameMode==="tcg"
+    ?"TCGモード：ゾーン上限なし／サーチは山札の全候補から選択（枚数も見える）／山札の下は「好きな順」も選べます"
+    :"デュエプレモード：手札10枚（超過は墓地へ）・シールド10枚（追加不可）・バトルゾーン7体（超過は墓地へ）・マナ99枚／探索（種類をまとめてランダム提示）／山札の下はランダム順");
 });
 $("zoneOrderTarget").addEventListener("change",renderZoneOrderEditor);
 $("setWidePair").addEventListener("change",async ()=>{
@@ -27528,6 +27818,15 @@ $("btnHelp").addEventListener("click",()=>{
       ・攻撃：クリーチャーをタップ→「攻撃」→対象選択。侵略/チェンジ/DDD/NS/トリガー等は自動で確認が出ます（EXモード時）<br>
       ・盾タップ→「⚡ブレイクする」でトリガー処理つきブレイク<br>
       ・カード登録は「⭐名前から設定」にテキストを貼るだけで、カードタイプ/コスト/パワー/文明/種族/キーワードが自動で入ります<br><br>
+
+      <b>■ ルール（デュエプレ／TCGモードの違い）</b><br>
+      ⚙設定→「ルール」で切り替えます。<br>
+      ・<b>ゾーン上限</b>：デュエプレは手札10枚（超過は墓地へ）／シールド10枚（追加不可）／バトルゾーン7体（超過は墓地へ・出た時は発動しない）／マナ99枚。TCGは無制限<br>
+      ・<b>誘発の解決順序</b>：デュエプレは自動決定＝ターンプレイヤー優先→「出た時」最優先→自分のクリーチャーが出た時→破壊された時系→攻撃する時系→その他、同ランクは右にあるカードから。TCGはプレイヤーが順序を選ぶ前提（保留順のまま）<br>
+      ・<b>山札からのサーチ</b>：デュエプレは「探索」＝同名を1枚にまとめて最大3種（超探索は5種）をランダム提示。TCGは山札の全候補から選択（同名の枚数も見える）<br>
+      ・<b>山札の下に置く順</b>：デュエプレはランダム固定（メクレイド残り・返霊など）。TCGは「好きな順に並べる」も選択可<br>
+      ・<b>クロスギア</b>：デュエプレは専用のクロスコスト欄、TCGはカードのコストでクロス<br>
+      ・マリガンなどその他の差異もモードに応じて自動で切り替わります<br><br>
 
       <b>■ ショートカット・PC操作</b><br>
       ・<b>⌘Z / Ctrl+Z</b>：1手戻る（やり直しは <b>⌘⇧Z / Ctrl+Shift+Z</b>）。画面上部の「↩戻る」ボタンでも戻せます<br>
