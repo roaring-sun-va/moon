@@ -3318,7 +3318,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.17";
+const APP_VER="v10.20";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -4240,6 +4240,7 @@ function libWinHolderOf(pi){
 }
 function draw(pi,n=1){
   const Z=S.players[pi].zones;
+  let _kept=0; // 🃏 dmps：手札超過で墓地に落ちた分は「ドローしたことにならない」（wiki準拠）
   for(let i=0;i<n;i++){
     if(!Z.deck.length){
       toast("山札がありません（LO）");
@@ -4255,9 +4256,8 @@ function draw(pi,n=1){
     }
     c.faceup=true;c.sideways=false;c.qqqxSide=false;
     const kept=toHand(Z,c); // デュエプレ：手札上限超過は墓地へ
-    if(kept)markArrive(c);
-    bumpEv("draws",pi);
-    logOnly(`${S.players[pi].label}：1枚ドロー${kept?"":"（手札上限のため墓地へ）"}`);
+    if(kept){markArrive(c);_kept++;bumpEv("draws",pi);}
+    logOnly(`${S.players[pi].label}：${kept?"1枚ドロー":"ドローは手札上限で無効（カードは墓地へ・ドローしたことにならない）"}`);
     if(S.anim!==false){
       const pe=document.querySelector(`#sysrow-${pi} [data-zone="deckTop"]`);
       if(pe&&typeof flyGhost==="function")flyGhost(pe.getBoundingClientRect(),c,null);
@@ -4271,7 +4271,7 @@ function draw(pi,n=1){
     }
   }
   sfx("draw");
-  emitEvent(pi,"draw");
+  if(_kept>0||S.gameMode==="tcg")emitEvent(pi,"draw"); // 🃏 dmps：1枚も引けていなければ「引いた時」誘発なし
   renderAll();
 }
 let NEXT_TURN_HOLD=0;
@@ -5449,7 +5449,7 @@ async function findByCond(pi){
   else if(dst===2)Z.mana.push(c);
   else if(dst===3)Z.grave.push(c);
   else if(dst===4||dst===5){
-    if(!shieldCapOk(Z,dst===5)){toast(`🛡 シールド上限（10枚）：${c.name} は手札へ`);Z.hand.push(c);markArrive(c);}
+    if(!shieldCapOk(Z,dst===5)){c.faceup=true;c.tapped=false;Z.grave.push(c);toast(`🛡 シールド上限（10枚）：${c.name} はシールドを経由せず墓地へ`);}
     else{c.faceup=(dst===5);c.mark=S.turn>0;Z.shield.push(c);}
   }
   else if(dst===6){Z.resolve.push(c);emitEvent(pi,"spell",c);enqueueFx(pi,c);}
@@ -5504,7 +5504,7 @@ async function searchZone(pi,zone,kinds){
   else if(dst===2)Z.mana.push(c);
   else if(dst===3)Z.grave.push(c);
   else if(dst===4||dst===5){
-    if(!shieldCapOk(Z,dst===5)){toast(`🛡 シールド上限（10枚）：${c.name} は手札へ`);Z.hand.push(c);markArrive(c);}
+    if(!shieldCapOk(Z,dst===5)){c.faceup=true;c.tapped=false;Z.grave.push(c);toast(`🛡 シールド上限（10枚）：${c.name} はシールドを経由せず墓地へ`);}
     else{c.faceup=(dst===5);c.mark=S.turn>0;Z.shield.push(c);}
   }
   else if(dst===6){Z.resolve.push(c);emitEvent(pi,"spell",c);enqueueFx(pi,c);}
@@ -6154,8 +6154,10 @@ const EFFECTS=[
      if(cards.length<2){toast("ガチンコジャッジ：山札の上を公開しました");return;}
      const [a,b]=cards;
      const rA=getReg(a.c),rB=getReg(b.c);
-     const cA=rA&&rA.cost!=null?rA.cost:null;
-     const cB=rB&&rB.cost!=null?rB.cost:null;
+     // 🃏 デュエプレ：ツインパクトは「コストの大きい面」を見せた扱い（同コストはクリーチャー面＝値は同じ）。TCGは従来どおりクリーチャー面
+     const jc=r=>{if(!r||r.cost==null)return null;if(S.gameMode!=="tcg"&&r.twin&&r.cost2!=null)return Math.max(+r.cost,+r.cost2);return +r.cost;};
+     const cA=jc(rA);
+     const cB=jc(rB);
      if(cA!==null&&cB!==null){
        if(cA>cB)toast(`ガチンコジャッジ！ ${S.players[a.pi].label}の勝利（コスト${cA} vs ${cB}）`);
        else if(cB>cA)toast(`ガチンコジャッジ！ ${S.players[b.pi].label}の勝利（コスト${cB} vs ${cA}）`);
@@ -7785,15 +7787,16 @@ async function runFxList(pi,list,srcCard,inPump){
       // 🃏 実行時に枚数を入力してドロー（エレメントの枚数分など・0でスキップ）
       const dn=await askNumber("何枚引きますか？（エレメントのカード枚数など・0でスキップ）",1,20);
       if(dn===null||dn<=0){toast("（ドローをスキップ）");renderAll();continue;}
-      let dc=0;for(let i=0;i<dn&&Z.deck.length;i++){const c2=Z.deck.shift();c2.faceup=true;c2.sideways=false;if(toHand(Z,c2))markArrive(c2);dc++;} // ✋ 手札上限超過は墓地へ
-      bumpEv("draws",pi,dc);
-      sfx("draw");emitEvent(pi,"draw");
-      toast(`🃏 ${dc}枚引いた`);renderAll();continue;
+      let dc=0,ov=0;for(let i=0;i<dn&&Z.deck.length;i++){const c2=Z.deck.shift();c2.faceup=true;c2.sideways=false;if(toHand(Z,c2)){markArrive(c2);dc++;}else ov++;} // ✋ 超過分はドローにならない
+      if(dc>0)bumpEv("draws",pi,dc);
+      sfx("draw");if(dc>0||S.gameMode==="tcg")emitEvent(pi,"draw");
+      toast(`🃏 ${dc}枚引いた${ov?`（${ov}枚は手札上限で墓地へ・ドローにならない）`:""}`);renderAll();continue;
     }
     if(f.t==="draw"){
-      let dc=0;for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;if(toHand(Z,c))markArrive(c);dc++;} // ✋ デュエプレ：手札上限超過は墓地へ（toHand内で処理）
-      bumpEv("draws",pi,dc);
-      sfx("draw");emitEvent(pi,"draw");
+      let dc=0,ov=0;for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;if(toHand(Z,c)){markArrive(c);dc++;}else ov++;} // ✋ 超過分はドローにならない（wiki準拠）
+      if(dc>0)bumpEv("draws",pi,dc);
+      sfx("draw");if(dc>0||S.gameMode==="tcg")emitEvent(pi,"draw");
+      if(ov)toast(`✋ ${ov}枚は手札上限のため墓地へ（ドローしたことにならない）`);
     }else if(f.t==="charge"){
       let cc=0,tp=[];
       for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;if(manaTapIn(c))tp.push(faceNameOf(c));Z.mana.push(c);markArrive(c);cc++;}
@@ -10626,7 +10629,7 @@ async function pumpFx(){
     HILITE_ID=c.id;renderAll(); // 🔶 処理中のカードを黄色ハイライト
     // ⚡ どのカードの効果を処理中か常時表示（同時に複数体出た時に取り違えないように・残り待機数も出す）
     {const _bi=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
-     setFxNowChip(`⚡ 処理中：${faceNameOf(c)}${_bi>=0?`（左から${_bi+1}体目）`:""}${fxQueue.length?`／あと${fxQueue.length}体待機`:""}`);}
+     setFxNowChip(`⚡ 処理中：${faceNameOf(c)}${_bi>=0?`（左から${_bi+1}体目）`:""}${fxQueue.length?`／あと${fxQueue.length}体待機`:""}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`);}
     {const _wt=fxQueue.length>=3?120:fxQueue.length>=1?220:380;toast(`▶ 効果処理：${faceNameOf(c)}`);await new Promise(r=>setTimeout(r,_wt));}
     snap();
     // 🚩 革命N：自分の盾がN枚以下でのみ追加能力が有効。未達なら発動しない（他の効果があれば選択）
@@ -12537,7 +12540,7 @@ function hideAtkBanner(){$("fxBanner").classList.remove("show");}
 function setFxNowChip(msg){
   const e=document.getElementById("fxNowChip");if(!e)return;
   if(!msg){e.classList.remove("show");e.textContent="";return;}
-  e.textContent=msg;e.classList.add("show");
+  e.textContent=msg;e.style.whiteSpace="pre-line";e.classList.add("show");
   makeDraggable(e,"fxNowChip");
   if(!e._sizeBound){
     e._sizeBound=true;
@@ -12709,6 +12712,24 @@ function trigPos(t){
   const bi=zonesOf(t.pi).battle.findIndex(x=>x.id===t.c.id);
   return bi>=0?bi:(t.pos!=null?t.pos:-1);
 }
+/* ⏳ 待機中の誘発を「実際に解決される順」に並べたプレビュー（本家の効果ウィンドウ相当）。
+   デュエプレモードは優先度ソート順、TCGモードは予約順で表示 */
+function trigQueuePreview(){
+  if(!TRIG_PENDING.length)return "";
+  let ord;
+  if(S.gameMode!=="tcg"){
+    ord=TRIG_PENDING.map((t,i)=>({t,i}));
+    ord.sort((a,b)=>{
+      const ka=[(S.who===a.t.pi)?0:1,trigRank(a.t.ev),-trigPos(a.t),a.i];
+      const kb=[(S.who===b.t.pi)?0:1,trigRank(b.t.ev),-trigPos(b.t),b.i];
+      for(let k=0;k<4;k++)if(ka[k]!==kb[k])return ka[k]-kb[k];
+      return 0;
+    });
+    ord=ord.map(x=>x.t);
+  }else ord=TRIG_PENDING.slice();
+  const names=ord.slice(0,4).map(t=>faceNameOf(t.c));
+  return `⏳ 待機誘発（解決順）：${names.join(" → ")}${ord.length>4?` …他${ord.length-4}件`:""}`;
+}
 async function drainTrig(activeOnly,skipAlly){
   if(TRIG_DRAINING||!TRIG_PENDING.length)return;
   TRIG_DRAINING=true;
@@ -12729,7 +12750,7 @@ async function drainTrig(activeOnly,skipAlly){
           if(!bk||key[0]<bk.k[0]||(key[0]===bk.k[0]&&(key[1]<bk.k[1]||(key[1]===bk.k[1]&&(key[2]<bk.k[2]||(key[2]===bk.k[2]&&key[3]<bk.k[3])))))){bk={i:i2,k:key};}
         }
         ix=bk?bk.i:-1;
-        if(ix>0)logOnly(`⏱ 解決順（デュエプレ）：待機中の誘発から ${faceNameOf(TRIG_PENDING[ix].c)}（${TRIG_PENDING[ix].ev||"保留"}）を優先して解決`);
+        if(ix>0)logOnly(`⚡ 解決順（デュエプレ）：待機中の誘発から ${faceNameOf(TRIG_PENDING[ix].c)}（${TRIG_PENDING[ix].ev||"保留"}）を優先して解決`);
       }else{
         ix=TRIG_PENDING.findIndex(t=>(activeOnly?(S.who===t.pi):true)&&!late(t));
       }
@@ -12740,11 +12761,16 @@ async function drainTrig(activeOnly,skipAlly){
         logOnly(`⚡ ${faceNameOf(t.c)} の誘発（${t.ev||"保留"}）を解決（誘発時に場にいたため・現在：${whereIs(t.c)}）`);
       }
       toast(`⚡誘発処理：${faceNameOf(t.c)}`);
+      setFxNowChip(`⚡ 誘発処理：${faceNameOf(t.c)}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`); // ⏳ 残りの待機誘発を解決順で表示
       await runFxList(t.pi,t.fx,t.c,fxRunning);
       S._watchOnce=S._watchOnce||{};
       for(const k of (t.onceKeys||[]))S._watchOnce[k]=`${S.turn}:${S.who}`;
     }
-  }finally{TRIG_DRAINING=false;}
+  }finally{
+    TRIG_DRAINING=false;
+    // ⏳ すべて処理し終えて他のキューも空なら、処理中バッジを消す
+    if(!TRIG_PENDING.length&&!fxQueue.length&&!fxRunning)try{setFxNowChip("");}catch(e){}
+  }
 }
 let ORI_QUEUE=[];
 let ORI_DRAINING=false;
@@ -13252,6 +13278,7 @@ async function execAttack(pi,id,tg){
   }
   // 侵略・革命チェンジ・S級侵略（ゾーン横断・複数回可・重ねた順に処理）
   let invadedOnce=false;
+  let changedOnce=false,warnedInvOrder=false; // 🃏 dmps：チェンジ実行後は侵略を宣言できない（wiki解決順準拠）
   if(S.expert)while(true){
     const sZones=v=>{
       if(v==="primal"||v==="deck")return ["hand","mana"];
@@ -13304,6 +13331,18 @@ async function execAttack(pi,id,tg){
       if(!condOk(r))continue;
       cands.push({h,zn:"shield",sKakumei:true});
     }
+    // 🃏 デュエプレモード：攻撃時の宣言の解決順は「1. 侵略（選んだ順）→ 2. 革命チェンジ・Jチェンジ →
+    //    3. アタック・チャンス」（wiki準拠）。候補を侵略系→チェンジ系の順に並べ、チェンジ実行後は侵略を宣言できない。
+    //    TCGモードは従来どおり自由な順で選択可。
+    const isChangeCand=({h})=>{const r=getReg(h);return !(r.invade||r.sInvade||r.pInvade);};
+    if(S.gameMode!=="tcg"){
+      if(changedOnce){
+        const b4=cands.length;
+        for(let ci=cands.length-1;ci>=0;ci--)if(!isChangeCand(cands[ci]))cands.splice(ci,1);
+        if(cands.length<b4&&!warnedInvOrder){warnedInvOrder=true;toast("⚡ 解決順（デュエプレ）：革命チェンジの後は侵略を宣言できません（チェンジ系のみ提示）");}
+      }
+      cands.sort((a,b)=>(isChangeCand(a)?1:0)-(isChangeCand(b)?1:0));
+    }
     if(!cands.length)break;
     {
       const j=await askChoice(`⚔ ${invadedOnce?"さらに":"攻撃時："}侵略／革命チェンジしますか？\n（侵略が先→革命チェンジの順。重ねた順に効果処理）`,
@@ -13325,6 +13364,7 @@ async function execAttack(pi,id,tg){
         if(srcZone==="hyper")hcard.isPsy=true; // 🌌 超次元から出たP侵略/P革命チェンジ体は離れると超次元へ戻る
         const inv2=r.invade||r.sInvade||r.pInvade;
         const isRevCh=!inv2; // 革命チェンジ／P革命チェンジ／J・チェンジ系（侵略以外）
+        if(isRevCh)changedOnce=true; // 🃏 dmps：これ以降は侵略を宣言できない
         if(r.invade||r.sInvade||r.pInvade){
           hcard.under=[c,...(c.under?c.under.splice(0):[]),...(hcard.under||[])];
           Z.battle[bi]=hcard;
@@ -18463,7 +18503,8 @@ function toHand(Z,c){
 }
 function placeCard(Z,toZone,c){
   if(toZone==="shieldUp"||toZone==="shield"){
-    if(!shieldCapOk(Z,toZone==="shieldUp")){toast(`🛡 シールド上限（10枚）：${faceNameOf(c)} は手札へ`);toHand(Z,c);return;}
+    // 🛡 デュエプレ：シールド超過分はシールドを経由せず直接墓地へ（墓地置き時の能力は発動しない・wiki準拠）
+    if(!shieldCapOk(Z,toZone==="shieldUp")){c.faceup=true;c.tapped=false;Z.grave.push(c);toast(`🛡 シールド上限（10枚）：${faceNameOf(c)} はシールドを経由せず墓地へ`);sfx("grave");return;}
     c.faceup=(toZone==="shieldUp");Z.shield.push(c);
   }
   else if(toZone==="deckTop"){c.faceup=false;c.seen=false;Z.deck.unshift(c);}
