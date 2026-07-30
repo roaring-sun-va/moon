@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>DM Re:Vault v10.15</title>
+<title>DM Re:Vault</title>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="googlebot" content="noindex, nofollow, noarchive">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -862,7 +862,7 @@ body.shake{animation:bodyShake .4s ease-out}
 <body>
 
 <div id="topbar">
-  <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span><span class="verchip" id="appVer">v10.15</span></h1>
+  <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span><span class="verchip" id="appVer" title="読み込み中">読込中…</span></h1>
   <div id="topScroll">
     <span id="turnBadge">ターン 0</span>
     <button class="btn small ex" id="btnExpert">EX</button>
@@ -3054,8 +3054,11 @@ window.addEventListener("resize",()=>{try{applyLogBox();}catch(e){}});
    toast("📜 ログボタンの位置を右下の既定に戻しました");
  });}
 {const b=document.getElementById("ldClose");if(b)b.addEventListener("click",()=>{const d=document.getElementById("logDock");if(d)d.classList.remove("show");});}
-/* 🔒💬 オンライン対戦の操作許可とメッセージのボタン結線（v10.31） */
-{
+/* 🔒💬 オンライン対戦の操作許可とメッセージのボタン結線（v10.31）
+   ⚠ v10.36修正：ここを即時実行していたため、後方で const 定義される CHAT_QUICK を
+   参照した時点で ReferenceError（TDZ）になり、以降のスクリプト全体が停止していた
+   （＝バージョン表示が静的HTMLのまま・盤面が真っ白になる不具合）。init から呼ぶ関数に変更。 */
+function wireOnlineChatUI(){
   const g=document.getElementById("olGrantBtn");
   if(g)g.addEventListener("click",()=>olSendGrant(!ONLINE.grantOpp));
   const a=document.getElementById("olAskBtn");
@@ -3400,10 +3403,100 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.35";
+const APP_VER="v10.36";
+/* ============================================================
+   🔄 更新まわりの安全装置（v10.36）
+   症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
+   原因になりうるもの：
+     ① Service Worker のキャッシュが古い index.html を返し続ける
+        （sw.js 自体が変わらないと updatefound が起きず、キャッシュが更新されない）
+     ② 新しい SW が waiting のまま取り残される（対戦中は skipWaiting を送らない仕様のため）
+     ③ 古いバージョンが、新しいバージョンの保存設定（レイアウト等）を読めずに描画で失敗する
+   対策：
+     ・起動時に waiting の SW があれば（対戦中でなければ）その場で切り替える
+     ・タブに戻るたびに更新チェック
+     ・バージョン表示をタップ → 強制更新（全キャッシュ削除＋SW解除＋キャッシュバスターつき再読込）
+     ・描画に失敗して盤面が空になったら、復旧バナーを出す */
+async function forceUpdateApp(){
+  try{
+    toast("🔄 キャッシュを削除して最新版を取得します…");
+    if("serviceWorker" in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      for(const r of regs){try{await r.unregister();}catch(e){}}
+    }
+    if(window.caches){
+      const keys=await caches.keys();
+      for(const k of keys){try{await caches.delete(k);}catch(e){}}
+    }
+  }catch(e){console.warn("forceUpdate",e);}
+  const u=new URL(location.href);
+  u.searchParams.set("v",String(Date.now())); // キャッシュバスター
+  location.replace(u.toString());
+}
+/* 🚑 保存設定が壊れている／新しい版のデータを古い版が読めない時の復旧 */
+async function resetViewSettings(){
+  const yes=await ask("🚑 表示設定（レイアウト・ゾーンの並び・大きさ・ログの位置）を初期化して再読み込みしますか？\n\n※デッキ・カード登録・画像は消えません");
+  if(!yes)return;
+  try{
+    if(db)for(const k of ["layout","zoneOrder","zoneOrders","zoneScale","widePair","logBox","logSize","logFabPos","sheetPos","listCols","builderCols","pickCols"]){
+      try{await idbPut("misc",k,"");}catch(e){}
+    }
+  }catch(e){}
+  toast("🚑 表示設定を初期化しました。再読み込みします…");
+  setTimeout(()=>location.reload(),600);
+}
+/* 🩹 盤面が空のまま（描画に失敗）なら復旧バナーを出す */
+function checkBoardHealth(){
+  try{
+    const b=document.getElementById("board");
+    if(!b||b.querySelector(".pboard"))return;
+    let w=document.getElementById("boardFixWrap");
+    if(w)return;
+    w=document.createElement("div");
+    w.id="boardFixWrap";
+    w.style.cssText="position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:95;max-width:min(92vw,420px);background:rgba(10,14,24,.98);border:1px solid #ff6b6b;border-radius:14px;padding:14px 16px;box-shadow:0 12px 34px rgba(0,0,0,.7);color:#e8eefc;font-size:13px;line-height:1.7;text-align:center";
+    w.innerHTML=`<div style="font-weight:900;color:#ff9a9a;margin-bottom:6px">⚠ 盤面が表示できませんでした</div>
+      <div style="color:#cbd3df">古いバージョンが残っているか、表示設定が読めない可能性があります。<br>下のどちらかをお試しください。</div>`;
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap";
+    const b1=document.createElement("button");
+    b1.className="btn small primary";b1.textContent="🔄 最新版を取得";
+    b1.addEventListener("click",()=>forceUpdateApp());
+    const b2=document.createElement("button");
+    b2.className="btn small";b2.textContent="🚑 表示設定を初期化";
+    b2.addEventListener("click",()=>resetViewSettings());
+    const b3=document.createElement("button");
+    b3.className="btn small ghost";b3.textContent="閉じる";
+    b3.addEventListener("click",()=>w.remove());
+    row.appendChild(b1);row.appendChild(b2);row.appendChild(b3);
+    w.appendChild(row);
+    document.body.appendChild(w);
+  }catch(e){}
+}
+/* ⚠ 起動中の致命的エラーを黙って白画面にしない */
+window.addEventListener("error",e=>{
+  try{
+    if(!window._fatalShown&&/renderPlayer|buildBoards|renderAll/.test(String(e&&e.error&&e.error.stack||""))){
+      window._fatalShown=true;
+      setTimeout(checkBoardHealth,50);
+    }
+  }catch(_){}
+});
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
-  const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
+  const _v=document.getElementById("appVer");
+  if(_v){
+    _v.textContent=APP_VER;
+    // 🔄 バージョン表示をタップ → 更新の確認・強制更新（古い版が残る問題の手動リセット口）
+    _v.style.cursor="pointer";
+    _v.title="タップ：最新版の確認・キャッシュを消して再取得";
+    _v.addEventListener("click",async ()=>{
+      const j=await askChoice(`⚡ DM Re:Vault ${APP_VER}\n表示が古い／盤面がおかしい時はここから直せます。`,
+        ["🔄 最新版を取得（キャッシュを削除して再読み込み）","🚑 表示設定を初期化して再読み込み","閉じる"]);
+      if(j===0)await forceUpdateApp();
+      else if(j===1)await resetViewSettings();
+    });
+  }
   const _v2=document.getElementById("setVer");if(_v2)_v2.textContent=APP_VER;
 }catch(e){}
 const memImages=new Map(), memDecks=new Map();
@@ -29766,6 +29859,20 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
     navigator.serviceWorker.register("./sw.js",{updateViaCache:"none"}).then(reg=>{
       console.log("SW registered: offline ready");
       reg.update().catch(()=>{});
+      // 🔄 v10.36：すでに waiting の SW が取り残されていたら、その場で切り替える。
+      //    （対戦中に更新を検知して skipWaiting を送らなかった場合、次の起動でここが拾う）
+      const takeWaiting=()=>{
+        if(!reg.waiting)return false;
+        if(swInGame()){swShowUpdateChip();return true;}
+        try{reg.waiting.postMessage({type:"SKIP_WAITING"});}catch(e){}
+        return true;
+      };
+      takeWaiting();
+      // 🔄 タブに戻るたびに更新チェック（デプロイ後にリロードしなくても拾えるように）
+      document.addEventListener("visibilitychange",()=>{
+        if(document.visibilityState!=="visible")return;
+        reg.update().then(()=>{setTimeout(takeWaiting,300);}).catch(()=>{});
+      });
       reg.addEventListener("updatefound",()=>{
         const nw=reg.installing;
         if(!nw)return;
@@ -29931,7 +30038,10 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
     if(d)setPlayerDeck(1,lastOpp,d);
   }
   await refreshDeckSelects();
+  try{wireOnlineChatUI();}catch(e){console.warn("wireOnlineChatUI",e);} // 🔒💬 操作許可・メッセージのボタン結線
   buildBoards();renderAll();
+  // 🩹 盤面が空のまま（古い版が残っている／設定が読めない等）なら復旧バナーを出す
+  setTimeout(checkBoardHealth,400);
   // 💾 前回が途中で切れていたら（Safariのメモリ落ち・不意のリロードなど）盤面の復帰を提案
   try{ if(typeof autoSaveOfferRestore==="function")await autoSaveOfferRestore(); }catch(e){ console.warn(e); }
 })();
