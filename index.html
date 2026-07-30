@@ -3318,7 +3318,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.27";
+const APP_VER="v10.30";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -5595,9 +5595,22 @@ function revealMaxMin(op,spellOnly){
 }
 
 /* ================= 汎用効果 ================= */
+/* 🔀 山札の下へまとめて送ったカードの「実際の並び順」をログに残す（v10.30）。
+   引数 cards は deck へ push する順（＝配列の後ろほど下）。デュエプレでは順番がランダムに決まるため
+   本来はプレイヤーにも分からない情報だが、検証・振り返り用に記録する。
+   オンライン対戦中のみ相手には枚数だけ見せる（logPriv）。pi不明時はlogOnly。 */
+function logDeckBottomOrder(pi,cards,labelJa,tagJa){
+  if(!cards||!cards.length)return;
+  const lb=labelJa||"カード";
+  const tag=tagJa||"";
+  const nms=cards.map(x=>`《${faceNameOf(x)}》`).join(" → ");
+  const msg=`🔀 ${pi!=null?S.players[pi].label+"：":""}${lb}${cards.length}枚を山札の下へ${tag?tag.replace(/[（）]/g,m=>m==="（"?"〔":"〕"):""} 上→下の順：${nms}　※最後の《${faceNameOf(cards[cards.length-1])}》が一番下`;
+  if(pi==null){logOnly(msg);return;}
+  logPriv(pi,msg,`🔀 ${S.players[pi].label}：${lb}${cards.length}枚を山札の下へ（並び順は非公開）`);
+}
 /* 🃏 山札の下に置く並び順（モード分岐）：
    デュエプレモード＝ランダム固定（本家では順番を指定できない）／TCGモード＝「好きな順に並べる」も選べる */
-async function orderForDeckBottom(rest,labelJa){
+async function orderForDeckBottom(rest,labelJa,pi){
   labelJa=labelJa||"残り";
   if(S.gameMode==="tcg"&&rest.length>1){
     const mode=await askChoice(`${labelJa}${rest.length}枚を山札の下へ。並び順は？（TCGモード）`,["ランダム","好きな順に並べる"]);
@@ -5610,19 +5623,21 @@ async function orderForDeckBottom(rest,labelJa){
       }
       ordered.push(...pool);
       toast(`${labelJa}${ordered.length}枚を指定順で山下へ：${ordered.map(x=>faceNameOf(x)).join(" → ")}`);
+      logDeckBottomOrder(pi,ordered,labelJa,"（TCG：指定順）");
       return ordered;
     }
   }
   const ordered=[...rest];
   for(let i=ordered.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ordered[i],ordered[j]]=[ordered[j],ordered[i]];}
   if(rest.length>1)toast(`${labelJa}${ordered.length}枚をランダムな順で山札の下へ`);
+  logDeckBottomOrder(pi,ordered,labelJa,"（ランダム順）");
   return ordered;
 }
 // メクレイド残り処理：山上のめくり残りを山札の下へ（並び順はモードで分岐）
-async function mekureidoRest(Z,rest){
+async function mekureidoRest(Z,rest,pi){
   if(!rest.length)return;
   if(rest.length===1){rest[0].faceup=false;rest[0].seen=false;Z.deck.push(rest[0]);return;}
-  const ordered=await orderForDeckBottom(rest,"残り");
+  const ordered=await orderForDeckBottom(rest,"残り",pi);
   ordered.forEach(x=>{x.faceup=false;x.seen=false;Z.deck.push(x);});
 }
 // メクレイド本体（count枚めくる。3=通常／6=ダブル）
@@ -5646,7 +5661,7 @@ async function mekureidoRun(count){
     enqueueFx(pi,cc);
     toast(`🔧 ${count>=6?"ダブル・":""}メクレイド${n}！ ${cc.name} を出した`);
   }
-  await mekureidoRest(Z,top);
+  await mekureidoRest(Z,top,pi);
   renderAll();sfx("ok");
 }
 // 効果のコントローラー（カード登録効果はrunFxListから設定。手札メニュー等はnull＝ターンプレイヤー基準）
@@ -5991,7 +6006,7 @@ const EFFECTS=[
      snap();
      const cc=Z.deck.splice(j,1)[0];
      cc.faceup=true;Z.hand.push(cc);markArrive(cc);
-     Z.deck.sort(()=>Math.random()-.5);
+     shuffle(Z.deck); // 🔀 v10.30：sortによる乱数シャッフルは偏るためFisher–Yates（shuffle）に統一
      sfx("draw");renderAll();
      toast(`🔍 ${cc.name} を手札に加え、山札をシャッフルした`);
    }},
@@ -6292,6 +6307,7 @@ const FX_TYPES=[
   ["zenithSpark","🌟 自分の手札から最もコストの大きいカードをランダムに1枚表向きにし、そのコスト以下の相手クリーチャーをすべてタップ。表向きにしたのがゼニスなら、それらは次の相手のターン開始時にアンタップしない（創世と終焉のゼニスパーク型）"],
   ["turnEndUntapAll","🌙 このターン終了時、自分のクリーチャーをすべてアンタップする（ジャスティスの誓い型・唱えた/出したターンのみ）"],
   ["drawPerOppTapped","🃏 相手のタップしているクリーチャー1体につきカードを1枚引く（手札上限10枚まで・フラッシュ・スパーク型）"],
+  ["drawPerAlly","🃏 自分の他の〔対象〕1体につきカードをn枚引く（手札上限10枚まで・超える分は引かない＝山札に残る・空中南極ペングィーナ型／条件欄＝対象・例：ムートピア）"],
   ["pickCostSpellHand","🔢 数字を1つ選び、そのコストの呪文を山札から超探索して1枚公開し手札へ→シャッフル（ロジック・スパーク型）"],
   ["turnLock","⛔ ターン限定ロックを設定（実行時に対象/種別/条件/期間を指定・5000VT後半効果型）"],
   ["oppCreLimitNext","🚫 次の相手のターン、相手はクリーチャーをn体しか出せない（キャンベロ型・体数制限ロック・n＝相手が出せる体数）"],
@@ -7347,6 +7363,7 @@ const MODE_FX_ALIAS={
   "墓地肥やし":"mill","ミル":"mill","山札墓地":"mill","自分墓地肥やし":"mill","山上墓地":"mill",
   "相手墓地肥やし":"millOpp","相手ミル":"millOpp",
   "ドロー":"draw","引く":"draw","相手ドロー":"drawFoe","相手に引かせる":"drawFoe",
+  "味方数ドロー":"drawPerAlly","1体につきドロー":"drawPerAlly",
   "オリオティスジャッジ":"oriJudge","オリオティス・ジャッジ":"oriJudge",
   "封印":"sealFoe","相手封印":"sealFoe","自分封印":"sealSelf",
   "マナ加速":"charge","ブースト":"charge","チャージ":"charge","マナブースト":"charge",
@@ -7712,6 +7729,7 @@ async function payHenrei(pi,f,srcCard){
         for(const sc of cards){const di2=DZ.lastIndexOf(sc);if(di2>=0)DZ.splice(di2,1);}
         for(let k2=cards.length-1;k2>0;k2--){const j3=Math.floor(Math.random()*(k2+1));[cards[k2],cards[j3]]=[cards[j3],cards[k2]];}
         DZ.push(...cards);
+        logDeckBottomOrder(zp2,cards,label,"（ランダム順）"); // 🔀 v10.30：実際に並んだ順を記録
       }
     }
     used++;
@@ -8061,6 +8079,28 @@ async function runFxList(pi,list,srcCard,inPump){
         bumpEv("draws",pi,dn);
         sfx("draw");emitEvent(pi,"draw");
         toast(`🃏 相手のタップ中クリーチャー${tn}体 → ${dn}枚ドロー${dn<tn?`（手札上限10枚のため${tn-dn}枚は引けない）`:""}`);
+        renderAll();
+      }
+    }else if(f.t==="drawPerAlly"){
+      // 🃏 自分の他の〔対象〕1体につきn枚引く（空中南極ペングィーナ型）。
+      //    「手札の上限枚数を超えるなら、上限枚数に達するまで引く」＝超える分は引かない（山札に残る・墓地には行かない）。
+      //    自分自身は「他の」なので数えない。封印中はクリーチャー扱いでないため数えない
+      const filtA=String(f.cond||"").trim();
+      const cntA=Z.battle.filter(x=>{
+        if(srcCard&&x.id===srcCard.id)return false;
+        if(isSealed(x))return false;
+        const rx=getReg(x);
+        if(!rx||!isCreatureReg(rx))return false;
+        return !filtA||lockFilterOk(filtA,rx,x);
+      }).length;
+      const wantA=cntA*Math.max(1,n);
+      if(!wantA){toast(`自分の他の${filtA||"クリーチャー"}がいません（ドローなし）`);}
+      else{
+        const capA=Math.max(0,10-Z.hand.length);
+        const dnA=Math.min(wantA,capA,Z.deck.length);
+        for(let i=0;i<dnA;i++){const dc=Z.deck.shift();dc.faceup=true;dc.sideways=false;Z.hand.push(dc);markArrive(dc);}
+        if(dnA>0){bumpEv("draws",pi,dnA);sfx("draw");emitEvent(pi,"draw");}
+        toast(`🃏 自分の他の${filtA||"クリーチャー"}${cntA}体 → ${dnA}枚ドロー${dnA<wantA?`（手札上限10枚のため${wantA-dnA}枚は引かない・山札に残る）`:""}`);
         renderAll();
       }
     }else if(f.t==="pickCostSpellHand"){
@@ -8424,7 +8464,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(!hits.length){toast(`⚖ ${S.players[p].label}：最大マナ${manaN}${gtMode?"より大きい":"以上の"}コストのクリーチャーはいない`);continue;}
         // ランダムな順番に並べ替え（Fisher–Yates）
         for(let i2=hits.length-1;i2>0;i2--){const j2=Math.floor(Math.random()*(i2+1));[hits[i2],hits[j2]]=[hits[j2],hits[i2]];}
-        const movedOJ=[];
+        const movedOJ=[],sentOJ=[]; // sentOJ＝実際に山札の下へ入った順（進化元も含む・ログ用）
         for(const hc of hits){
           if(!PZ.battle.some(x=>x.id===hc.id))continue; // 途中の置換等で既に離れていたら中止
           if(hasEtOmega(p,hc,getReg(hc))){etOmegaToHand(p,hc,PZ.battle);continue;} // ♾ 離れるかわりに手札へ
@@ -8448,6 +8488,7 @@ async function runFxList(pi,list,srcCard,inPump){
             }else{
               x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;
               PZ.deck.push(x);
+              sentOJ.push(x);
             }
           };
           const usOJ=hc.under?hc.under.splice(0):[];
@@ -8458,7 +8499,8 @@ async function runFxList(pi,list,srcCard,inPump){
         if(movedOJ.length){
           sfx("grave");
           toast(`⚖ ${S.players[p].label}（最大マナ${manaN}）：${movedOJ.join(" → ")} をランダムな順番で山札の一番下へ`);
-          logOnly(`⚖ オリオティス・ジャッジ型：${S.players[p].label}の ${movedOJ.join(" → ")} が山札の一番下へ（この順・最大マナ${manaN}${gtMode?"より大":"以上"}）`);
+          logOnly(`⚖ オリオティス・ジャッジ型：${S.players[p].label}の ${movedOJ.length}枚が山札の一番下へ（最大マナ${manaN}${gtMode?"より大":"以上"}）`);
+          logDeckBottomOrder(p,sentOJ,"オリオティス・ジャッジ","（ランダム順）");
         }
         renderAll();
       }
@@ -9192,6 +9234,7 @@ async function runFxList(pi,list,srcCard,inPump){
         }
         for(let i=revealed.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[revealed[i],revealed[k]]=[revealed[k],revealed[i]];}
         revealed.forEach(x=>{x.faceup=false;Z.deck.push(x);});
+        logDeckBottomOrder(pi,revealed,"残り","（ランダム順）"); // 🔀 v10.30
         sfx("ok");renderAll();
         toast(`🎴 ${put}体を出し、残り${revealed.length}枚をランダムに山札の下へ`);
       }
@@ -9602,6 +9645,7 @@ async function runFxList(pi,list,srcCard,inPump){
         for(const tc of take){tc.faceup=true;tc.tapped=false;Z.hand.push(tc);}
         for(let i=rest.length-1;i>0;i--){const j2=Math.floor(Math.random()*(i+1));[rest[i],rest[j2]]=[rest[j2],rest[i]];}
         for(const tc of rest){tc.faceup=false;Z.deck.push(tc);}
+        logDeckBottomOrder(pi,rest,"残り","（ランダム順）"); // 🔀 v10.30
         sfx("draw");renderAll();
         toast(`👀 ${take.length?`${take.map(faceNameOf).join("、")} を手札へ・`:""}残り${rest.length}枚を山札の下へ（ランダム順）`);
       }
@@ -10088,7 +10132,7 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🔍 ${cc.name} を手札に加えた`,null,{noLog:true});
         renderAll();
       }
-      Z.deck.sort(()=>Math.random()-.5);
+      shuffle(Z.deck); // 🔀 v10.30：sortによる乱数シャッフルは偏るためFisher–Yates（shuffle）に統一
       toast("山札をシャッフルした");
       sfx("draw");
     }else if(f.t==="handShieldUp"){
@@ -10299,7 +10343,7 @@ async function runFxList(pi,list,srcCard,inPump){
         renderAll();
       }
       if(!picked)toast(`🤖 「${w}」に該当するカードが山札にないため不発`);
-      Z.deck.sort(()=>Math.random()-.5);
+      shuffle(Z.deck); // 🔀 v10.30：sortによる乱数シャッフルは偏るためFisher–Yates（shuffle）に統一
       toast("山札をシャッフルした");
       sfx("draw");
     }else if(f.t==="battleAsk"){
@@ -11416,10 +11460,13 @@ async function faceupDestroyRep(pi,c,n,kindLabel){
   const canShield=!!(rRep&&rRep.underRepShield)&&Z.shield.length>0; // 🛡 「〜するか、自分のシールドを1つ墓地に置いてもよい」（カリスマックス型）
   // 🧬 進化クリーチャーの下にあるカードも「自分の表向きのカード」として選べるようにする
   //    （host=null なら盤面のカード本体、host があればそのクリーチャーの下のカード）
+  // 🔁 v10.28：このカード自身も「自分の表向きのカード」なので選べるようにした（カリスマックス型・
+  //    テキストに「このクリーチャー以外」の限定がないため。自身を選ぶと置換の結果として自身が破壊される＝
+  //    離れる／負けないの置換は成立する。自身の3枚破壊置換の二重適用は _jaoBusy で抑止）
   const pool=()=>{
     const out=[];
     for(const x of Z.battle){
-      if(x.id!==(c?c.id:null)&&x.faceup!==false)out.push({card:x,host:null});
+      if(x.faceup!==false)out.push({card:x,host:null,self:x.id===(c?c.id:null)});
       if(x.under&&x.under.length)for(const u of x.under){
         if(u&&u.faceup!==false&&u.id!==(c?c.id:null))out.push({card:u,host:x});
       }
@@ -11458,13 +11505,14 @@ async function faceupDestroyRep(pi,c,n,kindLabel){
     return true;
   }
   const names=[];
+  let selfKilled=false;
   for(let i=0;i<n;i++){
     const ps=pool();
     if(!ps.length)break;
     const j=ps.length===1?0:await pickCard(
       `💥 破壊する自分の表向きのカードを選択（${i+1}/${n}枚目）`,
       ps.map(o=>o.card),
-      {hint:"タップで選択（進化クリーチャーの下のカードも選べます）",sub:(x,ix)=>ps[ix]&&ps[ix].host?`⬇${faceNameOf(ps[ix].host)}の下`:""});
+      {hint:"タップで選択（このカード自身・進化クリーチャーの下のカードも選べます）",sub:(x,ix)=>ps[ix]&&ps[ix].host?`⬇${faceNameOf(ps[ix].host)}の下`:(ps[ix]&&ps[ix].self?"★このカード自身":"")});
     if(j===null)break;
     const t=ps[j];
     if(t.host){
@@ -11478,14 +11526,24 @@ async function faceupDestroyRep(pi,c,n,kindLabel){
       if(typeof queueToGrave==="function"){try{queueToGrave(pi,rm,"battle");}catch(e){}} // ⚡ 墓地に置かれた時（ゾルザーク型）は解決後に発火
       renderAll();
     }else{
-      names.push(faceNameOf(t.card));
-      await destroyCreature(pi,t.card,{});
+      names.push(t.self?`${faceNameOf(t.card)}（自身）`:faceNameOf(t.card));
+      if(t.self){
+        // ★ 自身を選んだ場合：3枚破壊の置換が再度走らないよう _jaoBusy で抑止して破壊
+        //    （エスケープ／EXライフ等の他の破壊置換は従来どおり適用される）
+        selfKilled=true;
+        const prevBusy=t.card._jaoBusy;
+        t.card._jaoBusy=true;
+        try{ await destroyCreature(pi,t.card,{}); }
+        finally{ t.card._jaoBusy=prevBusy; }
+      }else{
+        await destroyCreature(pi,t.card,{});
+      }
     }
   }
   renderAll();
   if(!names.length)return false;
   toast(`💥 ${names.join("、")} を破壊（${names.length}枚）`);
-  return true;
+  return selfKilled?"self":true;
 }
 async function underLeaveReplace(pi,c){
   if(c._jaoBusy)return false; // 置換の処理中に同じカードで二重に走らないように
@@ -11497,8 +11555,13 @@ async function underLeaveReplace(pi,c){
   finally{ c._jaoBusy=false; }
   if(ok){
     sfx("grave");renderAll();
-    toast(`🔽 ${faceNameOf(c)} は離れない！`);
-    logOnly(`🔽 離場置換：${faceNameOf(c)} は離れず、自分の表向きのカードを破壊`);
+    if(ok==="self"){
+      toast(`🔽 ${faceNameOf(c)} は置換の対象に自身を選んだため破壊された（元の離れ方は置き換えられた）`);
+      logOnly(`🔽 離場置換：${faceNameOf(c)} は自身を破壊対象に選択（元の離場は置換され、破壊として墓地へ）`);
+    }else{
+      toast(`🔽 ${faceNameOf(c)} は離れない！`);
+      logOnly(`🔽 離場置換：${faceNameOf(c)} は離れず、自分の表向きのカードを破壊`);
+    }
   }
   return ok;
 }
@@ -11518,8 +11581,8 @@ async function underLoseReplace(loser){
   const ok=await faceupDestroyRep(loser,h,n,`💀 ${S.players[loser].label} が負けます（${faceNameOf(h)}）。`);
   if(!ok)return false;
   sfx("grave");renderAll();
-  toast(`💀 ${S.players[loser].label} は負けない！（${faceNameOf(h)}）`);
-  logOnly(`💀 敗北置換：${faceNameOf(h)} により、自分の表向きのカードを破壊して負けなかった`);
+  toast(`💀 ${S.players[loser].label} は負けない！（${faceNameOf(h)}）${ok==="self"?"\n※置換の対象に自身を選んだため、このクリーチャーは破壊された":""}`);
+  logOnly(`💀 敗北置換：${faceNameOf(h)} により、自分の表向きのカードを破壊して負けなかった${ok==="self"?"（自身も破壊対象に選択）":""}`);
   return true;
 }
 /* 💀 バラド・ヴィナ・シューラ型の敗北置換：負ける時、かわりに手札から条件に合うクリーチャー1体を
@@ -15833,6 +15896,9 @@ function extractEffects(text,mode){
   }
   // 文をまたぐ効果（「。」で分割すると壊れるもの）を先に全文から検出し、検出部分は節処理から除外する
   let textFx=text;
+  // 📝 ルール注記の括弧を除外：「（手札の上限枚数を超えるなら、上限枚数に達するまで引く）」等は
+  //    効果ではなく処理の説明なので、素のドロー等として二重登録されないよう先に落とす（v10.29）
+  textFx=textFx.replace(/[（(][^）)]*上限枚数[^）)]*[）)]/g,"");
   // ❄ 「クリーチャー1体をタップしてもよい。それは次の持ち主のターン開始時にアンタップしない」（天恋妖精キョウメイ型）
   //    タップ行とフリーズ文が「。」をまたぐため全文から検出し、条件欄「フリーズ」付きのタップ効果として登録。
   //    「相手の」限定なら tapOpN、限定なしなら tapAnyN（両者どちらでも）。効果の実行順を保つため行の追加は末尾（return直前）で行う
@@ -15956,9 +16022,13 @@ function extractEffects(text,mode){
       }
     }
     // ドロー
-    if(/引く/.test(cl)&&!/相手/.test(cl.split("引く")[0].slice(-8))){
+    // 🃏 「自分の（他の）〔対象〕1体につき、カードをn枚引く」（空中南極ペングィーナ型）＝可変ドロー。素のdrawより先に判定
+    {const mDP=cl.match(/自分の(?:他の)?(.{1,20}?)(?:クリーチャー)?1体につき[、,]?\s*カードを(\d+)枚引く/);
+     if(mDP){
+       fx.push({t:"drawPerAlly",n:+mDP[2]||1,cond:mDP[1].trim()});
+     }else if(/引く/.test(cl)&&!/相手/.test(cl.split("引く")[0].slice(-8))){
       const n=numOf(cl,/(\d+)枚(?:を)?引く/); fx.push({t:"draw",n});
-    }
+    }}
     // 🚫 一時的な呪文ロック：「次の…ターンまで（or このターン）相手は呪文を唱えられない」→ foeNoSpell（相手・次ターン終了まで）
     if(/相手は[^。■]*?呪文を(?:唱えられない|唱えることができない)/.test(cl)&&/次の[^。■]{0,12}ターン|このターン/.test(cl)){
       const mCo=cl.match(/コスト(\d+)(以下|以上)/);
@@ -19964,8 +20034,9 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         for(let i=revealed.length-1;i>=0;i--){
           const x=revealed[i];x.faceup=false;
         }
-        revealed.sort(()=>Math.random()-.5);
+        for(let i=revealed.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[revealed[i],revealed[k]]=[revealed[k],revealed[i]];} // 🔀 v10.30：sort(()=>Math.random()-.5)は偏るためFisher–Yatesに変更
         revealed.forEach(x=>ZY.deck.push(x));
+        logDeckBottomOrder(pTo,revealed,"ヨビニオンの残り","（ランダム順）");
         if(revealed.length)toast(`残り${revealed.length}枚はシャッフルして山札の下へ`);
         renderAll();
         await waitFxIdle();renderAll();
@@ -25312,10 +25383,10 @@ $("rvAllTop").addEventListener("click",()=>rvBulk((Z,arr)=>{
   logOnly(`📤 ${S.players[rvPi].label}：公開ゾーンの${nms.length}枚を元の順で山札の上へ → ${cnList(nms)}`); // 公開ゾーンは両者が見ているので伏せない
 }));
 $("rvAllBottom").addEventListener("click",()=>rvBulk((Z,arr)=>{
-  const nms=arr.map(faceNameOf);
   arr.forEach(c=>{c.faceup=false;c.seen=false;}); // 順番が変わるので確認済みにはしない
   shuffle(arr);Z.deck.push(...arr);
-  logOnly(`🔀 ${S.players[rvPi].label}：公開ゾーンの${nms.length}枚をランダムな順で山札の下へ → ${cnList(nms)}`);
+  // 🔀 v10.30：並べ替え「後」の実際の順をログに記録（従来は並べ替え前の順を出していたため実際の山札と食い違っていた）
+  logDeckBottomOrder(rvPi,arr,"公開ゾーンのカード","（ランダム順）");
   toast("残りをランダムな順で山札の下に送りました");
 }));
 $("rvAllHand").addEventListener("click",()=>rvBulk((Z,arr)=>{
