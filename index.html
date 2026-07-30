@@ -1697,6 +1697,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxZRush"> Zラッシュ（いずれかの盾が離れるとHM解放）</label>
         <label><input type="checkbox" id="fxInvadeZero"> 侵略ZERO（相手がクリーチャーを出した時、手札/墓地/マナから自分のクリーチャーに重ねる）</label>
         <label><input type="checkbox" id="fxRev0"> 革命0トリガー（自分の盾0で相手の攻撃時、手札から無料使用）</label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="ミラクル・ミラダンテ型：革命0トリガーで出す時、山札の上から1枚目を表向きにし、それが進化元にできるクリーチャーならバトルゾーンに出して、このクリーチャーをその上に置く（進化）。条件欄に進化元の条件（例：光）を書けます。自動判定できない時はプレイヤーに確認します"><input type="checkbox" id="fxRev0Evo"> ⤴ 革命0で出す時、山札の1枚目を進化元にする（ミラクル・ミラダンテ型）／進化元の条件<input type="text" id="fxRev0EvoF" placeholder="例：光（空欄＝非進化クリーチャーなら可）" style="width:200px"></label>
+        <label title="革命の防壁型：この呪文を唱えた後、墓地に置くかわりに山札に加えてシャッフルする"><input type="checkbox" id="fxCastToDeck"> 🔀 この呪文を唱えた後、墓地のかわりに山札へ加えてシャッフル（革命の防壁型）</label>
         <label style="display:flex;align-items:center;gap:6px">🚩 革命（盾N枚以下で追加能力が有効）
           <select id="fxRevoN" style="width:auto">
             <option value="-1">なし</option>
@@ -3398,7 +3400,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.31";
+const APP_VER="v10.35";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -4923,7 +4925,8 @@ async function runTurnEndTriggers(cur2){
                 seen.forEach(x=>{x.faceup=false;ZK.deck.push(x);});
               }
               toast(`🕊 P'S光臨（${faceNameOf(kc)}）：山上${look}枚に該当クリーチャーなし（見たカードは山札の下へ）`);continue;}
-            const j=await askChoice(`🕊 P'S光臨（${faceNameOf(kc)}）：山上${look}枚から出すクリーチャーを選択${filt?`（${filt}）`:""}`,[...cands.map(x=>faceNameOf(x)),"出さない"]);
+            const j=await pickCard(`🕊 P'S光臨（${faceNameOf(kc)}）：山上${look}枚から出すクリーチャーを選択${filt?`（${filt}）`:""}`,cands,
+              {hint:"タップで選択　／　✕ で「出さない」（見たカードは山札の下へ）"}); // 🎴 v10.32：画像つき
             snap();
             const seen=ZK.deck.splice(0,Math.min(look,ZK.deck.length)); // 見た山上look枚を確保
             let pick=null;
@@ -6748,6 +6751,7 @@ const FX_TYPES=[
   ["flip","この多面カードを裏返す（次の面へ・チャクラ/ディアスZ型・確認あり）"],
   ["handShieldUp","手札から1枚選んで表向きにシールド化（サッヴァーク型・任意/新規盾or重ねるを選択）"],
   ["deckShield","🛡 自分の山札の上からn枚を裏向きでシールドゾーンに加える（シールド追加・シールド化）"],
+  ["revealBottomShield","🛡 山札の上1枚を公開して山札の一番下へ。それが条件に合うなら山札の上からn枚をシールド化（革命の防壁型／条件欄＝例：光｜クリーチャー）"],
   ["deckShieldFill","🛡 自分の山札の上からn枚をシールド化。ただしシールド上限（10枚）を超える分は加えず山札に残す（墓地に落とさない・ミルザム型）"],
   ["shieldRandToHand","🛡→✋ 自分のランダムなシールドをn枚、手札に加える（加えたカードのS・トリガーは使えない・ミルザム型）"],
   ["freeSummon","コストを支払わずにクリーチャーを召喚（実行時に元ゾーンとカードを選択・踏み倒し）"],
@@ -9403,7 +9407,9 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🔮 山上${look.length}枚を見た（該当呪文${spells.length}枚${filt?`・${filt}`:""}）`);
         logOnly(`🔮 ${S.players[pi].label}：山札の上${look.length}枚を公開 → ${cnList(look)}`);
         if(spells.length){
-          const j=await askChoice("🔮 コストを支払わず唱える呪文を選択",[...spells.map(x=>{const rx=getReg(x);return faceNameOf(x)+(rx&&rx.twin?"（ツインパクト・呪文面）":"");}),"唱えない"]);
+          const j=await pickCard("🔮 コストを支払わず唱える呪文を選択",spells,
+            {hint:"タップで選択　／　✕ で「唱えない」",
+             sub:x=>{const rx=getReg(x);return (rx&&rx.twin)?"呪文面":"";}}); // 🎴 v10.32：画像つき
           if(j!==null&&j<spells.length){
             const sel=spells[j];
             const li=look.findIndex(x=>x.id===sel.id);
@@ -9613,7 +9619,8 @@ async function runFxList(pi,list,srcCard,inPump){
       const lbl=spellOnly?"S・トリガー付きの呪文":"S・トリガー持ち";
       if(!cands.length){toast(`手札に${lbl}がありません${filt&&!spellOnly?`（${filt}）`:""}`);}
       else{
-        const j=await askChoice(`⚡ 手札から${lbl}を1枚、コストを支払わずに実行`,[...cands.map(x=>faceNameOf(x)),"実行しない"]);
+        const j=await pickCard(`⚡ 手札から${lbl}を1枚、コストを支払わずに実行`,cands,
+          {hint:"タップで選択　／　✕ で「実行しない」"}); // 🎴 v10.32：画像つき
         if(j!==null&&j<cands.length){
           const sel=cands[j];
           const hi=Z.hand.findIndex(x=>x.id===sel.id);
@@ -9647,7 +9654,9 @@ async function runFxList(pi,list,srcCard,inPump){
       const cands=Z.hand.filter(x=>{const rx=getReg(x);return rx&&(rx.ctype==="spell"||rx.twin||rx.ctype==="twinpact")&&(!filt||lockFilterOk(filt,rx,x,null,"spell"));});
       if(!cands.length){toast(`手札に条件に合う呪文がありません${filt?`（${filt}）`:""}`);}
       else{
-        const j=await askChoice(`🔮 手札から呪文を1枚、コストを支払わず唱える${filt?`（${filt}）`:""}`,[...cands.map(x=>{const rx=getReg(x);return faceNameOf(x)+(rx&&rx.twin?"（ツインパクト・呪文面）":"");}),"唱えない"]);
+        const j=await pickCard(`🔮 手札から呪文を1枚、コストを支払わず唱える${filt?`（${filt}）`:""}`,cands,
+          {hint:"タップで選択　／　✕ で「唱えない」",
+           sub:x=>{const rx=getReg(x);return (rx&&rx.twin)?"呪文面":"";}}); // 🎴 v10.32：画像つき
         if(j!==null&&j<cands.length){
           const sel=cands[j];
           const hi=Z.hand.findIndex(x=>x.id===sel.id);
@@ -10516,6 +10525,35 @@ async function runFxList(pi,list,srcCard,inPump){
       if(add>0){sfx("move");renderAll();toast(`🛡 山札の上${add}枚をシールドゾーンに加えた`);}
       else if(!toGrave)toast("山札がありません");
       else renderAll();
+    }else if(f.t==="revealBottomShield"){
+      // 🛡 山札の上から1枚目を公開し、山札の一番下に置く。それが条件（f.cond・例：光／クリーチャー）に
+      //    合うなら、自分の山札の上からn枚目までをシールド化する（革命の防壁型・v10.34）。
+      //    公開したカード自身ではなく「次の山上」をシールドにするのがポイント
+      if(!Z.deck.length){toast("山札がありません");continue;}
+      const rv=Z.deck.shift();
+      rv.faceup=true;rv.seen=false;
+      const filtRB=String(f.cond||"").trim();
+      const rRB=getReg(rv);
+      const okRB=!filtRB||lockFilterOk(filtRB,rRB,rv);
+      sfx("flip");
+      toast(`👀 公開：${faceNameOf(rv)}${filtRB?`（条件：${filtRB} → ${okRB?"満たす":"満たさない"}）`:""}`);
+      logOnly(`👀 ${S.players[pi].label}：山札の上1枚を公開 → ${cn(rv)}（山札の一番下へ）`);
+      rv.faceup=false;
+      Z.deck.push(rv);
+      if(okRB){
+        let addRB=0,gvRB=0;
+        for(let i=0;i<Math.max(1,n)&&Z.deck.length;i++){
+          const cc=Z.deck.shift();cc.tapped=false;cc.sideways=false;
+          if(!shieldCapOk(Z)){cc.faceup=true;Z.grave.push(cc);gvRB++;continue;} // 🛡 10枚超過は墓地
+          cc.faceup=false;if(S.turn>0)cc.mark=true;
+          Z.shield.push(cc);addRB++;
+        }
+        if(gvRB>0)toast(`🛡 シールド上限（10枚）：超過${gvRB}枚は墓地へ`);
+        if(addRB>0){sfx("move");toast(`🛡 山札の上${addRB}枚をシールド化した`);logOnly(`🛡 ${S.players[pi].label}：条件を満たしたため山札の上${addRB}枚をシールド化`);}
+      }else{
+        toast(`（条件を満たさないためシールド化しません）`);
+      }
+      renderAll();
     }else if(f.t==="deckShieldFill"){
       // 🛡 山札の上からn枚をシールド化。上限(10)を超える分は加えずに山札の上へ残す（墓地に落とさない・ミルザム型）
       let add=0,left=0;
@@ -10672,10 +10710,13 @@ async function runFxList(pi,list,srcCard,inPump){
       for(let i=0;i<n;i++){
         const cands=Z.deck.filter(matchW);
         if(!cands.length)break;
-        const uniq=[...new Set(cands.map(x=>x.name))];
-        const j=uniq.length===1?0:await askChoice(`🤖 該当カードから選択（${i+1}/${n}・枚数と他のカードは見えません）`,uniq);
+        // 🎴 v10.32：カード画像つきで選べるようにした（同名は1枚にまとめて表示）
+        const uniqCards=[],_seenNm=new Set();
+        for(const x of cands){if(_seenNm.has(x.name))continue;_seenNm.add(x.name);uniqCards.push(x);}
+        const j=uniqCards.length===1?0:await pickCard(`🤖 該当カードから選択（${i+1}/${n}）`,uniqCards,
+          {hint:"タップで選択（同名は1枚にまとめています・枚数と他のカードは見えません）　／　✕ で中止"});
         if(j===null)break;
-        const cc=cands.find(x=>x.name===uniq[j]);
+        const cc=uniqCards[j];
         const di=Z.deck.findIndex(x=>x.id===cc.id);
         Z.deck.splice(di,1);
         cc.faceup=true;Z.hand.push(cc);markArrive(cc);
@@ -12305,6 +12346,16 @@ function resolveOut(Z,o){
   o.faceup=true;o.tapped=false;
   const rg=getReg(o);
   if(rg&&rg.charger){Z.mana.push(o);return true;}
+  // 🔀 「この呪文を唱えた後、墓地に置くかわりに山札に加えてシャッフルする」（革命の防壁型・v10.34）
+  if(rg&&rg.castToDeck){
+    o.faceup=false;o.seen=false;o.sideways=false;o.rot=0;
+    Z.deck.push(o);
+    shuffle(Z.deck);
+    const pi0=S.players.findIndex(P=>P.zones===Z);
+    toast(`🔀 ${faceNameOf(o)} は唱えた後、墓地に置くかわりに山札に加えてシャッフル`);
+    if(pi0>=0)logPriv(pi0,`🔀 ${S.players[pi0].label}：${cn(o)} を唱えた後、墓地のかわりに山札へ加えてシャッフル`,`🔀 ${S.players[pi0].label}：唱えた呪文を墓地のかわりに山札へ加えてシャッフル`);
+    return true;
+  }
   Z.grave.push(o);
   // 🌑 虚無月の門：水の魔導具呪文の解決完了（解決中→墓地）を誘発候補に
   if(rg&&raceMatch(rg,"魔導具")&&rg.civs&&rg.civs.includes("water")){
@@ -13243,12 +13294,12 @@ async function startAttack(pi,id){
     if(!isCreatureReg(tr))return; // クリーチャー以外（D2フィールド/タマシード/クロスギア等）は攻撃対象外
     if(t.tapped||atkAll)targets.push({kind:"creature",cid:t.id,label:`⚔ ${faceNameOf(t)}${t.tapped?"（タップ中）":"（アンタップ）"}`});
   });
-  if(OZ.shield.length)targets.push({kind:"shield",label:`🛡 シールドをブレイク（残り${OZ.shield.length}枚）`});
+  if(OZ.shield.length)targets.push({kind:"shield",label:`🛡 相手プレイヤーを攻撃（シールド残り${OZ.shield.length}枚 → ブレイク）`});
   else targets.push({kind:"direct",label:"💥 ダイレクトアタック！"});
   closeSheet();
   const pick=await askChoice(`《${faceNameOf(c)}》の攻撃対象を選択`,targets.map(t=>t.label));
   if(pick===null){renderAll();return;}
-  const tg=targets[pick];
+  let tg=targets[pick]; // 🔥 革命0トリガーでシールドが増えた場合にブレイクへ差し替えるため let
   c._atkFxDone=false; // 新規アタック宣言のたびにアタック時効果を再有効化（保留→再開は別経路なので影響なし）
   c._allyAtkDone=false;c._anyAtkDone=false; // 攻撃するたびに誘発し直せるよう毎回リセット
   c._sxAtkDone=false;
@@ -14205,6 +14256,49 @@ async function execAttack(pi,id,tg){
       if(r2&&r2.ctype==="spell"){
         if(OZ.resolve.length){const olds=OZ.resolve.splice(0);olds.forEach(o=>resolveOut(OZ,o));}
         OZ.resolve.push(h);
+      }else if(r2&&r2.rev0Evo){
+        // ⤴ 革命0で出す進化クリーチャー（ミラクル・ミラダンテ型・v10.34）
+        //    山札の上から1枚目を表向きにし、それが進化元にできるクリーチャーなら
+        //    バトルゾーンに出して、このクリーチャーをその上に置く（進化元になる）
+        if(!OZ.deck.length){
+          toast(`🔥 革命0トリガー：山札がないため《${faceNameOf(h)}》は出せません（手札に戻します）`);
+          OZ.hand.push(h);h.faceup=true;renderAll();continue;
+        }
+        const top=OZ.deck.shift();
+        top.faceup=true;top.seen=false;
+        sfx("flip");renderAll();
+        const rTop=getReg(top);
+        const isCre=!!(rTop&&isCreatureReg(rTop));
+        const isEvo=!!(rTop&&isEvoReg(rTop));
+        const condTxt=String(r2.rev0EvoF||"").trim();
+        const civOk=!condTxt||(rTop&&lockFilterOk(condTxt,rTop,top));
+        let ok=isCre&&!isEvo&&civOk;
+        // 判定が微妙な場合（未登録・条件欄なし等）はプレイヤーに確認してもらう
+        const why=!isCre?"クリーチャーではない":isEvo?"進化クリーチャーである":!civOk?`条件（${condTxt}）を満たさない`:"";
+        if(!ok){
+          ok=await ask(`⤴ 革命0トリガー（${faceNameOf(h)}）\n山札の1枚目：《${faceNameOf(top)}》\n\n自動判定では「${why}」ため進化元にできません。\nこのカードを進化元にしますか？（テキストの条件で判断してください）`);
+        }
+        if(ok){
+          OZ.battle.push(top);
+          markArrive(top);
+          // 出したクリーチャーの上に革命0クリーチャーを重ねる（進化）
+          const bi=OZ.battle.findIndex(x=>x.id===top.id);
+          h.under=[top,...(top.under||[])];
+          top.under=[];
+          h.tapped=top.tapped;
+          OZ.battle[bi]=h;
+          toast(`⤴ 革命0トリガー！ ${faceNameOf(h)}（進化元：${faceNameOf(top)}）`);
+          logOnly(`⤴ ${S.players[op].label}：革命0トリガーで ${cn(h)} を《${faceNameOf(top)}》の上に出した`);
+          emitEvent(op,"summon",h);
+        }else{
+          // 進化元にできない：めくったカードは山札の一番下へ、本体は手札に戻す
+          top.faceup=false;
+          OZ.deck.push(top);
+          OZ.hand.push(h);h.faceup=true;
+          toast(`🔥 革命0トリガー：《${faceNameOf(top)}》は進化元にできないため不発（めくったカードは山札の一番下へ・${faceNameOf(h)} は手札に戻ります）`);
+          logOnly(`🔥 ${S.players[op].label}：革命0トリガーは不発（山札の1枚目が進化元にできなかった）`);
+          renderAll();continue;
+        }
       }else{
         OZ.battle.push(h);
         emitEvent(op,"summon");
@@ -14220,9 +14314,21 @@ async function execAttack(pi,id,tg){
   }
   await offerRev0();
   if(rev0Used){
-    toast(`🔥 革命0トリガーの処理中：効果を盤面で解決してください。攻撃が防がれなければ、攻撃クリーチャーからもう一度「攻撃する」→ダイレクトアタックで勝敗を記録できます`);
-    renderAll();
-    return;
+    // 🔥 革命0トリガーの解決後も攻撃は続く（ニンジャ・ストライク→ブロック宣言→ブレイク／ダイレクトアタック）。
+    //    シールドが追加されていれば、この攻撃はダイレクトアタックではなくブレイクになる（革命の防壁型・v10.35）。
+    //    ここで攻撃を打ち切って「もう一度攻撃」させると攻撃時効果が再発動してしまうため、
+    //    既定では中断せずそのまま続ける（手動で解決したい時だけ「いいえ」で中断できる）
+    if(OZ.shield.length&&tg.kind==="direct"){
+      tg={kind:"shield"};
+      toast(`🛡 革命0トリガーでシールドが${OZ.shield.length}枚になったため、この攻撃はダイレクトアタックではなくブレイクになります`);
+      logOnly(`🛡 ${S.players[op].label}：革命0トリガーでシールドが追加されたため、《${faceNameOf(c)}》の攻撃はブレイクに変わった`);
+    }
+    const goR0=await ask(`🔥 革命0トリガーの解決が終わりました。\nこのまま攻撃の処理（ブロック宣言→${tg.kind==="shield"?"ブレイク":"ダイレクトアタック"}）を続けますか？\n\n「いいえ」で中断すると盤面で手動処理できます（※もう一度攻撃すると攻撃時効果が再発動する点に注意）`);
+    if(!goR0){
+      toast(`🔥 革命0トリガー：攻撃の処理を中断しました（盤面で手動処理してください）`);
+      renderAll();
+      return;
+    }
   }
   // ニンジャ・ストライク／裏ニンジャ・ストライク（防御側）
   if(S.expert&&S.vs){
@@ -14340,7 +14446,8 @@ async function execAttack(pi,id,tg){
         // キズナプラス：自身のあと、自分の他のクリーチャー1体のキズナ能力を使う
         const pool=Z.battle.filter(x=>x.id!==c.id&&kFxOf(x).length);
         if(pool.length){
-          const j=pool.length===1?0:await askChoice(`🤝 キズナプラス：能力を使う自分の他のクリーチャーを選択`,[...pool.map(x=>faceNameOf(x)),"使わない"]);
+          const j=pool.length===1?0:await pickCard(`🤝 キズナプラス：能力を使う自分の他のクリーチャーを選択`,pool,
+            {hint:"タップで選択　／　✕ で「使わない」"}); // 🎴 v10.32：画像つき
           if(j!==null&&j<pool.length)await runK(pool[j]);
         }
       }
@@ -14386,6 +14493,99 @@ async function execAttack(pi,id,tg){
       if(t&&(getReg(t)||{}).taunt==="first")S.tauntUsed[op]=true;
     }
   }
+  /* 💥 ブレイク枚数を決める（∞ブレイカーの選択・パワード／付与PB／SF／バフ加算まで込み・v10.35で関数化）。
+     戻り値：{n,bk}＝通常／{cancel:true}＝キャンセル／{zero:true}＝∞ブレイカーで0枚を選択
+     ダイレクトアタック宣言後にシールドが追加された時（革命の防壁・ボルシャック・ドギラゴン型）にも同じ計算を使う */
+  async function computeBreakCount(){
+    const reg=getReg(c);
+    const bk=c.tmpWB?"all":((c.hyper&&reg&&reg.hmBk)?reg.hmBk:(reg&&reg.breaks?reg.breaks:"1"));
+    let n;
+    if(bk==="inf"){
+      // ∞ ブレイカー：相手のシールドを好きな数ブレイクできる（0枚も選択可）
+      const mx=OZ.shield.length;
+      const opts=[];for(let k=0;k<=mx;k++)opts.push(k===0?"0枚（ブレイクしない）":`${k}枚ブレイク${k===mx?"（全部）":""}`);
+      const j=await askChoice(`∞ ブレイカー（${faceNameOf(c)}）\nブレイクする枚数を選択（相手のシールド${mx}枚）`,opts);
+      if(j===null)return {cancel:true};
+      if(j===0)return {zero:true};
+      n=j;
+      toast(`∞ ブレイカー：${n}枚ブレイク！`);
+    }
+    else if(bk==="all")n="all";
+    else if(bk==="powered"){
+      const P=await effPower(c,true);
+      n=Math.max(1,1+Math.floor(P/6000));
+      toast(`パワード・ブレイカー！ パワー${P} → ${n}枚ブレイク`);
+    }
+    else if(bk==="masterw")n=2;
+    else n=parseInt(bk,10)||1;
+    if(typeof n==="number"){
+      // ✨ 常在付与：パワード・ブレイカー（味方から付与されていれば、パワー由来のブレイク数と比べて多い方）
+      {
+        let auraPB=false;
+        const rcA=getReg(c);
+        for(const b of Z.battle){
+          const rb=getReg(b);
+          if(!rb||!rb.stAuraPB)continue;
+          if(isSealed(b)||isIgnored(b,pi))continue;
+          if(rb.stAuraOthers&&b.id===c.id)continue;
+          if(rb.stAuraFilt&&!(rcA&&lockFilterOk(rb.stAuraFilt,rcA,c)))continue;
+          auraPB=true;break;
+        }
+        if(auraPB){
+          const P=await effPower(c,true);
+          const pn=Math.max(1,1+Math.floor(P/6000));
+          if(pn>n){n=pn;toast(`✨ 付与：パワード・ブレイカー！ パワー${P} → ${n}枚ブレイク`);}
+        }
+      }
+      const rSF=getReg(c);
+      if(c.sfActive&&rSF&&rSF.sforceFx==="break"&&rSF.sforceN){n+=rSF.sforceN;toast(`🛡✨ SF有効：ブレイク数＋${rSF.sforceN} → ${n}枚`);}
+      if(c.buff&&c.buff.breakPlus){n+=c.buff.breakPlus;toast(`💥 バフ：ブレイク数＋${c.buff.breakPlus} → ${n}枚`);}
+    }
+    return {n,bk};
+  }
+  /* 💥 ブレイクの実行と、その後の処理（ブレイク・ボーナス／2回攻撃／攻撃の終わり／ジョブヴェール型の自壊）。
+     シールド攻撃とダイレクト→ブレイク変換の両方から呼ぶ（v10.35で関数化） */
+  async function finishBreak(n){
+    const brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
+    await breakShields(op,n,c);
+    if(S.expert&&brokeN>0&&Z.battle.find(x=>x.id===id)){
+      const rBB=getReg(c);
+      const fxBB=rBB&&rBB.watchFx?rBB.watchFx.filter(w=>w.ev==="onBreak"):[];
+      if(fxBB.length){
+        toast(`💥 ブレイク・ボーナス！（${brokeN}回）`);
+        for(let i2=0;i2<brokeN;i2++){
+          await runFxList(pi,fxBB,c);
+          if(!Z.battle.find(x=>x.id===id))break;
+        }
+        renderAll();
+      }
+    }
+    if(S.expert){
+      const rT2=getReg(c);
+      if(rT2&&rT2.twice==="afterAtk"&&!c._twiceUsed&&Z.battle.find(x=>x.id===c.id)){
+        if(noAtkBlkOf(c)){
+          toast(`🚫 ${faceNameOf(c)} は攻撃を止められているため、2回攻撃のアンタップはしない`);
+        }else{
+          c._twiceUsed=true;
+          c.tapped=false;
+          sfx("ok");
+          toast(`⚡⚡ 2回攻撃：${faceNameOf(c)} は攻撃の後アンタップ！`);
+          renderAll();
+        }
+      }
+      await atkEnd(); // ⚡ このクリーチャーの攻撃の終わりに（条件式つき誘発）
+    }
+    // 💀 相手プレイヤーを攻撃する時、攻撃の後、このクリーチャーを破壊する（黒神龍ジョブヴェール型）
+    if(S.expert){
+      const rSK=getReg(c);
+      if(rSK&&rSK.atkPSelfKill&&Z.battle.find(x=>x.id===id)){
+        toast(`💀 ${faceNameOf(c)} は相手プレイヤーを攻撃した後、破壊される`);
+        await destroyCreature(pi,c);
+        renderAll();
+      }
+    }
+  }
+
   if(tg.kind==="creature"){
     // ⏸ 攻撃時の誘発（D2フィールドのベガス型など）の解決が終わってからバトルに入る
     if(S.expert){
@@ -14430,51 +14630,10 @@ async function execAttack(pi,id,tg){
     }
   }
   else if(tg.kind==="shield"){
-    const reg=getReg(c);
-    const bk=c.tmpWB?"all":((c.hyper&&reg&&reg.hmBk)?reg.hmBk:(reg&&reg.breaks?reg.breaks:"1"));
-    let n;
-    if(bk==="inf"){
-      // ∞ ブレイカー：相手のシールドを好きな数ブレイクできる（0枚も選択可）
-      const mx=OZ.shield.length;
-      const opts=[];for(let k=0;k<=mx;k++)opts.push(k===0?"0枚（ブレイクしない）":`${k}枚ブレイク${k===mx?"（全部）":""}`);
-      const j=await askChoice(`∞ ブレイカー（${faceNameOf(c)}）\nブレイクする枚数を選択（相手のシールド${mx}枚）`,opts);
-      if(j===null){renderAll();return;}
-      if(j===0){toast(`∞ ブレイカー：0枚ブレイクを選択（ブレイクせず攻撃終了）`);await atkEnd();renderAll();return;}
-      n=j;
-      toast(`∞ ブレイカー：${n}枚ブレイク！`);
-    }
-    else if(bk==="all")n="all";
-    else if(bk==="powered"){
-      const P=await effPower(c,true);
-      n=Math.max(1,1+Math.floor(P/6000));
-      toast(`パワード・ブレイカー！ パワー${P} → ${n}枚ブレイク`);
-    }
-    else if(bk==="masterw")n=2;
-    else n=parseInt(bk,10)||1;
-    if(typeof n==="number"){
-      // ✨ 常在付与：パワード・ブレイカー（味方から付与されていれば、パワー由来のブレイク数と比べて多い方）
-      {
-        let auraPB=false;
-        const rcA=getReg(c);
-        for(const b of Z.battle){
-          const rb=getReg(b);
-          if(!rb||!rb.stAuraPB)continue;
-          if(isSealed(b)||isIgnored(b,pi))continue;
-          if(rb.stAuraOthers&&b.id===c.id)continue;
-          if(rb.stAuraFilt&&!(rcA&&lockFilterOk(rb.stAuraFilt,rcA,c)))continue;
-          auraPB=true;break;
-        }
-        if(auraPB){
-          const P=await effPower(c,true);
-          const pn=Math.max(1,1+Math.floor(P/6000));
-          if(pn>n){n=pn;toast(`✨ 付与：パワード・ブレイカー！ パワー${P} → ${n}枚ブレイク`);}
-        }
-      }
-      const rSF=getReg(c);
-      if(c.sfActive&&rSF&&rSF.sforceFx==="break"&&rSF.sforceN){n+=rSF.sforceN;toast(`🛡✨ SF有効：ブレイク数＋${rSF.sforceN} → ${n}枚`);}
-      if(c.buff&&c.buff.breakPlus){n+=c.buff.breakPlus;toast(`💥 バフ：ブレイク数＋${c.buff.breakPlus} → ${n}枚`);}
-    }
-    let brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
+    const _bc=await computeBreakCount();
+    if(_bc.cancel){renderAll();return;}
+    if(_bc.zero){toast(`∞ ブレイカー：0枚ブレイクを選択（ブレイクせず攻撃終了）`);await atkEnd();renderAll();return;}
+    const bk=_bc.bk;let n=_bc.n;
     if(S.expert){
       const rA=getReg(c);
       if(((rA&&rA.cantAtkP)||(c.buff&&c.buff.cantAtkP))&&!isIgnored(c,pi)){
@@ -14506,54 +14665,33 @@ async function execAttack(pi,id,tg){
         toast("攻撃クリーチャーが場を離れたため、ブレイクは行われませんでした");
         clearPendingAtk();renderAll();return;
       }
-      // 🛡 誘発の解決で相手のシールドが0枚になった場合、ブレイクは行われない。
-      //    宣言時はシールドを攻撃しているので、ここでダイレクトアタックに変わることはない。
+      // 💥 誘発の解決で相手のシールドが0枚になった場合は、ダイレクトアタックになる（v10.33で修正）。
+      //    攻撃はもともと「相手プレイヤー」に対する宣言であり、シールドがあればそれがブレイクされ、
+      //    無ければそのままプレイヤーに通る。ブレイクするかダイレクトアタックかは
+      //    宣言時ではなく攻撃の解決時のシールド枚数で決まる。
+      //    （従来は「宣言時にシールドを攻撃しているから」として攻撃が不成立になっていた）
+      //    ※革命0トリガーは宣言時にシールド0枚の時に使えるものなので、ここでは提示しない
       if(!OZ.shield.length){
-        toast(`🛡 ${S.players[op].label} のシールドが0枚になったため、ブレイクは行われません\n（宣言時にシールドを攻撃しているので、ダイレクトアタックにはなりません）`);
-        logOnly(`🛡 ${S.players[op].label} のシールドが0枚になったため、《${faceNameOf(c)}》のブレイクは行われなかった（ダイレクトアタックにはならない）`);
-        await atkEnd();
+        toast(`💥 ${S.players[op].label} のシールドが0枚になったため、そのままダイレクトアタック！`);
+        logOnly(`💥 ${S.players[op].label} のシールドが0枚になったため、《${faceNameOf(c)}》の攻撃はダイレクトアタックになった`);
+        if(animOn("shake")){
+          document.body.classList.add("shake");
+          setTimeout(()=>document.body.classList.remove("shake"),450);
+        }
+        sfx("atk");
+        if(S.vs&&S.turn>0)declareWin(pi,`💥 ダイレクトアタック成立（攻撃中にシールドが0枚になった）`);
+        await atkEnd(); // ⚡ このクリーチャーの攻撃の終わりに
+        // 💀 相手プレイヤーを攻撃した後、このクリーチャーを破壊する（黒神龍ジョブヴェール型）
+        const rSK0=getReg(c);
+        if(rSK0&&rSK0.atkPSelfKill&&Z.battle.find(x=>x.id===id)){
+          toast(`💀 ${faceNameOf(c)} は相手プレイヤーを攻撃した後、破壊される`);
+          await destroyCreature(pi,c);
+        }
         clearPendingAtk();renderAll();return;
       }
-      // 💥 ブレイク・ボーナスの回数も、待機後の実際の枚数で数え直す
-      brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
+      // 💥 ブレイク・ボーナスの回数は finishBreak 内で待機後の実際の枚数から数え直す
     }
-    await breakShields(op,n,c);
-    if(S.expert&&brokeN>0&&Z.battle.find(x=>x.id===id)){
-      const rBB=getReg(c);
-      const fxBB=rBB&&rBB.watchFx?rBB.watchFx.filter(w=>w.ev==="onBreak"):[];
-      if(fxBB.length){
-        toast(`💥 ブレイク・ボーナス！（${brokeN}回）`);
-        for(let i2=0;i2<brokeN;i2++){
-          await runFxList(pi,fxBB,c);
-          if(!Z.battle.find(x=>x.id===id))break;
-        }
-        renderAll();
-      }
-    }
-    if(S.expert){
-      const rT2=getReg(c);
-      if(rT2&&rT2.twice==="afterAtk"&&!c._twiceUsed&&Z.battle.find(x=>x.id===c.id)){
-        if(noAtkBlkOf(c)){
-          toast(`🚫 ${faceNameOf(c)} は攻撃を止められているため、2回攻撃のアンタップはしない`);
-        }else{
-          c._twiceUsed=true;
-          c.tapped=false;
-          sfx("ok");
-          toast(`⚡⚡ 2回攻撃：${faceNameOf(c)} は攻撃の後アンタップ！`);
-          renderAll();
-        }
-      }
-      await atkEnd(); // ⚡ このクリーチャーの攻撃の終わりに（条件式つき誘発）
-    }
-    // 💀 相手プレイヤーを攻撃する時、攻撃の後、このクリーチャーを破壊する（黒神龍ジョブヴェール型）
-    if(S.expert){
-      const rSK=getReg(c);
-      if(rSK&&rSK.atkPSelfKill&&Z.battle.find(x=>x.id===id)){
-        toast(`💀 ${faceNameOf(c)} は相手プレイヤーを攻撃した後、破壊される`);
-        await destroyCreature(pi,c);
-        renderAll();
-      }
-    }
+    await finishBreak(n);
   }
   else{
     if(S.expert){
@@ -14571,6 +14709,16 @@ async function execAttack(pi,id,tg){
     rev0Asked=false;
     await offerRev0();
     if(rev0Used){
+      // 🛡 革命0トリガーでシールドが追加されたら、この攻撃はブレイクに変わる（革命の防壁型・v10.35）
+      if(OZ.shield.length){
+        toast(`🛡 革命0トリガーでシールドが${OZ.shield.length}枚になったため、ダイレクトアタックにはならずブレイクになります`);
+        logOnly(`🛡 ${S.players[op].label}：革命0トリガーでシールドが追加されたため、《${faceNameOf(c)}》の攻撃はブレイクに変わった`);
+        const _bc3=await computeBreakCount();
+        if(_bc3.cancel){renderAll();return;}
+        if(_bc3.zero){toast(`∞ ブレイカー：0枚ブレイクを選択（ブレイクせず攻撃終了）`);await atkEnd();clearPendingAtk();renderAll();return;}
+        await finishBreak(_bc3.n);
+        clearPendingAtk();renderAll();return;
+      }
       toast(`🔥 革命0トリガーの処理中：効果を盤面で解決してください。攻撃が防がれなければ、もう一度攻撃→ダイレクトアタックで勝敗を記録できます`);
       renderAll();
       return;
@@ -14605,11 +14753,16 @@ async function execAttack(pi,id,tg){
         toast("攻撃クリーチャーが場を離れたため、ダイレクトアタックは成立しません");
         clearPendingAtk();renderAll();return;
       }
-      // 🛡 誘発の解決で相手にシールドが追加された場合は、勝敗を記録しない
+      // 💥 誘発の解決（革命0トリガーの《革命の防壁》・《ボルシャック・ドギラゴン》の効果など）で
+      //    相手にシールドが追加された場合は、この攻撃はブレイクに変わる（v10.35で自動化）。
+      //    宣言時ではなく攻撃の解決時のシールド枚数で、ブレイクかダイレクトアタックかが決まる。
       if(OZ.shield.length){
-        toast(`🛡 ${S.players[op].label} にシールドが${OZ.shield.length}枚追加されたため、ダイレクトアタックは成立しません\n（必要ならもう一度攻撃してシールドをブレイクしてください）`);
-        logOnly(`🛡 ${S.players[op].label} にシールドが追加されたため、《${faceNameOf(c)}》のダイレクトアタックは成立しなかった`);
-        await atkEnd();
+        toast(`🛡 ${S.players[op].label} にシールドが${OZ.shield.length}枚追加されたため、ダイレクトアタックにはならずブレイクになります`);
+        logOnly(`🛡 ${S.players[op].label} にシールドが追加されたため、《${faceNameOf(c)}》の攻撃はダイレクトアタックからブレイクに変わった`);
+        const _bc2=await computeBreakCount();
+        if(_bc2.cancel){renderAll();return;}
+        if(_bc2.zero){toast(`∞ ブレイカー：0枚ブレイクを選択（ブレイクせず攻撃終了）`);await atkEnd();clearPendingAtk();renderAll();return;}
+        await finishBreak(_bc2.n);
         clearPendingAtk();renderAll();return;
       }
     }
@@ -14837,7 +14990,7 @@ function fxRowEl(faceIdx,i){
   cnd.value=f.cond||"";
   cnd.onchange=()=>{f.cond=cnd.value.trim();};
   // 🛡 盾追加系の「自分のシールドが○枚以下のときだけ発動」ゲート欄（空欄/0＝無条件）
-  const SHIELD_ADD_TYPES=new Set(["deckShield","deckShieldFill","handShield","foeToShield","foeAllShield","foeHandShieldRand","shieldMakeRand"]);
+  const SHIELD_ADD_TYPES=new Set(["deckShield","deckShieldFill","handShield","foeToShield","foeAllShield","foeHandShieldRand","shieldMakeRand","revealBottomShield"]);
   const shb=document.createElement("input");
   shb.type="number";shb.min="0";shb.placeholder="盾≤";
   shb.title="自分のシールドが この枚数以下のときだけ発動する（空欄/0＝無条件）。デュエプレの「シールドが○枚以下なら」型。";
@@ -15913,6 +16066,9 @@ function renderFxEditor(){
   $("fxHyper").checked=!!FXEDIT.hyper;
   $("fxInvadeZero").checked=!!FXEDIT.invadeZero;
   $("fxRev0").checked=!!FXEDIT.rev0;
+  $("fxRev0Evo").checked=!!FXEDIT.rev0Evo;
+  $("fxRev0EvoF").value=FXEDIT.rev0EvoF||"";
+  $("fxCastToDeck").checked=!!FXEDIT.castToDeck;
   $("fxRevoN").value=String(FXEDIT.revoN==null?-1:FXEDIT.revoN);
   $("fxGearCrossN").value=FXEDIT.gearCrossN||0;
   $("fxAccel").checked=!!FXEDIT.accel;
@@ -17175,6 +17331,26 @@ function parseCardText(txt,mode){
   m=tSelf.match(/バズレンダ\s*[〔〈［\[（(]?[^0-9〕〉］\]）)]{0,6}?(\d+)/); if(m)out.set.buzz=+m[1];
   // ♾ フォーエバー・プリンセス型：どこからでも墓地に置かれる時、かわりに墓地＋自身を山札へシャッフル
   if(/どこからでも[^。]*?墓地に置かれ[^。]*?かわりに[^。]*?山札に加えてシャッフル/.test(t))out.set.graveShuffleRep=true;
+  // 🔀 「この呪文を唱えた後、墓地に置くかわりに山札に加えてシャッフルする」（革命の防壁型）
+  if(/この呪文を唱えた後[^。]*?墓地に置くかわりに[^。]*?山札に加えてシャッフル/.test(t))out.set.castToDeck=true;
+  // ⤴ 革命0トリガーで出す進化クリーチャー（ミラクル・ミラダンテ型）
+  //    「山札の上から1枚目を表向きにする。そのカードが〔X〕クリーチャーなら、バトルゾーンに出し、このクリーチャーをその上に置く」
+  {const mR0=t.match(/山札の上から1枚目を表向きにする。?\s*そのカードが([^。]{0,20}?)クリーチャーなら[^。]*?バトルゾーンに出し[^。]*?このクリーチャーをその上に置く/);
+   if(mR0){
+     out.set.rev0Evo=true;
+     // 「光の進化でない」「光の、進化ではない」等から文明だけを条件欄に残す（進化かどうかは自動判定）
+     const civ=(mR0[1].match(/(光|水|闇|火|自然)/)||[])[1]||"";
+     out.set.rev0EvoF=civ;
+     out.notes.push({msg:`⤴ 革命0トリガーで山札の1枚目を進化元にする設定を入れました${civ?`（進化元の条件：${civ}）`:""}。進化クリーチャーかどうかは自動判定し、判断が難しい場合は実行時に確認します`,q:"革命0"});
+   }}
+  // 🛡 「自分の山札の上から1枚目を公開し、山札の一番下に置く。それが〔X〕なら、自分の山札の上から1枚目をシールド化する」（革命の防壁型）
+  {const mRB=t.match(/山札の上から1枚目を公開し[^。]*?山札の一番下に置く。?\s*それが([^。]{1,20}?)なら[^。]*?山札の上から(\d+)枚目?を?シールド化/);
+   if(mRB){
+     // 「光のクリーチャー」→「光／クリーチャー」（lockFilterOkの「／」＝AND区切りに合わせる）
+     const cond=mRB[1].trim().replace(/^(光|水|闇|火|自然|ゼロ)の(.+)$/,"$1／$2");
+     out.fx.push({t:"revealBottomShield",n:+mRB[2]||1,cond});
+     out.notes.push({msg:`🛡 「山札の1枚目を公開して山札の下へ → 条件（${cond}）を満たせば山上をシールド化」を効果に追加しました`,q:"シールド化"});
+   }}
   // 🎨 シビルカウント（数値＋任意の文明指定）
   {
     const cm=tSelf.match(/シビルカウント\s*(\d+)/);
@@ -18264,6 +18440,9 @@ $("fxSave").addEventListener("click",async ()=>{
     hyper:$("fxHyper").checked,
     invadeZero:$("fxInvadeZero").checked,
     rev0:$("fxRev0").checked,
+    rev0Evo:$("fxRev0Evo").checked,
+    rev0EvoF:$("fxRev0EvoF").value.trim(),
+    castToDeck:$("fxCastToDeck").checked,
     revoN:parseInt($("fxRevoN").value,10),
     gearCrossN:+$("fxGearCrossN").value||0,
     accel:$("fxAccel").checked,
