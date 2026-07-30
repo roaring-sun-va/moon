@@ -233,7 +233,43 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   box-shadow:0 6px 18px rgba(0,0,0,.55);display:none;
 }
 #peekChip.show{display:block}
-/* 📜 ログドック：盤面を見ながら読めるログ。オーバーレイ(z-index:90〜)より下に置き、確認パネルが開いたら隠れる */
+/* 🔒 オンライン対戦：操作ロックの帯と、軽いメッセージ（チャット） */
+#olBar{
+  position:fixed;left:50%;transform:translateX(-50%);
+  top:calc(46px + env(safe-area-inset-top));z-index:86;
+  display:none;align-items:center;gap:8px;
+  background:rgba(10,14,24,.96);border:1px solid var(--line);border-radius:20px;
+  padding:5px 8px 5px 12px;box-shadow:0 6px 18px rgba(0,0,0,.55);
+  font-size:12px;font-weight:900;color:#cbd3df;max-width:calc(100vw - 16px);
+}
+#olBar.show{display:flex}
+#olBar.locked{border-color:#ff6b6b;color:#ffb3b3}
+#olBar.granted{border-color:#7fe0a8;color:#bff3d6}
+#olBar .btn{padding:4px 9px;font-size:11.5px}
+#chatFab{position:fixed;right:10px;bottom:calc(152px + env(safe-area-inset-bottom));z-index:84;
+  width:48px;height:48px;border-radius:50%;border:1px solid var(--line);
+  background:rgba(10,14,24,.92);color:#cbd3df;font-size:20px;
+  display:none;align-items:center;justify-content:center;
+  box-shadow:0 6px 18px rgba(0,0,0,.55);cursor:pointer;padding:0}
+#chatFab.show{display:flex}
+#chatFab .badge{position:absolute;top:-3px;right:-3px;min-width:17px;height:17px;border-radius:9px;
+  background:#ff5c5c;color:#fff;font-size:10.5px;font-weight:900;line-height:17px;padding:0 4px;display:none}
+#chatFab.unread .badge{display:block}
+#chatDock{position:fixed;right:8px;bottom:calc(96px + env(safe-area-inset-bottom));
+  width:300px;max-height:46dvh;z-index:85;
+  background:rgba(10,14,24,.97);border:1px solid var(--line);border-radius:12px;
+  display:none;flex-direction:column;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+#chatDock.show{display:flex}
+#chatDock .cd-head{display:flex;align-items:center;gap:6px;padding:7px 9px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:900;color:#8fb3ff}
+#chatDock .cd-body{flex:1 1 auto;overflow:auto;padding:8px 9px;display:flex;flex-direction:column;gap:6px}
+#chatDock .cd-msg{font-size:12.5px;line-height:1.5;padding:5px 8px;border-radius:9px;max-width:88%;word-break:break-word}
+#chatDock .cd-mine{align-self:flex-end;background:#1c3355;color:#dce8ff}
+#chatDock .cd-them{align-self:flex-start;background:#2a2033;color:#f0dcff}
+#chatDock .cd-sys{align-self:center;background:#171d29;color:#9fb0c8;font-size:11.5px}
+#chatDock .cd-quick{display:flex;flex-wrap:wrap;gap:5px;padding:6px 9px;border-top:1px solid var(--line)}
+#chatDock .cd-quick .btn{padding:4px 8px;font-size:11.5px}
+#chatDock .cd-in{display:flex;gap:5px;padding:6px 9px;border-top:1px solid var(--line)}
+#chatDock .cd-in input{flex:1 1 auto;min-width:0;background:#0d1119;border:1px solid var(--line);border-radius:8px;color:#e8eefc;padding:6px 8px;font-size:12.5px}
 #logDock{
   position:fixed;right:8px;top:calc(84px + env(safe-area-inset-top));
   width:340px;max-height:58dvh;z-index:85;
@@ -2229,7 +2265,26 @@ body.shake{animation:bodyShake .4s ease-out}
 <button id="peekChip">📋 パネルに戻る</button>
 <div id="fxNowChip"></div>
 <button id="logFab" title="ログを開く／閉じる（長押しで大きさ切替）">📜</button>
-<div id="logDock">
+<div id="olBar">
+  <span id="olBarMsg">対戦中</span>
+  <button class="btn small" id="olGrantBtn" title="相手が自分のターン中でもカードを動かせるようにします（もう一度押すと解除）">🔓 相手に操作を許可</button>
+  <button class="btn small ghost" id="olAskBtn" title="相手に操作の許可をお願いします">✋ 操作をお願い</button>
+</div>
+<button id="chatFab" title="メッセージ">💬<span class="badge" id="chatBadge">0</span></button>
+<div id="chatDock">
+  <div class="cd-head">
+    <span style="flex:1 1 auto">💬 メッセージ</span>
+    <button class="btn small ghost" id="cdClose" title="閉じる">✕</button>
+  </div>
+  <div class="cd-body" id="cdBody"></div>
+  <div class="cd-quick" id="cdQuick"></div>
+  <div class="cd-in">
+    <input id="cdInput" maxlength="60" placeholder="ひとこと（60字まで）" autocomplete="off">
+    <button class="btn small primary" id="cdSend">送信</button>
+  </div>
+</div>
+
+<div id="logDock">>
   <div class="ld-head">
     <span class="ld-title" id="ldTitle">📜 ログ</span>
     <button class="btn small ghost" id="ldDeck" title="山札の公開情報（確認済み・表向き・横差し）を見る">🔍</button>
@@ -2997,6 +3052,31 @@ window.addEventListener("resize",()=>{try{applyLogBox();}catch(e){}});
    toast("📜 ログボタンの位置を右下の既定に戻しました");
  });}
 {const b=document.getElementById("ldClose");if(b)b.addEventListener("click",()=>{const d=document.getElementById("logDock");if(d)d.classList.remove("show");});}
+/* 🔒💬 オンライン対戦の操作許可とメッセージのボタン結線（v10.31） */
+{
+  const g=document.getElementById("olGrantBtn");
+  if(g)g.addEventListener("click",()=>olSendGrant(!ONLINE.grantOpp));
+  const a=document.getElementById("olAskBtn");
+  if(a)a.addEventListener("click",()=>olAskPermission());
+  const f=document.getElementById("chatFab");
+  if(f)f.addEventListener("click",()=>chatToggle());
+  const cc=document.getElementById("cdClose");
+  if(cc)cc.addEventListener("click",()=>chatToggle(false));
+  const q=document.getElementById("cdQuick");
+  if(q){
+    for(const t of CHAT_QUICK){
+      const b2=document.createElement("button");
+      b2.className="btn small ghost";b2.textContent=t;
+      b2.addEventListener("click",()=>chatSend(t));
+      q.appendChild(b2);
+    }
+  }
+  const inp=document.getElementById("cdInput");
+  const snd=document.getElementById("cdSend");
+  const doSend=()=>{if(!inp)return;const v=inp.value;inp.value="";chatSend(v);};
+  if(snd)snd.addEventListener("click",doSend);
+  if(inp)inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();doSend();}});
+}
 /* 🪟 確認パネル（オーバーレイ）が開いている間も、ログを手前に重ねて読めるようにする。
    ログ自体は閉じていないが、これまではパネルの下に隠れて「閉じた」ように見えていた。 */
 window.LOG_OVER_OLAYS=["viewerOlay","revealOlay","stackOlay","askOlay","breakOlay"];
@@ -3318,7 +3398,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.30";
+const APP_VER="v10.31";
 try{
   document.title=`DM Re:Vault ${APP_VER}`;
   const _v=document.getElementById("appVer");if(_v)_v.textContent=APP_VER;
@@ -3868,7 +3948,186 @@ function updateEditingBanner(){
   if(!DECK_DIRTY){const dm=$("dirtyMark");if(dm)dm.textContent="";}
 }
 const LIMWARN=[{},{}];
-const ONLINE={peer:null,conn:null,role:null,applying:false,timer:null};
+const ONLINE={peer:null,conn:null,role:null,applying:false,timer:null,grantMe:false,grantOpp:false,askedAt:0};
+/* ============================================================
+   🔒 オンライン対戦：手番外の操作ロック（v10.31）
+   全状態を丸ごと送り合う同期方式のため、相手が自分のターン中に盤面を触ったり
+   ⌘Zで巻き戻すと、その状態が上書きされて処理が混乱する。
+   そこで「手番でない側は盤面・戻る・次のターンを触れない」ようにし、
+   必要な時だけターン側が許可を出せるようにする。
+   ロックしないもの：ログ／メッセージ／画像拡大／設定・投了などの読み取り系 */
+function olActive(){return !!(typeof ONLINE!=="undefined"&&ONLINE&&ONLINE.conn&&ONLINE.conn.open);}
+function olMySeat(){return (typeof S!=="undefined"&&S)?(S.seat|0):0;}
+function olMyTurn(){return !(typeof S!=="undefined"&&S&&S.vs)||((S.who|0)===olMySeat());}
+function olLocked(){
+  if(!olActive())return false;
+  if(typeof S==="undefined"||!S||!S.vs)return false;
+  if(S.turn<=0)return false;      // 開始前の準備中は自由に触れる
+  if(olMyTurn())return false;     // 自分のターン
+  return !ONLINE.grantMe;         // 許可をもらっていれば触れる
+}
+let _olToastAt=0;
+function olBlockToast(){
+  const now=Date.now();
+  if(now-_olToastAt<1800)return;
+  _olToastAt=now;
+  toast("🔒 相手のターン中は盤面を操作できません\n（操作が必要なら「✋ 操作をお願い」を押してください）");
+}
+/* ロック中でも触っていい場所（ログ・メッセージ・帯・各種パネル・拡大表示） */
+function olAllowedTarget(t){
+  if(!t||!t.closest)return true;
+  if(t.closest("#logDock,#logFab,#chatDock,#chatFab,#olBar,#peekChip"))return true;
+  // 開いているオーバーレイ（確認・一覧・設定・ヘルプ等）は閉じられないと困るので通す
+  if(t.closest(".olay,#viewerOlay,#askOlay"))return true;
+  // カードのシートは「閉じる」だけ許可（開いたままのシートから盤面を触られないように）
+  if(t.closest("#sheet"))return !!t.closest("#sheetClose");
+  // 画像の拡大表示（動的生成・z-index 990 の全画面レイヤー）
+  const zi=(()=>{try{return +getComputedStyle(t.closest("div")||t).zIndex||0;}catch(e){return 0;}})();
+  if(zi>=900)return true;
+  return false;
+}
+function olGate(e){
+  if(!olLocked())return;
+  if(olAllowedTarget(e.target))return;
+  e.stopImmediatePropagation();e.preventDefault();
+  olBlockToast();
+}
+document.addEventListener("pointerdown",olGate,true);
+document.addEventListener("mousedown",olGate,true);
+document.addEventListener("touchstart",olGate,true);
+document.addEventListener("click",olGate,true);
+document.addEventListener("dragstart",olGate,true);
+document.addEventListener("keydown",e=>{
+  if(!olLocked())return;
+  const tag=(e.target&&e.target.tagName)||"";
+  if(/INPUT|TEXTAREA|SELECT/.test(tag))return; // メッセージ入力は通す
+  // ⌘Z（巻き戻し）など盤面を動かすショートカットは止める
+  if((e.metaKey||e.ctrlKey)||/^[a-zA-Z0-9 ]$/.test(e.key)||e.key==="Enter"){
+    e.stopImmediatePropagation();e.preventDefault();olBlockToast();
+  }
+},true);
+/* 🔓 許可の送受信。ターンが変わったら自動で失効させる（言い忘れても事故らないように） */
+function olSendGrant(on){
+  ONLINE.grantOpp=!!on;
+  try{if(olActive())ONLINE.conn.send({t:"grant",on:!!on});}catch(e){}
+  logOnly(on?"🔓 相手に手番外の操作を許可しました":"🔒 相手の手番外の操作を許可を解除しました");
+  toast(on?"🔓 相手が操作できるようになりました":"🔒 相手の操作を再びロックしました");
+  olRenderBar();
+}
+function olRecvGrant(on){
+  ONLINE.grantMe=!!on;
+  toast(on?"🔓 相手が操作を許可してくれました（盤面を触れます）":"🔒 相手の許可が解除されました");
+  olRenderBar();
+}
+function olClearGrant(reason){
+  if(!ONLINE.grantMe&&!ONLINE.grantOpp)return;
+  if(ONLINE.grantOpp)try{if(olActive())ONLINE.conn.send({t:"grant",on:false});}catch(e){}
+  ONLINE.grantMe=false;ONLINE.grantOpp=false;
+  logOnly(`🔒 手番外の操作許可を自動で解除しました（${reason||"ターンが変わった"}）`);
+  olRenderBar();
+}
+function olAskPermission(){
+  const now=Date.now();
+  if(now-ONLINE.askedAt<4000){toast("（少し待ってからもう一度お願いしてください）");return;}
+  ONLINE.askedAt=now;
+  try{if(olActive())ONLINE.conn.send({t:"grantReq"});}catch(e){}
+  toast("✋ 相手に操作の許可をお願いしました");
+}
+async function olRecvAsk(){
+  sfx("flip");
+  const yes=await ask("✋ 相手が「盤面を操作したい」と言っています。\n自分のターン中の操作を許可しますか？\n（ターンが変わると自動で解除されます）");
+  if(yes)olSendGrant(true);
+  else{try{if(olActive())ONLINE.conn.send({t:"grantNo"});}catch(e){}}
+}
+function olRenderBar(){
+  const bar=document.getElementById("olBar");
+  const fab=document.getElementById("chatFab");
+  if(!bar)return;
+  const on=olActive();
+  bar.classList.toggle("show",on);
+  if(fab)fab.classList.toggle("show",on);
+  if(!on){const cd=document.getElementById("chatDock");if(cd)cd.classList.remove("show");return;}
+  const msg=document.getElementById("olBarMsg");
+  const gb=document.getElementById("olGrantBtn");
+  const ab=document.getElementById("olAskBtn");
+  const locked=olLocked();
+  const mine=olMyTurn();
+  bar.classList.toggle("locked",locked);
+  bar.classList.toggle("granted",!locked&&!mine);
+  if(msg){
+    if(S.turn<=0)msg.textContent="🔗 接続中（準備中は両者操作できます）";
+    else if(mine)msg.textContent=`🟢 自分のターン${ONLINE.grantOpp?"（相手に操作を許可中）":""}`;
+    else if(ONLINE.grantMe)msg.textContent="🔓 相手のターン（操作を許可されています）";
+    else msg.textContent="🔒 相手のターン（操作ロック中）";
+  }
+  if(gb){
+    gb.style.display=(mine&&S.turn>0)?"":"none";
+    gb.textContent=ONLINE.grantOpp?"🔒 許可を解除":"🔓 相手に操作を許可";
+  }
+  if(ab)ab.style.display=(!mine&&S.turn>0&&!ONLINE.grantMe)?"":"none";
+}
+/* ============================================================
+   💬 オンライン対戦の軽いメッセージ（v10.31）
+   ログとは別枠。定型文はタップ1回で送れる。自由入力は60字まで */
+const CHAT=[];
+let CHAT_UNREAD=0;
+const CHAT_QUICK=["よろしく！","ありがとう！","OK","少し待ってください","ごめんなさい","確認中です","巻き戻したいです","処理をお願いします","GG！"];
+function chatPush(who,m,sys){
+  CHAT.push({who,m:String(m||"").slice(0,60),sys:!!sys,ts:new Date().toTimeString().slice(0,5)});
+  if(CHAT.length>120)CHAT.shift();
+  const dock=document.getElementById("chatDock");
+  if(!dock||!dock.classList.contains("show")){
+    if(who==="them"){CHAT_UNREAD++;chatRenderFab();}
+  }
+  chatRender();
+}
+function chatRenderFab(){
+  const fab=document.getElementById("chatFab");
+  const b=document.getElementById("chatBadge");
+  if(!fab||!b)return;
+  fab.classList.toggle("unread",CHAT_UNREAD>0);
+  b.textContent=CHAT_UNREAD>9?"9+":String(CHAT_UNREAD);
+}
+function chatRender(){
+  const body=document.getElementById("cdBody");
+  if(!body)return;
+  const atBottom=body.scrollHeight-body.scrollTop-body.clientHeight<40;
+  body.innerHTML="";
+  if(!CHAT.length){
+    const d=document.createElement("div");
+    d.className="cd-msg cd-sys";d.textContent="まだメッセージはありません";
+    body.appendChild(d);
+  }
+  for(const c of CHAT){
+    const d=document.createElement("div");
+    d.className="cd-msg "+(c.sys?"cd-sys":(c.who==="me"?"cd-mine":"cd-them"));
+    d.textContent=c.sys?c.m:`${c.m}　${c.ts}`;
+    body.appendChild(d);
+  }
+  if(atBottom)body.scrollTop=body.scrollHeight;
+}
+function chatSend(m){
+  const t=String(m||"").trim().slice(0,60);
+  if(!t)return;
+  if(!olActive()){toast("（オンライン接続中のみ送れます）");return;}
+  try{ONLINE.conn.send({t:"chat",m:t});}catch(e){toast("送信に失敗しました");return;}
+  chatPush("me",t);
+  sfx("flip");
+}
+function chatRecv(m){
+  const t=String(m||"").trim().slice(0,60);
+  if(!t)return;
+  chatPush("them",t);
+  sfx("flip");
+  toast(`💬 ${S&&S.vs?S.players[olMySeat()?0:1].label:"相手"}：${t}`);
+}
+function chatToggle(open){
+  const dock=document.getElementById("chatDock");
+  if(!dock)return;
+  const willOpen=(open==null)?!dock.classList.contains("show"):!!open;
+  dock.classList.toggle("show",willOpen);
+  if(willOpen){CHAT_UNREAD=0;chatRenderFab();chatRender();}
+}
 const SCORE=[0,0];
 function serializeState(){return JSON.stringify({t:S.turn,w:S.who,z:S.players.map(p=>p.zones),ec:ENTERED_CNT,pt:S.pturn,wo:S._watchOnce||{},fs:S.firstSumUsed||{},su:S.sumTurn||{},nl:S.noLoseCnt||{}});}
 function snap(){
@@ -3963,6 +4222,87 @@ const idbTx=(s,fn)=>new Promise(r=>{if(!db)return r(null);try{const t=db.transac
 const idbPut=(s,k,v)=>idbTx(s,st=>st.put(v,k));
 const idbDel=(s,k)=>idbTx(s,st=>st.delete(k));
 const idbClear=s=>idbTx(s,st=>st.clear());
+/* ============================================================
+   💾 自動保存＆復帰（v10.31）
+   iOS Safari はメモリ不足でタブを破棄して勝手に読み直すことがあり、これまでは
+   その瞬間に盤面が完全に消えていた（＝「プレイ中にロードが入って画面がリセットされる」）。
+   数秒ごと・画面を離れる時に盤面をIndexedDBへ書いておき、次の起動で復帰を選べるようにする。
+   保存するのは盤面と進行だけ（カード登録・画像・デッキは元から別に保存されている）。 */
+const AUTOSAVE={last:0,timer:null,busy:false};
+function autoSaveSnapshot(){
+  try{
+    if(typeof S==="undefined"||!S)return null;
+    if((S.turn|0)<=0)return null; // 開始前は保存しない
+    return {
+      v:2,at:Date.now(),ver:(typeof APP_VER!=="undefined"?APP_VER:""),
+      turn:S.turn|0,who:S.who|0,seat:S.seat|0,vs:!!S.vs,
+      expert:!!S.expert,freePlay:!!S.freePlay,gameMode:S.gameMode||"",
+      score:(typeof SCORE!=="undefined"&&SCORE)?SCORE.slice():[0,0],
+      labels:S.players.map(p=>p.label||""),
+      z:S.players.map(p=>p.zones),
+      log:(typeof GAMELOG!=="undefined"&&GAMELOG)?GAMELOG.slice(-200):[],
+    };
+  }catch(e){return null;}
+}
+async function autoSaveNow(){
+  if(AUTOSAVE.busy||!db)return;
+  const snap=autoSaveSnapshot();
+  if(!snap)return;
+  AUTOSAVE.busy=true;
+  try{ await idbPut("misc","autosave",JSON.stringify(snap)); AUTOSAVE.last=Date.now(); }
+  catch(e){}
+  finally{ AUTOSAVE.busy=false; }
+}
+function autoSaveSchedule(){
+  if(!db)return;
+  if(AUTOSAVE.timer)return;
+  AUTOSAVE.timer=setTimeout(()=>{AUTOSAVE.timer=null;autoSaveNow();},2500);
+}
+async function autoSaveClear(){try{if(db)await idbPut("misc","autosave","");}catch(e){}}
+/* 画面を離れる・隠れる時は必ず書き込む（Safariが破棄する直前の最後の砦） */
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")autoSaveNow();});
+window.addEventListener("pagehide",()=>{autoSaveNow();});
+/* 復帰：起動時に保存があれば聞く（新しい対戦を始めたい時は「いいえ」でそのまま） */
+async function autoSaveOfferRestore(){
+  if(!db)return false;
+  let raw=null;
+  try{ raw=await idbGet("misc","autosave"); }catch(e){ return false; }
+  if(!raw)return false;
+  let s=null;
+  try{ s=JSON.parse(raw); }catch(e){ return false; }
+  if(!s||!s.z||(s.turn|0)<=0)return false;
+  const ageMin=Math.round((Date.now()-(s.at||0))/60000);
+  if(ageMin>720){await autoSaveClear();return false;} // 12時間以上前のものは破棄
+  const when=ageMin<1?"1分以内":ageMin<60?`約${ageMin}分前`:`約${Math.round(ageMin/60)}時間前`;
+  const yes=await ask(`💾 前回の対戦の途中データが見つかりました（${when}・ターン${s.turn}${s.vs?`／${s.labels&&s.labels[s.who]||""}の番`:""}）。\n盤面を復元しますか？\n\n※画面が勝手に読み直された時の復帰用です。「いいえ」を選ぶと破棄されます`);
+  if(!yes){await autoSaveClear();return false;}
+  try{
+    S.turn=s.turn|0;S.who=s.who|0;S.seat=s.seat|0;S.vs=!!s.vs;
+    if(s.expert!=null)S.expert=!!s.expert;
+    if(s.freePlay!=null)S.freePlay=!!s.freePlay;
+    if(s.gameMode)S.gameMode=s.gameMode;
+    if(s.score&&typeof SCORE!=="undefined"){SCORE[0]=s.score[0]|0;SCORE[1]=s.score[1]|0;}
+    s.z.forEach((z,i)=>{
+      if(!S.players[i])return;
+      for(const k of Object.keys(emptyZones()))if(!z[k])z[k]=[];
+      for(const k of Object.keys(z))z[k].forEach(normalizeCard);
+      S.players[i].zones=z;
+      if(s.labels&&s.labels[i])S.players[i].label=s.labels[i];
+    });
+    S.sel=null;S.msel=[];
+    if(s.log&&typeof GAMELOG!=="undefined"){GAMELOG.length=0;for(const e of s.log)GAMELOG.push(e);}
+    if(typeof HIST!=="undefined"&&HIST)HIST.length=0; // 巻き戻し履歴は引き継がない
+    renderAll();
+    logOnly(`💾 途中データから盤面を復元しました（${when}の記録・ターン${S.turn}）`);
+    toast(`💾 盤面を復元しました（ターン${S.turn}）\n※オンライン対戦だった場合は、もう一度接続してください`);
+    return true;
+  }catch(e){
+    console.warn("restore failed",e);
+    toast("⚠ 復元に失敗しました（データを破棄します）");
+    await autoSaveClear();
+    return false;
+  }
+}
 /* 🕒 効果登録に「いつ更新したか・どこから来たか」を記録する。
    共有データや同梱データと突き合わせる時、どちらが新しいかを判断するために使う。
    _v：更新時刻（ミリ秒）／_src："self"＝自分で登録、"builtin"＝同梱データ、"shared:名前"＝他の人からもらった登録 */
@@ -4380,6 +4720,8 @@ async function runLabyEnd(cur2){
 }
 function nextTurn(){
   if(REPLAY.on){toast("📽 リプレイ再生中です（「✖ 終了」で戻れます）");return;}
+  // 🔒 ターンを進める＝手番外の操作許可はここで自動失効（言い忘れても事故らないように）
+  try{if(typeof olClearGrant==="function")olClearGrant("ターンを進めた");}catch(e){}
   if(GAME_PAUSE){
     toast("⏸ 処理中です（「▶ 再開」を押してから進めてください）");
     return;
@@ -21515,6 +21857,8 @@ function renderAll(){
   },55-(now-_raLast));
 }
 function renderAllNow(){
+  try{if(typeof olRenderBar==="function")olRenderBar();}catch(e){} // 🔒 操作権の帯を毎描画で最新化
+  try{if(typeof autoSaveSchedule==="function")autoSaveSchedule();}catch(e){} // 💾 リロード復帰用の自動保存
   checkLibWin();
   checkMugetsu(false);
   // 🌟 モモキングダム✕型：含まれるカードの枚数を見張り、「ちょうど6枚になった」瞬間に −99999 を発動する。
@@ -21707,6 +22051,8 @@ function serializeFull(){
 }
 function applyRemote(msg){
   ONLINE.applying=true;
+  const _prevWho=(typeof S!=="undefined"&&S)?(S.who|0):-1;
+  const _prevTurn=(typeof S!=="undefined"&&S)?(S.turn|0):-1;
   try{
     S.turn=msg.turn;S.who=msg.who;S.vs=!!msg.vs;
     if(msg.score){SCORE[0]=msg.score[0]|0;SCORE[1]=msg.score[1]|0;}
@@ -21718,6 +22064,9 @@ function applyRemote(msg){
     S.sel=null;S.msel=[];
     renderAll();
   }finally{ONLINE.applying=false;}
+  // 🔒 ターンが変わったら手番外の操作許可は自動で失効（言い忘れ事故の防止）
+  if((S.who|0)!==_prevWho||(S.turn|0)!==_prevTurn)olClearGrant("ターンが変わった");
+  olRenderBar();
 }
 /* 📜 オンライン対戦：ログの1行を相手に送る。
    ・案内・警告（hint）は自分の端末の操作メモなので送らない
@@ -21763,6 +22112,10 @@ function setupConn(conn){
   conn.on("data",msg=>{
     if(msg&&msg.t==="state")applyRemote(msg);
     else if(msg&&msg.t==="log")logRecv(msg.e);
+    else if(msg&&msg.t==="grant")olRecvGrant(msg.on);
+    else if(msg&&msg.t==="grantReq")olRecvAsk();
+    else if(msg&&msg.t==="grantNo")toast("🔒 相手は操作を許可しませんでした");
+    else if(msg&&msg.t==="chat")chatRecv(msg.m);
     else if(msg&&msg.t==="deckSave"){
       // 🃏 デッキ単位で送られてきたものを、相手の端末のデッキ一覧に保存する
       (async()=>{
@@ -29193,6 +29546,42 @@ $("bApply").addEventListener("click",()=>{
 });
 
 /* ================= init ================= */
+/* 🔄 更新の反映タイミング（v10.31）
+   これまでは新しい版を検知した瞬間に location.reload() していたため、
+   デプロイ直後にプレイ中の端末が突然リロードされ、盤面がリセットされていた（＝「たまにロードが入る」の主因）。
+   対戦中・準備中は自動リロードせず、案内だけ出して、区切りのいい時に本人が反映できるようにする。 */
+let SW_PENDING=false;
+function swInGame(){
+  try{
+    if(typeof S==="undefined"||!S)return false;
+    if(typeof olActive==="function"&&olActive())return true; // オンライン接続中は絶対に中断しない
+    return (S.turn|0)>0;
+  }catch(e){return false;}
+}
+function swApplyUpdate(){
+  try{toast("🔄 新しいバージョンに切り替えます…");}catch(e){}
+  setTimeout(()=>location.reload(),400);
+}
+function swShowUpdateChip(){
+  SW_PENDING=true;
+  let w=document.getElementById("swUpdWrap");
+  if(!w){
+    w=document.createElement("div");
+    w.id="swUpdWrap";
+    w.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:calc(66px + env(safe-area-inset-bottom));z-index:88;display:flex;gap:8px;align-items:center;background:rgba(10,14,24,.97);border:1px solid var(--accent);border-radius:20px;padding:6px 8px 6px 12px;box-shadow:0 8px 22px rgba(0,0,0,.6);font-size:12px;font-weight:900;color:#ffe08a";
+    const t=document.createElement("span");
+    t.textContent="🔄 新しいバージョンがあります";
+    const b=document.createElement("button");
+    b.className="btn small primary";b.textContent="今すぐ反映";
+    b.addEventListener("click",swApplyUpdate);
+    const c=document.createElement("button");
+    c.className="btn small ghost";c.textContent="あとで";
+    c.addEventListener("click",()=>{w.style.display="none";});
+    w.appendChild(t);w.appendChild(b);w.appendChild(c);
+    document.body.appendChild(w);
+  }
+  w.style.display="flex";
+}
 if("serviceWorker" in navigator&&location.protocol==="https:"){
   window.addEventListener("load",()=>{
     navigator.serviceWorker.register("./sw.js",{updateViaCache:"none"}).then(reg=>{
@@ -29203,6 +29592,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
         if(!nw)return;
         nw.addEventListener("statechange",()=>{
           if(nw.state==="installed"&&navigator.serviceWorker.controller){
+            // 対戦中は待機させる（skipWaitingを送らない＝勝手に切り替わらない）
+            if(swInGame()){swShowUpdateChip();return;}
             try{toast("🔄 新しいバージョンを取得しました。リロードします…");}catch(_){}
             nw.postMessage({type:"SKIP_WAITING"});
           }
@@ -29211,7 +29602,10 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
     }).catch(e=>console.warn("SW register failed",e));
     let _swReloaded=false;
     navigator.serviceWorker.addEventListener("controllerchange",()=>{
-      if(_swReloaded)return;_swReloaded=true;
+      if(_swReloaded)return;
+      // プレイ中に制御が切り替わってもリロードしない（案内だけ出す）
+      if(swInGame()){swShowUpdateChip();return;}
+      _swReloaded=true;
       setTimeout(()=>location.reload(),300);
     });
   });
@@ -29359,6 +29753,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   }
   await refreshDeckSelects();
   buildBoards();renderAll();
+  // 💾 前回が途中で切れていたら（Safariのメモリ落ち・不意のリロードなど）盤面の復帰を提案
+  try{ if(typeof autoSaveOfferRestore==="function")await autoSaveOfferRestore(); }catch(e){ console.warn(e); }
 })();
 </script>
 </body>
