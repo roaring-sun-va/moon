@@ -1600,6 +1600,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row" style="gap:12px">
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="ブレイクなどで自分のシールドゾーンから手札に加える〔対象〕すべてに「S・トリガー」を与える（ブレイクパネルに⚡バッジが付き、解決中へ/バトルへを選べる）"><span style="font-size:12px;font-weight:700">⚡ 常在：盾→手札の対象にS・トリガー付与</span><input type="text" id="fxStShieldStG" list="raceList" placeholder="対象（例：ゼニス・「全て」＝盾の全カード・空欄＝無効）" style="width:200px"></label>
         <label title="自分のクリーチャー（自身含む）がバトルゾーンを離れる時、パワーが0より大きければ、かわりに自分のランダムなシールドn枚をブレイクし（S・トリガー使用可）、そのターンそのクリーチャーは離れない"><span style="font-size:12px;font-weight:700">♻ 常在：味方の離場→かわりに自分のランダム盾ブレイク＋離れない</span><input type="checkbox" id="fxStLeaveRep"> 盾<input type="number" id="fxStLeaveRepN" min="1" max="5" value="2" style="width:52px">枚</label>
+        <label title="ボルシャック・カクメイジン型：自分の〔条件〕のクリーチャーがバトルゾーンを離れる時、かわりに自分のシールドゾーンにある表向きのカードを1枚裏向きにしてもよい（表向きの盾が無ければ発動しない・任意）"><span style="font-size:12px;font-weight:700">🛡 常在：味方の離場→かわりに表向きの盾1枚を裏向きに（カクメイジン型）</span><input type="checkbox" id="fxShFlipRep"> 対象<input type="text" id="fxShFlipRepF" list="raceList" placeholder="例：アーマード・ドラゴン（空欄＝自分のクリーチャー全て）" style="width:220px"></label>
         <label title="自分の、対象条件に合うクリーチャーすべてに「エターナル・Ω（離れるかわりに手札へ）」を与える（例：ドラゴン／コマンド・「全て」＝全クリーチャー・空欄＝無効）"><span style="font-size:12px;font-weight:700">♾ 常在：味方に「エターナル・Ω」を付与</span> <input type="text" id="fxStAuraOmegaF" list="raceList" placeholder="対象（例：ドラゴン／コマンド・空欄＝無効）" style="width:230px"></label>
       </div>
       <div class="row" style="gap:12px">
@@ -3406,7 +3407,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.38";
+const APP_VER="v10.40";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6847,6 +6848,7 @@ const FX_TYPES=[
   ["flip","この多面カードを裏返す（次の面へ・チャクラ/ディアスZ型・確認あり）"],
   ["handShieldUp","手札から1枚選んで表向きにシールド化（サッヴァーク型・任意/新規盾or重ねるを選択）"],
   ["deckShield","🛡 自分の山札の上からn枚を裏向きでシールドゾーンに加える（シールド追加・シールド化）"],
+  ["deckShieldUp","🛡 自分の山札の上からn枚を【表向き】でシールドゾーンに加える（ボルシャック・カクメイジン型）"],
   ["revealBottomShield","🛡 山札の上1枚を公開して山札の一番下へ。それが条件に合うなら山札の上からn枚をシールド化（革命の防壁型／条件欄＝例：光｜クリーチャー）"],
   ["deckShieldFill","🛡 自分の山札の上からn枚をシールド化。ただしシールド上限（10枚）を超える分は加えず山札に残す（墓地に落とさない・ミルザム型）"],
   ["shieldRandToHand","🛡→✋ 自分のランダムなシールドをn枚、手札に加える（加えたカードのS・トリガーは使えない・ミルザム型）"],
@@ -7587,6 +7589,19 @@ async function destroyCreature(pi,c,opts){
             return;
           }
         }
+      }
+    }
+    // 🛡 常在：味方の離場→かわりに表向きシールド1枚を裏向きにする（ボルシャック・カクメイジン型・v10.40）
+    //    ②「与える」常在で付与される置換なので、①自身のエターナルΩがあればそちらを優先（デュエプレ）
+    {
+      const _sfr=shFlipRepSource(pi,c);
+      if(_sfr){
+        if(etOmegaCat(pi,c,rDC)===1&&S.gameMode!=="tcg"){
+          logOnly(`⚡ 置換競合（デュエプレ自動裁定）：《${faceNameOf(c)}》の離場置換 → ①自身のエターナルΩを優先（②付与の《${faceNameOf(_sfr)}》より先に適用）`);
+          etOmegaToHand(pi,c,zonesOf(pi).battle);
+          return;
+        }
+        if(await shFlipRepApply(pi,c,_sfr))return; // 置換成立＝離れない
       }
     }
     // ♻ 常在：味方の離場→かわりにランダム盾ブレイク＋そのターン離れない（付与元の能力なので、離れるカード自身の無視状態では消えない）
@@ -10621,6 +10636,23 @@ async function runFxList(pi,list,srcCard,inPump){
       if(add>0){sfx("move");renderAll();toast(`🛡 山札の上${add}枚をシールドゾーンに加えた`);}
       else if(!toGrave)toast("山札がありません");
       else renderAll();
+    }else if(f.t==="deckShieldUp"){
+      // 🛡 山札の上からn枚を「表向き」でシールド化（ボルシャック・カクメイジン型・v10.40）
+      let addU=0,gvU=0;
+      const nmsU=[];
+      for(let i=0;i<Math.max(1,n)&&Z.deck.length;i++){
+        const cc=Z.deck.shift();cc.tapped=false;cc.sideways=false;cc.rot=0;
+        if(!shieldCapOk(Z,true)){cc.faceup=true;Z.grave.push(cc);gvU++;continue;} // 🛡 上限超過は墓地
+        cc.faceup=true;if(S.turn>0)cc.mark=true;
+        Z.shield.push(cc);addU++;nmsU.push(`《${faceNameOf(cc)}》`);
+      }
+      if(gvU>0)toast(`🛡 シールド上限（10枚）：超過${gvU}枚は墓地へ`);
+      if(addU>0){
+        sfx("move");
+        toast(`🛡 山札の上${addU}枚を表向きのシールドに：${nmsU.join("")}`);
+        logOnly(`🛡 ${S.players[pi].label}：山札の上${addU}枚を表向きでシールド化 → ${nmsU.join("")}`);
+      }else if(!gvU)toast("山札がありません");
+      renderAll();
     }else if(f.t==="revealBottomShield"){
       // 🛡 山札の上から1枚目を公開し、山札の一番下に置く。それが条件（f.cond・例：光／クリーチャー）に
       //    合うなら、自分の山札の上からn枚目までをシールド化する（革命の防壁型・v10.34）。
@@ -15086,7 +15118,7 @@ function fxRowEl(faceIdx,i){
   cnd.value=f.cond||"";
   cnd.onchange=()=>{f.cond=cnd.value.trim();};
   // 🛡 盾追加系の「自分のシールドが○枚以下のときだけ発動」ゲート欄（空欄/0＝無条件）
-  const SHIELD_ADD_TYPES=new Set(["deckShield","deckShieldFill","handShield","foeToShield","foeAllShield","foeHandShieldRand","shieldMakeRand","revealBottomShield"]);
+  const SHIELD_ADD_TYPES=new Set(["deckShield","deckShieldFill","handShield","foeToShield","foeAllShield","foeHandShieldRand","shieldMakeRand","revealBottomShield","deckShieldUp"]);
   const shb=document.createElement("input");
   shb.type="number";shb.min="0";shb.placeholder="盾≤";
   shb.title="自分のシールドが この枚数以下のときだけ発動する（空欄/0＝無条件）。デュエプレの「シールドが○枚以下なら」型。";
@@ -16121,6 +16153,8 @@ function renderFxEditor(){
   {const e=$("fxEtOmega");if(e)e.checked=!!FXEDIT.etOmega;}
   {const e=$("fxStLeaveRep");if(e)e.checked=!!FXEDIT.stLeaveRep;}
   {const e=$("fxStLeaveRepN");if(e)e.value=String(FXEDIT.stLeaveRepN||2);}
+  {const e=$("fxShFlipRep");if(e)e.checked=!!FXEDIT.shFlipRep;}
+  {const e=$("fxShFlipRepF");if(e)e.value=FXEDIT.shFlipRepF||"";}
   {const e=$("fxStAuraOmegaF");if(e)e.value=FXEDIT.stAuraOmegaF||"";}
   {const e=$("fxCostRedOppCiv");if(e)e.value=String(FXEDIT.costRedOppCiv||0);}
   {const e=$("fxLeaveSacF");if(e)e.value=FXEDIT.leaveSacF||"";}
@@ -17427,6 +17461,20 @@ function parseCardText(txt,mode){
   m=tSelf.match(/バズレンダ\s*[〔〈［\[（(]?[^0-9〕〉］\]）)]{0,6}?(\d+)/); if(m)out.set.buzz=+m[1];
   // ♾ フォーエバー・プリンセス型：どこからでも墓地に置かれる時、かわりに墓地＋自身を山札へシャッフル
   if(/どこからでも[^。]*?墓地に置かれ[^。]*?かわりに[^。]*?山札に加えてシャッフル/.test(t))out.set.graveShuffleRep=true;
+  // 🛡 「このクリーチャーが出た時、自分の山札の上からn枚を表向きでシールド化する」（ボルシャック・カクメイジン型）
+  {const mDU=t.match(/山札の上から(\d+)枚を表向き(?:で|に)シールド化/);
+   if(mDU){
+     out.fx.push({t:"deckShieldUp",n:+mDU[1]||1});
+     out.notes.push({msg:`🛡 「山札の上${mDU[1]}枚を表向きでシールド化」を効果に追加しました`,q:"シールド化"});
+   }}
+  // 🛡 「自分の〔X〕が離れる時、かわりに自分のシールドゾーンにある表向きのカードを1枚、裏向きにしてもよい」（カクメイジン型）
+  {const mSF=t.match(/自分の([^。■]{0,20}?)が離れる時[、,]?\s*かわりに[^。■]*?表向きのカードを1枚[、,]?\s*裏向きにして?も?よい/);
+   if(mSF){
+     out.set.shFlipRep=true;
+     const f0=mSF[1].replace(/クリーチャー$/,"").trim();
+     out.set.shFlipRepF=(f0==="")?"":f0;
+     out.notes.push({msg:`🛡 「味方（${f0||"クリーチャー全て"}）が離れる時、かわりに表向きの盾1枚を裏向きにする」置換を設定しました`,q:"離れる"});
+   }}
   // 🔀 「この呪文を唱えた後、墓地に置くかわりに山札に加えてシャッフルする」（革命の防壁型）
   if(/この呪文を唱えた後[^。]*?墓地に置くかわりに[^。]*?山札に加えてシャッフル/.test(t))out.set.castToDeck=true;
   // ⤴ 革命0トリガーで出す進化クリーチャー（ミラクル・ミラダンテ型）
@@ -18504,6 +18552,8 @@ $("fxSave").addEventListener("click",async ()=>{
     etOmega:$("fxEtOmega")?$("fxEtOmega").checked:false,
     stLeaveRep:$("fxStLeaveRep")?$("fxStLeaveRep").checked:false,
     stLeaveRepN:$("fxStLeaveRepN")?(parseInt($("fxStLeaveRepN").value,10)||2):2,
+    shFlipRep:$("fxShFlipRep")?$("fxShFlipRep").checked:false,
+    shFlipRepF:$("fxShFlipRepF")?$("fxShFlipRepF").value.trim():"",
     stAuraOmegaF:$("fxStAuraOmegaF")?$("fxStAuraOmegaF").value.trim():"",
     costRedOppCiv:$("fxCostRedOppCiv")?(parseInt($("fxCostRedOppCiv").value,10)||0):0,
     leaveSacF:($("fxLeaveSacF")?$("fxLeaveSacF").value:"").trim(),
@@ -19529,6 +19579,45 @@ function hasEtOmega(pi,c,r){
 }
 /* ♻ 常在：自分のクリーチャーが離れる時、パワーが0より大きければ、かわりに自分のランダムな盾n枚をブレイク（ST使用可）＋そのターン離れない。
    付与元を返す（自身も対象・封印/無視は除外・離れるカードがその付与元自身でも適用） */
+/* 🛡 常在：自分の〔条件〕が離れる時、かわりに自分の表向きシールドを1枚裏向きにしてもよい
+   （ボルシャック・カクメイジン型・v10.40）。付与元（shFlipRep持ち）を返す。
+   表向きのシールドが1枚も無ければ発動できない。任意効果なので実行時に確認する */
+function shFlipRepSource(pi,c){
+  if(!S.expert)return null;
+  const rc=getReg(c);
+  if(!rc||!isCreatureReg(rc))return null;
+  const Z=zonesOf(pi);
+  if(!Z.shield.some(x=>x.faceup))return null; // 裏向きにできる表向きの盾が必要
+  for(const b of Z.battle){
+    const rb=getReg(b);
+    if(!rb||!rb.shFlipRep)continue;
+    if(isSealed(b)||isIgnored(b,pi))continue;
+    if(rb.shFlipRepF&&!lockFilterOk(rb.shFlipRepF,rc,c))continue; // 対象条件（例：アーマード・ドラゴン）
+    return b;
+  }
+  return null;
+}
+/* 表向きシールドを1枚選んで裏向きにする（置換の実行部分）。成功したら true */
+async function shFlipRepApply(pi,c,src){
+  const Z=zonesOf(pi);
+  const ups=Z.shield.filter(x=>x.faceup);
+  if(!ups.length)return false;
+  const yes=await ask(`🛡 ${faceNameOf(src)}：${faceNameOf(c)} が離れるかわりに、表向きのシールドを1枚裏向きにしますか？\n（「はい」で ${faceNameOf(c)} は離れません）`);
+  if(!yes)return false;
+  let j=0;
+  if(ups.length>1){
+    const k=await pickCard("🛡 裏向きにする表向きのシールドを選択",ups,{hint:"タップで選択（このカードが裏向きになり、離場が置き換わります）"});
+    if(k===null)return false;
+    j=k;
+  }
+  snap();
+  const sc=ups[j];
+  sc.faceup=false;sc.tapped=false;sc.sideways=false;
+  sfx("flip");renderAll();
+  toast(`🛡 ${faceNameOf(src)}：表向きのシールド1枚を裏向きにして、${faceNameOf(c)} は離れない！`);
+  logOnly(`🛡 離場置換（${cn(src)}）：${cn(c)} は離れるかわりに、表向きのシールド1枚を裏向きにした`);
+  return true;
+}
 function stLeaveRepSource(pi,c){
   if(!S.expert)return null;
   const rc=getReg(c);
@@ -20215,6 +20304,17 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       if(hasFu){
         (async()=>{
           const done=await savvarkReplace(pFrom,f.card);
+          if(!done)moveCardXRaw(pFrom,fromZone,id,pTo,toZone);
+        })();
+        return;
+      }
+    }
+    // 🛡 カクメイジン型：バウンス・マナ送りなど破壊以外で離れる時も、表向きシールド1枚を裏向きにして場に残せる（v10.40）
+    if(!skipRep){
+      const _sfr2=shFlipRepSource(pFrom,f.card);
+      if(_sfr2){
+        (async()=>{
+          const done=await shFlipRepApply(pFrom,f.card,_sfr2);
           if(!done)moveCardXRaw(pFrom,fromZone,id,pTo,toZone);
         })();
         return;
@@ -25891,7 +25991,8 @@ function renderRevealPanel(){
     info.style.cssText="font-size:12px;font-weight:700;align-self:center";
     info.textContent=`${rvMulti.size}枚選択中（⌘タップで追加/解除）→`;
     bar.appendChild(info);
-    const targets2=[["hand","手札へ"],["mana","マナへ"],["battle","バトルへ"],["resolve","解決中へ"],["grave","墓地へ"],["shield","シールドへ"],["deckTop","山札の上へ"],["deckBottom","山札の下へ"]];
+    // 🛡 v10.39：公開ゾーンからも「表向きのままシールドへ」を選べるように（G城・ギャラクシールド等）
+    const targets2=[["hand","手札へ"],["mana","マナへ"],["battle","バトルへ"],["resolve","解決中へ"],["grave","墓地へ"],["shield","シールドへ（裏）"],["shieldUp","シールドへ（表向き）"],["deckTop","山札の上へ"],["deckBottom","山札の下へ"]];
     for(const [tz,label] of targets2){
       const b=document.createElement("button");
       b.className="btn small"+(tz==="hand"?" primary":"");
@@ -25906,7 +26007,8 @@ function renderRevealPanel(){
           const cc=arr2.splice(j,1)[0];
           const Z2=zonesOf(rvPi);
           cc.tapped=false;
-          if(tz==="shield"){cc.faceup=false;Z2.shield.push(cc);}
+          if(tz==="shield"){cc.faceup=false;if(S.turn>0)cc.mark=true;Z2.shield.push(cc);}
+          else if(tz==="shieldUp"){cc.faceup=true;if(S.turn>0)cc.mark=true;Z2.shield.push(cc);} // 🛡 表向きのままシールドへ（G城等）
           else if(tz==="deckTop"){cc.faceup=false;Z2.deck.unshift(cc);}
           else if(tz==="deckBottom"){cc.faceup=false;Z2.deck.push(cc);}
           else if(tz==="battle"){
@@ -25934,7 +26036,8 @@ function renderRevealPanel(){
   }
   if(rvSel!=null){
     bar.style.display="";
-    const targets=[["hand","手札へ"],["mana","マナへ"],["battle","バトルへ"],["resolve","解決中へ"],["grave","墓地へ"],["shield","シールドへ"],["deckTop","山札の上へ"],["deckBottom","山札の下へ"]];
+    // 🛡 v10.39：公開ゾーンからも「表向きのままシールドへ」を選べるように（G城・ギャラクシールド等）
+    const targets=[["hand","手札へ"],["mana","マナへ"],["battle","バトルへ"],["resolve","解決中へ"],["grave","墓地へ"],["shield","シールドへ（裏）"],["shieldUp","シールドへ（表向き）"],["deckTop","山札の上へ"],["deckBottom","山札の下へ"]];
     for(const [tz,label] of targets){
       const b=document.createElement("button");
       b.className="btn small"+(tz==="hand"?" primary":"");
