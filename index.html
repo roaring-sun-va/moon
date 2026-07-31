@@ -1702,6 +1702,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxInvadeZero"> 侵略ZERO（相手がクリーチャーを出した時、手札/墓地/マナから自分のクリーチャーに重ねる）</label>
         <label><input type="checkbox" id="fxRev0"> 革命0トリガー（自分の盾0で相手の攻撃時、手札から無料使用）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="ミラクル・ミラダンテ型：革命0トリガーで出す時、山札の上から1枚目を表向きにし、それが進化元にできるクリーチャーならバトルゾーンに出して、このクリーチャーをその上に置く（進化）。条件欄に進化元の条件（例：光）を書けます。自動判定できない時はプレイヤーに確認します"><input type="checkbox" id="fxRev0Evo"> ⤴ 革命0で出す時、山札の1枚目を進化元にする（ミラクル・ミラダンテ型）／進化元の条件<input type="text" id="fxRev0EvoF" placeholder="例：光（空欄＝非進化クリーチャーなら可）" style="width:200px"></label>
+        <label title="ボルシャック・ヒカリスマ型：S革命チェンジ（コスト5以上のアーマード・手札または表向きシールドから入れ替え）／革命チェンジで出た時・攻撃する時に山上2枚を見て1枚を表向きシールド化・1枚を手札／相手が非クリーチャーを実行する時、表向きシールド1枚を裏向きにしてその実行カードを墓地に置ける（打ち消し）"><input type="checkbox" id="fxHikarisma"> 🐉 ボルシャック・ヒカリスマ型（S革命チェンジ＋表向き盾で打ち消し）</label>
+        <label title="超鯱城型（G城）：相手のマナゾーンの枚数よりコストが大きい相手クリーチャーが出た時、それを破壊する"><input type="checkbox" id="fxCastleManaKill"> 🏯 超鯱城型（G城・相手の最大マナ超のクリーチャーが出たら破壊）</label>
         <label title="革命の防壁型：この呪文を唱えた後、墓地に置くかわりに山札に加えてシャッフルする"><input type="checkbox" id="fxCastToDeck"> 🔀 この呪文を唱えた後、墓地のかわりに山札へ加えてシャッフル（革命の防壁型）</label>
         <label style="display:flex;align-items:center;gap:6px">🚩 革命（盾N枚以下で追加能力が有効）
           <select id="fxRevoN" style="width:auto">
@@ -3407,7 +3409,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.40";
+const APP_VER="v10.41";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -15630,15 +15632,59 @@ function fxUiPolish(){
           "ブロッカー付与":["ブロッカー"],"sa付与":["スピードアタッカー"],
           "オシオキムーン":["シールドが離れた"],"gs":["G・ストライク"],"exライフ":["EXライフ"],
           "ドラゴン":["ドラゴン"],"マナ武装":["マナ武装"],"gr":["超GR","GR召喚"],"超天":["GR召喚"],
-          "多色":["多色"],"単色":["単色"],"タップイン":["タップして"],"cip踏み倒し":["出た時","出す"]
+          "多色":["多色"],"単色":["単色"],"タップイン":["タップして"],"cip踏み倒し":["出た時","出す"],
+          /* 🔎 v10.41：カード名から設定へたどり着けるように大幅追加。
+             「そのカードで実現したい仕組み」を検索するのが一番速いので、実装済みの型名・カード名を網羅する */
+          "ヒカリスマ":["ヒカリスマ","S革命チェンジ","表向き"],"ボルシャックヒカリスマ":["ヒカリスマ"],"世界竜皇":["ヒカリスマ"],
+          "カクメイジン":["カクメイジン","表向き","裏向き"],"ボルシャックカクメイジン":["カクメイジン"],
+          "s革命チェンジ":["ヒカリスマ","S革命チェンジ"],"エス革命チェンジ":["ヒカリスマ","S革命チェンジ"],
+          "超鯱城":["超鯱城","G城"],"しゃちほこ":["超鯱城"],"シャチホコ":["超鯱城"],
+          "ハッスルキャッスル":["置換ロック","マナ"],"我竜塔":["置換ロック"],"g城":["G城"],"城":["G城","要塞化"],
+          "カルマシフォン":["置換ロック","シールド"],"シフォン":["置換ロック","シールド"],
+          "コナユキ":["置換ロック","マナ"],"オリオティス":["最大マナ","置換ロック"],"オリオティスジャッジ":["最大マナ"],
+          "ペングィーナ":["1体につき","ドロー"],"ムートピア":["1体につき"],
+          "キョウメイ":["フリーズ","アンタップしない"],"天恋妖精":["フリーズ"],
+          "革命の防壁":["革命0","山札の一番下","シールド化"],"防壁":["革命0"],"革命0":["革命0"],"革命ゼロ":["革命0"],
+          "ミラダンテ":["革命0","進化元"],"ミラクルミラダンテ":["革命0","進化元"],
+          "ドギラゴン":["革命0","革命チェンジ"],"ボルシャックドギラゴン":["革命0"],
+          "ジャオウガ":["表向きのカード","負ける時"],"カリスマックス":["表向きのカード"],"鬼":["表向きのカード"],
+          "サッヴァーク":["置換","シールド"],"フォーエバープリンセス":["山札に加えてシャッフル"],
+          "ミクセル":["置換ロック"],"ヤミノカムスター":["見て","捨て"],"デクロワゾー":["ランダム","捨て"],"ジェニー":["捨て"],
+          "vivy":["相手に引かせる","相手ドロー"],"ヴィヴィ":["相手ドロー"],
+          "ゼニス":["種族:"],"ミスティックプローチ":["山札から","種族:"],
+          "クローネ":["身代わり"],"ライオネル":["身代わり"],
+          "デンジャデオン":["トラップ"],"チェンジザ":["革命チェンジ"],"ドルツヴァイ":["マナ加速"],
+          "エターナルオメガ":["エターナルΩ"],"eω":["エターナルΩ"],"オメガ":["エターナルΩ"],
+          "エスケープ":["エスケープ"],"exライフ":["EXライフ"],"スター進化":["スター進化"],"gneo":["G・NEO"],
+          "置換":["置換","かわりに"],"かわりに":["置換","かわりに"],"身代わり":["セイバー","身代わり"],
+          "打ち消し":["ヒカリスマ","実行する時"],"カウンター":["ヒカリスマ","実行する時"],
+          "表向き盾":["表向き"],"表向きシールド":["表向き"],"裏向き":["裏向き"],
+          "ツインパクト":["ツインパクト","下面"],"多面":["ツインパクト"],
+          "メクレイド":["メクレイド"],"ヨビニオン":["ヨビニオン"],"キズナ":["キズナ"],"バズレンダ":["バズレンダ"],
+          "シビルカウント":["シビルカウント"],"マジボンバー":["マジボンバー"],"光臨":["光臨"],"返霊":["返霊"],
+          "無月":["無月"],"零龍":["零龍"],"禁断":["禁断"],"封印":["封印"],"クロスギア":["クロスギア","クロス"],
+          "d2":["D2"],"フィールド":["D2","フィールド"],"タマシード":["タマシード"],"オーラ":["オーラ"]
         };
+        // 🔎 v10.41：中黒などを抜いたキーでも引けるように、別名表を自動で補完しておく
+        {const _n=x=>String(x).toLowerCase().replace(/[・･\-ー–—\s　'"”“’＝=]/g,"");
+         for(const k of Object.keys(FX_ALIAS)){const nk=_n(k);if(nk&&nk!==k&&!FX_ALIAS[nk])FX_ALIAS[nk]=FX_ALIAS[k];}}
         window.__applyFxFinder=()=>{const inp=document.getElementById("fxFinder");if(!inp)return;
           const toks=inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
           const cnt=document.getElementById("fxFinderN");
           const w2h=(s)=>s.replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0));
           const matchTxt=(txt)=>{
             const low=w2h(txt).toLowerCase();
-            return toks.every(t=>{const tt=w2h(t);return low.includes(tt)||((FX_ALIAS[t]||[]).some(a=>w2h(txt).includes(a)));});
+            // 🔎 v10.41：別名の引き当ては「・」「＝」空白などを取り除いた形でも試す
+            //    （「ボルシャック・ヒカリスマ」「ハッスル・キャッスル」のように中黒つきで打っても引けるように）
+            const norm=x=>w2h(String(x)).toLowerCase().replace(/[・･\-ー–—\s　'"”“’＝=]/g,"");
+            return toks.every(t=>{
+              const tt=w2h(t);
+              if(low.includes(tt))return true;
+              const cands=FX_ALIAS[t]||FX_ALIAS[norm(t)]||[];
+              if(cands.some(a=>w2h(txt).includes(a)))return true;
+              // 別名に無くても、正規化した表記同士で部分一致すれば拾う
+              return norm(txt).includes(norm(t));
+            });
           };
           const inFx=(el)=>el.closest(".fxrow")||bar.contains(el);
           const labels=[...panel.querySelectorAll("label")].filter(l=>!inFx(l));
@@ -16154,6 +16200,8 @@ function renderFxEditor(){
   {const e=$("fxStLeaveRep");if(e)e.checked=!!FXEDIT.stLeaveRep;}
   {const e=$("fxStLeaveRepN");if(e)e.value=String(FXEDIT.stLeaveRepN||2);}
   {const e=$("fxShFlipRep");if(e)e.checked=!!FXEDIT.shFlipRep;}
+  {const e=$("fxHikarisma");if(e)e.checked=!!FXEDIT.hikarisma;}
+  {const e=$("fxCastleManaKill");if(e)e.checked=!!FXEDIT.castleManaKill;}
   {const e=$("fxShFlipRepF");if(e)e.value=FXEDIT.shFlipRepF||"";}
   {const e=$("fxStAuraOmegaF");if(e)e.value=FXEDIT.stAuraOmegaF||"";}
   {const e=$("fxCostRedOppCiv");if(e)e.value=String(FXEDIT.costRedOppCiv||0);}
@@ -18660,8 +18708,8 @@ $("fxSave").addEventListener("click",async ()=>{
     pKakumei:$("fxPKakumei").checked,
     soulRaid:$("fxSoulRaid").checked,
     momoKingX:$("fxMomoKingX")?$("fxMomoKingX").checked:false,
-    castleManaKill:!!(FXEDIT&&FXEDIT.castleManaKill),
-    hikarisma:!!(FXEDIT&&FXEDIT.hikarisma),
+    castleManaKill:$("fxCastleManaKill")?$("fxCastleManaKill").checked:!!(FXEDIT&&FXEDIT.castleManaKill),
+    hikarisma:$("fxHikarisma")?$("fxHikarisma").checked:!!(FXEDIT&&FXEDIT.hikarisma),
     soulX:$("fxSoulX").checked,
     lastburst:$("fxLastBurst").checked,
     megaLB:$("fxMegaLB").checked,
