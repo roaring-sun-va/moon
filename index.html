@@ -3406,7 +3406,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.37";
+const APP_VER="v10.38";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -17547,8 +17547,12 @@ function parseCardText(txt,mode){
   }
   // 踏み倒しメタ：相手が召喚以外で出したクリーチャー→シールド化（シフォン型・任意）／マナ送り（コナユキ型）
   if(!out.set.repIn&&/召喚以外/.test(t)&&/クリーチャー/.test(t)){
-    if(/(?:シールド化|シールドに(?:する|置|加え)|盾に(?:する|置|加え))/.test(t)){out.set.repIn="shield";out.set.repInNC=true;}
-    else if(/(?:かわりに|そのかわり)[^。]{0,10}マナ|マナ(?:ゾーン)?に置/.test(t)){out.set.repIn="mana";out.set.repInNC=true;}
+    // 🔧 v10.38：判定は「召喚以外」を含む一文だけを見る。
+    //    G城の注記「（G城は実行したら、表向きでシールド化される…）」のように、
+    //    別の行の「シールド化」を拾って、マナ置換をシールド置換と誤判定していた
+    const _clNC=(t.split(/[。■\n]/).find(x=>/召喚以外/.test(x))||t);
+    if(/(?:シールド化|シールドに(?:する|置|加え)|盾に(?:する|置|加え))/.test(_clNC)){out.set.repIn="shield";out.set.repInNC=true;}
+    else if(/(?:かわりに|そのかわり)[^。]{0,10}マナ|マナ(?:ゾーン)?に置/.test(_clNC)){out.set.repIn="mana";out.set.repInNC=true;}
   }
   // NEO進化/進化クリーチャーなら…の条件付きクリーチャー制限（一音の妖精型）＝進化状態のみ有効
   if(out.set.stCrePT&&/(?:NEO)?進化クリーチャー(?:なら|であれば|の場合)/.test(t))out.set.stCrePTevo=true;
@@ -19866,10 +19870,17 @@ function applyEnterReplacement(pTo,c,mode){
       return (rIn&&raceMatch(rIn,tk))||String(c.name).includes(tk);
     });
   };
-  const lockers=zonesOf(foeR).battle.filter(x=>{
+  // 🔒 ロック元の探索範囲：相手のバトルゾーンに加えて、**表向きのシールド（城・G城）**も見る（v10.38）。
+  //    《我竜塔第七層 ハッスル・キャッスル》のようにG城が置換ロックを持つため、
+  //    バトルゾーンだけを見ていると反応しなかった。城は表向きの時だけ機能する
+  const _lockOk=(x,ownerP)=>{
     const rx=getReg(x);
-    return rx&&rx.repIn&&!isSealed(x)&&!isIgnored(x,foeR)&&matchR(rx.repInF)&&(!rx.repInOppTurn||(S.vs&&S.who===pTo));
-  });
+    return !!(rx&&rx.repIn&&!isSealed(x)&&!isIgnored(x,ownerP)&&matchR(rx.repInF)&&(!rx.repInOppTurn||(S.vs&&S.who===pTo)));
+  };
+  const lockers=[
+    ...zonesOf(foeR).battle.filter(x=>_lockOk(x,foeR)),
+    ...zonesOf(foeR).shield.filter(x=>x.faceup&&_lockOk(x,foeR)), // 🏰 表向きの城・G城
+  ];
   if(!lockers.length)return false;
   let locker=lockers[0];
   if(lockers.length>1&&S.gameMode!=="tcg"){
