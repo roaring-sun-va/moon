@@ -3409,7 +3409,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.41";
+const APP_VER="v10.42";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7065,6 +7065,17 @@ function vtDiscount(opts){
   }
   return n;
 }
+/* 🃏 ツインパクトの「支払う面」に合わせた登録ビューを返す（v10.42）。
+   下面（呪文面）を支払う時に、上面（クリーチャー面）の種族でコスト増減の対象条件を
+   判定してしまう不具合の修正。例：ルピア系（ドラゴンのコスト軽減）が場にいると、
+   《龍装鬼 オブザ08号》の呪文面《終焉の開闢》まで軽減されていた。
+   下面の種族は races2 に登録されている（呪文面は通常「種族なし」）。 */
+function payFaceReg(r,paySide){
+  if(!r)return r;
+  if(paySide!=="spell")return r;
+  if(!(r.twin||r.ctype==="twinpact"))return r;
+  return Object.assign({},r,{races:(r.races2||[]).slice(),ctype:"spell"});
+}
 function oppCostUp(r,c,pi,asSide){
   // asSide: "spell"（呪文面/呪文）または "creature"（クリーチャー面/クリーチャー）を明示。
   // 未指定時は r.ctype から推定（ツインパクトは判定不能のため呪文限定/クリーチャー限定フィルタが両面に誤適用されるのを防ぐ）
@@ -7073,6 +7084,7 @@ function oppCostUp(r,c,pi,asSide){
     const op=pi===0?1:0;
     if(!S.vs)return 0;
     const sideIsSpell=asSide?(asSide==="spell"):(r&&r.ctype==="spell");
+    const rF=payFaceReg(r,sideIsSpell?"spell":"creature"); // 🃏 種族判定は支払う面のもので行う
     for(const b of zonesOf(op).battle){
       const rb=getReg(b);
       if(!rb||!rb.stCostUp||rb.stCostUp<=0)continue;
@@ -7086,9 +7098,9 @@ function oppCostUp(r,c,pi,asSide){
         const civMap={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature","ゼロ":"zero","無色":"zero"};
         const ok=rb.stCostUpF.split(/[／\/、,]/).some(tk=>{
           if(!tk)return false;
-          if(civMap[tk])return r.civs&&r.civs.includes(civMap[tk]);
-          if(tk==="多色")return r.civs&&r.civs.length>1;
-          return raceMatch(r,tk)||faceNameOf(c).includes(tk);
+          if(civMap[tk])return rF.civs&&rF.civs.includes(civMap[tk]);
+          if(tk==="多色")return rF.civs&&rF.civs.length>1;
+          return raceMatch(rF,tk)||faceNameOf(c).includes(tk);
         });
         if(!ok)continue;
       }
@@ -7324,10 +7336,11 @@ async function autoTapCost(pi,c){
     const matchF=(filt)=>{
       if(!filt)return true;
       const toks2=String(filt).split(/[／\/、,]/).map(x=>x.trim()).filter(Boolean);
+      const rF=payFaceReg(r,paySide); // 🃏 ツインパクトは支払う面の種族で判定（ルピア系が呪文面まで軽減する不具合の修正）
       return toks2.some(tk=>{
-        if(tk==="多色")return r&&r.civs&&r.civs.length>=2;
-        if(civMapC[tk])return r&&r.civs&&r.civs.includes(civMapC[tk]);
-        return (r&&raceMatch(r,tk))||faceNameOf(c).includes(tk);
+        if(tk==="多色")return rF&&rF.civs&&rF.civs.length>=2;
+        if(civMapC[tk])return rF&&rF.civs&&rF.civs.includes(civMapC[tk]);
+        return (rF&&raceMatch(rF,tk))||faceNameOf(c).includes(tk);
       });
     };
     const ms=[...Z.battle,...evoBases].filter(b=>{const rb=getReg(b);return rb&&rb.stCostM>0&&b.id!==c.id&&!isSealed(b);});
