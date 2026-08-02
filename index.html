@@ -3409,7 +3409,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.42";
+const APP_VER="v10.43";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6820,6 +6820,7 @@ const FX_TYPES=[
   ["shieldPickNew","相手クリーチャーをn体選んで新しいシールドに追加（対象選択・表向き）"],
   ["shieldPickTuck","相手クリーチャーをn体選んで既存のシールドに表向きで重ねる（対象選択）"],
   ["foeShieldGrave","相手のシールドをn枚選んで持ち主の墓地に置く（ブレイクせず直接墓地）"],
+  ["peekShieldGrave","👀🛡 いずれかのプレイヤーのシールドを1つ見る→墓地に置いてもよい。置いた場合のみ、そのプレイヤーは山札の上から1枚をシールド化（裏向き・堕呪 ウキドゥ型／ブレイクではないのでS・トリガーは使えない）"],
   ["grsummon","GR召喚 n体（超GRの上から）"],
   ["tutor","山札から好きなカードをn枚 手札に加える（TCG式・全部見える）"],
   ["tutorDMPS","山札から条件に合うカードをn枚 手札へ（デュエプレ式・候補のみ表示／無ければ不発）"],
@@ -9047,6 +9048,70 @@ async function runFxList(pi,list,srcCard,inPump){
         renderAll();
       }
       sfx("grave");
+    }else if(f.t==="peekShieldGrave"){
+      // 👀🛡 堕呪 ウキドゥ型（v10.43）：いずれかのプレイヤーのシールドを1つ見る。それを墓地に置いてもよい。
+      //    そうした場合、そのプレイヤーは自身の山札の上から1枚目をシールド化する（裏向き）。
+      //    ポイント：「そうした場合」＝墓地に置いた時だけ補充が起きる。見ただけ／置かなかった時は
+      //    シールドは1枚も動かないので、山札からのシールド化も行わない。
+      //    ブレイクではなく直接墓地なので、S・トリガーは使えない（シールド焼却と同じ扱い）。
+      const nUK=Math.max(1,n||1);
+      for(let i=0;i<nUK;i++){
+        // ① 対象プレイヤー（いずれかのプレイヤー＝自分でも相手でもよい）
+        let tp=pi;
+        if(S.vs){
+          const jp=await askChoice(`👀 ${faceNameOf(srcCard||{name:"堕呪 ウキドゥ"})}：誰のシールドを見ますか？${nUK>1?`（${i+1}/${nUK}）`:""}`,
+            [`自分（${S.players[pi].label}）`,`相手（${S.players[op].label}）`]);
+          if(jp===null)break;
+          tp=(jp===1)?op:pi;
+        }
+        const ZT=zonesOf(tp);
+        if(!ZT.shield.length){toast(`${S.players[tp].label} のシールドがありません`);continue;}
+        // ② 見るシールドを選ぶ（中身は伏せたまま位置で選ぶ）
+        let j=0;
+        if(ZT.shield.length>1){
+          const lbs=ZT.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表向き：${faceNameOf(x)}）`:""}${x.under&&x.under.length?` ＋${x.under.length}枚重ね`:""}`);
+          j=await askChoice(`👀 ${S.players[tp].label} のシールドを1つ選んで見る`,lbs);
+          if(j===null)break;
+        }
+        const sh=ZT.shield[j];
+        // ③ 中身を見る（画像つきパネル）
+        await pickCard(`👀 ${S.players[tp].label} の盾${j+1}を見た`,[sh],{hint:"タップして次へ　／　このあと墓地に置くかどうかを選びます"});
+        logOnly(`👀 ${S.players[pi].label}：${S.players[tp].label} の盾${j+1}を見た → 《${faceNameOf(sh)}》`);
+        // ④ 墓地に置くかどうか（任意）
+        const jg=await askChoice(`🛡 ${S.players[tp].label} の盾${j+1}：《${faceNameOf(sh)}》\n墓地に置きますか？`,
+          ["墓地に置く（→ そのプレイヤーは山札の上から1枚をシールド化）","置かない（シールドはそのまま・補充もなし）"]);
+        if(jg!==0){
+          toast(`👀 見ただけで、シールドは動かさなかった（補充なし）`);
+          logOnly(`👀 ${S.players[pi].label}：盾を墓地に置かなかったため、シールド化は行われない`);
+          renderAll();continue;
+        }
+        // ⑤ 墓地へ（ブレイクしない＝S・トリガーは使えない）
+        const shx=ZT.shield.splice(j,1)[0];
+        const kids=shx.under?shx.under.splice(0):[];
+        shx.faceup=true;shx.tapped=false;shx.mark=false;shx.sideways=false;
+        ZT.grave.push(shx);
+        kids.forEach(u=>{u.faceup=true;u.tapped=false;ZT.grave.push(u);});
+        if(kids.length)toast(`盾の下の${kids.length}枚（要塞化の城など）は墓地へ`);
+        toast(`🛡→🪦 ${S.players[tp].label} の盾${j+1}《${faceNameOf(shx)}》を墓地へ（ブレイクではないのでS・トリガーなし）`);
+        logOnly(`🛡→🪦 ${S.players[pi].label}：${S.players[tp].label} のシールド《${faceNameOf(shx)}》を墓地に置いた`);
+        sfx("grave");
+        if(S.expert)runWatchFx(tp,"shieldLeave");
+        renderAll();
+        // ⑥ 「そうした場合」＝墓地に置いた時だけ、そのプレイヤーが山札の上から1枚をシールド化（裏向き）
+        if(!ZT.deck.length){toast(`${S.players[tp].label} の山札がないため、シールド化はできない`);continue;}
+        const nc=ZT.deck.shift();
+        nc.tapped=false;nc.sideways=false;nc.rot=0;
+        if(!shieldCapOk(ZT)){
+          nc.faceup=true;ZT.grave.push(nc);
+          toast(`🛡 シールド上限（10枚）：${faceNameOf(nc)} は墓地へ`);
+        }else{
+          nc.faceup=false;if(S.turn>0)nc.mark=true;
+          ZT.shield.push(nc);
+          toast(`🛡 ${S.players[tp].label}：山札の上から1枚を新しいシールドに（裏向き）`);
+          logOnly(`🛡 ${S.players[tp].label}：山札の上から1枚をシールド化（ウキドゥ型の補充）`);
+        }
+        sfx("move");renderAll();
+      }
     }else if(f.t==="peepShield"){
       // 🛡 パクリオ型：相手の手札を見てn枚選び、裏向きの新しいシールドとして加える
       if(!S.vs){toast("（ソロのためスキップ：相手の手札がありません）");continue;}
@@ -15672,6 +15737,8 @@ function fxUiPolish(){
           "置換":["置換","かわりに"],"かわりに":["置換","かわりに"],"身代わり":["セイバー","身代わり"],
           "打ち消し":["ヒカリスマ","実行する時"],"カウンター":["ヒカリスマ","実行する時"],
           "表向き盾":["表向き"],"表向きシールド":["表向き"],"裏向き":["裏向き"],
+          "ウキドゥ":["ウキドゥ"],"堕呪":["ウキドゥ"],"だじゅ":["ウキドゥ"],
+          "盾覗き":["ウキドゥ","見る"],"盾を見る":["ウキドゥ","見る"],"シールド確認":["ウキドゥ","見る"],
           "ツインパクト":["ツインパクト","下面"],"多面":["ツインパクト"],
           "メクレイド":["メクレイド"],"ヨビニオン":["ヨビニオン"],"キズナ":["キズナ"],"バズレンダ":["バズレンダ"],
           "シビルカウント":["シビルカウント"],"マジボンバー":["マジボンバー"],"光臨":["光臨"],"返霊":["返霊"],
@@ -16885,7 +16952,11 @@ function extractEffects(text,mode){
       fx.push({t:"retrieveHand",n:numOf(cl,/(\d+)枚/),cond:zonePfx+rfilt});
     }
     // 🛡 山札の上を自分のシールドに加える（シールド追加・シールド化）
-    if(/山札の上から.{0,14}?(?:シールド化|シールド(?:ゾーン)?に(?:加え|置)|盾(?:に(?:加え|置)|化))/.test(cl)&&!/相手/.test(cl)){
+    // ※「そのプレイヤーは自身の山札の上から…をシールド化する」（堕呪 ウキドゥ型の補充）は、
+    //   誰のシールドになるかが文脈で決まるため、この素の deckShield では拾わない（peekShieldGrave 側で処理）
+    // ※「表向きでシールド化」は deckShieldUp（カクメイジン型）が別途拾うため、ここでは除外する。
+    //   除外しないと deckShieldUp と deckShield の2件が登録され、盾が2枚増えてしまう（v10.43で修正）
+    if(/山札の上から.{0,14}?(?:シールド化|シールド(?:ゾーン)?に(?:加え|置)|盾(?:に(?:加え|置)|化))/.test(cl)&&!/相手/.test(cl)&&!/そのプレイヤー/.test(cl)&&!/表向き/.test(cl)){
       // 🛡 「自分のシールドが○枚以下なら」→ 盾ゲート（f.shieldMax）。追加枚数nは盾枚数の「○枚以下」を除いて取得。
       const mSg=cl.match(/(?:自分の)?シールド(?:が)?(\d+)枚以下(?:なら|の(?:場合|とき)|であれば)?/);
       const clForN=cl.replace(/(?:自分の)?シールド(?:が)?\d+枚以下(?:なら|の(?:場合|とき)|であれば)?[、,]?/,"");
@@ -17522,6 +17593,13 @@ function parseCardText(txt,mode){
   m=tSelf.match(/バズレンダ\s*[〔〈［\[（(]?[^0-9〕〉］\]）)]{0,6}?(\d+)/); if(m)out.set.buzz=+m[1];
   // ♾ フォーエバー・プリンセス型：どこからでも墓地に置かれる時、かわりに墓地＋自身を山札へシャッフル
   if(/どこからでも[^。]*?墓地に置かれ[^。]*?かわりに[^。]*?山札に加えてシャッフル/.test(t))out.set.graveShuffleRep=true;
+  // 👀🛡 「いずれかのプレイヤーのシールドを1つ見る。それを墓地に置いてもよい。そうした場合、
+  //       そのプレイヤーは自身の山札の上から1枚目をシールド化する」（堕呪 ウキドゥ型・v10.43）
+  {const mUK=t.match(/いずれかのプレイヤーのシールドを(\d+)[つ枚]見る[。、,]?\s*(?:それを)?墓地に置いても?よい/);
+   if(mUK){
+     out.fx.push({t:"peekShieldGrave",n:+mUK[1]||1});
+     out.notes.push({msg:`👀🛡 「いずれかのプレイヤーのシールドを${mUK[1]}つ見る→墓地に置いてもよい（置いた時だけ山札の上から1枚をシールド化）」を効果に追加しました`,q:"シールドを1つ見る"});
+   }}
   // 🛡 「このクリーチャーが出た時、自分の山札の上からn枚を表向きでシールド化する」（ボルシャック・カクメイジン型）
   {const mDU=t.match(/山札の上から(\d+)枚を表向き(?:で|に)シールド化/);
    if(mDU){
