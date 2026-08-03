@@ -884,6 +884,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <button class="btn small bar-extra" id="btnEffects">✨ 効果</button>
     <button class="btn small bar-extra" id="btnWho" style="display:none">操作:P1</button>
     <button class="btn small bar-extra" id="btnSeat" style="display:none">視点:P1</button>
+    <button class="btn small bar-extra" id="btnGhostBar" style="display:none" title="このターンのプレイヤーを自動でプレイします（マナチャージ→召喚→全員で攻撃）。効果の選択パネルが出たら、ゴーストの代わりにあなたが選んでください">👻 ゴースト</button>
     <button class="btn small warn bar-extra" id="btnResignBar" style="display:none">🏳 投了</button>
     <button class="btn small ghost bar-extra" id="btnLog">📜</button>
     <button class="btn small ghost bar-extra" id="btnStats" title="対戦戦績">📊</button>
@@ -1882,7 +1883,7 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="stayPow">離れる時、パワー0超ならとどまる（ボルシャック型・破壊/バウンス等すべて置換）</option>
             <option value="noDestroy">破壊されない</option>
             <option value="sa">スピードアタッカー</option>
-            <option value="unblock">ブロックされない（攻撃時表示）</option>
+            <option value="unblock">ブロックされない</option>
             <option value="blocker">ブロッカーを得る</option>
             <option value="slayer">スレイヤーを得る（バトル時表示）</option>
             <option value="noSpell">相手は呪文を唱えられない（マキア型）</option>
@@ -1918,7 +1919,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <label><input type="checkbox" id="fxAGTEsc"> 真・エスケープ</label>
           <input type="text" id="fxAGCond" placeholder="条件式（例：マナ:光>=5・空欄＝無条件）" style="flex:1;min-width:170px">
         </div>
-        <label><input type="checkbox" id="fxStUnblock"> 自分のクリーチャー全てブロックされない（攻撃時アナウンス）</label>
+        <label><input type="checkbox" id="fxStUnblock"> 自分のクリーチャー全てブロックされない</label>
         <label><input type="checkbox" id="fxStOriotis"> オリオティス（相手のマナ枚数よりコストが大きい相手クリーチャーが出たら山札の下へ）</label>
         <label data-fxcat="aura" style="margin-left:18px" title="山札の下でなく破壊する（マグナム・ルピア型）。上のオリオティスと併用してください"><input type="checkbox" id="fxStOriotisDestroy"> └ オリオティス：かわりに破壊する（マグナム・ルピア型）</label>
         <label>🌀 相手ターン開始時、相手マナのアンタップを <input type="number" id="fxManaUntapN" min="0" max="99" style="width:58px" value="0"> 枚までに制限（0=制限なし・ガ・リュザーク型は3）</label>
@@ -3409,7 +3410,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.43";
+const APP_VER="v10.44";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5020,8 +5021,9 @@ async function runTurnEndTriggers(cur2){
               // 該当なしでも、見た山上カードはランダムに山下へ（P'S光臨の正式挙動）
               if(top.length){
                 const seen=ZK.deck.splice(0,top.length);
-                for(let a=seen.length-1;a>0;a--){const b=Math.floor(Math.random()*(a+1));[seen[a],seen[b]]=[seen[b],seen[a]];}
-                seen.forEach(x=>{x.faceup=false;ZK.deck.push(x);});
+                // 🔀 v10.44：TCGモードは並び順を選べるように共通ヘルパへ（デュエプレはランダム固定）
+                const ordered=await orderForDeckBottom(seen,"P'S光臨で見たカード",cur2);
+                ordered.forEach(x=>{x.faceup=false;x.seen=false;ZK.deck.push(x);});
               }
               toast(`🕊 P'S光臨（${faceNameOf(kc)}）：山上${look}枚に該当クリーチャーなし（見たカードは山札の下へ）`);continue;}
             const j=await pickCard(`🕊 P'S光臨（${faceNameOf(kc)}）：山上${look}枚から出すクリーチャーを選択${filt?`（${filt}）`:""}`,cands,
@@ -5031,9 +5033,9 @@ async function runTurnEndTriggers(cur2){
             let pick=null;
             if(j!==null&&j<cands.length){pick=cands[j];}
             const rest=seen.filter(x=>!pick||x.id!==pick.id);
-            // 残りをランダムな順番で山札の下へ
-            for(let a=rest.length-1;a>0;a--){const b=Math.floor(Math.random()*(a+1));[rest[a],rest[b]]=[rest[b],rest[a]];}
-            rest.forEach(x=>{x.faceup=false;ZK.deck.push(x);});
+            // 🔀 v10.44：残りを山札の下へ（TCGモードは並び順を選択可・デュエプレはランダム固定）
+            {const ordered=await orderForDeckBottom(rest,"P'S光臨の残り",cur2);
+             ordered.forEach(x=>{x.faceup=false;x.seen=false;ZK.deck.push(x);});}
             if(!pick){toast(`🕊 P'S光臨（${faceNameOf(kc)}）：出さなかった（見たカードは山札の下へ）`);renderAll();continue;}
             pick.faceup=true;pick.tapped=false;
             if(battleSlotFull(cur2)){ZK.grave.push(pick);toast(`🟥 バトルゾーン7面のため《${faceNameOf(pick)}》は墓地へ`);}
@@ -9612,8 +9614,10 @@ async function runFxList(pi,list,srcCard,inPump){
             toast(`🔮 ${faceNameOf(sel)} をコストを支払わず唱えた（解決中へ）`);
           }
         }
-        for(let i=look.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[look[i],look[k]]=[look[k],look[i]];}
-        look.forEach(x=>{x.faceup=false;Z.deck.push(x);});
+        // 🔀 v10.44：TCGモードは並び順を選択可（デュエプレはランダム固定）
+        {const ordered=await orderForDeckBottom(look.slice(),"残り",pi);
+         look.length=0;
+         ordered.forEach(x=>{x.faceup=false;x.seen=false;Z.deck.push(x);});}
         renderAll();await waitFxIdle(inPump);
       }
     }else if(f.t==="foeToShield"){
@@ -9771,11 +9775,11 @@ async function runFxList(pi,list,srcCard,inPump){
             for(const d of dup){const di=revealed.findIndex(x=>x.id===d.id);if(di>=0)revealed.splice(di,1);}
           }
         }
-        for(let i=revealed.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[revealed[i],revealed[k]]=[revealed[k],revealed[i]];}
-        revealed.forEach(x=>{x.faceup=false;Z.deck.push(x);});
-        logDeckBottomOrder(pi,revealed,"残り","（ランダム順）"); // 🔀 v10.30
+        // 🔀 v10.44：TCGモードは並び順を選択可（デュエプレはランダム固定・ログも内部で記録）
+        {const ordered=await orderForDeckBottom(revealed.slice(),"残り",pi);
+         ordered.forEach(x=>{x.faceup=false;x.seen=false;Z.deck.push(x);});}
         sfx("ok");renderAll();
-        toast(`🎴 ${put}体を出し、残り${revealed.length}枚をランダムに山札の下へ`);
+        toast(`🎴 ${put}体を出し、残り${revealed.length}枚を山札の下へ`);
       }
     }else if(f.t==="grantStayBlk"){
       // 🛡⚓ 自分のブロッカー持ちすべてに「離れる時パワー0超ならとどまる」を次の自分のターンまで付与（Shin-Ka Musical型・付与時点のブロッカーが対象）
@@ -10185,11 +10189,11 @@ async function runFxList(pi,list,srcCard,inPump){
         const take=rev.filter(x=>{const rx=getReg(x);return !filt||lockFilterOk(filt,rx,x);});
         const rest=rev.filter(x=>!take.includes(x));
         for(const tc of take){tc.faceup=true;tc.tapped=false;Z.hand.push(tc);}
-        for(let i=rest.length-1;i>0;i--){const j2=Math.floor(Math.random()*(i+1));[rest[i],rest[j2]]=[rest[j2],rest[i]];}
-        for(const tc of rest){tc.faceup=false;Z.deck.push(tc);}
-        logDeckBottomOrder(pi,rest,"残り","（ランダム順）"); // 🔀 v10.30
+        // 🔀 v10.44：TCGモードは並び順を選択可（デュエプレはランダム固定・ログも内部で記録）
+        {const ordered=await orderForDeckBottom(rest.slice(),"残り",pi);
+         ordered.forEach(tc=>{tc.faceup=false;tc.seen=false;Z.deck.push(tc);});}
         sfx("draw");renderAll();
-        toast(`👀 ${take.length?`${take.map(faceNameOf).join("、")} を手札へ・`:""}残り${rest.length}枚を山札の下へ（ランダム順）`);
+        toast(`👀 ${take.length?`${take.map(faceNameOf).join("、")} を手札へ・`:""}残り${rest.length}枚を山札の下へ`);
       }
     }else if(f.t==="revealTakeGrave"){
       // 👀 山上n枚を表向き→条件に合うカードをすべて手札→それ以外を墓地へ（コアクアンのおつかい型）
@@ -11027,9 +11031,24 @@ function lockFilterOk(filt,r,c,lockPi,face){
   const rCost=(face==="spell"&&isTwin&&r.cost2!=null&&!isNaN(+r.cost2))?+r.cost2
              :(r&&r.cost!=null&&!isNaN(+r.cost)?+r.cost:null);
   const one=tk=>{
+    // 🏷 名前判定に使う名前の候補（v10.44）。呪文面として評価する時（face==="spell"）は、
+    //    ツインパクトの下面（呪文面）の名前も見る。《ナ・チュラルゴ・デンジャー／ナチュラル・トラップ》の
+    //    ように「トラップ」が下面にしか付かないカードは、手札では上面の名前しか見ていなかったため
+    //    「トラップ」条件に合致せず、デンジャデオン型の選択パネルに出てこなかった。
+    const nameHas=w=>{
+      const cands=[];
+      const push=v=>{v=String(v||"");if(v&&!cands.includes(v))cands.push(v);};
+      if(c){try{push(faceNameOf(c));}catch(e){}push(c.name);}
+      if(r)push(r.name);
+      if(face==="spell"&&c&&c.name){
+        const lk=LINKS.get(normName(c.name));
+        if(lk&&lk.length>1)for(const k of lk)push(dispName.get(k));
+      }
+      return cands.some(v=>v.includes(w));
+    };
     // 🏷 「名前:X」＝カード名にXを含む（AND側で使える名前条件。例：ドラゴン／名前:ボルシャック＝ボルシャックと名の付くドラゴン）
     const mNm=tk.match(/^名前[:：](.+)$/);
-    if(mNm)return String((c&&faceNameOf(c))||(c&&c.name)||(r&&r.name)||"").includes(mNm[1]);
+    if(mNm)return nameHas(mNm[1]);
     // 🧬 「種族:X」＝登録された種族のみで判定（カード名は見ない）。
     //    素の種族語は名前一致にもフォールバックするため、《ゼニス・スパーク》（名前にゼニス・種族ゼニスではない）の
     //    ような誤ヒットを避けたい時はこちらを使う（例：種族:ゼニス／種族:オラクル＝OR側で使える）
@@ -11066,7 +11085,7 @@ function lockFilterOk(filt,r,c,lockPi,face){
     if(tk==="呪文")return !!(r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact")); // ツインパクトは呪文としても扱う
     if(tk==="ツインパクト")return !!(r&&(r.twin||r.ctype==="twinpact"));
     if(civMap[tk])return !!(r&&r.civs&&r.civs.includes(civMap[tk]));
-    return !!((r&&raceMatch(r,tk))||String(faceNameOf(c)||c.name||"").includes(tk));
+    return !!((r&&raceMatch(r,tk))||nameHas(tk));
   };
   filt=String(filt).replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0)).replace(/＞/g,">").replace(/＜/g,"<").replace(/＝/g,"=");
   // 種族・名前のトークンは「いずれか（OR）」、コスト/パワー/タイプ/文明/多色単色/「以外」は「すべて（AND）」。
@@ -11371,7 +11390,19 @@ function enqueueFx(pi,c){
   // 🔢 いまカードを1枚処理している最中に生まれたCIP（＝その効果の結果出たカード）は、
   //    残りの兄弟カードより先に解決する（カーソル位置に順番を保って挿入）。処理中でなければ末尾へ。
   if(fxRunning&&fxInsertAt!=null){fxQueue.splice(fxInsertAt,0,{pi,c,reg});fxInsertAt++;}
-  else fxQueue.push({pi,c,reg});
+  else{
+    // ⏱ APNAP（v10.44）：同時に複数のCIPが待機している時は、ターンプレイヤーの持ち主のものから解決する。
+    //    従来は到着順だったため、両者のクリーチャーが同時に出る場面（革命0トリガー・全体踏み倒し・
+    //    相手にも出させる効果など）で、非ターンプレイヤーのCIPが先に解決されることがあった。
+    //    持ち主ごとの並びは崩さない（同じ持ち主の中では到着順のまま＝持ち主が順番を決める）。
+    const ent={pi,c,reg};
+    let ins=fxQueue.length;
+    if(S.vs&&pi===S.who){
+      const k=fxQueue.findIndex(q=>q.pi!==S.who);
+      if(k>=0)ins=k; // ターンプレイヤーのCIPは、非ターンプレイヤーの待機分より前に入れる
+    }
+    fxQueue.splice(ins,0,ent);
+  }
   pumpFx();
 }
 async function pumpFx(){
@@ -11600,22 +11631,11 @@ async function offerSoulRaid(pi,c){
   }else{
     toast(`🔥 超魂レイド：下に置かなかった（進化元なし）`);
   }
-  // 残りを好きな順序で山札の下に置く（1枚ずつ選択・選んだ順に上→下へ積む）
-  if(look.length>=2){
-    const rest=look.slice();
-    let step=0;
-    while(rest.length>1){
-      step++;
-      const k=await pickCard(`🔥 残り${rest.length}枚：山札の下に置く順番を選択（${step}番目に下へ／上から順に積みます）`,rest,
-        {hint:"タップで次に下へ置くカードを選択（順に山札の下へ積まれます）"});
-      const idx=(k===null)?0:k; // キャンセル時は先頭から
-      const csel=rest.splice(idx,1)[0];
-      csel.faceup=false;Z.deck.push(csel);
-    }
-    if(rest.length){rest[0].faceup=false;Z.deck.push(rest[0]);}
-    toast(`🔥 超魂レイド：残りを選んだ順で山札の下に置いた`);
-  }else{
-    look.forEach(x=>{x.faceup=false;Z.deck.push(x);});
+  // 🔀 v10.44：残りを山札の下へ。従来はモードに関係なく「好きな順に並べる」を聞いていたが、
+  //    デュエプレでは山札の下の順番は指定できない（ランダム固定）ため、共通ヘルパでモード分岐する。
+  if(look.length){
+    const ordered=await orderForDeckBottom(look.slice(),"超魂レイドの残り",pi);
+    ordered.forEach(x=>{x.faceup=false;x.seen=false;Z.deck.push(x);});
   }
   renderAll();
 }
@@ -14606,6 +14626,18 @@ async function execAttack(pi,id,tg){
     }
   }
   const aregNB=getReg(c);
+  // 🛡✋ v10.44：「ブロックされない」の判定を1か所にまとめた。
+  //    従来はカード自身の登録（noBlock）しか見ておらず、条件付き常在（cstFx=unblock）・
+  //    全体常在（stUnblock）・1ターン付与（buff.noBlock）はメッセージが出るだけでブロックできてしまっていた。
+  const unblockInfo=(()=>{
+    if(aregNB&&aregNB.noBlock)return {ok:true,why:`${faceNameOf(c)} はブロックされない`};
+    if(c.buff&&c.buff.noBlock)return {ok:true,why:`付与：${faceNameOf(c)} はブロックされない`};
+    if(aregNB&&aregNB.cstCond&&aregNB.cstFx==="unblock"&&!isSealed(c)&&!isIgnored(c,pi)&&zoneCondOk(aregNB.cstCond,pi,c))
+      return {ok:true,why:`条件付き常在（${aregNB.cstCond}）：${faceNameOf(c)} はブロックされない`};
+    const src=Z.battle.find(b=>{const rb=getReg(b);return rb&&rb.stUnblock&&!isSealed(b)&&!isIgnored(b,pi);});
+    if(src)return {ok:true,why:`常在効果（${faceNameOf(src)}）：自分のクリーチャーはブロックされない`};
+    return {ok:false};
+  })();
   const isBlk=b=>{
     const rb=getReg(b);
     if(rb&&rb.blocker)return true;
@@ -14616,9 +14648,11 @@ async function execAttack(pi,id,tg){
     if(rb&&rb.cstCond&&rb.cstFx==="blocker"&&!isSealed(b)&&!isIgnored(b,op)&&zoneCondOk(rb.cstCond,op,b))return true;
     return false;
   };
-  const blockers=(aregNB&&aregNB.noBlock)?[]:OZ.battle.filter(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b));
-  if(aregNB&&aregNB.noBlock&&OZ.battle.some(b=>!b.tapped&&isBlk(b)))
-    toast(`${faceNameOf(c)} はブロックされない`);
+  const blockers=unblockInfo.ok?[]:OZ.battle.filter(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b));
+  if(unblockInfo.ok&&OZ.battle.some(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b))){
+    toast(`🛡✋ ${unblockInfo.why}（ブロックの確認は出ません）`);
+    logOnly(`🛡✋ ${unblockInfo.why}`);
+  }
   let defender=null;
   if(blockers.length){
     const bl=await askChoice(`${S.players[op].label}：ブロックしますか？`,
@@ -14670,9 +14704,7 @@ async function execAttack(pi,id,tg){
       if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
     }
   }
-  if(S.expert&&Z.battle.some(b=>{const rb=getReg(b);return rb&&rb.stUnblock;})){
-    toast(`🛡✋ 常在効果：自分のクリーチャーはブロックされない`);
-  }
+  // 🛡✋ 「ブロックされない」の通知は、上のブロック確認の直前にまとめて出すようにしたため、ここでは出さない（v10.44）
   // 攻撃誘導：防御側に誘導持ちがいれば攻撃先を変更（攻撃可能な対象のみ）
   if(S.expert){
     S.tauntUsed=S.tauntUsed||{};
@@ -17527,7 +17559,7 @@ function parseCardText(txt,mode){
      out.notes.push({msg:`🎲 離場身代わり（他の${mLS[1]}のコスト最小1体をランダム破壊して場に残る）を設定しました。破壊置換の選択肢に出ます（破壊以外で離れる時は手動でキャンセル→身代わり破壊）`,q:"身代わり"});
    }}
   if(/この(?:クリーチャー|カード)を自分のマナゾーンから召喚してもよい/.test(t))
-    out.notes.push("💡 「マナゾーンから召喚してもよい」は未対応です。マナのカードを手動でバトルゾーンへ出してください（コスト支払いはマナタップで）");
+    out.notes.push({msg:"💡 「マナゾーンから召喚してもよい」は、マナのカードをタップして『⚔ 召喚（マナから・コスト支払い）』から出せます（自動マナタップ・出た時効果・進化/NEOの選択も手札召喚と同じ）。自動発動ではないので、条件を満たした時に手動で選んでください",q:"召喚"});
   if(/そのターン中に[^■。]{0,20}?(\d+)体以上破壊されていたら[^■。]{0,30}?手札からバトルゾーンに出す/.test(t))
     out.notes.push("💡 「そのターン中の破壊数を数えて手札から出す」は未対応です。条件を満たしたら手札から手動で出してください（出た時効果は自動処理されます）");
   // 🔒 コナユキ'26型：「相手のターン中、相手がコストを支払わずにクリーチャーを出す時、かわりにマナゾーンに置く」
@@ -20901,10 +20933,10 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         for(let i=revealed.length-1;i>=0;i--){
           const x=revealed[i];x.faceup=false;
         }
-        for(let i=revealed.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[revealed[i],revealed[k]]=[revealed[k],revealed[i]];} // 🔀 v10.30：sort(()=>Math.random()-.5)は偏るためFisher–Yatesに変更
-        revealed.forEach(x=>ZY.deck.push(x));
-        logDeckBottomOrder(pTo,revealed,"ヨビニオンの残り","（ランダム順）");
-        if(revealed.length)toast(`残り${revealed.length}枚はシャッフルして山札の下へ`);
+        // 🔀 v10.44：TCGモードは並び順を選択可（デュエプレはランダム固定・ログも内部で記録）
+        {const ordered=await orderForDeckBottom(revealed.slice(),"ヨビニオンの残り",pTo);
+         ordered.forEach(x=>{x.faceup=false;x.seen=false;ZY.deck.push(x);});}
+        if(revealed.length)toast(`残り${revealed.length}枚を山札の下へ`);
         renderAll();
         await waitFxIdle();renderAll();
       })();
@@ -21822,6 +21854,7 @@ function cardEl(pi,zone,c){
     if(c.buff.noDestroy)parts.push("🪨破壊×");
     if(c.buff.noLeave)parts.push("⚓離脱×");
     if(c.buff.ignoreAbility)parts.push("🚯能力無視");
+    if(c.buff.noBlock)parts.push("🛡✋ブロック×");
     if(c.buff.note)parts.push(c.buff.note);
     if(parts.length){
       const bt=document.createElement("span");bt.className="bufftag";bt.textContent=parts.join(" ");
@@ -22470,6 +22503,7 @@ function renderAllNow(){
   $("btnSeat").style.display=S.vs?"":"none";
   $("btnSeat").textContent=`視点:${S.players[S.seat|0].label}`;
   $("btnResignBar").style.display=(S.vs&&S.turn>0)?"":"none";
+  {const gb=$("btnGhostBar");if(gb)gb.style.display=(S.vs&&S.turn>0&&!olActive())?"":"none";} // 👻 オンライン対戦中は非表示
   {
     const fp=$("btnFreePlay");
     fp.textContent=S.freePlay?"⚡踏倒:ON":"踏倒:OFF";
@@ -23457,6 +23491,139 @@ function openStatsPanel(days){
   g.appendChild(wrap);
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
+/* 👻 ゴーストデッキ（v10.44・AI対戦相手の第1段階）
+   このターンのプレイヤーを自動でプレイする：①山上→マナ ②出せるクリーチャーをコストが高い順に召喚 ③攻撃できる全員でプレイヤーを攻撃。
+   ・効果の選択パネル（出た時など）が開いたら、ゴーストの代わりに人間が選ぶ（代行方式）
+   ・進化／NEO／ツインパクトは判断が要るため出さない（手札に残す）。呪文も唱えない
+   ・ブロックの確認は従来どおり防御側（人間）に出る
+   ・攻撃が保留（手動処理）になったら中断し、解決後にもう一度押せば続きから動く */
+let GHOST_BUSY=false;
+function ghostCivOk(r,untapped){
+  const civs=(r.civs||[]).filter(cv=>cv&&cv!=="zero");
+  return civs.every(cv=>untapped.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}));
+}
+function ghostPayMana(Z,r){
+  // 支払い：必要文明を1枚ずつ確保→残りは任意のアンタップマナ（軽減は使わない＝定価で払う）
+  const need=(r.civs||[]).filter(cv=>cv&&cv!=="zero");
+  const cost=Math.max(0,(+r.cost)|0);
+  const pick=[];
+  const rest=()=>Z.mana.filter(m=>!m.tapped&&!pick.includes(m));
+  for(const cv of need){
+    if(pick.length>=cost)break;
+    if(pick.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}))continue; // 既に確保済みの文明
+    const m=rest().find(m2=>{const rm=getReg(m2);return rm&&rm.civs&&rm.civs.includes(cv);});
+    if(m)pick.push(m);
+  }
+  for(const m of rest()){if(pick.length>=cost)break;pick.push(m);}
+  if(pick.length<cost)return false;
+  pick.forEach(m=>m.tapped=true);
+  return true;
+}
+async function ghostTurn(){
+  if(GHOST_BUSY){toast("👻 ゴースト処理中です");return;}
+  if(!S.vs){toast("👻 ゴーストは対戦モード専用です");return;}
+  if(olActive()){toast("👻 オンライン対戦中はゴーストを使えません");return;}
+  if(REPLAY.on){toast("👻 リプレイ再生中は使えません");return;}
+  if(GAME_PAUSE){toast("⏸ 処理中です（「▶ 再開」を押してから実行してください）");return;}
+  const pi=S.who|0, op=pi?0:1;
+  const Z=zonesOf(pi), OZ=zonesOf(op);
+  const wait=ms=>new Promise(r2=>setTimeout(r2,ms));
+  GHOST_BUSY=true;
+  try{
+    snap();
+    toast(`👻 ゴースト：${S.players[pi].label} のターンを自動プレイ`);
+    logOnly(`👻 ゴースト：${S.players[pi].label} のターンを自動プレイ開始`);
+    // ① マナチャージ（山上→マナ・1ターン1回）
+    S.ghostCharged=S.ghostCharged||{};
+    const chKey=`${S.pturn|0}-${pi}`;
+    if(S.ghostCharged._k!==chKey){
+      if(Z.deck.length){
+        const mc=Z.deck.shift();mc.faceup=true;mc.sideways=false;
+        const tp=manaTapIn(mc);
+        Z.mana.push(mc);markArrive(mc);
+        S.ghostCharged._k=chKey;
+        toast(`👻💠 マナチャージ：${faceNameOf(mc)}${tp?"（多色・タップイン）":""}`);
+        logOnly(`👻💠 ゴースト：《${faceNameOf(mc)}》をマナチャージ`);
+        sfx("move");renderAll();await wait(400);
+      }
+    }
+    // ② 召喚（非進化・非ツインパクトのクリーチャーを、コストが高い順に出せるだけ）
+    let guard=0,skipped=[];
+    while(guard++<12){
+      await waitFxIdle();
+      if(GAME_PAUSE||FX_HOLD)break;
+      if(battleSlotFull(pi))break;
+      const untapped=Z.mana.filter(m=>!m.tapped);
+      const cands=Z.hand.map(cc=>({cc,r:getReg(cc)}))
+        .filter(o=>o.r&&isCreatureReg(o.r)&&!isEvoReg(o.r)&&!o.r.twin&&o.r.ctype!=="twinpact"&&o.r.cost!=null&&(+o.r.cost)<=untapped.length&&ghostCivOk(o.r,untapped))
+        .sort((a,b)=>(+b.r.cost)-(+a.r.cost));
+      let played=false;
+      for(const {cc,r} of cands){
+        // ロック確認（安全側：出せないカードはスキップして次の候補へ）
+        if(S.expert&&!S.freePlay&&S.turn>0){
+          const cap=perTurnCapHit(pi,"creature");
+          if(cap){skipped.push("⛔回数制限");break;}
+          const lk=stLockerOf(pi,"stLockCre","stLockCreF",r,cc);
+          const tl=lk?null:turnLockHit(pi,"creature",r);
+          if(lk||tl){skipped.push(`⛔${faceNameOf(cc)}`);continue;}
+        }
+        if(!battleEntryOk(pi,cc)){skipped.push(`⛔${faceNameOf(cc)}`);continue;}
+        if(!ghostPayMana(Z,r))continue;
+        const hi=Z.hand.findIndex(x=>x.id===cc.id);
+        if(hi<0)continue;
+        Z.hand.splice(hi,1);
+        cc.faceup=true;cc.tapped=false;cc.sideways=false;
+        cc.sick=(S.turn>0)&&!(r&&r.sa);
+        Z.battle.push(cc);
+        markArrive(cc);emitEvent(pi,"summon");enqueueFx(pi,cc);
+        toast(`👻⚔ 召喚：${faceNameOf(cc)}（コスト${r.cost}）`);
+        logOnly(`👻⚔ ゴースト：《${faceNameOf(cc)}》を召喚（コスト${r.cost}）`);
+        sfx("ok");renderAll();
+        await waitFxIdle();await wait(350);
+        played=true;break;
+      }
+      if(!played)break;
+    }
+    // 呪文・進化・ツインパクトは出さない旨を1回だけ通知（手札にある時のみ）
+    if(Z.hand.some(cc=>{const r=getReg(cc);return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"||isEvoReg(r));}))
+      toast("👻 呪文・進化・ツインパクトはゴーストは使いません（必要ならあなたが代行してください）");
+    // ③ 攻撃（攻撃できる全員で、シールド→なければダイレクト）
+    guard=0;
+    while(guard++<15){
+      await waitFxIdle();
+      if(GAME_PAUSE||FX_HOLD||S.pendingAtk)break;
+      const atk=Z.battle.find(c=>{
+        if(!c||c.tapped)return false;
+        const r=getReg(c);
+        if(!r||!isCreatureReg(r))return false;
+        if(c.sick&&!(r.sa)&&!saGrantSource(pi,c,r))return false;
+        if(noAtkBlkOf(c)||isSealed(c))return false;
+        if(r.cantAtk||r.cantAtkP)return false; // プレイヤー攻撃不可はゴーストの攻撃先が常にプレイヤーなので除外
+        return true;
+      });
+      if(!atk)break;
+      // 🏆 決着チェック：ダイレクトアタックで勝敗が記録されたら、残りの攻撃は行わない
+      const scoreBefore=SCORE[0]+SCORE[1];
+      const tg=OZ.shield.length?{kind:"shield"}:{kind:"direct"};
+      atk.tapped=true;
+      atk._atkFxDone=false;atk._allyAtkDone=false;atk._anyAtkDone=false;atk._sxAtkDone=false;atk._mbDone=false;
+      logOnly(`👻⚔ ゴースト：《${faceNameOf(atk)}》で${tg.kind==="shield"?"シールドを攻撃":"ダイレクトアタック"}`);
+      renderAll();
+      await execAttack(pi,atk.id,tg);
+      await wait(300);
+      if(SCORE[0]+SCORE[1]>scoreBefore){logOnly("👻🏆 ゴースト：決着がついたため攻撃を終了");break;} // 🏆 勝敗が記録された
+      if(S.pendingAtk||FX_HOLD||GAME_PAUSE){
+        toast("👻⏸ 攻撃が保留されました。盤面で解決してから、もう一度「👻 ゴースト」を押すと続きから動きます");
+        return;
+      }
+      if(!S.vs)return; // 決着などで対戦が終了した場合
+    }
+    toast("👻 ゴーストのターン終了。「次のターン ▶」で進めてください");
+    logOnly("👻 ゴースト：ターンのプレイを終えた");
+  }catch(e){
+    toast(`👻⚠ ゴースト処理を中断：${String(e&&e.message||e).slice(0,60)}`);
+  }finally{GHOST_BUSY=false;renderAll();}
+}
 async function declareWin(winner,reason,askFirst=true){
   if(!S.vs){toast(`🏆 ${reason}`);return;}
   // 💀 ジャオウガ型の敗北置換：負ける側に「負けるかわりに下のカードを1枚墓地へ」があれば、先に確認する
@@ -23801,6 +23968,7 @@ $("olDeckSend").addEventListener("click",async ()=>{
 });
 $("olResign").addEventListener("click",doResign);
 $("btnResignBar").addEventListener("click",doResign);
+{const gb=$("btnGhostBar");if(gb)gb.addEventListener("click",()=>{closeSheet();ghostTurn();});}
 $("btnLog").addEventListener("click",toggleLogDock); // 📜 盤面を見ながら読めるログドックを開閉（⛶で全画面）
 {const sb=document.getElementById("btnStats");if(sb)sb.addEventListener("click",()=>openStatsPanel());}
 $("btnMore").addEventListener("click",()=>{$("bottombar").classList.toggle("more-open");});
@@ -24777,7 +24945,7 @@ function openCardSheet(ctx){
     }
     box.appendChild(actBtn("✨ 1ターン付与（パワー±/PA/スレイヤー等）",async ()=>{
       const pick=await askChoice(`《${faceNameOf(c)}》に付与\n（持続はこの後で選べます／❄フリーズ・JDは自動解除）`,
-        ["パワー ＋（数値入力）","パワー −（数値入力）","パワーアタッカー ＋（数値入力）","スレイヤー","ブロッカー","メモ（自由入力）","❄ フリーズ（次のターン アンタップしない）","🌀 ジャストダイバー（次の自分のターン開始まで）","🚫 攻撃もブロックもできない（プリンプリン型）","⚓ バトルゾーンを離れない","🪨 破壊されない","⚡ スピードアタッカー付与","💥 ブレイク数＋n","🚯 このカードの能力を無視（立ち上がれ型・エレメント能力無視）"]);
+        ["パワー ＋（数値入力）","パワー −（数値入力）","パワーアタッカー ＋（数値入力）","スレイヤー","ブロッカー","メモ（自由入力）","❄ フリーズ（次のターン アンタップしない）","🌀 ジャストダイバー（次の自分のターン開始まで）","🚫 攻撃もブロックもできない（プリンプリン型）","⚓ バトルゾーンを離れない","🪨 破壊されない","⚡ スピードアタッカー付与","💥 ブレイク数＋n","🚯 このカードの能力を無視（立ち上がれ型・エレメント能力無視）","🛡✋ ブロックされない"]);
       if(pick===null)return;
       snap();
       // ✨「次の自分のターン開始まで」の基準＝効果を使ったプレイヤー。
@@ -24832,6 +25000,7 @@ function openCardSheet(ctx){
       else if(pick===11){c.buff.sa=true;setKeys.push("sa");toast(`⚡ ${faceNameOf(c)}：スピードアタッカー付与`);}
       else if(pick===12){const v=await askNumber("ブレイク数＋いくつ？",1);if(v!=null){c.buff.breakPlus=(c.buff.breakPlus||0)+v;setKeys.push("breakPlus");toast(`💥 ${faceNameOf(c)}：ブレイク数＋${v}`);}}
       else if(pick===13){c.buff.ignoreAbility=true;setKeys.push("ignoreAbility");toast(`🚯 ${faceNameOf(c)}：${nextDur?"次の自分のターン開始まで":"このターン"}、能力を無視`);}
+      else if(pick===14){c.buff.noBlock=true;setKeys.push("noBlock");toast(`🛡✋ ${faceNameOf(c)}：${nextDur?"次の自分のターン開始まで":"このターン"}、ブロックされない`);}
       else if(pick===3){c.buff.slayer=true;setKeys.push("slayer");}
       else if(pick===4){c.buff.blocker=true;setKeys.push("blocker");}
       else if(pick===5){const t2=await askText("付与内容（メモ）","");if(t2){c.buff.note=t2;setKeys.push("note");}}
@@ -26238,14 +26407,18 @@ function renderRevealPanel(){
     }
   }else bar.style.display="none";
 }
-function rvBulk(fn){
+async function rvBulk(fn){
   const Z=zonesOf(rvPi);
   const key=rvZoneKey();
   if(!Z[key].length)return;
   snap();
-  fn(Z,Z[key]);
+  // 🔀 v10.44：山札の下へ送る並び順の選択（TCGモード）で await するため、先にゾーンを空にしてから処理する。
+  //    先に空にしないと、選択パネルを開いている間にもう一度押せてしまい二重処理になる。
+  const arr=Z[key];
   Z[key]=[];
   rvSel=null;
+  renderAll();renderRevealPanel();
+  await fn(Z,arr);
   renderAll();renderRevealPanel();
 }
 $("rvReveal1More").addEventListener("click",()=>{
@@ -26263,12 +26436,13 @@ $("rvAllTop").addEventListener("click",()=>rvBulk((Z,arr)=>{
   Z.deck.unshift(...arr);
   logOnly(`📤 ${S.players[rvPi].label}：公開ゾーンの${nms.length}枚を元の順で山札の上へ → ${cnList(nms)}`); // 公開ゾーンは両者が見ているので伏せない
 }));
-$("rvAllBottom").addEventListener("click",()=>rvBulk((Z,arr)=>{
+$("rvAllBottom").addEventListener("click",()=>rvBulk(async(Z,arr)=>{
   arr.forEach(c=>{c.faceup=false;c.seen=false;}); // 順番が変わるので確認済みにはしない
-  shuffle(arr);Z.deck.push(...arr);
-  // 🔀 v10.30：並べ替え「後」の実際の順をログに記録（従来は並べ替え前の順を出していたため実際の山札と食い違っていた）
-  logDeckBottomOrder(rvPi,arr,"公開ゾーンのカード","（ランダム順）");
-  toast("残りをランダムな順で山札の下に送りました");
+  // 🔀 v10.44：TCGモードでは「好きな順に並べる」を選べるように共通ヘルパへ集約
+  //    （デュエプレモードは従来どおりランダム固定・ログ記録も内部で行う）
+  const ordered=await orderForDeckBottom(arr,"公開ゾーンのカード",rvPi);
+  ordered.forEach(c=>{c.faceup=false;c.seen=false;Z.deck.push(c);});
+  toast(`公開ゾーンの${ordered.length}枚を山札の下に送りました`);
 }));
 $("rvAllHand").addEventListener("click",()=>rvBulk((Z,arr)=>{
   const nms=arr.map(faceNameOf);
