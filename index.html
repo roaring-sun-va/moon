@@ -3413,7 +3413,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.48";
+const APP_VER="v10.49";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -23808,6 +23808,9 @@ function ghostPickCharge(Z){
     let sc=0;
     if(!playable)sc+=100;
     if(playable&&cost>manaN+2)sc+=40;
+    // 📖 2ターン先を読む（プレイング講座 第三章）：チャージ後のマナで「次のターン・次の次のターンに
+    //    ちょうど出せる」カーブ上の札は埋めない。展開の主役をマナに埋める事故を防ぐ
+    if(playable&&(cost===manaN+1||cost===manaN+2))sc-=25;
     if(Z.hand.some((o,j)=>j!==i&&o.name===cc.name))sc+=25;
     const civs=((r&&r.civs)||[]).filter(cv=>cv!=="zero");
     if(civs.length&&civs.some(cv=>!Z.mana.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);})))sc+=10;
@@ -23946,10 +23949,14 @@ async function ghostTurn(opts){
     // 呪文・進化・ツインパクトは出さない旨を1回だけ通知（手札にある時のみ）
     if(Z.hand.some(cc=>{const r=getReg(cc);return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"||isEvoReg(r));}))
       toast("👻 呪文・進化・ツインパクトはゴーストは使いません（必要ならあなたが代行してください）");
-    // ③ 攻撃（リーサル判定＋ブロッカー考慮・v10.45）
-    //    ・リーサル：全員で攻撃（ブレイク数の小さい順＝弱い順に殴ってブロックを吸わせる）
-    //    ・非リーサル＆相手にアンタップのブロッカー：最大ブロッカーのパワーを上回るクリーチャーだけで攻撃（返り討ちを避ける）
-    //    ・非リーサル＆ブロッカーなし：全員で攻撃（パワーの大きい順）
+    // ③ 攻撃（v10.49・リーサル判定＋刻み＋ブロッカー考慮＋タップ除去）
+    //    参考：公式基本ルール（攻撃対象＝プレイヤーorタップ中クリーチャー）と、
+    //    競技プレイング講座の「刻み」「分割リーサル」「偶数理論」の考え方を取り込んだ。
+    //    ・リーサル：全員で攻撃（弱い順＝ブロックを弱い子に吸わせる）
+    //    ・分割リーサル：次のターンに割り切れる見込みなら、今は1点だけ刻んでリーサルターンを短縮
+    //    ・偶数理論：W・ブレイカー持ちがいて相手の盾が奇数（3枚以上）なら、1点刻んで偶数に整える
+    //    ・学習ゲート：人間が攻めない盾枚数帯では、刻み以外の攻撃を控える
+    //    ・タップ除去：プレイヤーを攻めない判断の時、相手のタップ中クリーチャーにバトルで勝てるなら攻撃して除去
     const canAtkOf=c=>{
       if(!c||c.tapped)return false;
       const r=getReg(c);
@@ -23964,7 +23971,7 @@ async function ghostTurn(opts){
       const rb=getReg(b);
       return !!((rb&&rb.blocker)||(b.buff&&b.buff.blocker));
     });
-    let heldBack=0;
+    let heldBack=0,nickDone=false;
     guard=0;
     while(guard++<15){
       await waitFxIdle();
@@ -23975,6 +23982,7 @@ async function ghostTurn(opts){
       const B=blks.length;
       const shields=OZ.shield.length;
       const brOf=c=>ghostBreaksOf(c,getReg(c));
+      const powOf=c=>ghostPowOf(c,getReg(c));
       const sumBr=ready.reduce((a,c)=>a+brOf(c),0);
       const minBr=Math.min(...ready.map(brOf));
       // 🎯 リーサル判定（安全側）：ブロッカー0ならブレイク数で厳密に、いるなら「1体1ブレイク＋ブロックで止まる」前提で
@@ -23982,34 +23990,82 @@ async function ghostTurn(opts){
       if(shields===0)lethal=(ready.length-B)>=1;
       else if(B===0)lethal=ready.length>=2&&(sumBr-minBr)>=shields;
       else lethal=(ready.length-B)>=(shields+1);
-      let atk=null;
+      let atk=null,tg=null,mode="";
       if(lethal){
-        atk=ready.slice().sort((a,b)=>(brOf(a)-brOf(b))||(ghostPowOf(a,getReg(a))-ghostPowOf(b,getReg(b))))[0];
+        atk=ready.slice().sort((a,b)=>(brOf(a)-brOf(b))||(powOf(a)-powOf(b)))[0];
+        tg=shields?{kind:"shield"}:{kind:"direct"};
       }else{
-        // 📊 攻撃タイミングの学習（v10.47）：この盾枚数帯で人間があまり攻めていない（35%未満）なら、
-        //    リーサルでない攻撃は仕掛けず盤面を溜める（守りのS・トリガーを警戒する人間の判断を模倣）
         const ag=(typeof mdAggro==="function")?mdAggro(shields):null;
-        if(ag!=null&&ag<0.35){
-          if(!S.ghostHoldSaid){S.ghostHoldSaid=true;toast(`👻📊 学習データ：盾${shields}枚帯では攻め手が少ないため、このターンは攻撃を控えます（攻めた比率${Math.round(ag*100)}%）`);}
-          heldBack=ready.length;break;
+        const aggroLow=(ag!=null&&ag<0.35);
+        const maxBlk=B?Math.max(...blks.map(powOf)):0;
+        const pAtkPool=B===0?ready:ready.filter(c=>powOf(c)>maxBlk); // ブロッカーに勝てる攻め手
+        // 🔪 刻み判定（1点だけ割る）
+        let nickWhy="";
+        if(!nickDone&&shields>=1&&pAtkPool.length){
+          // 分割リーサル：今1点刻めば、次のターン（酔いが解けた分を含む打点）で残りを割り切ってダイレクトまで届く見込み
+          const sickUp=Z.battle.filter(c=>{
+            if(!c||c.tapped||!c.sick)return false;
+            const r=getReg(c);
+            if(!r||!isCreatureReg(r))return false;
+            if(noAtkBlkOf(c)||isSealed(c)||r.cantAtk||r.cantAtkP)return false;
+            return true;
+          });
+          const nextReady=ready.concat(sickUp);
+          const nBr=nextReady.reduce((a,c)=>a+brOf(c),0);
+          const nMin=nextReady.length?Math.min(...nextReady.map(brOf)):0;
+          const shAfter=shields-1;
+          let nextLethal=false;
+          if(B===0)nextLethal=nextReady.length>=2&&(nBr-nMin)>=shAfter;
+          else nextLethal=(nextReady.length-B)>=(shAfter+1);
+          if(nextLethal&&shields>=2)nickWhy="split"; // 盾1枚なら刻み＝そのまま通常攻撃と同じなので分割の意味なし
+          // 偶数理論：W・ブレイカーがいて盾が奇数（3枚以上）なら1点で偶数に整える
+          else if(shields>=3&&shields%2===1&&ready.some(c=>brOf(c)>=2)&&pAtkPool.some(c=>brOf(c)===1))nickWhy="even";
         }
-        if(B===0){
-          atk=ready.slice().sort((a,b)=>ghostPowOf(b,getReg(b))-ghostPowOf(a,getReg(a)))[0];
+        if(nickWhy){
+          // 刻みは1ブレイクの子を優先（Wで刻むと2点入って調整にならない）
+          const pool1=pAtkPool.filter(c=>brOf(c)===1);
+          atk=(pool1.length?pool1:pAtkPool).sort((a,b)=>powOf(b)-powOf(a))[0];
+          tg={kind:"shield"};nickDone=true;mode=nickWhy;
+          toast(nickWhy==="split"
+            ?"👻🔪 分割リーサル：次のターンに割り切れる見込みのため、今は1点だけ刻みます"
+            :"👻🔪 刻み：盾を偶数に整えて、W・ブレイカーで割り切りやすくします");
+        }else if(!aggroLow&&!nickDone&&pAtkPool.length){
+          atk=pAtkPool.slice().sort((a,b)=>powOf(b)-powOf(a))[0];
+          tg=shields?{kind:"shield"}:{kind:"direct"};
         }else{
-          const maxBlk=Math.max(...blks.map(b=>ghostPowOf(b,getReg(b))));
-          const winners=ready.filter(c=>ghostPowOf(c,getReg(c))>maxBlk);
-          if(!winners.length){heldBack=ready.length;break;} // 全員がブロッカーに勝てない＝攻撃を見送り
-          atk=winners.sort((a,b)=>ghostPowOf(b,getReg(b))-ghostPowOf(a,getReg(a)))[0];
-          heldBack=ready.length-winners.length;
+          // ⚔ タップ除去：プレイヤーを攻めない判断の時、相手のタップ中クリーチャーにバトルで勝てるなら攻撃
+          //    （公式ルール：攻撃できるのは相手プレイヤーかタップされているクリーチャー）
+          //    タップ中クリーチャーへの攻撃もブロックされ得るため、攻め手はブロッカーに勝てる子に限定する
+          let pair=null;
+          const taps=OZ.battle.filter(t=>{
+            if(!t||!t.tapped)return false;
+            const rt=getReg(t);
+            if(!rt||!isCreatureReg(rt))return false;
+            if(rt.noAtked)return false;
+            if(rt.slayer||(t.buff&&t.buff.slayer))return false; // スレイヤーは相打ちになるため避ける
+            return true;
+          });
+          for(const a of pAtkPool.slice().sort((x,y)=>powOf(y)-powOf(x))){
+            const beat=taps.filter(t=>ghostPowOf(t,getReg(t))<powOf(a))
+              .sort((x,y)=>ghostPowOf(y,getReg(y))-ghostPowOf(x,getReg(x)))[0]; // 勝てる中で最大を除去
+            if(beat){pair={a,t:beat};break;}
+          }
+          if(pair){
+            atk=pair.a;tg={kind:"creature",cid:pair.t.id};mode="tapkill";
+            toast(`👻⚔ 相手のタップ中の《${faceNameOf(pair.t)}》を攻撃（バトルで除去）`);
+          }else{
+            heldBack=ready.length;
+            if(aggroLow&&!S.ghostHoldSaid){S.ghostHoldSaid=true;toast(`👻📊 学習データ：盾${shields}枚帯では攻め手が少ないため、このターンは攻撃を控えます${ag!=null?`（攻めた比率${Math.round(ag*100)}%）`:""}`);}
+            break;
+          }
         }
       }
       if(!atk)break;
       if(lethal&&!S.ghostLethalSaid){S.ghostLethalSaid=true;toast("👻🎯 リーサル判定：全員で攻撃します");}
       const scoreBefore=SCORE[0]+SCORE[1];
-      const tg=OZ.shield.length?{kind:"shield"}:{kind:"direct"};
       atk.tapped=true;
       atk._atkFxDone=false;atk._allyAtkDone=false;atk._anyAtkDone=false;atk._sxAtkDone=false;atk._mbDone=false;
-      logOnly(`👻⚔ ゴースト：《${faceNameOf(atk)}》で${tg.kind==="shield"?"シールドを攻撃":"ダイレクトアタック"}${lethal?"（リーサル）":""}`);
+      logOnly(`👻⚔ ゴースト：《${faceNameOf(atk)}》で${tg.kind==="creature"?"相手のタップ中クリーチャーを攻撃":tg.kind==="shield"?"シールドを攻撃":"ダイレクトアタック"}${lethal?"（リーサル）":mode==="split"?"（分割リーサルの刻み）":mode==="even"?"（偶数調整の刻み）":""}`);
       renderAll();
       await execAttack(pi,atk.id,tg);
       await wait(300);
