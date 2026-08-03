@@ -1287,6 +1287,9 @@ body.shake{animation:bodyShake .4s ease-out}
         <span id="olScore" style="font-size:13px;font-weight:800;flex:1;text-align:center"></span>
         <button class="btn small ghost" id="olScoreReset">戦績リセット</button>
       </div>
+      <div class="row">
+        <button class="btn small" id="mdPanelBtn" title="人間の判断（マナチャージ・召喚・攻撃・ブロック）を記録し、ゴーストの判断に反映します。書き出し／読み込みで仲間のデータと統合できます">📊 対戦データ（ゴースト学習用）</button>
+      </div>
       <div class="hint" id="olStatus">未接続。ホストが部屋を作る→ゲストが同じ合言葉で入る→ホストがデッキを選んで対戦開始すると、盤面が自動同期されます。</div>
     </section>
     <div class="row">
@@ -3410,7 +3413,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.44";
+const APP_VER="v10.48";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4016,7 +4019,7 @@ async function summonCreatureNeoAware(pi,t,opts){
       }
     }
   }
-  if(enterBattleOrGrave(pi,t)){emitEvent(pi,"summon");enqueueFx(pi,t);return true;}
+  if(enterBattleOrGrave(pi,t)){emitEvent(pi,"summon");enqueueFx(pi,t);if(typeof mdEv==="function")mdEv("summon",pi,faceNameOf(t),{m:zonesOf(pi).mana.length});return true;}
   return false;
 }
 function qqqxOwnerOpp(pi){
@@ -4663,6 +4666,7 @@ function startGame(picks){
   // 📽 リプレイ：初期盤面をフレーム0として記録
   REPLAY.frames=S.vs?[serializeState()]:[];
   MATCH_EV=S.vs?newMatchEv():null;
+  if(typeof MDATA!=="undefined")MDATA.cur=S.vs?[]:null; // 📊 対戦データ記録の開始（v10.46）
   // 登録漏れ警告：ロック/シンパシー等の自動判定がすり抜ける原因になるため、開始時に知らせる
   if(S.expert){
     const miss=new Set(), noPC=new Set();
@@ -5135,6 +5139,18 @@ async function finishNextTurn(cur){
     }else c.buff=null;
     c.tmpWB=false;
   });
+  // 📊 対戦データ：ターンを終える人間プレイヤーの「攻めた／攻めなかった」を要約記録（攻撃タイミングの学習・v10.47）
+  try{
+    if(S.vs&&typeof MDATA!=="undefined"&&MDATA.on&&MDATA.cur){
+      const dep=S.who|0; // これからターンを終えるプレイヤー
+      if(S.ghostSeat!==dep){ // ゴースト担当の判断は学習しない
+        const opd=dep?0:1;
+        const atkN=MDATA.cur.filter(e=>e.a==="atk"&&e.p===dep&&e.t===(S.turn|0)).length;
+        const heldN=mdReadyCount(dep);
+        if(atkN>0||heldN>0)mdEv("te",dep,"",{held:heldN,atk:atkN,os:zonesOf(opd).shield.length});
+      }
+    }
+  }catch(e){}
   let extra=false;
   if(S.extra[cur]>0){S.extra[cur]--;extra=true;S.turn++;}
   else if(S.vs){
@@ -5355,6 +5371,12 @@ async function finishNextTurn(cur){
   }
   draw(pi,1);
   toast(`ターン ${S.turn}：${S.players[pi].label} のターン${extra?"（⚡エクストラターン！）":""}（アンタップ＆ドロー）`);
+  // 👻 ゴースト担当の席のターンが来たら、少し待ってから自動でプレイを開始（v10.45）
+  if(S.vs&&S.ghostSeat===pi&&!olActive()&&S.turn>0&&!REPLAY.on){
+    setTimeout(()=>{
+      if(S.vs&&(S.who|0)===pi&&S.ghostSeat===pi&&!GHOST_BUSY&&!GAME_PAUSE)ghostTurn({auto:true});
+    },800);
+  }
   if(S.expert){
     const Zc=zonesOf(pi);
     const cand=[];
@@ -13988,6 +14010,8 @@ async function execAttack(pi,id,tg){
     }else if(tg&&tg.kind==="shield")tgt=`${S.players[op0]?S.players[op0].label:"相手"}のシールド`;
     else tgt=`${S.players[op0]?S.players[op0].label:"相手"}（ダイレクトアタック）`;
     logOnly(`⚔ ${S.players[pi].label}：《${faceNameOf(c)}》が ${tgt} を攻撃`);
+    // 📊 対戦データ：攻撃宣言を記録（v10.46）
+    if(typeof mdEv==="function")mdEv("atk",pi,faceNameOf(c),{k:(tg&&tg.kind)||"direct",os:zonesOf(op0).shield.length});
   }
   const stillAtk=()=>{
     let a=Z.battle.find(x=>x.id===CUR_ATTACKER)||Z.battle.find(x=>x.id===id);
@@ -14661,9 +14685,10 @@ async function execAttack(pi,id,tg){
     if(bl<blockers.length){
       defender=blockers[bl];
       defender.tapped=true;
+      if(typeof mdEv==="function")mdEv("block",op,faceNameOf(defender),{vs:faceNameOf(c)}); // 📊 ブロックの判断を記録
       toast(`⚔ ブロック：《${faceNameOf(defender)}》が《${faceNameOf(c)}》の攻撃をブロック`);
       renderAll();
-    }
+    }else if(typeof mdEv==="function")mdEv("noblock",op,"",{vs:faceNameOf(c)}); // 📊 ブロックしない判断も記録
   }
   if(defender){await doBattle(pi,c,op,defender);await atkEnd();clearPendingAtk();return;} // ⚡ ブロックされても攻撃は終わるので誘発する
   if(S.expert){
@@ -21026,6 +21051,8 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       toast(`⚙ 常在効果：マナはタップして置かれる`);
     }
   }
+  // 📊 対戦データ：手札からのマナチャージを記録（v10.46・効果による移動もここを通るが人間の判断として近似）
+  if(fromZone==="hand"&&toZone==="mana"&&pFrom===pTo&&typeof mdEv==="function")mdEv("charge",pTo,faceNameOf(c),{m:zonesOf(pTo).mana.length});
   if(S.expert&&fromZone==="hand"&&toZone==="grave"){
     afterHandDiscard(pFrom,c);
   }
@@ -22730,6 +22757,27 @@ function setupConn(conn){
         }catch(e){}
       }
     }
+    else if(msg&&msg.t==="mdata"){
+      // 🔄 対戦データの受信（v10.48）。分割で届くので受信箱に貯め、最終チャンクで統合する
+      if(!Array.isArray(msg.games))return;
+      if((msg.chunk|0)===0)ONLINE._mdInbox=[];
+      ONLINE._mdInbox=(ONLINE._mdInbox||[]).concat(msg.games).slice(0,600);
+      if((msg.chunk|0)+1>=(msg.total|0)){
+        const from=String(msg.from||"相手").slice(0,12);
+        const added=mdMerge(ONLINE._mdInbox);
+        ONLINE._mdInbox=null;
+        persistMData();
+        if(added>0){sfx("ok");toast(`📊 ${from} の対戦データを統合：${added}試合を追加（合計${MDATA.games.length}試合）`);}
+        else if(!msg.auto)toast(`📊 ${from} の対戦データを受信（新しい試合はありませんでした）`);
+        try{if(ONLINE.conn&&ONLINE.conn.open)ONLINE.conn.send({t:"mdack",n:added,who:S.players[S.seat|0].label});}catch(e){}
+        // want=true：相手が「双方向同期」を求めているので、自分のデータを返送（wantなし＝ループしない）
+        if(msg.want)mdSyncOnline({want:false,silent:true});
+      }
+    }
+    else if(msg&&msg.t==="mdack"){
+      const who=String(msg.who||"相手").slice(0,12);
+      if((msg.n|0)>0)toast(`✅ ${who} に対戦データが届き、${msg.n|0}試合が統合されました`);
+    }
     else if(msg&&msg.t==="fx"){
       // 📦 カード登録の受信。盤面が壊れないよう、すぐには反映せず受信箱に貯めて差分画面で確認してもらう
       if(!msg.items||typeof msg.items!=="object")return;
@@ -22992,6 +23040,219 @@ function showResultScreen(winner,reason){
 let MATCH_CTX=null;   // 進行中の試合コンテキスト（startGameで設定）
 let MATCH_STATS=[];   // 保存済みの全試合 [{d,deck0,deck1,first,winner,reason,turns,ms}]
 let MATCH_EV=null;    // 進行中試合のイベント計測 {key:[p0,p1]}
+/* 📊 対戦データ（v10.46・ゴースト学習用）：人間の判断（マナチャージ・召喚・攻撃・ブロック）を記録し、
+   統計としてゴーストの判断に反映する。複数人のデータをJSONで書き出し／読み込みして統合できる。
+   ・記録するのは「どのカードをどうしたか」だけ（盤面全体は保存しない・リプレイとは別物）
+   ・ゴースト自身の操作は学習しない（人間の判断のみ）。ただしブロックの選択は防御側＝人間なので記録する
+   ・勝った側の判断は少し重く（×1.5）数える */
+const MDATA={on:true,use:true,games:[],cur:null,_st:null};
+function mdEv(a,pi,cardName,extra){
+  try{
+    if(!MDATA.on||!MDATA.cur)return;
+    if(typeof REPLAY!=="undefined"&&REPLAY.on)return;
+    if(typeof GHOST_BUSY!=="undefined"&&GHOST_BUSY&&a!=="block"&&a!=="noblock")return; // 👻 ゴーストの操作は学習しない
+    const e={t:S.turn|0,p:pi|0,a,c:String(cardName||"").slice(0,60)};
+    if(extra)Object.assign(e,extra);
+    MDATA.cur.push(e);
+    if(MDATA.cur.length>1200)MDATA.cur.shift();
+  }catch(e2){}
+}
+async function persistMData(){try{if(db)await idbPut("misc","matchData",JSON.stringify({on:MDATA.on,use:MDATA.use,games:MDATA.games}));}catch(e){}}
+async function loadMData(){try{const raw=db?await idbGet("misc","matchData"):null;if(raw){const v=JSON.parse(raw);if(v){MDATA.on=v.on!==false;MDATA.use=v.use!==false;if(Array.isArray(v.games))MDATA.games=v.games;}}}catch(e){}}
+function mdStats(){
+  if(MDATA._st)return MDATA._st;
+  const st={charge:{},chargeE:{},chargeL:{},summon:{},summonE:{},summonL:{},summonM:{},atkC:{},
+            aggro:{atk:[0,0,0],hold:[0,0,0]}, // 盾0-1／2-3／4+ の3段階で「攻めたターン／攻めなかったターン」
+            atk:0,block:0,noblock:0,games:MDATA.games.length,ev:0};
+  for(const g of MDATA.games){
+    for(const e of (g.ev||[])){
+      st.ev++;
+      const w=(g.winner===e.p)?1.5:1; // 勝者の判断を少し重く
+      if(e.a==="charge"){
+        st.charge[e.c]=(st.charge[e.c]||0)+w;
+        ((e.t|0)<=4?st.chargeE:st.chargeL)[e.c]=(((e.t|0)<=4?st.chargeE:st.chargeL)[e.c]||0)+w;
+      }
+      else if(e.a==="summon"){
+        st.summon[e.c]=(st.summon[e.c]||0)+w;
+        ((e.t|0)<=4?st.summonE:st.summonL)[e.c]=(((e.t|0)<=4?st.summonE:st.summonL)[e.c]||0)+w;
+        if(e.m!=null){const cur=st.summonM[e.c];st.summonM[e.c]=(cur==null)?(e.m|0):Math.min(cur,e.m|0);} // 召喚時の最小マナ＝推定コスト
+      }
+      else if(e.a==="atk"){st.atk++;st.atkC[e.c]=(st.atkC[e.c]||0)+1;}
+      else if(e.a==="block")st.block++;
+      else if(e.a==="noblock")st.noblock++;
+      else if(e.a==="te"){
+        // ターン終了時の要約：攻撃できるのに攻めなかったか（攻撃タイミングの学習・v10.47）
+        const b=(e.os|0)>=4?2:((e.os|0)>=2?1:0);
+        if((e.atk|0)>0)st.aggro.atk[b]++;
+        else if((e.held|0)>0)st.aggro.hold[b]++;
+      }
+    }
+  }
+  MDATA._st=st;
+  return st;
+}
+/* 📊 カード別の「マナに置かれがち度」：charge/(charge+summon)。サンプル3未満はnull（判断材料にしない）
+   turnを渡すと序盤（〜4T）／終盤（5T〜）の時期別比率を優先して使う（時期別サンプル3以上の時のみ・v10.47） */
+function mdChargeRatio(name,turn){
+  if(!MDATA.use)return null;
+  const st=mdStats();
+  if(turn!=null){
+    const early=(turn|0)<=4;
+    const cb=(early?st.chargeE:st.chargeL)[name]||0;
+    const sb=(early?st.summonE:st.summonL)[name]||0; // 同じ時期の召喚と比べる（全期間と混ぜない・v10.47）
+    if(cb+sb>=3)return cb/(cb+sb);
+  }
+  const c=st.charge[name]||0, s=st.summon[name]||0;
+  if(c+s<3)return null;
+  return c/(c+s);
+}
+/* 📊 推定コスト（v10.47）：登録が無いカードでも、人間が召喚した時のマナ数の最小値からコストを推定する。
+   召喚2回以上で有効。軽減で実コストより小さく出ることがあるが、ゴーストが損する方向ではないため許容 */
+function mdEstCost(name){
+  if(!MDATA.use)return null;
+  const st=mdStats();
+  if((st.summon[name]||0)<2)return null;
+  const m=st.summonM[name];
+  return (m==null||m>=99)?null:m;
+}
+/* 📊 攻撃タイミングの学習（v10.47）：相手の盾枚数の段階（0-1／2-3／4+）ごとに、
+   「攻撃できるターンのうち実際に攻めた比率」を返す。サンプル8ターン未満はnull */
+function mdAggro(oppShields){
+  if(!MDATA.use)return null;
+  const st=mdStats();
+  const b=(oppShields|0)>=4?2:((oppShields|0)>=2?1:0);
+  const a=st.aggro.atk[b], h=st.aggro.hold[b];
+  if(a+h<8)return null;
+  return a/(a+h);
+}
+/* 📊 「今すぐ攻撃できるクリーチャー」の数（ターン終了時の記録用・v10.47） */
+function mdReadyCount(pi){
+  try{
+    return zonesOf(pi).battle.filter(c=>{
+      if(!c||c.tapped)return false;
+      const r=getReg(c);
+      if(r&&!isCreatureReg(r))return false;
+      if(c.sick&&!(r&&r.sa)&&!saGrantSource(pi,c,r))return false;
+      if(noAtkBlkOf(c)||isSealed(c))return false;
+      if(r&&(r.cantAtk||r.cantAtkP))return false;
+      return true;
+    }).length;
+  }catch(e){return 0;}
+}
+function mdExport(){
+  const data={v:1,app:"DM Re:Vault",type:"matchdata",exported:new Date().toISOString(),games:MDATA.games};
+  const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`dmrv-matchdata-${MDATA.games.length}games-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  toast(`📤 対戦データを書き出しました（${MDATA.games.length}試合）。仲間の「📥 読み込み」で統合できます`);
+}
+/* 📊 対戦データの統合（試合IDで重複排除・v10.48でファイル読み込みとオンライン同期の共通処理に） */
+function mdMerge(gamesArr){
+  let added=0;
+  if(!Array.isArray(gamesArr))return 0;
+  const have=new Set(MDATA.games.map(g=>String(g.id)));
+  for(const g of gamesArr){
+    if(!g||g.id==null||have.has(String(g.id)))continue;
+    if(!Array.isArray(g.ev))continue;
+    MDATA.games.push({id:g.id,d:+g.d||Date.now(),
+      deck0:String(g.deck0||"").slice(0,40),deck1:String(g.deck1||"").slice(0,40),
+      winner:g.winner|0,turns:g.turns|0,ev:g.ev.slice(0,1200)});
+    have.add(String(g.id));added++;
+  }
+  if(MDATA.games.length>600)MDATA.games=MDATA.games.slice(-600);
+  MDATA._st=null;
+  return added;
+}
+/* 🔄 オンライン対戦の相手と対戦データを同期（v10.48）。カード登録の受け渡しと同じ分割送信方式。
+   want=true で送ると、相手は統合後に自分のデータを送り返す（1回の操作で双方向同期） */
+function mdSyncOnline(opts){
+  opts=opts||{};
+  if(!olActive()){toast("🔄 オンライン対戦に接続中のみ同期できます（対戦パネルから接続してください）");return;}
+  const games=MDATA.games;
+  if(!games.length&&!opts.silent){toast("📊 送る対戦データがまだありません（相手からの受信は接続中いつでも届きます）");}
+  const CH=15; // 1メッセージあたりの試合数
+  const total=Math.max(1,Math.ceil(games.length/CH));
+  const from=S.players[S.seat|0]?S.players[S.seat|0].label:"相手";
+  try{
+    for(let i=0;i<total;i++){
+      ONLINE.conn.send({t:"mdata",chunk:i,total,from,
+        games:games.slice(i*CH,(i+1)*CH),
+        want:!!opts.want});
+    }
+    if(!opts.silent)toast(`🔄 対戦データ${games.length}試合を送信しました${opts.want?"（相手のデータも自動で返送されます）":""}`);
+  }catch(e){toast("🔄 送信に失敗しました（接続を確認してください）");}
+}
+function mdImport(){
+  const inp=document.createElement("input");
+  inp.type="file";inp.accept=".json,application/json";inp.multiple=true;
+  inp.style.cssText="position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0";
+  inp.onchange=async()=>{
+    let added=0,files=0;
+    for(const f of (inp.files||[])){
+      try{
+        const v=JSON.parse(await f.text());
+        if(!v||v.type!=="matchdata"||!Array.isArray(v.games)){toast(`📥 ${f.name}：対戦データのファイルではありません`);continue;}
+        files++;
+        added+=mdMerge(v.games);
+      }catch(e){toast(`📥 ${f.name}：読み込みに失敗しました`);}
+    }
+    if(MDATA.games.length>600)MDATA.games=MDATA.games.slice(-600);
+    MDATA._st=null;
+    await persistMData();
+    if(files)toast(`📥 統合完了：${added}試合を追加（合計${MDATA.games.length}試合）`);
+    inp.remove();
+  };
+  document.body.appendChild(inp);
+  inp.click();
+}
+async function mdPanel(){
+  for(;;){
+    const st=mdStats();
+    const j=await askChoice(`📊 対戦データ（ゴースト学習用）\n${st.games}試合・${st.ev}操作を保持${olActive()?"　🟢オンライン接続中":""}`,
+      [`記録：${MDATA.on?"ON":"OFF"}（タップで切替）`,
+       `ゴーストへの反映：${MDATA.use?"ON":"OFF"}（タップで切替）`,
+       "🔄 オンラインの相手と同期（双方向・接続中のみ）",
+       "📤 書き出し（仲間に渡すJSON）",
+       "📥 読み込み（仲間のデータを統合・複数可）",
+       "📈 統計を見る",
+       "🗑 データを全消去"]);
+    if(j===null)return;
+    if(j===0){MDATA.on=!MDATA.on;await persistMData();toast(`📊 記録：${MDATA.on?"ON":"OFF"}`);}
+    else if(j===1){MDATA.use=!MDATA.use;await persistMData();toast(`👻 ゴーストへの反映：${MDATA.use?"ON":"OFF"}`);}
+    else if(j===2){mdSyncOnline({want:true});return;}
+    else if(j===3){mdExport();return;}
+    else if(j===4){mdImport();return;}
+    else if(j===5){
+      const rows=[...new Set([...Object.keys(st.charge),...Object.keys(st.summon)])]
+        .map(n=>({n,c:st.charge[n]||0,s:st.summon[n]||0,a:st.atkC[n]||0}))
+        .filter(r=>r.c+r.s>=3)
+        .sort((a,b)=>(b.c+b.s)-(a.c+a.s)).slice(0,14);
+      const lines=rows.length?rows.map(r=>{
+        const ratio=Math.round(100*r.c/(r.c+r.s));
+        const est=(typeof mdEstCost==="function")?mdEstCost(r.n):null;
+        const reg=FXDB.get(normName(r.n));
+        const estTxt=(est!=null&&(!reg||reg.cost==null))?`・📊推定コスト${est}`:"";
+        return `${r.n}：マナ${ratio}%／プレイ${100-ratio}%（${Math.round(r.c+r.s)}回${r.a?`・攻撃${r.a}回`:""}${estTxt}）`;
+      }).join("\n"):"（サンプル3回以上のカードがまだありません）";
+      // 📊 攻撃タイミング（盾枚数帯ごとの攻めた比率）
+      const agLine=[0,2,4].map((lo,bi)=>{
+        const a=st.aggro.atk[bi],h=st.aggro.hold[bi];
+        const lb=bi===0?"盾0-1":bi===1?"盾2-3":"盾4+";
+        return (a+h)?`${lb}：攻め${Math.round(100*a/(a+h))}%（${a+h}ターン）`:`${lb}：データなし`;
+      }).join("　");
+      await ask(`📈 カード別の使われ方（マナに置く÷プレイする・勝者×1.5重み）\n\n${lines}\n\n⚔ 攻撃タイミング（相手の盾枚数帯ごと）\n${agLine}\n\n※ゴーストはチャージ優先度・召喚順・攻撃判断・未登録カードの推定コストに反映します`);
+    }
+    else if(j===6){
+      if(await ask(`🗑 対戦データ${st.games}試合をすべて消去します。よろしいですか？（書き出していないデータは戻せません）`)){
+        MDATA.games=[];MDATA._st=null;await persistMData();toast("🗑 対戦データを消去しました");
+      }
+    }
+  }
+}
 function newMatchEv(){
   return {draws:[0,0],summons:[0,0],spells:[0,0],stTrig:[0,0],breaks:[0,0],destroys:[0,0],manaAccel:[0,0],handes:[0,0],peakBoard:[0,0],shieldsEnd:[0,0]};
 }
@@ -23028,6 +23289,26 @@ async function recordMatch(winner,reason){
     ev
   });
   if(MATCH_STATS.length>2000)MATCH_STATS=MATCH_STATS.slice(-2000);
+  // 📊 対戦データ：この試合の判断ログを保存（v10.46）
+  try{
+    if(typeof MDATA!=="undefined"&&MDATA.on&&MDATA.cur&&MDATA.cur.length){
+      MDATA.games.push({id,d:Date.now(),
+        deck0:c.deck0||S.players[0].deckName||"（デッキ未選択）",
+        deck1:c.deck1||S.players[1].deckName||"（デッキ未選択）",
+        winner,turns:S.turn,ev:MDATA.cur.slice()});
+      if(MDATA.games.length>600)MDATA.games=MDATA.games.slice(-600);
+      MDATA._st=null;
+      persistMData();
+      // 🔄 オンライン対戦中なら、終わった試合を相手にも自動送信（両者のデータが手作業ゼロで揃う・v10.48）
+      try{
+        if(olActive()){
+          const last=MDATA.games[MDATA.games.length-1];
+          ONLINE.conn.send({t:"mdata",chunk:0,total:1,from:S.players[S.seat|0].label,games:[last],want:false,auto:true});
+        }
+      }catch(e2){}
+    }
+    if(typeof MDATA!=="undefined")MDATA.cur=null;
+  }catch(e){}
   await persistStats();
   // 📽 リプレイ＆ログを保存（直近30試合分のみ保持）
   try{
@@ -23491,21 +23772,71 @@ function openStatsPanel(days){
   g.appendChild(wrap);
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
-/* 👻 ゴーストデッキ（v10.44・AI対戦相手の第1段階）
-   このターンのプレイヤーを自動でプレイする：①山上→マナ ②出せるクリーチャーをコストが高い順に召喚 ③攻撃できる全員でプレイヤーを攻撃。
+/* 👻 ゴーストデッキ（v10.45・AI対戦相手の第2段階）
+   このターンのプレイヤーを自動でプレイする：①手札からマナチャージ（使えない札・重い札・ダブりを優先）
+   ②出せるクリーチャーをコストが高い順に召喚 ③リーサル判定＋ブロッカー考慮で攻撃。
    ・効果の選択パネル（出た時など）が開いたら、ゴーストの代わりに人間が選ぶ（代行方式）
-   ・進化／NEO／ツインパクトは判断が要るため出さない（手札に残す）。呪文も唱えない
+   ・進化／NEO／ツインパクトは判断が要るため出さない（マナチャージ候補として優先消化）。呪文も唱えない
    ・ブロックの確認は従来どおり防御側（人間）に出る
-   ・攻撃が保留（手動処理）になったら中断し、解決後にもう一度押せば続きから動く */
+   ・「毎ターン自動（ゴースト担当）」にすると、その席のターンは自動でプレイして自動でターンを返す */
 let GHOST_BUSY=false;
 function ghostCivOk(r,untapped){
   const civs=(r.civs||[]).filter(cv=>cv&&cv!=="zero");
   return civs.every(cv=>untapped.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}));
 }
-function ghostPayMana(Z,r){
+function ghostPlayableReg(r){
+  return !!(r&&isCreatureReg(r)&&!isEvoReg(r)&&!r.twin&&r.ctype!=="twinpact"&&r.cost!=null);
+}
+function ghostPickCharge(Z){
+  // 💠 マナに置く札の選択：①ゴーストが使えない札（呪文・進化・ツインパクト・推定もできない未登録）を最優先
+  //    ②当分出せない重い札 ③同名ダブり ④マナに無い文明（マナ基盤づくり）。同点なら重い方。
+  //    v10.47：未登録でも学習データで推定コストが取れる札は「使える札」として扱い、マナに埋めない
+  if(!Z.hand.length)return -1;
+  const manaN=Z.mana.length;
+  const costOf=cc=>{
+    const r=getReg(cc);
+    if(ghostPlayableReg(r))return +r.cost;
+    if(r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"||isEvoReg(r)))return null; // 種別が分かっていて出せない
+    const est=(typeof mdEstCost==="function")?mdEstCost(cc.name):null;
+    return est; // 未登録：推定できればそのコスト、できなければnull
+  };
+  let best=-1,bestScore=-1;
+  Z.hand.forEach((cc,i)=>{
+    const r=getReg(cc);
+    const cost=costOf(cc);
+    const playable=cost!=null;
+    let sc=0;
+    if(!playable)sc+=100;
+    if(playable&&cost>manaN+2)sc+=40;
+    if(Z.hand.some((o,j)=>j!==i&&o.name===cc.name))sc+=25;
+    const civs=((r&&r.civs)||[]).filter(cv=>cv!=="zero");
+    if(civs.length&&civs.some(cv=>!Z.mana.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);})))sc+=10;
+    if(playable)sc+=Math.min(cost,12);
+    // 📊 学習データ：人間がこの札をマナに置く比率を反映（±35点・序盤/終盤の時期別があれば優先）
+    const cr=(typeof mdChargeRatio==="function")?mdChargeRatio(cc.name,S.turn):null;
+    if(cr!=null)sc+=Math.round((cr-0.5)*70);
+    if(sc>bestScore){bestScore=sc;best=i;}
+  });
+  // 手札が全部「今すぐ出せる札」だけなら、チャージせず展開に回す（唯一のプレイをマナに埋めない）
+  const allCastNow=Z.hand.every(cc=>{const c2=costOf(cc);return c2!=null&&c2<=manaN;});
+  if(allCastNow)return -1;
+  return best;
+}
+function ghostBreaksOf(c,r){
+  let b=(r&&r.breaks)?(+r.breaks||1):1;
+  if(c.buff&&c.buff.breakPlus)b+=(+c.buff.breakPlus)||0;
+  if(c.tmpWB)b=Math.max(b,2);
+  return Math.max(1,b);
+}
+function ghostPowOf(c,r){
+  let p=(r&&r.power!=null)?+r.power:0;
+  if(c.buff&&c.buff.pm)p+=(+c.buff.pm)||0;
+  return p;
+}
+function ghostPayManaN(Z,cost,civs){
   // 支払い：必要文明を1枚ずつ確保→残りは任意のアンタップマナ（軽減は使わない＝定価で払う）
-  const need=(r.civs||[]).filter(cv=>cv&&cv!=="zero");
-  const cost=Math.max(0,(+r.cost)|0);
+  const need=(civs||[]).filter(cv=>cv&&cv!=="zero");
+  cost=Math.max(0,(+cost)|0);
   const pick=[];
   const rest=()=>Z.mana.filter(m=>!m.tapped&&!pick.includes(m));
   for(const cv of need){
@@ -23519,7 +23850,9 @@ function ghostPayMana(Z,r){
   pick.forEach(m=>m.tapped=true);
   return true;
 }
-async function ghostTurn(){
+function ghostPayMana(Z,r){return ghostPayManaN(Z,r.cost,r.civs);}
+async function ghostTurn(opts){
+  opts=opts||{};
   if(GHOST_BUSY){toast("👻 ゴースト処理中です");return;}
   if(!S.vs){toast("👻 ゴーストは対戦モード専用です");return;}
   if(olActive()){toast("👻 オンライン対戦中はゴーストを使えません");return;}
@@ -23528,37 +23861,58 @@ async function ghostTurn(){
   const pi=S.who|0, op=pi?0:1;
   const Z=zonesOf(pi), OZ=zonesOf(op);
   const wait=ms=>new Promise(r2=>setTimeout(r2,ms));
+  const scoreAtStart=SCORE[0]+SCORE[1];
   GHOST_BUSY=true;
   try{
     snap();
     toast(`👻 ゴースト：${S.players[pi].label} のターンを自動プレイ`);
     logOnly(`👻 ゴースト：${S.players[pi].label} のターンを自動プレイ開始`);
-    // ① マナチャージ（山上→マナ・1ターン1回）
+    // ① マナチャージ（手札から1枚・1ターン1回）。置く札は ghostPickCharge の優先順位で選ぶ
     S.ghostCharged=S.ghostCharged||{};
     const chKey=`${S.pturn|0}-${pi}`;
     if(S.ghostCharged._k!==chKey){
-      if(Z.deck.length){
-        const mc=Z.deck.shift();mc.faceup=true;mc.sideways=false;
+      const ci=ghostPickCharge(Z);
+      if(ci>=0){
+        const mc=Z.hand.splice(ci,1)[0];
+        mc.faceup=true;mc.sideways=false;
         const tp=manaTapIn(mc);
         Z.mana.push(mc);markArrive(mc);
         S.ghostCharged._k=chKey;
-        toast(`👻💠 マナチャージ：${faceNameOf(mc)}${tp?"（多色・タップイン）":""}`);
-        logOnly(`👻💠 ゴースト：《${faceNameOf(mc)}》をマナチャージ`);
+        toast(`👻💠 マナチャージ（手札から）：${faceNameOf(mc)}${tp?"（多色・タップイン）":""}`);
+        logOnly(`👻💠 ゴースト：《${faceNameOf(mc)}》を手札からマナチャージ`);
         sfx("move");renderAll();await wait(400);
+      }else if(Z.hand.length){
+        S.ghostCharged._k=chKey;
+        toast("👻💠 マナチャージなし（手札の展開を優先）");
       }
     }
-    // ② 召喚（非進化・非ツインパクトのクリーチャーを、コストが高い順に出せるだけ）
+    // ② 召喚（コストが高い順に出せるだけ・v10.47）
+    //    ・登録済み：非進化・非ツインパクトのクリーチャーを従来どおり
+    //    ・未登録（コスト不明）：学習データの「召喚時の最小マナ」を推定コストにして出す。
+    //      効果は自動処理されないので、出した後に人間が代行する（代行方式）
     let guard=0,skipped=[];
     while(guard++<12){
       await waitFxIdle();
       if(GAME_PAUSE||FX_HOLD)break;
       if(battleSlotFull(pi))break;
       const untapped=Z.mana.filter(m=>!m.tapped);
-      const cands=Z.hand.map(cc=>({cc,r:getReg(cc)}))
-        .filter(o=>o.r&&isCreatureReg(o.r)&&!isEvoReg(o.r)&&!o.r.twin&&o.r.ctype!=="twinpact"&&o.r.cost!=null&&(+o.r.cost)<=untapped.length&&ghostCivOk(o.r,untapped))
-        .sort((a,b)=>(+b.r.cost)-(+a.r.cost));
+      const cands=Z.hand.map(cc=>{
+        const r=getReg(cc);
+        if(ghostPlayableReg(r))return {cc,r,cost:+r.cost,civs:r.civs||[],est:false};
+        // 📊 推定コスト：登録が無い（or コスト未設定でタイプ制約も無い）カードのみ。呪文・進化・ツインパクト登録は除外
+        if(r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"||isEvoReg(r)))return null;
+        const est=(typeof mdEstCost==="function")?mdEstCost(cc.name):null;
+        if(est==null)return null;
+        return {cc,r,cost:est,civs:(r&&r.civs)||[],est:true};
+      }).filter(o=>o&&o.cost<=untapped.length&&(!o.civs.length||ghostCivOk({civs:o.civs},untapped)))
+        .sort((a,b)=>{
+          // 📊 学習データ：人間がよくプレイする札を同コスト帯で優先（プレイ比率で±2コスト相当の補正）
+          const pr=o=>{const cr=(typeof mdChargeRatio==="function")?mdChargeRatio(o.cc.name,S.turn):null;return cr==null?0:(0.5-cr)*4;};
+          return (b.cost+pr(b))-(a.cost+pr(a));
+        });
       let played=false;
-      for(const {cc,r} of cands){
+      for(const o of cands){
+        const {cc,r}=o;
         // ロック確認（安全側：出せないカードはスキップして次の候補へ）
         if(S.expert&&!S.freePlay&&S.turn>0){
           const cap=perTurnCapHit(pi,"creature");
@@ -23568,7 +23922,7 @@ async function ghostTurn(){
           if(lk||tl){skipped.push(`⛔${faceNameOf(cc)}`);continue;}
         }
         if(!battleEntryOk(pi,cc)){skipped.push(`⛔${faceNameOf(cc)}`);continue;}
-        if(!ghostPayMana(Z,r))continue;
+        if(!ghostPayManaN(Z,o.cost,o.civs))continue;
         const hi=Z.hand.findIndex(x=>x.id===cc.id);
         if(hi<0)continue;
         Z.hand.splice(hi,1);
@@ -23576,8 +23930,13 @@ async function ghostTurn(){
         cc.sick=(S.turn>0)&&!(r&&r.sa);
         Z.battle.push(cc);
         markArrive(cc);emitEvent(pi,"summon");enqueueFx(pi,cc);
-        toast(`👻⚔ 召喚：${faceNameOf(cc)}（コスト${r.cost}）`);
-        logOnly(`👻⚔ ゴースト：《${faceNameOf(cc)}》を召喚（コスト${r.cost}）`);
+        if(o.est){
+          toast(`👻⚔ 召喚：${faceNameOf(cc)}（📊推定コスト${o.cost}・効果があれば代行処理してください）`);
+          logOnly(`👻⚔ ゴースト：《${faceNameOf(cc)}》を召喚（学習データの推定コスト${o.cost}・未登録のため効果は手動代行）`);
+        }else{
+          toast(`👻⚔ 召喚：${faceNameOf(cc)}（コスト${o.cost}）`);
+          logOnly(`👻⚔ ゴースト：《${faceNameOf(cc)}》を召喚（コスト${o.cost}）`);
+        }
         sfx("ok");renderAll();
         await waitFxIdle();await wait(350);
         played=true;break;
@@ -23587,27 +23946,70 @@ async function ghostTurn(){
     // 呪文・進化・ツインパクトは出さない旨を1回だけ通知（手札にある時のみ）
     if(Z.hand.some(cc=>{const r=getReg(cc);return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"||isEvoReg(r));}))
       toast("👻 呪文・進化・ツインパクトはゴーストは使いません（必要ならあなたが代行してください）");
-    // ③ 攻撃（攻撃できる全員で、シールド→なければダイレクト）
+    // ③ 攻撃（リーサル判定＋ブロッカー考慮・v10.45）
+    //    ・リーサル：全員で攻撃（ブレイク数の小さい順＝弱い順に殴ってブロックを吸わせる）
+    //    ・非リーサル＆相手にアンタップのブロッカー：最大ブロッカーのパワーを上回るクリーチャーだけで攻撃（返り討ちを避ける）
+    //    ・非リーサル＆ブロッカーなし：全員で攻撃（パワーの大きい順）
+    const canAtkOf=c=>{
+      if(!c||c.tapped)return false;
+      const r=getReg(c);
+      if(!r||!isCreatureReg(r))return false;
+      if(c.sick&&!(r.sa)&&!saGrantSource(pi,c,r))return false;
+      if(noAtkBlkOf(c)||isSealed(c))return false;
+      if(r.cantAtk||r.cantAtkP)return false;
+      return true;
+    };
+    const blockersUp=()=>OZ.battle.filter(b=>{
+      if(b.tapped||noAtkBlkOf(b)||isSealed(b))return false;
+      const rb=getReg(b);
+      return !!((rb&&rb.blocker)||(b.buff&&b.buff.blocker));
+    });
+    let heldBack=0;
     guard=0;
     while(guard++<15){
       await waitFxIdle();
       if(GAME_PAUSE||FX_HOLD||S.pendingAtk)break;
-      const atk=Z.battle.find(c=>{
-        if(!c||c.tapped)return false;
-        const r=getReg(c);
-        if(!r||!isCreatureReg(r))return false;
-        if(c.sick&&!(r.sa)&&!saGrantSource(pi,c,r))return false;
-        if(noAtkBlkOf(c)||isSealed(c))return false;
-        if(r.cantAtk||r.cantAtkP)return false; // プレイヤー攻撃不可はゴーストの攻撃先が常にプレイヤーなので除外
-        return true;
-      });
+      const ready=Z.battle.filter(canAtkOf);
+      if(!ready.length)break;
+      const blks=blockersUp();
+      const B=blks.length;
+      const shields=OZ.shield.length;
+      const brOf=c=>ghostBreaksOf(c,getReg(c));
+      const sumBr=ready.reduce((a,c)=>a+brOf(c),0);
+      const minBr=Math.min(...ready.map(brOf));
+      // 🎯 リーサル判定（安全側）：ブロッカー0ならブレイク数で厳密に、いるなら「1体1ブレイク＋ブロックで止まる」前提で
+      let lethal=false;
+      if(shields===0)lethal=(ready.length-B)>=1;
+      else if(B===0)lethal=ready.length>=2&&(sumBr-minBr)>=shields;
+      else lethal=(ready.length-B)>=(shields+1);
+      let atk=null;
+      if(lethal){
+        atk=ready.slice().sort((a,b)=>(brOf(a)-brOf(b))||(ghostPowOf(a,getReg(a))-ghostPowOf(b,getReg(b))))[0];
+      }else{
+        // 📊 攻撃タイミングの学習（v10.47）：この盾枚数帯で人間があまり攻めていない（35%未満）なら、
+        //    リーサルでない攻撃は仕掛けず盤面を溜める（守りのS・トリガーを警戒する人間の判断を模倣）
+        const ag=(typeof mdAggro==="function")?mdAggro(shields):null;
+        if(ag!=null&&ag<0.35){
+          if(!S.ghostHoldSaid){S.ghostHoldSaid=true;toast(`👻📊 学習データ：盾${shields}枚帯では攻め手が少ないため、このターンは攻撃を控えます（攻めた比率${Math.round(ag*100)}%）`);}
+          heldBack=ready.length;break;
+        }
+        if(B===0){
+          atk=ready.slice().sort((a,b)=>ghostPowOf(b,getReg(b))-ghostPowOf(a,getReg(a)))[0];
+        }else{
+          const maxBlk=Math.max(...blks.map(b=>ghostPowOf(b,getReg(b))));
+          const winners=ready.filter(c=>ghostPowOf(c,getReg(c))>maxBlk);
+          if(!winners.length){heldBack=ready.length;break;} // 全員がブロッカーに勝てない＝攻撃を見送り
+          atk=winners.sort((a,b)=>ghostPowOf(b,getReg(b))-ghostPowOf(a,getReg(a)))[0];
+          heldBack=ready.length-winners.length;
+        }
+      }
       if(!atk)break;
-      // 🏆 決着チェック：ダイレクトアタックで勝敗が記録されたら、残りの攻撃は行わない
+      if(lethal&&!S.ghostLethalSaid){S.ghostLethalSaid=true;toast("👻🎯 リーサル判定：全員で攻撃します");}
       const scoreBefore=SCORE[0]+SCORE[1];
       const tg=OZ.shield.length?{kind:"shield"}:{kind:"direct"};
       atk.tapped=true;
       atk._atkFxDone=false;atk._allyAtkDone=false;atk._anyAtkDone=false;atk._sxAtkDone=false;atk._mbDone=false;
-      logOnly(`👻⚔ ゴースト：《${faceNameOf(atk)}》で${tg.kind==="shield"?"シールドを攻撃":"ダイレクトアタック"}`);
+      logOnly(`👻⚔ ゴースト：《${faceNameOf(atk)}》で${tg.kind==="shield"?"シールドを攻撃":"ダイレクトアタック"}${lethal?"（リーサル）":""}`);
       renderAll();
       await execAttack(pi,atk.id,tg);
       await wait(300);
@@ -23618,11 +24020,45 @@ async function ghostTurn(){
       }
       if(!S.vs)return; // 決着などで対戦が終了した場合
     }
+    delete S.ghostLethalSaid;
+    delete S.ghostHoldSaid;
+    if(heldBack>0)toast(`👻🛡 相手のブロッカーに勝てないため、${heldBack}体は攻撃を見送りました`);
+    // ⏭ 毎ターン自動（ゴースト担当）：決着していなければ自動でターンを返す
+    const decided=(SCORE[0]+SCORE[1])>scoreAtStart;
+    if(opts.auto&&S.ghostSeat===pi&&!decided&&S.vs&&!GAME_PAUSE&&!FX_HOLD&&!S.pendingAtk){
+      await waitFxIdle();
+      toast("👻⏭ ゴーストのターン終了 → 自動で次のターンへ");
+      logOnly("👻⏭ ゴースト：ターンを返した");
+      await wait(700);
+      GHOST_BUSY=false; // nextTurn内から再度ゴーストが起動できるように先に解放
+      nextTurn();
+      return;
+    }
     toast("👻 ゴーストのターン終了。「次のターン ▶」で進めてください");
     logOnly("👻 ゴースト：ターンのプレイを終えた");
   }catch(e){
     toast(`👻⚠ ゴースト処理を中断：${String(e&&e.message||e).slice(0,60)}`);
   }finally{GHOST_BUSY=false;renderAll();}
+}
+/* 👻 ボタン：このターンだけ実行／毎ターン自動（ゴースト担当）の切り替え */
+async function ghostButton(){
+  if(!S.vs){toast("👻 ゴーストは対戦モード専用です");return;}
+  const pi=S.who|0;
+  if(S.ghostSeat===pi){
+    const j=await askChoice(`👻 ${S.players[pi].label} は毎ターン自動（ゴースト担当）です`,
+      ["今すぐこのターンを実行","👻 ゴースト担当を解除する"]);
+    if(j===0)ghostTurn({auto:true});
+    else if(j===1){S.ghostSeat=null;toast("👻 ゴースト担当を解除しました");}
+    return;
+  }
+  const j=await askChoice(`👻 ゴースト：${S.players[pi].label} のターンを自動でプレイします\n（マナチャージ→召喚→攻撃。効果パネルはあなたが代行）`,
+    ["このターンだけ実行","この席を毎ターン自動にする（ゴースト担当）"]);
+  if(j===0)ghostTurn();
+  else if(j===1){
+    S.ghostSeat=pi;
+    toast(`👻 ${S.players[pi].label} をゴースト担当にしました（このプレイヤーのターンは自動プレイ→自動でターンを返します）`);
+    ghostTurn({auto:true});
+  }
 }
 async function declareWin(winner,reason,askFirst=true){
   if(!S.vs){toast(`🏆 ${reason}`);return;}
@@ -23967,8 +24403,9 @@ $("olDeckSend").addEventListener("click",async ()=>{
   }catch(e){toast("送信に失敗しました");}
 });
 $("olResign").addEventListener("click",doResign);
+{const mb=$("mdPanelBtn");if(mb)mb.addEventListener("click",()=>{mdPanel();});}
 $("btnResignBar").addEventListener("click",doResign);
-{const gb=$("btnGhostBar");if(gb)gb.addEventListener("click",()=>{closeSheet();ghostTurn();});}
+{const gb=$("btnGhostBar");if(gb)gb.addEventListener("click",()=>{closeSheet();ghostButton();});}
 $("btnLog").addEventListener("click",toggleLogDock); // 📜 盤面を見ながら読めるログドックを開閉（⛶で全画面）
 {const sb=document.getElementById("btnStats");if(sb)sb.addEventListener("click",()=>openStatsPanel());}
 $("btnMore").addEventListener("click",()=>{$("bottombar").classList.toggle("more-open");});
@@ -30434,6 +30871,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   if(bbt!==null&&bbt!==undefined)S.battleBtns=!!bbt;
   const ass=db?await idbGet("misc","autoSeat"):null;
   await loadStats();
+  await loadMData(); // 📊 対戦データ（v10.46）
   const sag=db?await idbGet("misc","spellAutoGrave"):null;
   if(sag!==null&&sag!==undefined)S.spellAutoGrave=!!sag;
   {const el=document.getElementById("setSpellAuto");if(el)el.checked=S.spellAutoGrave!==false;}
