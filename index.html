@@ -3235,6 +3235,8 @@ async function _serialDlg(acquire,open){
   finally{ release(); }
 }
 function ask(msg){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
+  // 👻 ゴースト自動応答：確認系（ダイレクトアタック成立など）は「はい」で進める
+  if(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO){setTimeout(()=>res(true),100);return;}
   dlgReset();$("askMsg").textContent=msg;
   $("askOlay").classList.add("open");
   $("askYes").onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(true);};
@@ -3255,6 +3257,11 @@ function askText(msg,def){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
   $("askNo").onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(null);};
 }));}
 function askChoice(msg,options){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
+  // 👻 ゴースト自動応答：処理中は無難な既定回答で解決を進める（判断不能時のみ人間パネルを開く）
+  if(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO){
+    const gi=ghostAnswerChoice(msg,options);
+    if(gi!=null&&gi>=0&&gi<options.length){setTimeout(()=>res(gi),120);return;}
+  }
   dlgReset();$("askMsg").textContent=msg;$("askYN").style.display="none";
   const box=$("askChoices");box.style.display="";box.innerHTML="";
   // 選択肢が多い/長い時に画面からはみ出さないよう、縦スクロールできるようにする
@@ -3413,7 +3420,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.50";
+const APP_VER="v10.55";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5143,7 +5150,7 @@ async function finishNextTurn(cur){
   try{
     if(S.vs&&typeof MDATA!=="undefined"&&MDATA.on&&MDATA.cur){
       const dep=S.who|0; // これからターンを終えるプレイヤー
-      if(S.ghostSeat!==dep){ // ゴースト担当の判断は学習しない
+      if(!isGhostSeat(dep)){ // ゴースト担当の判断は学習しない
         const opd=dep?0:1;
         const atkN=MDATA.cur.filter(e=>e.a==="atk"&&e.p===dep&&e.t===(S.turn|0)).length;
         const heldN=mdReadyCount(dep);
@@ -5372,9 +5379,9 @@ async function finishNextTurn(cur){
   draw(pi,1);
   toast(`ターン ${S.turn}：${S.players[pi].label} のターン${extra?"（⚡エクストラターン！）":""}（アンタップ＆ドロー）`);
   // 👻 ゴースト担当の席のターンが来たら、少し待ってから自動でプレイを開始（v10.45）
-  if(S.vs&&S.ghostSeat===pi&&!olActive()&&S.turn>0&&!REPLAY.on){
+  if(S.vs&&isGhostSeat(pi)&&!olActive()&&S.turn>0&&!REPLAY.on){
     setTimeout(()=>{
-      if(S.vs&&(S.who|0)===pi&&S.ghostSeat===pi&&!GHOST_BUSY&&!GAME_PAUSE)ghostTurn({auto:true});
+      if(S.vs&&(S.who|0)===pi&&isGhostSeat(pi)&&!GHOST_BUSY&&!GAME_PAUSE)ghostTurn({auto:true});
     },800);
   }
   if(S.expert){
@@ -12877,6 +12884,72 @@ function processBroken(op,stack,label){
       render();
     };
     logOnly(label);
+    // 👻 防御側がゴースト担当なら、ブレイクされたシールドの処理を自動化（v10.53）。
+    //    S・トリガー／S・バック／サバキZ／条件達成のST付与＝タダで使える受けは使い、残りは手札へ。
+    if(typeof isGhostSeat==="function"&&isGhostSeat(op)&&typeof GHOST_BUSY!=="undefined"&&GHOST_BUSY){
+      (async()=>{
+        const stSealed=(S.expert&&S.vs)?zonesOf(op===0?1:0).battle.some(x=>{const rx=getReg(x);return rx&&rx.stNoST&&!isSealed(x);}):false;
+        const isTrig=c=>{
+          const r=getReg(c);if(!r)return false;
+          if(!stSealed&&((r.st)||shieldStGrantOk(op,c)))return true;   // S・トリガー
+          if((r.gs)||shieldGSGrantOk(op,c))return true;               // G・ストライク（相手の攻撃を止める・タダ）
+          if(r.stWhen||r.stCond){                                     // 条件付きST付与
+            if(r.stCond&&zoneCondOk(r.stCond,op))return true;
+            const w=r.stWhen;
+            if(w==="manual")return true;
+            if(w==="oppTurn"&&S.who!==op)return true;
+            const lim={s3:3,s2:2,s1:1,s0:0}[w];
+            if(lim!=null&&Z.shield.length<=lim)return true;
+          }
+          return false;
+        };
+        // ① トリガー系は1枚ずつ「使う」（唱える/出す）＝効果解決へ。②残りは手札へ。
+        const trigs=remaining.filter(isTrig);
+        const rest=remaining.filter(c=>!isTrig(c));
+        for(const c of trigs){
+          const r=getReg(c);
+          const idx=remaining.findIndex(x=>x.id===c.id);
+          if(idx<0)continue;
+          remaining.splice(idx,1);
+          const asSpell=r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact");
+          // 🃏 v10.54：ツインパクトでどちらの面にS・トリガーがあるかで唱える面を決める。
+          //    stFace ビット：1=上面(クリーチャー)・2=下面(呪文)。両方or不明なら呪文面を優先（下面）。
+          const twin=r&&(r.twin||r.ctype==="twinpact");
+          let castFace=asSpell?1:0;
+          if(twin){
+            const sf=r.stFace|0;
+            if(sf===1)castFace=0;        // 上面のみST→クリーチャー面で出す
+            else if(sf===2)castFace=1;   // 下面のみST→呪文面で唱える
+            else castFace=1;             // 両面/不明→呪文面（受けとして無難）
+          }
+          const playAsSpell=twin?(castFace===1):asSpell;
+          c.faceup=true;c.tapped=false;
+          if(playAsSpell){
+            if(twin)c.face=1;
+            if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
+            Z.resolve.push(c);markArrive(c);
+            stDefer.push({c,zone:"resolve"});
+            logOnly(`👻⚡ ${S.players[op].label}：S・トリガー《${faceNameOf(c)}》を唱える`);
+          }else{
+            if(twin)c.face=0;
+            Z.battle.push(c);markArrive(c);
+            stDefer.push({c,zone:"battle"});
+            logOnly(`👻⚡ ${S.players[op].label}：S・トリガー《${faceNameOf(c)}》を出す`);
+          }
+          wentGrave=true;
+        }
+        // 残り（トリガー無し）は手札へ
+        for(const c of rest){
+          const idx=remaining.findIndex(x=>x.id===c.id);
+          if(idx<0)continue;
+          remaining.splice(idx,1);
+          c.faceup=true;Z.hand.push(c);
+        }
+        if(trigs.length)toast(`👻⚡ ${S.players[op].label}：受け札 ${trigs.length}枚を使用（残りは手札へ）`);
+        finish();
+      })();
+      return;
+    }
     const render=()=>{
       if(!remaining.length){finish();return;}
       $("breakOlay").classList.add("open");
@@ -12890,7 +12963,7 @@ function processBroken(op,stack,label){
           el.style.outline="2px solid var(--accent)";
           const badge=document.createElement("div");
           badge.style.cssText="position:absolute;bottom:0;left:0;right:0;background:var(--accent);color:#000;font-size:10px;font-weight:900;text-align:center;padding:1px 0;z-index:5;border-radius:0 0 4px 4px";
-          badge.textContent="⚡ S・トリガー";
+          badge.textContent="⚡ S・トリガー"+((r2&&(r2.twin||r2.ctype==="twinpact")&&r2.stFace)?(r2.stFace===1?"(上面)":r2.stFace===2?"(下面)":""):"");
           el.querySelector(".thumb").style.position="relative";
           el.querySelector(".thumb").appendChild(badge);
         }else if(r2&&r2.sback){
@@ -13052,6 +13125,16 @@ function pickShieldIdxs(op,count){
 }
 async function breakShields(op,count,attacker,forceIdx){
   const OZ=zonesOf(op);
+  // 👻 ブレイク処理は防御側(op)の選択（どの盾を割るか・S・トリガーを使うか）。
+  //    防御側が人間なら自動応答を一時停止して人間に委ねる（両ゴースト時はそのまま自動）
+  const _gaSaved=(typeof GHOST_AUTO!=="undefined")?GHOST_AUTO:false;
+  const _defHuman=(typeof isGhostSeat==="function")&&!isGhostSeat(op);
+  if(_gaSaved&&_defHuman)GHOST_AUTO=false;
+  try{
+  return await _breakShieldsInner(op,count,attacker,forceIdx,OZ);
+  }finally{if(typeof GHOST_AUTO!=="undefined")GHOST_AUTO=_gaSaved;}
+}
+async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   const total=count==="all"?OZ.shield.length:Math.min(count,OZ.shield.length);
   if(!total){toast("シールドがありません");return;}
   let idxs=null;
@@ -14679,8 +14762,22 @@ async function execAttack(pi,id,tg){
   }
   let defender=null;
   if(blockers.length){
-    const bl=await askChoice(`${S.players[op].label}：ブロックしますか？`,
-      [...blockers.map(b=>`🛡 ${faceNameOf(b)} でブロック`),"ブロックしない"]);
+    // 👻 ブロックの選択：防御側がゴースト担当なら自動、そうでなければ人間が選ぶ（自動応答を一時停止）
+    const defIsGhost=(typeof isGhostSeat==="function")&&isGhostSeat(op);
+    const _savedAuto=GHOST_AUTO;
+    let bl;
+    if(defIsGhost&&GHOST_AUTO){
+      // 攻め手のパワーを上回るブロッカーがいればブロック（相打ち以上）、無ければ受ける
+      const atkPow=ghostPowOf(c,getReg(c));
+      let bestI=-1,bestPow=-1;
+      blockers.forEach((b,i)=>{const bp=ghostPowOf(b,getReg(b));if(bp>=atkPow&&bp>bestPow){bestPow=bp;bestI=i;}});
+      bl=bestI>=0?bestI:blockers.length; // 勝てるブロッカーが無ければブロックしない
+    }else{
+      if(GHOST_AUTO)GHOST_AUTO=false; // 人間の防御選択中は自動応答を止める
+      bl=await askChoice(`${S.players[op].label}：ブロックしますか？`,
+        [...blockers.map(b=>`🛡 ${faceNameOf(b)} でブロック`),"ブロックしない"]);
+      GHOST_AUTO=_savedAuto;
+    }
     if(bl===null){renderAll();return;}
     if(bl<blockers.length){
       defender=blockers[bl];
@@ -18305,6 +18402,9 @@ async function autoFillFromText(){
     else if(/進化[：:－ー]/.test(up)||/進化クリーチャー/.test(up))FXEDIT.twinTop="evo";
     total+=applySet(r1.set)+applyFx(r1.fx,0);
     Object.assign(_twinSet,r1.set);_twinUpFx.push(...r1.fx);
+    // 🃏 v10.54：ツインパクトで上面にS・トリガーがある場合、その面を記録（stFaceにビット：1=上面）
+    if(r1.set.st){FXEDIT.st=true;_twinSet.st=true;_twinSet.stFace=(_twinSet.stFace||0)|1;}
+    if(r1.set.stCond){FXEDIT.stCond=r1.set.stCond;_twinSet.stCond=r1.set.stCond;}
     notes.push(...r1.notes);
   }
   const dn=(twinOnly==="up")?null:await grab("下面（呪文面）");
@@ -18313,7 +18413,7 @@ async function autoFillFromText(){
     // 下面から拾うのは cost2・ST・条件ST・呪文効果（パワー等は上面優先で上書きしない）
     const dnCost=(r2.set.cost2!=null)?r2.set.cost2:r2.set.cost;
     if(dnCost!=null){FXEDIT.cost2=dnCost;_twinSet.cost2=dnCost;}
-    if(r2.set.st){FXEDIT.st=true;_twinSet.st=true;}
+    if(r2.set.st){FXEDIT.st=true;_twinSet.st=true;_twinSet.stFace=(_twinSet.stFace||0)|2;} // 🃏 2=下面
     if(r2.set.stCond){FXEDIT.stCond=r2.set.stCond;_twinSet.stCond=r2.set.stCond;}
     total+=applyFx(r2.fx,1);
     _twinDnFx.push(...r2.fx);
@@ -23856,6 +23956,95 @@ function openStatsPanel(days){
    ・ブロックの確認は従来どおり防御側（人間）に出る
    ・「毎ターン自動（ゴースト担当）」にすると、その席のターンは自動でプレイして自動でターンを返す */
 let GHOST_BUSY=false;
+/* 👻 効果パネルの自動応答（v10.51）。ゴーストのターン処理中(GHOST_AUTO=true)は、
+   askChoice / pickCard / ask に「無難な既定回答」を返して効果解決を進める。
+   完全な最適化は狙わず、①自分に有利な選択（相手を対象に取る等）②困ったら先頭 という安全側。
+   難しい選択（明らかに盤面理解が要るもの）はタイムアウトで人間に委ねる余地を残す。 */
+let GHOST_AUTO=false;
+let GHOST_AUTO_PI=0;
+/* askChoice 用：選択肢テキストからゴースト向きの回答を推定。返り値 index、判断不能なら null（＝人間に委ねる） */
+function ghostAnswerChoice(msg,options){
+  if(!GHOST_AUTO)return null;
+  const m=String(msg||"");
+  const opt=options.map(o=>String(o||""));
+  const findIdx=re=>opt.findIndex(o=>re.test(o));
+  // よくある yes/no・任意効果：能力は「使う／する／発動」を選ぶ（ゴーストは効果を最大限使う方針）
+  const useI=findIdx(/使う|する|発動|唱える|出す|加える|引く|破壊|選ぶ|見る|マナ|ブースト|探す|サーチ|回収|置く/);
+  const skipI=findIdx(/しない|やめ|キャンセル|パス|スキップ|使わない|不要|そのまま/);
+  // 相手を対象に取る系（誰の〜？）：相手プレイヤーを選ぶ
+  const oppI=opt.findIndex(o=>/相手|opponent/.test(o)&&!/自分/.test(o));
+  const selfI=opt.findIndex(o=>/自分|自身/.test(o)&&!/相手/.test(o));
+  if(/誰の|どちらのプレイヤー|対象のプレイヤー/.test(m)){
+    // ハンデス・破壊など攻撃的効果は相手、ブースト・ドロー・シールド追加など利得は自分
+    if(/破壊|ハンデス|捨て|マナ送り|バウンス|凍結|フリーズ|タップ/.test(m)&&oppI>=0)return oppI;
+    if(/ドロー|引く|ブースト|シールド|回収|加える|探す/.test(m)&&selfI>=0)return selfI;
+    if(oppI>=0)return oppI;
+  }
+  // 「〜してもよい」の任意効果：基本使う
+  if(/してもよい|しても良い|できる。|できます|使いますか|発動しますか|唱えますか/.test(m)){
+    if(useI>=0)return useI;
+    const yesI=findIdx(/^はい|^うん|^する$|^使う$/);
+    if(yesI>=0)return yesI;
+  }
+  // モード選択（次のうち1つ）：ドロー系>除去系>それ以外 の順で無難に
+  if(/次のうち|いずれか|選ぶ|モード/.test(m)){
+    const drawI=findIdx(/引く|ドロー|回収|加える/);
+    if(drawI>=0)return drawI;
+    const killI=findIdx(/破壊|除去/);
+    if(killI>=0)return killI;
+  }
+  if(useI>=0)return useI;
+  if(skipI>=0)return skipI; // 使えないなら見送り
+  return 0; // 最後は先頭（多くのパネルで無難な既定）
+}
+/* pickCard 用：候補カードからゴロースト向きの1枚。effを見て相手対象なら弱いのを残す等の簡易判断。返り値 index */
+function ghostAnswerPick(title,cards,opts){
+  if(!GHOST_AUTO||!cards||!cards.length)return null;
+  const t=String(title||"");
+  const powOf=c=>{const r=getReg(c);let p=(r&&r.power!=null)?+r.power:0;if(c.buff&&c.buff.pm)p+=(+c.buff.pm)||0;return p;};
+  const costOf=c=>{const r=getReg(c);return (r&&r.cost!=null)?+r.cost:0;};
+  // 相手のカードを選ぶ系（破壊・バウンス・タップ・ハンデス対象）→ 相手にとって重い＝コスト/パワー最大を狙う
+  if(/破壊|選んで|バウンス|手札に戻|マナ送り|タップ|凍結|捨て(させ)?る|除去|山札の下|墓地(に|へ)置く/.test(t)){
+    let best=0,bv=-1;
+    cards.forEach((c,i)=>{const v=powOf(c)*100+costOf(c);if(v>bv){bv=v;best=i;}});
+    return best;
+  }
+  // 進化元・コスト踏み倒しで出す・マナから召喚など「自分が出す」系 → コスト最大（一番強いのを出す）
+  if(/出す|召喚|進化元|踏み倒|マナから|山札から.*場|バトルゾーンに/.test(t)){
+    let best=0,bv=-1;
+    cards.forEach((c,i)=>{const v=costOf(c)*100+powOf(c);if(v>bv){bv=v;best=i;}});
+    return best;
+  }
+  // 手札に加える・回収・サーチ → コスト最大の当たりを取る
+  if(/加える|回収|サーチ|探す|手札に/.test(t)){
+    let best=0,bv=-1;
+    cards.forEach((c,i)=>{const v=costOf(c)*100+powOf(c);if(v>bv){bv=v;best=i;}});
+    return best;
+  }
+  // 自分のカードを犠牲にする（コストとして墓地／マナ）→ 一番弱い（コスト最小）を差し出す
+  if(/コストとして|生け贄|捨てる（自分|マナに置く.*自分/.test(t)){
+    let best=0,bv=1e9;
+    cards.forEach((c,i)=>{const v=costOf(c)*100+powOf(c);if(v<bv){bv=v;best=i;}});
+    return best;
+  }
+  return 0; // 判断つかない時は先頭
+}
+/* 👻 ゴースト担当の席（v10.51で複数席対応）。S.ghostSeats は担当する席番号の配列。
+   旧セーブとの互換：数値の S.ghostSeat があれば配列に移す */
+function ghostSeatsSet(){
+  if(!S.ghostSeats){
+    S.ghostSeats=(S.ghostSeat!=null)?[S.ghostSeat|0]:[];
+    if(S.ghostSeat!=null)delete S.ghostSeat;
+  }
+  return S.ghostSeats;
+}
+function isGhostSeat(pi){return ghostSeatsSet().includes(pi|0);}
+function setGhostSeat(pi,on){
+  const a=ghostSeatsSet();
+  const i=a.indexOf(pi|0);
+  if(on&&i<0)a.push(pi|0);
+  if(!on&&i>=0)a.splice(i,1);
+}
 function ghostCivOk(r,untapped){
   const civs=(r.civs||[]).filter(cv=>cv&&cv!=="zero");
   return civs.every(cv=>untapped.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}));
@@ -23871,10 +24060,14 @@ function ghostPickCharge(Z){
   const manaN=Z.mana.length;
   const costOf=cc=>{
     const r=getReg(cc);
-    if(ghostPlayableReg(r))return +r.cost;
-    if(r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"||isEvoReg(r)))return null; // 種別が分かっていて出せない
-    const est=(typeof mdEstCost==="function")?mdEstCost(cc.name):null;
-    return est; // 未登録：推定できればそのコスト、できなければnull
+    if(!r)return (typeof mdEstCost==="function")?mdEstCost(cc.name):null; // 未登録：推定コスト
+    const twin=!!(r.twin||r.ctype==="twinpact");
+    // 👻 v10.52：呪文・進化・ツインパクトもゴーストは使えるので「出せる札」として扱う（マナに埋めない）
+    if(r.ctype==="spell")return (r.cost!=null)?+r.cost:null;
+    if(twin){const a=[];if(r.cost!=null)a.push(+r.cost);if(r.cost2!=null)a.push(+r.cost2);return a.length?Math.min(...a):null;}
+    if(isEvoReg(r))return (r.cost!=null)?+r.cost:null;
+    if(isCreatureReg(r)&&r.cost!=null)return +r.cost;
+    return (typeof mdEstCost==="function")?mdEstCost(cc.name):null;
   };
   let best=-1,bestScore=-1;
   Z.hand.forEach((cc,i)=>{
@@ -23912,6 +24105,70 @@ function ghostPowOf(c,r){
   if(c.buff&&c.buff.pm)p+=(+c.buff.pm)||0;
   return p;
 }
+/* 👻 効果の型集合（v10.52・プレイ価値判定用） */
+const GHOST_FX={
+  needFoeCreature:new Set(["tapAllOp","tapOpN","sealFoe","foeFreezeAll","zenithSpark","lockFoeAtkP","lockFoeAtkBlock",
+    "foePowDownPick","foePowDownPer","bounce","destroyRnd","destroyPick","destroyElemPick","manaPick","manaElemPick",
+    "bouncePick","bounceElemPick","foeSelfDestroy","foeSelfMana","foeSelfBounce","shieldPickNew","shieldPickTuck",
+    "battleAsk","destroyFilt","foeBounceAll","tapAnyN","drawPerOppTapped",
+    "destroyFiltAll","foePowDownAll","bounceFilt","foeToShield","foeAllShield","foeAtkLockP"]),
+  needFoeHand:new Set(["peepDiscard","handDisAll","handDisRnd","handDisPick"]),
+  needSelfCreature:new Set(["evoFromBattle","tapSelfN","selfBounce","powBuffAlly","allyToShield","untapAlly","tapMyN","untapFilt"]),
+  valueFx:new Set(["draw","drawFoe","deckShield","deckShieldUp","manaBoost","manaBoostTap","search","searchHand",
+    "handShield","peekShieldGrave","revealBottomShield","drawPerAlly","foeShieldGrave","foeShieldToMana",
+    "foeNoSpell","chargeTap","drawTapped","graveToManaAllTap"])
+};
+/* ある登録カードの、この面の効果配列（faces[0]=クリーチャー面/faces[1]=呪文面など）を平坦化して返す */
+function ghostFxOf(r,side){
+  if(!r)return [];
+  const out=[];
+  const push=arr=>{if(Array.isArray(arr))for(const f of arr)if(f&&f.t)out.push(f);};
+  const twin=!!(r.twin||r.ctype==="twinpact");
+  if(r.faces){
+    // 単体カードは faces[0] が本体（呪文なら呪文効果・クリーチャーならCIP）。
+    // ツインパクトのみ side="spell" で下面 faces[1] を見る。
+    if(twin&&side==="spell")push(r.faces[1]);
+    else push(r.faces[0]);
+  }
+  if(r.fx)push(r.fx);
+  if(r.watchFx)push(r.watchFx);
+  if(r.modes)for(const m of r.modes)if(Array.isArray(m))push(m);
+  return out;
+}
+/* 👻 このカードを今プレイすると効果が無駄になるか（v10.52）。
+   除去・ハンデス系の効果しか持たず、対象が盤面に存在しない場合 true（＝撃たない）。
+   価値効果（ドロー・ブースト等）を1つでも含むなら、対象不在でも false（撃つ意味がある）。 */
+function ghostWasteful(r,side,pi){
+  const op=pi?0:1;
+  const fxs=ghostFxOf(r,side);
+  if(!fxs.length)return false; // 効果不明（未登録相当）は無駄判定しない
+  let anyTargeted=false, anyValue=false, anySatisfiable=false;
+  const foeCre=zonesOf(op).battle.filter(c=>{const rr=getReg(c);return rr&&isCreatureReg(rr);});
+  const foeHand=zonesOf(op).hand.length;
+  const selfCreOthers=zonesOf(pi).battle.filter(c=>{const rr=getReg(c);return rr&&isCreatureReg(rr);});
+  for(const f of fxs){
+    if(GHOST_FX.valueFx.has(f.t)){anyValue=true;continue;}
+    if(GHOST_FX.needFoeCreature.has(f.t)){anyTargeted=true;if(foeCre.length)anySatisfiable=true;continue;}
+    if(GHOST_FX.needFoeHand.has(f.t)){anyTargeted=true;if(foeHand>0)anySatisfiable=true;continue;}
+    if(GHOST_FX.needSelfCreature.has(f.t)){anyTargeted=true;if(selfCreOthers.length)anySatisfiable=true;continue;}
+    // それ以外の効果（シールド操作・ターン操作・自分だけで完結する効果など）は「無駄ではない」扱い
+    anyValue=true;
+  }
+  if(anyValue)return false;              // 価値効果があるなら撃つ
+  if(anyTargeted&&!anySatisfiable)return true; // 対象必須の効果しかなく、対象がいない＝無駄
+  return false;
+}
+/* 👻 進化クリーチャーの進化元候補（同じ種族/条件は簡易にバトルの自クリーチャーで代用・v10.52） */
+function ghostEvoBase(r,pi){
+  const bat=zonesOf(pi).battle.filter(c=>{
+    if(c.tapped)return false; // 進化元は通常アンタップ不問だが、攻撃に使いたい起きた子は残す方針で簡易に
+    const rr=getReg(c);
+    return rr&&isCreatureReg(rr)&&!isEvoReg(rr);
+  });
+  // 進化元に取るのは一番弱い（コスト最小）クリーチャー＝盤面価値の損を最小化
+  bat.sort((a,b)=>{const ra=getReg(a),rb=getReg(b);return ((ra&&ra.cost)||0)-((rb&&rb.cost)||0);});
+  return bat[0]||null;
+}
 function ghostPayManaN(Z,cost,civs){
   // 支払い：必要文明を1枚ずつ確保→残りは任意のアンタップマナ（軽減は使わない＝定価で払う）
   const need=(civs||[]).filter(cv=>cv&&cv!=="zero");
@@ -23942,6 +24199,7 @@ async function ghostTurn(opts){
   const wait=ms=>new Promise(r2=>setTimeout(r2,ms));
   const scoreAtStart=SCORE[0]+SCORE[1];
   GHOST_BUSY=true;
+  GHOST_AUTO=true;GHOST_AUTO_PI=pi; // 👻 ゴースト自身の効果解決はパネル自動応答（v10.51）
   try{
     snap();
     toast(`👻 ゴースト：${S.players[pi].label} のターンを自動プレイ`);
@@ -23965,66 +24223,107 @@ async function ghostTurn(opts){
         toast("👻💠 マナチャージなし（手札の展開を優先）");
       }
     }
-    // ② 召喚（コストが高い順に出せるだけ・v10.47）
-    //    ・登録済み：非進化・非ツインパクトのクリーチャーを従来どおり
-    //    ・未登録（コスト不明）：学習データの「召喚時の最小マナ」を推定コストにして出す。
-    //      効果は自動処理されないので、出した後に人間が代行する（代行方式）
+    // ② プレイ（v10.52・全カード対応：クリーチャー召喚／進化／呪文詠唱／ツインパクト）
+    //    ・登録済み効果はそのまま実行（効果パネルはゴースト自動応答）
+    //    ・未登録は学習データの推定コストで召喚（効果は代行）
+    //    ・「効果が無駄になるプレイ（対象不在の除去など）」は撃たない＝ghostWasteful ゲート
     let guard=0,skipped=[];
-    while(guard++<12){
+    while(guard++<16){
       await waitFxIdle();
       if(GAME_PAUSE||FX_HOLD)break;
-      if(battleSlotFull(pi))break;
       const untapped=Z.mana.filter(m=>!m.tapped);
-      const cands=Z.hand.map(cc=>{
+      const slotOpen=!battleSlotFull(pi);
+      const cands=[];
+      for(const cc of Z.hand){
         const r=getReg(cc);
-        if(ghostPlayableReg(r))return {cc,r,cost:+r.cost,civs:r.civs||[],est:false};
-        // 📊 推定コスト：登録が無い（or コスト未設定でタイプ制約も無い）カードのみ。呪文・進化・ツインパクト登録は除外
-        if(r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"||isEvoReg(r)))return null;
-        const est=(typeof mdEstCost==="function")?mdEstCost(cc.name):null;
-        if(est==null)return null;
-        return {cc,r,cost:est,civs:(r&&r.civs)||[],est:true};
-      }).filter(o=>o&&o.cost<=untapped.length&&(!o.civs.length||ghostCivOk({civs:o.civs},untapped)))
+        const twin=!!(r&&(r.twin||r.ctype==="twinpact"));
+        // --- クリーチャー面（召喚 or 進化） ---
+        if(slotOpen&&r&&(isCreatureReg(r)||twin)){
+          const isEvo=isEvoReg(r);
+          const cost=(r.cost!=null)?+r.cost:null;
+          if(cost!=null){
+            // 進化は進化元が要るが、ゴーストでは簡易に「自分の非進化クリーチャーがいる時のみ出せる／召喚酔いなし」で扱う
+            let evoOk=true;
+            if(isEvo)evoOk=!!ghostEvoBase(r,pi);
+            if(evoOk&&!ghostWasteful(r,"creature",pi))
+              cands.push({cc,r,kind:"summon",side:"creature",cost,civs:r.civs||[],est:false,evo:isEvo,
+                val:cost*10+ghostPowOf(cc,r)/1000+(ghostFxOf(r,"creature").length?8:0)+(isEvo?5:0)});
+          }else if(!twin&&!isEvo){
+            // 未登録：推定コストで召喚
+            const est=(typeof mdEstCost==="function")?mdEstCost(cc.name):null;
+            if(est!=null)cands.push({cc,r,kind:"summon",side:"creature",cost:est,civs:(r&&r.civs)||[],est:true,val:est*10});
+          }
+        }
+        // --- 呪文面（詠唱・ツインパクトは下面／単体呪文） ---
+        if(r&&(r.ctype==="spell"||twin)){
+          const sc=twin?(r.cost2!=null?+r.cost2:null):(r.cost!=null?+r.cost:null);
+          const sciv=twin?(r.civs2||r.civs||[]):(r.civs||[]);
+          if(sc!=null&&!ghostWasteful(r,"spell",pi)){
+            const hasFx=ghostFxOf(r,"spell").length>0;
+            cands.push({cc,r,kind:"spell",side:"spell",cost:sc,civs:sciv,est:!hasFx,
+              val:sc*9+(hasFx?10:0)}); // 呪文はやや控えめの価値（盤面に残らない）
+          }
+        }
+      }
+      // 出せるものだけに絞る（コスト・文明・ロック）
+      const playable=cands.filter(o=>o.cost<=untapped.length&&(!o.civs.length||ghostCivOk({civs:o.civs},untapped)))
         .sort((a,b)=>{
-          // 📊 学習データ：人間がよくプレイする札を同コスト帯で優先（プレイ比率で±2コスト相当の補正）
-          const pr=o=>{const cr=(typeof mdChargeRatio==="function")?mdChargeRatio(o.cc.name,S.turn):null;return cr==null?0:(0.5-cr)*4;};
-          return (b.cost+pr(b))-(a.cost+pr(a));
+          const pr=o=>{const cr=(typeof mdChargeRatio==="function")?mdChargeRatio(o.cc.name,S.turn):null;return cr==null?0:(0.5-cr)*40;};
+          return (b.val+pr(b))-(a.val+pr(a));
         });
       let played=false;
-      for(const o of cands){
+      for(const o of playable){
         const {cc,r}=o;
-        // ロック確認（安全側：出せないカードはスキップして次の候補へ）
+        // ロック確認
         if(S.expert&&!S.freePlay&&S.turn>0){
-          const cap=perTurnCapHit(pi,"creature");
-          if(cap){skipped.push("⛔回数制限");break;}
-          const lk=stLockerOf(pi,"stLockCre","stLockCreF",r,cc);
-          const tl=lk?null:turnLockHit(pi,"creature",r);
+          const kind=o.side==="spell"?"spell":"creature";
+          const cap=perTurnCapHit(pi,kind);
+          if(cap){skipped.push("⛔回数制限");continue;}
+          const lk=o.side==="spell"
+            ? stLockerOf(pi,"stLockSpell","stLockSpellF",r,cc)
+            : stLockerOf(pi,"stLockCre","stLockCreF",r,cc);
+          const tl=lk?null:turnLockHit(pi,kind,r);
           if(lk||tl){skipped.push(`⛔${faceNameOf(cc)}`);continue;}
         }
-        if(!battleEntryOk(pi,cc)){skipped.push(`⛔${faceNameOf(cc)}`);continue;}
+        if(o.side==="creature"&&!o.est&&!battleEntryOk(pi,cc)){skipped.push(`⛔${faceNameOf(cc)}`);continue;}
         if(!ghostPayManaN(Z,o.cost,o.civs))continue;
         const hi=Z.hand.findIndex(x=>x.id===cc.id);
         if(hi<0)continue;
         Z.hand.splice(hi,1);
         cc.faceup=true;cc.tapped=false;cc.sideways=false;
-        cc.sick=(S.turn>0)&&!(r&&r.sa);
-        Z.battle.push(cc);
-        markArrive(cc);emitEvent(pi,"summon");enqueueFx(pi,cc);
-        if(o.est){
-          toast(`👻⚔ 召喚：${faceNameOf(cc)}（📊推定コスト${o.cost}・効果があれば代行処理してください）`);
-          logOnly(`👻⚔ ゴースト：《${faceNameOf(cc)}》を召喚（学習データの推定コスト${o.cost}・未登録のため効果は手動代行）`);
+        if(o.kind==="spell"){
+          // 🌀 呪文詠唱：効果解決ゾーンへ（ツインパクトは呪文面）
+          if(r&&(r.twin||r.ctype==="twinpact"))cc.face=1;
+          if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(x=>resolveOut(Z,x));}
+          Z.resolve.push(cc);markArrive(cc);emitEvent(pi,"spell");enqueueFx(pi,cc);
+          toast(`👻🌀 ${faceNameOf(cc)} を唱えた（コスト${o.cost}${o.est?"・効果は代行してください":""}）`);
+          logOnly(`👻🌀 ゴースト：《${faceNameOf(cc)}》を唱えた（コスト${o.cost}）`);
         }else{
-          toast(`👻⚔ 召喚：${faceNameOf(cc)}（コスト${o.cost}）`);
-          logOnly(`👻⚔ ゴースト：《${faceNameOf(cc)}》を召喚（コスト${o.cost}）`);
+          // ⚔ 通常召喚／進化（evoフラグ時は召喚酔いなし）
+          if(r&&(r.twin||r.ctype==="twinpact"))cc.face=0;
+          cc.sick=o.evo?false:((S.turn>0)&&!(r&&r.sa));
+          Z.battle.push(cc);
+          markArrive(cc);emitEvent(pi,"summon");enqueueFx(pi,cc);
+          if(o.evo){
+            toast(`👻⤴ 進化：${faceNameOf(cc)}（コスト${o.cost}・進化元は手動で下に移してください）`);
+            logOnly(`👻⤴ ゴースト：《${faceNameOf(cc)}》を進化として出した`);
+          }else if(o.est){
+            toast(`👻⚔ 召喚：${faceNameOf(cc)}（📊推定コスト${o.cost}・効果があれば代行）`);
+            logOnly(`👻⚔ ゴースト：《${faceNameOf(cc)}》を召喚（推定コスト${o.cost}）`);
+          }else{
+            toast(`👻⚔ 召喚：${faceNameOf(cc)}（コスト${o.cost}）`);
+            logOnly(`👻⚔ ゴースト：《${faceNameOf(cc)}》を召喚（コスト${o.cost}）`);
+          }
         }
         sfx("ok");renderAll();
-        await waitFxIdle();await wait(350);
+        await waitFxIdle();await wait(320);
         played=true;break;
       }
       if(!played)break;
     }
-    // 呪文・進化・ツインパクトは出さない旨を1回だけ通知（手札にある時のみ）
-    if(Z.hand.some(cc=>{const r=getReg(cc);return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"||isEvoReg(r));}))
-      toast("👻 呪文・進化・ツインパクトはゴーストは使いません（必要ならあなたが代行してください）");
+    // 効果が無駄になるため見送ったカードがあれば1回通知
+    {const held=Z.hand.filter(cc=>{const r=getReg(cc);return r&&ghostWasteful(r,(r.ctype==="spell")?"spell":"creature",pi);});
+     if(held.length)toast(`👻 対象がいないため《${faceNameOf(held[0])}》${held.length>1?` ほか${held.length-1}枚`:""}は温存しました`);}
     // ③ 攻撃（v10.49・リーサル判定＋刻み＋ブロッカー考慮＋タップ除去）
     //    参考：公式基本ルール（攻撃対象＝プレイヤーorタップ中クリーチャー）と、
     //    競技プレイング講座の「刻み」「分割リーサル」「偶数理論」の考え方を取り込んだ。
@@ -24157,7 +24456,7 @@ async function ghostTurn(opts){
     if(heldBack>0)toast(`👻🛡 相手のブロッカーに勝てないため、${heldBack}体は攻撃を見送りました`);
     // ⏭ 毎ターン自動（ゴースト担当）：決着していなければ自動でターンを返す
     const decided=(SCORE[0]+SCORE[1])>scoreAtStart;
-    if(opts.auto&&S.ghostSeat===pi&&!decided&&S.vs&&!GAME_PAUSE&&!FX_HOLD&&!S.pendingAtk){
+    if(opts.auto&&isGhostSeat(pi)&&!decided&&S.vs&&!GAME_PAUSE&&!FX_HOLD&&!S.pendingAtk){
       await waitFxIdle();
       toast("👻⏭ ゴーストのターン終了 → 自動で次のターンへ");
       logOnly("👻⏭ ゴースト：ターンを返した");
@@ -24170,27 +24469,32 @@ async function ghostTurn(opts){
     logOnly("👻 ゴースト：ターンのプレイを終えた");
   }catch(e){
     toast(`👻⚠ ゴースト処理を中断：${String(e&&e.message||e).slice(0,60)}`);
-  }finally{GHOST_BUSY=false;renderAll();}
+  }finally{GHOST_BUSY=false;GHOST_AUTO=false;renderAll();}
 }
-/* 👻 ボタン：このターンだけ実行／毎ターン自動（ゴースト担当）の切り替え */
+/* 👻 ボタン：このターンだけ実行／毎ターン自動（ゴースト担当）／両プレイヤーを自動（観戦）の切り替え（v10.51） */
 async function ghostButton(){
   if(!S.vs){toast("👻 ゴーストは対戦モード専用です");return;}
-  const pi=S.who|0;
-  if(S.ghostSeat===pi){
-    const j=await askChoice(`👻 ${S.players[pi].label} は毎ターン自動（ゴースト担当）です`,
-      ["今すぐこのターンを実行","👻 ゴースト担当を解除する"]);
-    if(j===0)ghostTurn({auto:true});
-    else if(j===1){S.ghostSeat=null;toast("👻 ゴースト担当を解除しました");}
-    return;
-  }
-  const j=await askChoice(`👻 ゴースト：${S.players[pi].label} のターンを自動でプレイします\n（マナチャージ→召喚→攻撃。効果パネルはあなたが代行）`,
-    ["このターンだけ実行","この席を毎ターン自動にする（ゴースト担当）"]);
-  if(j===0)ghostTurn();
-  else if(j===1){
-    S.ghostSeat=pi;
-    toast(`👻 ${S.players[pi].label} をゴースト担当にしました（このプレイヤーのターンは自動プレイ→自動でターンを返します）`);
-    ghostTurn({auto:true});
-  }
+  if(olActive()){toast("👻 オンライン対戦中はゴーストを使えません");return;}
+  const pi=S.who|0, other=pi?0:1;
+  const seats=ghostSeatsSet();
+  const bothOn=seats.length>=2;
+  const meOn=isGhostSeat(pi);
+  // 現在の担当状況で選択肢を組み立てる
+  const opts=[],acts=[];
+  opts.push("このターンだけ実行");                                   acts.push("once");
+  if(!meOn){opts.push(`${S.players[pi].label} を毎ターン自動にする`); acts.push("addMe");}
+  else{opts.push(`${S.players[pi].label} の自動を解除`);              acts.push("delMe");}
+  if(!bothOn){opts.push("👻👻 両プレイヤーを自動にする（観戦モード）");acts.push("both");}
+  else{opts.push("👻👻 両プレイヤーの自動を解除");                    acts.push("none");}
+  const status=bothOn?"両プレイヤーが自動（観戦モード）":meOn?`${S.players[pi].label} が自動`:isGhostSeat(other)?`${S.players[other].label} が自動`:"手動";
+  const j=await askChoice(`👻 ゴースト設定（現在：${status}）\n効果の選択パネルはできる範囲でゴーストが自動応答します（難しいものはあなたに委ねます）`,opts);
+  if(j===null)return;
+  const a=acts[j];
+  if(a==="once"){ghostTurn();return;}
+  if(a==="addMe"){setGhostSeat(pi,true);toast(`👻 ${S.players[pi].label} をゴースト担当に。このターンから自動でプレイします`);ghostTurn({auto:true});return;}
+  if(a==="delMe"){setGhostSeat(pi,false);toast(`👻 ${S.players[pi].label} の自動を解除しました`);return;}
+  if(a==="both"){setGhostSeat(0,true);setGhostSeat(1,true);toast("👻👻 両プレイヤーを自動に（観戦モード）。手番から自動で進みます。止めたい時はもう一度このボタンで解除できます");ghostTurn({auto:true});return;}
+  if(a==="none"){setGhostSeat(0,false);setGhostSeat(1,false);toast("👻 両プレイヤーの自動を解除しました");return;}
 }
 async function declareWin(winner,reason,askFirst=true){
   if(!S.vs){toast(`🏆 ${reason}`);return;}
@@ -27343,6 +27647,11 @@ $("vCancel").onclick=defaultVCancel;
    選択中も「👁 盤面を見る」で盤面確認できる（ビューア共通のピーク） */
 function pickCard(title,cards,opts={}){
   if(!cards||!cards.length)return Promise.resolve(null); // 空は即返し（ゲート不要）
+  // 👻 ゴースト自動応答：処理中は簡易ヒューリスティックで1枚選ぶ
+  if(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO){
+    const gi=ghostAnswerPick(title,cards,opts);
+    if(gi!=null&&gi>=0&&gi<cards.length)return new Promise(r=>setTimeout(()=>r(gi),140));
+  }
   return _serialDlg(PICK_GATE,()=>new Promise(res=>{
     const g=$("vGrid");g.innerHTML="";
     $("vTitle").textContent=title;
