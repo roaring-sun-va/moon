@@ -3413,7 +3413,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.49";
+const APP_VER="v10.50";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -23169,6 +23169,80 @@ function mdMerge(gamesArr){
 }
 /* 🔄 オンライン対戦の相手と対戦データを同期（v10.48）。カード登録の受け渡しと同じ分割送信方式。
    want=true で送ると、相手は統合後に自分のデータを送り返す（1回の操作で双方向同期） */
+/* 📽 リプレイのフレーム列から判断イベントを再構築する（v10.50・純関数）。
+   v10.46より前の試合には判断の記録が無いが、リプレイには全盤面が残っているため、
+   連続フレームの差分から「手札→マナ＝チャージ」「手札→バトル＝召喚」「ターン中の相手盾減少＝攻撃」を逆算する。
+   近似の注意：効果による手札→マナ移動もチャージとして数える（生記録側と同じ近似）／
+   進化で下に潜った召喚は拾えない／「攻撃できるのに攻めなかった数」はタップ・酔いのみで判定（キーワード非考慮） */
+function mdFramesToEv(frames){
+  const ev=[];
+  if(!Array.isArray(frames)||frames.length<2)return {ev,lastTurn:0};
+  let prev;try{prev=JSON.parse(frames[0]);}catch(e){return {ev,lastTurn:0};}
+  let segTurn=prev.t|0,segWho=prev.w|0;
+  let segStartOppSh=((prev.z[(segWho|0)?0:1]||{}).shield||[]).length;
+  const teFlush=lastF=>{
+    const dep=segWho|0,opd=dep?0:1;
+    const endOppSh=(((lastF.z||[])[opd]||{}).shield||[]).length;
+    const atkN=Math.max(0,segStartOppSh-endOppSh);
+    const held=(((lastF.z||[])[dep]||{}).battle||[]).filter(c=>c&&!c.tapped&&!c.sick).length;
+    if(atkN>0||held>0)ev.push({t:segTurn,p:dep,a:"te",held,atk:atkN,os:segStartOppSh});
+  };
+  for(let i=1;i<frames.length;i++){
+    let cur;try{cur=JSON.parse(frames[i]);}catch(e){continue;}
+    if(!cur||!Array.isArray(cur.z))continue;
+    for(const p of [0,1]){
+      const z0=(prev.z||[])[p]||{},z1=(cur.z||[])[p]||{};
+      const h0=new Set((z0.hand||[]).map(c=>c&&c.id));
+      for(const c of (z1.mana||[]))if(c&&h0.has(c.id))ev.push({t:cur.t|0,p,a:"charge",c:String(c.name||"").slice(0,60),m:(z1.mana||[]).length});
+      for(const c of (z1.battle||[]))if(c&&h0.has(c.id))ev.push({t:cur.t|0,p,a:"summon",c:String(c.name||"").slice(0,60),m:(z1.mana||[]).length});
+    }
+    if((cur.t|0)!==segTurn||(cur.w|0)!==segWho){
+      teFlush(prev);
+      segTurn=cur.t|0;segWho=cur.w|0;
+      segStartOppSh=(((cur.z||[])[(segWho|0)?0:1]||{}).shield||[]).length;
+    }
+    prev=cur;
+    if(ev.length>1150)break;
+  }
+  teFlush(prev);
+  return {ev,lastTurn:prev.t|0};
+}
+/* 📽 保存済みリプレイ（直近30試合＋⭐お気に入り）を対戦データに変換して学習に使う（v10.50） */
+async function mdRebuildFromReplays(){
+  if(!db){toast("📽 この端末には保存されたリプレイがありません");return;}
+  let keys=[];try{keys=await idbKeys("replays");}catch(e){}
+  if(!keys||!keys.length){toast("📽 保存されたリプレイがありません（直近30試合＋⭐お気に入りのみ保存されています）");return;}
+  const have=new Set(MDATA.games.map(g=>String(g.id)));
+  const statById=new Map(MATCH_STATS.filter(m=>m&&m.id!=null).map(m=>[String(m.id),m]));
+  let made=0,skip=0,fail=0;
+  toast(`📽 リプレイ${keys.length}件から学習データを再構築しています…`);
+  for(const k of keys){
+    const ks=String(k);
+    if(have.has(ks)){skip++;continue;}
+    let rec=null;try{rec=await idbGet("replays",ks);}catch(e){}
+    if(!rec||!Array.isArray(rec.frames)||rec.frames.length<2){fail++;continue;}
+    try{
+      const {ev,lastTurn}=mdFramesToEv(rec.frames);
+      if(!ev.length){fail++;continue;}
+      const st=statById.get(ks);
+      MDATA.games.push({
+        id:isNaN(+ks)?ks:+ks,
+        d:st?(+st.d||Date.now()):Date.now(),
+        deck0:st?String(st.deck0||"").slice(0,40):"（リプレイ再構築）",
+        deck1:st?String(st.deck1||"").slice(0,40):"（リプレイ再構築）",
+        winner:st?(st.winner|0):-1, // 勝者不明の試合は誰の判断も重み付けしない
+        turns:st?(st.turns|0):lastTurn,
+        ev:ev.slice(0,1200)});
+      have.add(ks);made++;
+    }catch(e){fail++;}
+    await new Promise(r=>setTimeout(r,0)); // UIを止めない
+  }
+  if(MDATA.games.length>600)MDATA.games=MDATA.games.slice(-600);
+  MDATA._st=null;
+  await persistMData();
+  sfx("ok");
+  toast(`📽 再構築完了：${made}試合を学習データに追加（統合済み${skip}件・変換不可${fail}件）→ 合計${MDATA.games.length}試合`);
+}
 function mdSyncOnline(opts){
   opts=opts||{};
   if(!olActive()){toast("🔄 オンライン対戦に接続中のみ同期できます（対戦パネルから接続してください）");return;}
@@ -23216,6 +23290,7 @@ async function mdPanel(){
       [`記録：${MDATA.on?"ON":"OFF"}（タップで切替）`,
        `ゴーストへの反映：${MDATA.use?"ON":"OFF"}（タップで切替）`,
        "🔄 オンラインの相手と同期（双方向・接続中のみ）",
+       "📽 過去のリプレイから再構築（昔の試合を学習データ化）",
        "📤 書き出し（仲間に渡すJSON）",
        "📥 読み込み（仲間のデータを統合・複数可）",
        "📈 統計を見る",
@@ -23224,9 +23299,10 @@ async function mdPanel(){
     if(j===0){MDATA.on=!MDATA.on;await persistMData();toast(`📊 記録：${MDATA.on?"ON":"OFF"}`);}
     else if(j===1){MDATA.use=!MDATA.use;await persistMData();toast(`👻 ゴーストへの反映：${MDATA.use?"ON":"OFF"}`);}
     else if(j===2){mdSyncOnline({want:true});return;}
-    else if(j===3){mdExport();return;}
-    else if(j===4){mdImport();return;}
-    else if(j===5){
+    else if(j===3){await mdRebuildFromReplays();continue;}
+    else if(j===4){mdExport();return;}
+    else if(j===5){mdImport();return;}
+    else if(j===6){
       const rows=[...new Set([...Object.keys(st.charge),...Object.keys(st.summon)])]
         .map(n=>({n,c:st.charge[n]||0,s:st.summon[n]||0,a:st.atkC[n]||0}))
         .filter(r=>r.c+r.s>=3)
@@ -23246,7 +23322,7 @@ async function mdPanel(){
       }).join("　");
       await ask(`📈 カード別の使われ方（マナに置く÷プレイする・勝者×1.5重み）\n\n${lines}\n\n⚔ 攻撃タイミング（相手の盾枚数帯ごと）\n${agLine}\n\n※ゴーストはチャージ優先度・召喚順・攻撃判断・未登録カードの推定コストに反映します`);
     }
-    else if(j===6){
+    else if(j===7){
       if(await ask(`🗑 対戦データ${st.games}試合をすべて消去します。よろしいですか？（書き出していないデータは戻せません）`)){
         MDATA.games=[];MDATA._st=null;await persistMData();toast("🗑 対戦データを消去しました");
       }
