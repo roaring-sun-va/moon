@@ -503,9 +503,10 @@ body.vs .pboard.cmw{flex:1 1 0;min-height:0}
 .shieldpile .n{font-size:21px;background:rgba(6,8,16,.72);color:#bae6fd;padding:0 8px}
 .shieldpile .lbl{color:#7dd3fc}
 .shieldpile .side{background:#fbbf24;color:#3a2a00}
-.manapile{width:calc(var(--card-h)*.92);height:calc(var(--card-h)*.92);border-radius:50%;border:3px solid #d98b1e;background:radial-gradient(circle at 50% 38%,#3a2a10,#1b1408);box-shadow:0 0 0 2px #7a5210 inset,0 2px 10px rgba(0,0,0,.5)}
+.manapile{position:relative;overflow:hidden;width:calc(var(--card-h)*.92);height:calc(var(--card-h)*.92);border-radius:50%;border:3px solid #d98b1e;background:radial-gradient(circle at 50% 38%,#3a2a10,#1b1408);box-shadow:0 0 0 2px #7a5210 inset,0 2px 10px rgba(0,0,0,.5)}
 .manapile img{opacity:.5;border-radius:50%}
-.manapile .n{font-size:16px;color:#ffd98a}
+.manapile .n{font-size:16px;color:#ffd98a;position:relative;z-index:1}
+.manapile .lbl{position:relative;z-index:1}
 .manapile .lbl{color:#ffcf7a}
 .manapile.droptgt{box-shadow:0 0 0 3px var(--accent),0 0 16px rgba(245,197,66,.5)}
 .vcard.mtap .thumb{transform:rotate(90deg) scale(.86);opacity:.6}
@@ -1006,6 +1007,18 @@ body.shake{animation:bodyShake .4s ease-out}
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの見出しをつかんで、好きな場所へ動かせます。右下・左下の隅をつかむと大きさ（幅と高さ）を変えられます。位置と大きさは次回も覚えています"><input type="checkbox" id="optLogDrag" checked> ✋ ログの見出しをつかんで移動する（隅のつかみ手で大きさ変更）</label><button class="btn small ghost" id="btnLogBoxReset" title="自由に動かしたログの位置と大きさを、既定（右上・幅340px）に戻します">↺ ログの位置と大きさを戻す</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="画面の右端から左へ払うとログが開き、右へ払うと閉じます。カードのドラッグと当たる場合はオフにしてください"><input type="checkbox" id="optLogSwipe" checked> ➡ 画面の右端から左へ払ってログを開く（右へ払って閉じる）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="確認パネルや効果パネルが開いている間も、ログを手前に重ねて表示します。パネルの操作が隠れて邪魔な場合はオフにしてください"><input type="checkbox" id="optLogOverPanel" checked> 🪟 確認パネルが開いている間もログを手前に表示する</label></div>
+    <div class="row" style="flex-direction:column;align-items:flex-start;gap:2px">
+      <label style="font-size:12px;display:inline-flex;align-items:center;gap:6px">💠 マナゾーンの文明表示：
+        <select id="optManaCiv" style="width:auto;font-size:12px">
+          <option value="pie">マナ山の円グラフ（スマホ向け・既定）</option>
+          <option value="chips">見出しに文字で並べる（光2 水1/3 …）</option>
+          <option value="off">表示しない</option>
+        </select></label>
+      <div class="hint" style="margin:0 0 0 24px;font-size:10.5px;line-height:1.45">
+        円グラフはマナ山の輪にマナの文明の割合を出します（0マナのカードとゼロ文明は色を持たないため含みません）。
+        文字で並べる方はスマホだとマナゾーンが横に広がるので、画面が狭い場合は円グラフをおすすめします。
+      </div>
+    </div>
     <div class="row" style="flex-direction:column;align-items:flex-start;gap:2px">
       <label style="font-size:12px;display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="optAllyEnterFirst"> ⏱ 「出た時」が重なった時、見ている側を先に処理する</label>
       <div class="hint" style="margin:0 0 0 24px;font-size:10.5px;line-height:1.45">
@@ -3168,6 +3181,13 @@ window.syncLogOverPanel=()=>{
    try{if(db)await idbPut("misc","logShare",S.logShare?1:0);}catch(e){}
    toast(S.logShare?"🌐 オンライン対戦でログを相手にも送ります":"🌐 ログの送信をやめました（自分の端末だけに残ります）");
  });}
+{const se=document.getElementById("optManaCiv");
+ if(se)se.addEventListener("change",async()=>{
+   if(typeof S==="undefined"||!S)return;
+   S.manaCivView=se.value||"pie";
+   try{if(db)await idbPut("misc","manaCivView",S.manaCivView);}catch(e){}
+   renderAll();
+ });}
 {const cb=document.getElementById("optLogOverPanel");
  if(cb)cb.addEventListener("change",async()=>{
    if(typeof S==="undefined"||!S)return;
@@ -3435,7 +3455,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.61";
+const APP_VER="v10.62";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6911,6 +6931,7 @@ const FX_TYPES=[
   ["deckTopRecruitMana","🃏 山札の上からn枚を表向きにし、その中の条件に合うクリーチャーを好きな数バトルゾーンへ・残りをマナゾーンへ（条件欄で対象を指定・ボルシャック究極進化型）"],
   ["deckTopPlay","🎴 山札の上からn枚を見て（めくって）、その中の条件に合うクリーチャーを出す→残りをランダムに山札の下（探索と違い外れることもある・条件欄で対象＋『最大3』等で出す上限指定・ヘブンズ・キリコ型）"],
   ["bottomGravePlay","🂡 自分の山札の一番下のカードをn枚 墓地に置く。それが条件に合うクリーチャーなら、バトルゾーンに出す（カツラデランス型／条件欄＝例：コスト7以下／ジョーカーズ）"],
+  ["destroySumPow","💥 相手のクリーチャーを、パワーの合計がn以下になるように好きな数選び、破壊する（スクラッパーレッド型／条件欄で対象をさらに絞れる）"],
   ["deckSearch","🔎 山札から条件に合うカードをn体バトルゾーンへ（探索踏み倒し・3種提示のランダム・条件欄で対象を指定）→山札シャッフル"],
   ["graveRecruit","⚰ 墓地から条件に合うクリーチャーをn体バトルゾーンへ（蘇生・条件欄で対象を指定）"],
   ["handRecruit","✋ 手札から条件に合うクリーチャーをn体バトルゾーンへ（踏み倒し・条件欄で対象を指定）"],
@@ -7913,6 +7934,8 @@ const MODE_FX_ALIAS={
   "手札マナ詠唱":"handManaCastSpell","マナ詠唱":"handManaCastSpell","手札マナから呪文":"handManaCastSpell",
   "相手墓地山札":"foeGraveTopCostToDeck","相手墓地リセット":"foeGraveTopCostToDeck",
   "相手盾マナ送り":"foeShieldToMana","相手シールドマナ":"foeShieldToMana","盾マナ送り":"foeShieldToMana",
+  "パワー合計破壊":"destroySumPow","合計破壊":"destroySumPow","スクラッパー":"destroySumPow",
+  "山下踏み倒し":"bottomGravePlay","一番下":"bottomGravePlay",
 };
 // 逆引き：モード@記法の自動出力に使う日本語名（内部名を画面に出さない）
 const MODE_FX_JA=(()=>{const m={};for(const [ja,en] of Object.entries(MODE_FX_ALIAS))if(!m[en])m[en]=ja;return m;})();
@@ -8174,7 +8197,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🔧 条件欄を「対象の絞り込み／書式」として使う効果の一覧。
    これらの効果ではcondをゾーン条件式（マナ>=3など）として判定してはいけない。
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
-const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
+const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
@@ -10599,6 +10622,45 @@ async function runFxList(pi,list,srcCard,inPump){
         else toast(`🂠 ${faceNameOf(host)} は非進化として場に残った（召喚酔いあり）`);
         renderAll();
       }
+    }else if(f.t==="destroySumPow"){
+      // 💥 パワーの合計がn以下になるように好きな数選んで破壊（スクラッパーレッド型）。
+      //    残り予算より大きいクリーチャーは選択肢に出さない。キャンセルでそこまでの選択を実行。
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const filt=String(f.cond||"").trim();
+      const OZ2=zonesOf(op);
+      const picked=[];
+      let budget=n;
+      for(let guard=0;guard<20;guard++){
+        let pool=OZ2.battle.filter(x=>isCreatureReg(getReg(x))&&!picked.some(y=>y.id===x.id));
+        if(filt)pool=pool.filter(x=>lockFilterOk(filt,getReg(x),x));
+        pool=pool.filter(x=>{const rx=getReg(x);return !(((rx&&rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,op));});
+        const powOfC=async x=>await effPower(x,false,false);
+        const pows=[];
+        for(const x of pool)pows.push(await powOfC(x));
+        const ok2=pool.filter((x,i)=>pows[i]<=budget);
+        if(!ok2.length){
+          if(!picked.length)toast(`対象のクリーチャーがいません（パワー合計${n}以下）`);
+          break;
+        }
+        const okPows=pool.map((x,i)=>[x,pows[i]]).filter(([,pw])=>pw<=budget);
+        const j=await pickCard(`💥 破壊するクリーチャーを選択（残りパワー ${budget}${picked.length?`／選択中 ${picked.length}体`:""}・キャンセルで確定）`,
+          okPows.map(([x])=>x),{sub:x=>{const e=okPows.find(([y])=>y.id===x.id);return e?`P${e[1]}`:"";}});
+        if(j===null)break;
+        const [tgt,pw]=okPows[j];
+        picked.push(tgt);budget-=pw;
+        toast(`💥 ${faceNameOf(tgt)}（パワー${pw}）を選択　残り ${budget}`);
+      }
+      if(picked.length){
+        snap();
+        toast(`💥 パワー合計 ${n-budget}／${n}：${picked.length}体を破壊します`);
+        for(const tgt of picked){
+          if(!OZ2.battle.find(x=>x.id===tgt.id))continue;
+          await destroyWithReplace(op,tgt);
+          renderAll();
+        }
+        sfx("grave");
+      }
+      renderAll();
     }else if(f.t==="bottomGravePlay"){
       // 🂡 山札の一番下のカードを墓地に置く→それが条件に合うクリーチャーならバトルゾーンに出す（カツラデランス型）
       //    「墓地に置く」が先に起きるので、墓地に置かれた時（toGrave）の誘発も正しく発火させる。
@@ -19945,6 +20007,32 @@ function zonesOf(pi){return S.players[pi].zones;}
 const MANA_CIVJ=[["light","光","#f5e6a8","#5a4b12"],["water","水","#7fc4ff","#0b2f52"],
                  ["dark","闇","#b9a6d6","#241832"],["fire","火","#ff9d8a","#4d1408"],
                  ["nature","自然","#9fdba0","#123d1a"],["zero","無","#c8ced9","#20242c"]];
+/* 🥧 マナゾーンの文明割合を円グラフ（conic-gradient）で返す。
+   ・多色カードは持っている文明の数で等分して数える（水/闇の2色なら each 0.5）
+   ・0マナのカードは支払いに使えないので含めない
+   ・ゼロ文明は色を持たないので含めない（該当カードしか無ければ円グラフは出さない）
+   戻り値は CSS の conic-gradient 文字列。対象が無ければ空文字。 */
+function manaCivPie(pi){
+  const Z=zonesOf(pi);
+  if(!Z||!Z.mana||!Z.mana.length)return "";
+  const w={};let total=0;
+  for(const mc of Z.mana){
+    if(manaValOf(mc)===0)continue;
+    const rm=getReg(mc);
+    const cv=((rm&&rm.civs)||[]).filter(k=>k!=="zero");
+    if(!cv.length)continue;
+    for(const k of cv){w[k]=(w[k]||0)+1/cv.length;total+=1/cv.length;}
+  }
+  if(total<=0)return "";
+  const segs=[];let acc=0;
+  for(const [k,,bg] of MANA_CIVJ){
+    if(k==="zero"||!w[k])continue;
+    const from=acc/total*360, to=(acc+w[k])/total*360;
+    segs.push(`${bg} ${from.toFixed(2)}deg ${to.toFixed(2)}deg`);
+    acc+=w[k];
+  }
+  return segs.length?`conic-gradient(${segs.join(",")})`:"";
+}
 function manaCivChips(pi){
   const Z=zonesOf(pi);
   if(!Z||!Z.mana)return "";
@@ -22655,9 +22743,18 @@ function renderPlayer(pi){
       mb.innerHTML="";
       const untap=manaSumOf(pi,true);
       const top=Z.mana[Z.mana.length-1];
+      // 🥧 既定ではマナ山の輪に文明の円グラフを出す（一番上のカードの透かし表示の代わり）
+      const pieCss=(S.manaCivView||"pie")==="pie"?manaCivPie(pi):"";
       const pile=pileEl({n:`${untap}/${manaSumOf(pi,false)}`,label:"マナ",dz:"mana",cls:"manapile",
-        img:top&&imgURL.get(faceKeyOf(top))||null,
+        img:pieCss?null:(top&&imgURL.get(faceKeyOf(top))||null),
         onTap:()=>openManaViewer(pi)});
+      if(pieCss){
+        const pie=document.createElement("div");
+        pie.dataset.manapie="1";
+        pie.style.cssText=`position:absolute;inset:0;border-radius:50%;background:${pieCss};opacity:.55;pointer-events:none;z-index:0;-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%)`;
+        pie.title="マナゾーンの文明の割合（0マナのカードとゼロ文明は含みません）";
+        pile.insertBefore(pie,pile.firstChild);
+      }
       mb.appendChild(pile);
     }
   }else{
@@ -22669,8 +22766,11 @@ function renderPlayer(pi){
   $(`cHand-${pi}`).textContent=Z.hand.length;
   // 🎨 マナゾーンの文明内訳：どの文明がどれだけあるか（使用可＝アンタップ／括弧内＝タップ中も含む合計）を色付きで表示
   {
+    // 💠 文明の内訳は既定ではマナ山の円グラフに出すので、見出しは短く保つ（スマホでゾーンが横に広がらないように）
     const zero=Z.mana.filter(mc=>manaValOf(mc)===0).length;
-    $(`manaFree-${pi}`).innerHTML=`使用可 ${manaSumOf(pi,true)}マナ`+manaCivChips(pi)
+    const view=S.manaCivView||"pie";
+    $(`manaFree-${pi}`).innerHTML=`使用可 ${manaSumOf(pi,true)}マナ`
+      +(view==="chips"?manaCivChips(pi):"")
       +(zero?`<span style="opacity:.7;margin-left:3px">0マナ${zero}枚</span>`:"");
   }
   $(`sysinfo-${pi}`).textContent=`盾${Z.shield.length}`;
@@ -31579,6 +31679,9 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
    const e=$("optAllyEnterFirst");if(e)e.checked=S.allyEnterFirst;}
   {const la=db?await idbGet("misc","logAutoImg"):null;S.logAutoImg=(la==null)?true:!!la;
    const e=$("optLogAutoImg");if(e)e.checked=S.logAutoImg;}
+  {const mv=db?await idbGet("misc","manaCivView"):null;
+   S.manaCivView=(mv==="chips"||mv==="off"||mv==="pie")?mv:"pie";
+   const e=$("optManaCiv");if(e)e.value=S.manaCivView;}
   {const lo=db?await idbGet("misc","logOverPanel"):null;S.logOverPanel=(lo==null)?true:!!lo;
    const e=$("optLogOverPanel");if(e)e.checked=S.logOverPanel;
    if(typeof syncLogOverPanel==="function")syncLogOverPanel();}
