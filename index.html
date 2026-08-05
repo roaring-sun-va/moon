@@ -3423,7 +3423,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.57";
+const APP_VER="v10.58";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -15319,7 +15319,7 @@ function pickFromList(title,pairs,current){
     ttl.style.cssText="font-weight:700;font-size:14px";
     const inp=document.createElement("input");
     inp.type="text";
-    inp.placeholder="🔎 キーワード検索（略称OK：SA/cip/pig/ST/バウンス/回収/踏み倒し…・スペースでAND）";
+    inp.placeholder="🔎 キーワード検索（略称OK：SA/cip/pig/ST/バウンス/回収/踏み倒し…／カード名・英字の内部名でも探せます・スペースでAND）";
     inp.style.cssText="width:100%;font-size:13px;padding:8px;box-sizing:border-box";
     const list=document.createElement("div");
     list.style.cssText="overflow:auto;flex:1;display:flex;flex-direction:column;gap:2px;min-height:120px";
