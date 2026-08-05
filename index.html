@@ -1813,10 +1813,13 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;font-weight:700">侵略/チェンジ条件（攻撃側が満たす時のみ確認）</span>
-        <select id="fxInvCiv" style="width:auto;flex:0 0 90px">
-          <option value="">文明不問</option>
-          <option value="light">光</option><option value="water">水</option><option value="dark">闇</option><option value="fire">火</option><option value="nature">自然</option>
-        </select>
+        <input type="text" id="fxInvCiv" list="invCivList" placeholder="文明（空欄＝不問／例：水または闇）" style="width:auto;flex:0 0 190px" title="複数文明は「または」または「｜」で区切ります（例：水または闇＝ノロン型）">
+        <datalist id="invCivList">
+          <option value="光"></option><option value="水"></option><option value="闇"></option><option value="火"></option><option value="自然"></option>
+          <option value="光または水"></option><option value="光または闇"></option><option value="光または火"></option><option value="光または自然"></option>
+          <option value="水または闇"></option><option value="水または火"></option><option value="水または自然"></option>
+          <option value="闇または火"></option><option value="闇または自然"></option><option value="火または自然"></option>
+        </datalist>
         <input type="text" id="fxInvRace" list="raceList" placeholder="種族（「／」区切りで複数OK：例 ドラゴン／コマンド）" style="flex:1;min-width:120px">
         <input type="number" id="fxInvCost" placeholder="コスト以上" style="width:86px">
         <input type="number" id="fxInvPow" placeholder="パワー以上" style="width:96px">
@@ -3420,7 +3423,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.55";
+const APP_VER="v10.57";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6890,6 +6893,7 @@ const FX_TYPES=[
   ["deckRecruit","🔎 山札から条件に合うカードをn体バトルゾーンへ（超探索踏み倒し・5種提示・条件欄で対象を指定・ボルシャック・NEX型）→山札シャッフル"],
   ["deckTopRecruitMana","🃏 山札の上からn枚を表向きにし、その中の条件に合うクリーチャーを好きな数バトルゾーンへ・残りをマナゾーンへ（条件欄で対象を指定・ボルシャック究極進化型）"],
   ["deckTopPlay","🎴 山札の上からn枚を見て（めくって）、その中の条件に合うクリーチャーを出す→残りをランダムに山札の下（探索と違い外れることもある・条件欄で対象＋『最大3』等で出す上限指定・ヘブンズ・キリコ型）"],
+  ["bottomGravePlay","🂡 自分の山札の一番下のカードをn枚 墓地に置く。それが条件に合うクリーチャーなら、バトルゾーンに出す（カツラデランス型／条件欄＝例：コスト7以下／ジョーカーズ）"],
   ["deckSearch","🔎 山札から条件に合うカードをn体バトルゾーンへ（探索踏み倒し・3種提示のランダム・条件欄で対象を指定）→山札シャッフル"],
   ["graveRecruit","⚰ 墓地から条件に合うクリーチャーをn体バトルゾーンへ（蘇生・条件欄で対象を指定）"],
   ["handRecruit","✋ 手札から条件に合うクリーチャーをn体バトルゾーンへ（踏み倒し・条件欄で対象を指定）"],
@@ -8153,7 +8157,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🔧 条件欄を「対象の絞り込み／書式」として使う効果の一覧。
    これらの効果ではcondをゾーン条件式（マナ>=3など）として判定してはいけない。
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
-const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
+const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
@@ -10578,6 +10582,44 @@ async function runFxList(pi,list,srcCard,inPump){
         else toast(`🂠 ${faceNameOf(host)} は非進化として場に残った（召喚酔いあり）`);
         renderAll();
       }
+    }else if(f.t==="bottomGravePlay"){
+      // 🂡 山札の一番下のカードを墓地に置く→それが条件に合うクリーチャーならバトルゾーンに出す（カツラデランス型）
+      //    「墓地に置く」が先に起きるので、墓地に置かれた時（toGrave）の誘発も正しく発火させる。
+      const filt=String(f.cond||"").trim();
+      snap();
+      const _played=[];
+      for(let k=0;k<n;k++){
+        if(!Z.deck.length){toast("🂡 山札がありません（一番下のカードを置けません）");break;}
+        const bot=Z.deck.pop();
+        bot.faceup=true;bot.seen=false;bot.tapped=false;bot.sideways=false;
+        Z.grave.push(bot);sfx("grave");renderAll();
+        toast(`🂡 山札の一番下：《${faceNameOf(bot)}》を墓地に置いた`);
+        await fireToGrave(pi,bot,"deck");
+        const rB=getReg(bot);
+        if(!rB||!isCreatureReg(rB)||(filt&&!lockFilterOk(filt,rB,bot))){
+          toast(`🂡 ${faceNameOf(bot)} は条件（${filt||"クリーチャー"}）に合わないため墓地に残る`);
+          continue;
+        }
+        if(isEvoReg(rB)&&!isNoBaseEvoReg(rB)){
+          toast(`⤴ ${faceNameOf(bot)} は進化クリーチャーです。墓地に残したので、重ねる場合は手動で処理してください`);
+          continue;
+        }
+        const gi=Z.grave.findIndex(x=>x.id===bot.id);
+        if(gi<0){toast(`🂡 ${faceNameOf(bot)} は墓地を離れているため出せない`);continue;}
+        if(!battleEntryOk(pi,bot)){toast(`⛔ ${faceNameOf(bot)} は出せないため墓地に残る`);continue;}
+        Z.grave.splice(gi,1);
+        bot.sick=(S.turn>0)&&!(rB&&rB.sa);
+        Z.battle.push(bot);markArrive(bot);_played.push(bot);
+        sfx("move");renderAll();
+        toast(`🂡 ${faceNameOf(bot)} は条件に合うためバトルゾーンへ！`);
+      }
+      // 🔁 全部出し終えてから「出た時」を順に処理（deckRecruitCore と同じ方針）
+      for(const cc of _played){
+        if(!Z.battle.find(x=>x.id===cc.id))continue;
+        LAST_ARRIVED=cc;emitEvent(pi,"summon");enqueueFx(pi,cc);
+      }
+      if(_played.length)await waitFxIdle(inPump);
+      renderAll();
     }else if(f.t==="deckSearch"){
       await deckRecruitCore(pi,String(f.cond||"").trim(),n,3,"探索",undefined,inPump);
     }else if(f.t==="graveRecruit"){
@@ -11035,6 +11077,31 @@ function zoneCountSimple(zn,filt,pi){
   const Z=zonesOf(pi);const arr=zoneCards(Z,zmap[zn]);
   if(!filt)return arr.length;
   return arr.filter(x=>{const rr=getReg(x);return (rr&&raceMatch(rr,filt))||String(x.name||"").includes(filt);}).length;
+}
+/* 🎨 侵略／革命チェンジの文明条件を文明キーの配列に直す。
+   「水または闇」「水｜闇」「水/闇」のような複数指定に対応し、旧形式（"water" 等の単一英字キー）もそのまま受ける。
+   空欄・解釈できない文字列は空配列＝文明不問。 */
+function invCivKeys(v){
+  const src=String(v||"").trim();
+  if(!src)return [];
+  const JA={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature","ゼロ":"zero","無色":"zero"};
+  const EN=new Set(["light","water","dark","fire","nature","zero"]);
+  const out=[];
+  for(let t of src.split(/または|｜|\||\/|／|、|,|\s+/)){
+    t=t.trim();
+    if(!t)continue;
+    t=t.replace(/文明$/,"").replace(/のクリーチャー$/,"");
+    const k=JA[t]||(EN.has(t.toLowerCase())?t.toLowerCase():null);
+    if(k&&!out.includes(k))out.push(k);
+  }
+  return out;
+}
+/* 🎨 文明キー配列 → 日本語表示（登録エディタの復元用） */
+function invCivLabel(v){
+  const JA={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};
+  const ks=invCivKeys(v);
+  if(!ks.length)return "";
+  return ks.map(k=>JA[k]||k).join("または");
 }
 function lockFilterOk(filt,r,c,lockPi,face){
   // ロック対象条件：「／」区切り＝すべて満たすものだけを禁止（AND）。「X以外」で否定（例：光以外）
@@ -12857,11 +12924,15 @@ function processBroken(op,stack,label){
       if(zone==="grave"){c.faceup=true;Z.grave.push(c);sfx("grave");wentGrave=true;logOnly(`${S.players[op].label}：ブレイクされた《${faceNameOf(c)}》を墓地へ置いた（S・バック/サバキZコスト等）`);}
       else if(zone==="resolve"){
         // 複数のS・トリガー呪文は解決中に積んでおき、パネル完了後に選んだ順で1枚ずつ解決（スタック式）
+        // 🃏 v10.56：ツインパクトは呪文面（下面）で唱える。faceを立てないと enqueueFx が上面（クリーチャー面）の効果を読んでしまう
+        {const rT=getReg(c);if(rT&&(rT.twin||rT.ctype==="twinpact"))c.face=1;}
         c.faceup=true;Z.resolve.push(c);markArrive(c);sfx("move");
         logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を唱えた（${stDefer.length+1}番目・パネル完了後に順番に解決）`);
         bumpEv("stTrig",op);
         stDefer.push({c,zone:"resolve"});
       }else if(zone==="battle"){
+        // 🃏 v10.56：ツインパクトはクリーチャー面（上面）で出す
+        {const rT=getReg(c);if(rT&&(rT.twin||rT.ctype==="twinpact"))c.face=0;}
         c.faceup=true;Z.battle.push(c);markArrive(c);sfx("move");
         const r=getReg(c);if(r&&(r.d2||r.wide))applyD2Rot(op,c);
         logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を出した（${stDefer.length+1}番目・出た時効果はパネル完了後）`);
@@ -13053,8 +13124,21 @@ function processBroken(op,stack,label){
             note.textContent="※ S・トリガーで唱える/出すカードは1枚ずつ選んでください（複数まとめては不可）";
             bar.appendChild(note);
           }else{
-            mk("S・トリガー：解決中へ","resolve");
-            mk("S・トリガー：バトルへ","battle");
+            // 🃏 v10.56：ツインパクトはS・トリガーを持つ面でしか受けに使えない。
+            //    stFace（1=上面のみ／2=下面のみ／3=両面）が分かっている札だけ面を制限し、
+            //    未登録・付与ST（stFace無し）は従来どおり両方を出す。
+            const cSel=selCards[0];
+            const rSel=getReg(cSel);
+            const twinSel=!!(rSel&&(rSel.twin||rSel.ctype==="twinpact"));
+            const sfSel=(twinSel&&rSel.st)?(rSel.stFace|0):0;
+            if(sfSel!==1)mk("S・トリガー：解決中へ"+(twinSel?"（下面・呪文）":""),"resolve");
+            if(sfSel!==2)mk("S・トリガー：バトルへ"+(twinSel?"（上面・クリーチャー）":""),"battle");
+            if(twinSel&&(sfSel===1||sfSel===2)){
+              const nt=document.createElement("div");
+              nt.style.cssText="font-size:11px;color:var(--muted);flex-basis:100%";
+              nt.textContent=`🃏 このツインパクトのS・トリガーは${sfSel===1?"上面（クリーチャー）":"下面（呪文）"}のみ：もう一方の面はS・トリガーでは使えません`;
+              bar.appendChild(nt);
+            }
           }
         }
         mk(multi?`${selCards.length}枚まとめて墓地へ`:"墓地へ（S・バック/サバキZコスト）","grave","warn");
@@ -14282,7 +14366,11 @@ async function execAttack(pi,id,tg){
     const condOk=r=>{
       if(!r.invCiv&&!r.invRace&&!r.invCost&&!r.invPow)return true;
       if(!aRegNow)return false;
-      if(r.invCiv&&!(aRegNow.civs&&aRegNow.civs.includes(r.invCiv)))return false;
+      // 🎨 「水または闇のクリーチャー」等の複数文明条件に対応（いずれか1つでも持っていればOK）
+      if(r.invCiv){
+        const need=invCivKeys(r.invCiv);
+        if(need.length&&!(aRegNow.civs&&need.some(k=>aRegNow.civs.includes(k))))return false;
+      }
       if(r.invRace&&!raceMatch(aRegNow,r.invRace))return false;
       if(r.invCost&&!(aRegNow.cost!=null&&aRegNow.cost>=r.invCost))return false;
       if(r.invPow&&!(aRegNow.power!=null&&+aRegNow.power>=r.invPow))return false;
@@ -16542,7 +16630,7 @@ function renderFxEditor(){
   $("fxStCrePT").value=FXEDIT.stCrePT||"";
   $("fxStPlayPT").value=FXEDIT.stPlayPT||"";
   $("fxStCrePTevo").checked=!!FXEDIT.stCrePTevo;
-  $("fxInvCiv").value=FXEDIT.invCiv||"";
+  $("fxInvCiv").value=invCivLabel(FXEDIT.invCiv);
   $("fxSymX").value=String(FXEDIT.symX||1);
   {const e=$("fxSymFace");if(e)e.value=String(FXEDIT.symFace||"");}
   $("fxPInvade").checked=!!FXEDIT.pInvade;
@@ -16905,6 +16993,27 @@ function extractEffects(text,mode){
   // 🔍 「山札の上から1枚目を表向きにする。それが〔種族〕ならマナゾーンに置き、それ以外なら山札の下に置く」
   {const mFT=textFx.match(/山札の上から(\d+)枚目?を表向きに(?:する|し)[\s\S]{0,12}?それが([ァ-ヶ一-龠ーヴ\u30fc・]{2,14})なら[\s\S]{0,8}?マナ(?:ゾーン)?に置き[\s\S]{0,24}?山札の下に置く/);
    if(mFT){fx.push({t:"flipTopMana",n:+mFT[1]||1,cond:mFT[2]});textFx=textFx.replace(mFT[0],"");}}
+  // 🂡 「自分の山札の一番下のカードを墓地に置く。それが〔条件〕なら、バトルゾーンに出す」（カツラデランス型）。
+  //    文をまたぐので節分割の前に全文から検出し、条件欄用の絞り込み文字列に組み立てる。
+  {const mBG=textFx.match(/(?:自分の)?山札の一番下の(?:カード|1枚)を墓地に置く[。、,\s]*(?:そして)?それが([^。■●]{0,50}?)なら[、,]?\s*(?:それを|その(?:カード|クリーチャー)を)?バトルゾーンに出す/);
+   if(mBG){
+     let body=String(mBG[1]||"").trim(),parts=[];
+     const mC=body.match(/コスト\s*(\d+)\s*(以下|以上)/);
+     if(mC){parts.push(`コスト${mC[1]}${mC[2]}`);body=body.replace(mC[0],"");}
+     const mP=body.match(/パワー\s*(\d+)\s*(以下|以上)/);
+     if(mP){parts.push(`パワー${mP[1]}${mP[2]}`);body=body.replace(mP[0],"");}
+     body=body.replace(/クリーチャー$/,"").replace(/^[のと・、\/／\s]+|[のと・、\/／\s]+$/g,"").trim();
+     if(body&&!/^カード$/.test(body))parts.push(body.replace(/・$/,""));
+     fx.push({t:"bottomGravePlay",n:1,cond:parts.join("／")});
+     textFx=textFx.replace(mBG[0],"");
+   }}
+  // 📝 連用形でつながった文（「カードを1枚引き、自分の手札を1枚捨てる」）を、節に分けられるよう終止形＋句点に直す。
+  //    ここから下は節ごとの解析なので、上の「文をまたぐ検出」には影響しない。
+  textFx=textFx
+    .replace(/引き、/g,"引く。")
+    .replace(/捨て、/g,"捨てる。")
+    .replace(/タップし、/g,"タップする。")
+    .replace(/アンタップし、/g,"アンタップする。");
   const clauses=textFx.split(/[■●。\n]/).map(x=>x.trim()).filter(x=>x.length>1);
   // 「使用可能マナは増えない」＝置いたマナはそのターン使えない＝タップして置く扱い
   const _noUsableMana=/使用可能(?:な)?マナ(?:は|が)?[^。]{0,6}(?:増えない|多くならない)/.test(text);
@@ -16939,6 +17048,13 @@ function extractEffects(text,mode){
      }else if(/引く/.test(cl)&&!/相手/.test(cl.split("引く")[0].slice(-8))){
       const n=numOf(cl,/(\d+)枚(?:を)?引く/); fx.push({t:"draw",n});
     }}
+    // 🗑 自分の手札を捨てる（「自分の手札を1枚捨てる」「カードを1枚捨てる」＝selfDiscard）。
+    //    相手に捨てさせる（handes/peepDiscard）や、コストとしての墓地送りとは区別する。
+    if(/捨てる/.test(cl)&&!/捨てさせ|させる/.test(cl)&&!/相手/.test(cl.split("捨てる")[0])
+       &&/自分の手札|手札を|カードを/.test(cl)&&!/山札|マナゾーン|シールド|墓地から/.test(cl)){
+      const mSD=cl.match(/(?:自分の)?(?:手札|カード)を?(\d+)枚(?:を)?(?:選ん[でだ])?捨てる/);
+      if(mSD)fx.push({t:"selfDiscard",n:+mSD[1]||1});
+    }
     // 🚫 一時的な呪文ロック：「次の…ターンまで（or このターン）相手は呪文を唱えられない」→ foeNoSpell（相手・次ターン終了まで）
     if(/相手は[^。■]*?呪文を(?:唱えられない|唱えることができない)/.test(cl)&&/次の[^。■]{0,12}ターン|このターン/.test(cl)){
       const mCo=cl.match(/コスト(\d+)(以下|以上)/);
@@ -17606,6 +17722,25 @@ function parseCardText(txt,mode){
    }}
   // 🚫 「S・トリガーは使えない」（ミルザム等・回収したカードのST禁止）は自身のS・トリガーではないので誤検出を打ち消す
   if(out.set.st&&/S・?トリガー[」』]?は?使えない/.test(tSelf)&&!/[■●]\s*S・?トリガー(?![はを])/.test(tSelf)&&!/S・?トリガー」?を与える/.test(tSelf))delete out.set.st;
+  // ♻ 「革命チェンジ：水または闇のクリーチャー」「侵略：火のコマンド」等の条件を自動で読み取る
+  if(out.set.kakumei||out.set.pKakumei||out.set.invade){
+    const mCh=tSelf.match(/(?:[PＰ]?革命チェンジ|侵略)\s*[：:]\s*([^\n。■●]+)/);
+    if(mCh){
+      let body=mCh[1].trim();
+      const mC=body.match(/コスト\s*(\d+)\s*以上/);if(mC){out.set.invCost=+mC[1];body=body.replace(mC[0],"");}
+      const mP=body.match(/パワー\s*(\d+)\s*以上/);if(mP){out.set.invPow=+mP[1];body=body.replace(mP[0],"");}
+      const civRe=/(光|水|闇|火|自然)(?:文明)?(?=(?:または|又は|・|、|\/|／|の|$))/g;
+      const civs=[];let m2;
+      while((m2=civRe.exec(body))!==null)if(!civs.includes(m2[1]))civs.push(m2[1]);
+      if(civs.length)out.set.invCiv=civs.join("または");
+      const rest=body.replace(civRe,"").replace(/または|又は|文明/g,"")
+        .replace(/^[のと・、\/／\s]+/,"").replace(/クリーチャー$/,"")
+        .replace(/^[のと・、\/／\s]+|[のと・、\/／\s]+$/g,"").trim();
+      if(rest&&!/^(カード|エレメント)$/.test(rest))out.set.invRace=rest;
+      const lbl=[civs.length?civs.join("または"):"",out.set.invRace||"",mC?`コスト${mC[1]}以上`:"",mP?`パワー${mP[1]}以上`:""].filter(Boolean).join("・");
+      if(lbl)out.notes.push({msg:`♻ チェンジ/侵略の条件「${lbl}」を読み取りました（登録欄の文明・種族・コスト欄に入っています）`,q:"条件"});
+    }
+  }
   // P革命チェンジ検出時は通常革命チェンジフラグを外す（超次元からの誘発と混同しないため）
   if(out.set.pKakumei)delete out.set.kakumei;
   // ⚖ オリオティス・ジャッジ型：「各プレイヤーは、自身の最大マナ以上のコストを持つクリーチャーをすべて、ランダムな順番で自身の山札の一番下に置く」
@@ -18002,6 +18137,20 @@ function parseCardText(txt,mode){
         out.fx.push(...efs);
         tForFx=tForFx.replace(mm[0],"■");
         out.notes.push({msg:"🪧「召喚によって出た時」の効果として登録しました（召喚時のみ・実行時に出た方法を確認）",q:"召喚"});
+      }
+    }
+  }
+  // ☄ 「バトルゾーンに出た時または離れた時、〔効果〕」→ 出た時＋離れた時（selfLeave）の両方に登録（ノロン型）
+  {
+    const mm=tForFx.match(/(?:^|[■●])\s*バトルゾーンに出た時[、,]?または(?:バトルゾーンを)?離れた時[、,]?([^■●]+?)(?=[■●]|$)/);
+    if(mm){
+      const efs=extractEffects(mm[1],mode);
+      if(efs.length){
+        out.set.watchFx=(out.set.watchFx||[]);
+        for(const f of efs)out.set.watchFx.push({ev:"selfLeave",t:f.t,n:f.n||1,cond:f.cond||""});
+        out.fx.push(...efs);
+        tForFx=tForFx.replace(mm[0],"■");
+        out.notes.push({msg:"☄「出た時または離れた時」→ 出た時の効果と、離れた時の誘発の両方に登録しました",q:"誘発"});
       }
     }
   }
@@ -18949,7 +19098,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stLockBoth:$("fxStLockBoth")?$("fxStLockBoth").checked:false,
     stLockPsy:$("fxStLockPsy")?$("fxStLockPsy").checked:false,
     stLockCreF:$("fxStLockCreF").value.trim(),
-    invCiv:$("fxInvCiv").value||"",
+    invCiv:invCivLabel($("fxInvCiv").value),
     symX:+$("fxSymX").value||1,
     symFace:$("fxSymFace")?String($("fxSymFace").value||""):"",
     pInvade:$("fxPInvade").checked,
