@@ -3455,7 +3455,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.62";
+const APP_VER="v10.63";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6932,6 +6932,7 @@ const FX_TYPES=[
   ["deckTopPlay","🎴 山札の上からn枚を見て（めくって）、その中の条件に合うクリーチャーを出す→残りをランダムに山札の下（探索と違い外れることもある・条件欄で対象＋『最大3』等で出す上限指定・ヘブンズ・キリコ型）"],
   ["bottomGravePlay","🂡 自分の山札の一番下のカードをn枚 墓地に置く。それが条件に合うクリーチャーなら、バトルゾーンに出す（カツラデランス型／条件欄＝例：コスト7以下／ジョーカーズ）"],
   ["destroySumPow","💥 相手のクリーチャーを、パワーの合計がn以下になるように好きな数選び、破壊する（スクラッパーレッド型／条件欄で対象をさらに絞れる）"],
+  ["selfManaThenFoeMana","🍃 このクリーチャーを自分のマナゾーンに置いてもよい。そうした場合、相手のクリーチャーn体をマナゾーンに置く（エリカッチュ型／条件欄＝例：タップ中／どちらもタップして置くので使用可能マナは増えない）"],
   ["deckSearch","🔎 山札から条件に合うカードをn体バトルゾーンへ（探索踏み倒し・3種提示のランダム・条件欄で対象を指定）→山札シャッフル"],
   ["graveRecruit","⚰ 墓地から条件に合うクリーチャーをn体バトルゾーンへ（蘇生・条件欄で対象を指定）"],
   ["handRecruit","✋ 手札から条件に合うクリーチャーをn体バトルゾーンへ（踏み倒し・条件欄で対象を指定）"],
@@ -7935,6 +7936,7 @@ const MODE_FX_ALIAS={
   "相手墓地山札":"foeGraveTopCostToDeck","相手墓地リセット":"foeGraveTopCostToDeck",
   "相手盾マナ送り":"foeShieldToMana","相手シールドマナ":"foeShieldToMana","盾マナ送り":"foeShieldToMana",
   "パワー合計破壊":"destroySumPow","合計破壊":"destroySumPow","スクラッパー":"destroySumPow",
+  "自分マナ送りして相手マナ送り":"selfManaThenFoeMana","エリカッチュ":"selfManaThenFoeMana",
   "山下踏み倒し":"bottomGravePlay","一番下":"bottomGravePlay",
 };
 // 逆引き：モード@記法の自動出力に使う日本語名（内部名を画面に出さない）
@@ -8197,7 +8199,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🔧 条件欄を「対象の絞り込み／書式」として使う効果の一覧。
    これらの効果ではcondをゾーン条件式（マナ>=3など）として判定してはいけない。
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
-const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
+const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","selfManaThenFoeMana","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
@@ -10622,6 +10624,53 @@ async function runFxList(pi,list,srcCard,inPump){
         else toast(`🂠 ${faceNameOf(host)} は非進化として場に残った（召喚酔いあり）`);
         renderAll();
       }
+    }else if(f.t==="selfManaThenFoeMana"){
+      // 🍃 エリカッチュ型：このクリーチャーをマナゾーンに置いてもよい。そうした場合だけ、相手のクリーチャーをマナゾーンに置く。
+      //    「使用可能マナは増えない」ので、置かれたカードは両方ともタップして置く。
+      if(!srcCard){toast("🍃 対象カードが特定できないためスキップしました");continue;}
+      const Zs=zonesOf(pi);
+      const bi=Zs.battle.findIndex(x=>x.id===srcCard.id);
+      if(bi<0){toast("🍃 このクリーチャーはすでにバトルゾーンにいません");continue;}
+      const yesSelf=await ask(`🍃 ${faceNameOf(srcCard)} を自分のマナゾーンに置きますか？\n（置いた場合だけ、相手のクリーチャーをマナゾーンに置けます・タップして置くので使用可能マナは増えません）`);
+      if(!yesSelf){toast("🍃 マナゾーンに置かなかったので、相手への効果は発生しません");renderAll();continue;}
+      if(await offerTrueEscape(pi,Zs.battle[bi])){renderAll();continue;}
+      snap();
+      const bi2=Zs.battle.findIndex(x=>x.id===srcCard.id);
+      if(bi2<0){toast("🍃 このクリーチャーはすでにバトルゾーンにいません");renderAll();continue;}
+      const mv=Zs.battle.splice(bi2,1)[0];
+      const _um=(mv.under&&mv.under.length)?mv.under.splice(0):[];
+      if(mv.gear&&mv.gear.length){mv.gear.splice(0).forEach(gg=>gearOut(Zs,gg));}
+      mv.sideways=false;mv.rot=0;mv.buff=null;mv.seals=[];mv.faceup=true;mv.mark=false;
+      mv.tapped=true;                       // 💠 使用可能マナは増えない＝タップして置く
+      Zs.mana.push(mv);
+      _um.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];Zs.grave.push(u);});
+      sfx("move");renderAll();
+      toast(`🍃 ${faceNameOf(mv)} を自分のマナゾーンへ（タップして置いた）`);
+      if(!S.vs){toast("（ソロのため相手への効果はスキップ）");renderAll();continue;}
+      const OZ3=zonesOf(op);
+      const filt=String(f.cond||"").trim();
+      for(let i=0;i<n;i++){
+        let pool=OZ3.battle.filter(x=>isCreatureReg(getReg(x)));
+        if(filt)pool=pool.filter(x=>lockFilterOk(filt,getReg(x),x));
+        pool=pool.filter(x=>{const rx=getReg(x);return !(((rx&&rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,op));});
+        if(!pool.length){toast(`🍃 対象の相手クリーチャーがいません${filt?`（${filt}）`:""}`);break;}
+        const j=await pickCard(`🍃 マナゾーンに置く相手のクリーチャーを選択${filt?`（${filt}）`:""}（${i+1}/${n}体目）`,pool,{sub:x=>x.tapped?"タップ":"アンタップ"});
+        if(j===null)break;
+        const tgt=pool[j];
+        if(await offerTrueEscape(op,tgt)){renderAll();continue;}
+        const idx=OZ3.battle.findIndex(x=>x.id===tgt.id);
+        if(idx<0)continue;
+        const removed=OZ3.battle.splice(idx,1)[0];
+        const _um2=(removed.under&&removed.under.length)?removed.under.splice(0):[];
+        if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>gearOut(OZ3,gg));}
+        removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;removed.mark=false;
+        removed.tapped=true;                // 💠 こちらもタップして置く
+        OZ3.mana.push(removed);
+        _um2.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];OZ3.grave.push(u);});
+        sfx("move");renderAll();
+        toast(`🍃 ${faceNameOf(removed)} を相手のマナゾーンへ（タップして置いた）`);
+      }
+      renderAll();
     }else if(f.t==="destroySumPow"){
       // 💥 パワーの合計がn以下になるように好きな数選んで破壊（スクラッパーレッド型）。
       //    残り予算より大きいクリーチャーは選択肢に出さない。キャンセルでそこまでの選択を実行。
@@ -11241,6 +11290,9 @@ function lockFilterOk(filt,r,c,lockPi,face){
     if(mC){const cv=rCost;if(cv==null)return false;return mC[2]==="以下"?cv<=+mC[1]:cv>=+mC[1];}
     const mP=tk.match(/^パワー(\d+)(以下|以上)$/);
     if(mP){const pv=r&&r.power!=null?+r.power:null;if(pv==null)return false;return mP[2]==="以下"?pv<=+mP[1]:pv>=+mP[1];}
+    // 🔄 タップ状態で絞る（エリカッチュ型「相手のタップしているクリーチャー」など）。盤面のカードにだけ意味がある。
+    if(tk==="タップ中"||tk==="タップしている"||tk==="タップ")return !!(c&&c.tapped);
+    if(tk==="アンタップ中"||tk==="アンタップしている"||tk==="アンタップ")return !!(c&&!c.tapped);
     if(tk==="多色")return !!(r&&r.civs&&r.civs.length>=2);
     if(tk==="単色")return !!(r&&r.civs&&r.civs.length===1&&r.civs[0]!=="zero");
     if(tk==="無色")return !!(r&&r.civs&&r.civs.includes("zero"));
@@ -17087,6 +17139,21 @@ function extractEffects(text,mode){
   // 🔍 「山札の上から1枚目を表向きにする。それが〔種族〕ならマナゾーンに置き、それ以外なら山札の下に置く」
   {const mFT=textFx.match(/山札の上から(\d+)枚目?を表向きに(?:する|し)[\s\S]{0,12}?それが([ァ-ヶ一-龠ーヴ\u30fc・]{2,14})なら[\s\S]{0,8}?マナ(?:ゾーン)?に置き[\s\S]{0,24}?山札の下に置く/);
    if(mFT){fx.push({t:"flipTopMana",n:+mFT[1]||1,cond:mFT[2]});textFx=textFx.replace(mFT[0],"");}}
+  // 🍃 「このクリーチャーをマナゾーンに置いてもよい。そうした場合、相手の〔条件〕クリーチャーn体をマナゾーンに置く」（エリカッチュ型）。
+  //    文をまたぐので節分割の前に全文から検出する。「タップしている」などの絞り込みは条件欄に入れる。
+  {const mEK=textFx.match(/この(?:クリーチャー|カード)を(?:自分の)?マナ(?:ゾーン)?に置いてもよい[。、,\s]*(?:そう(?:した|する)場合[、,]?)?\s*相手の([^。■●]{0,24}?)クリーチャー(?:を)?\s*([0-9０-９]+|1)?\s*体(?:を)?[^。■●]{0,12}?マナ(?:ゾーン)?に置く/);
+   if(mEK){
+     const _z=x=>String(x||"").replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0));
+     const num=parseInt(_z(mEK[2]||"1"),10)||1;
+     let body=String(mEK[1]||"").trim().replace(/^[のと・、\/／\s]+|[のと・、\/／\s]+$/g,"");
+     const parts=[];
+     if(/タップしている|タップ中/.test(body)){parts.push("タップ中");body=body.replace(/タップしている|タップ中/g,"");}
+     if(/アンタップしている|アンタップ中/.test(body)){parts.push("アンタップ中");body=body.replace(/アンタップしている|アンタップ中/g,"");}
+     body=body.replace(/^[のと・、\/／\s]+|[のと・、\/／\s]+$/g,"").trim();
+     if(body)parts.push(body);
+     fx.push({t:"selfManaThenFoeMana",n:num,cond:parts.join("／")});
+     textFx=textFx.replace(mEK[0],"");
+   }}
   // 🂡 「自分の山札の一番下のカードを墓地に置く。それが〔条件〕なら、バトルゾーンに出す」（カツラデランス型）。
   //    文をまたぐので節分割の前に全文から検出し、条件欄用の絞り込み文字列に組み立てる。
   {const mBG=textFx.match(/(?:自分の)?山札の一番下の(?:カード|1枚)を墓地に置く[。、,\s]*(?:そして)?それが([^。■●]{0,50}?)なら[、,]?\s*(?:それを|その(?:カード|クリーチャー)を)?バトルゾーンに出す/);
