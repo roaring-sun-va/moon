@@ -3455,7 +3455,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.63";
+const APP_VER="v10.64";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -22833,12 +22833,17 @@ function renderPlayer(pi){
   $(`cHand-${pi}`).textContent=Z.hand.length;
   // 🎨 マナゾーンの文明内訳：どの文明がどれだけあるか（使用可＝アンタップ／括弧内＝タップ中も含む合計）を色付きで表示
   {
-    // 💠 文明の内訳は既定ではマナ山の円グラフに出すので、見出しは短く保つ（スマホでゾーンが横に広がらないように）
+    // 💠 見出しは短く保つ（長いとスマホで折り返してマナゾーンの背が高くなる）。
+    //    コンパクト表示ではマナ山の丸が「使用可/合計」を出しているので、見出しでは繰り返さない。
     const zero=Z.mana.filter(mc=>manaValOf(mc)===0).length;
     const view=S.manaCivView||"pie";
-    $(`manaFree-${pi}`).innerHTML=`使用可 ${manaSumOf(pi,true)}マナ`
+    const compact=(S.manaMode==="compact");
+    const el=$(`manaFree-${pi}`);
+    el.style.whiteSpace="nowrap";
+    el.title=`使用可 ${manaSumOf(pi,true)}マナ／全 ${manaSumOf(pi,false)}マナ・${Z.mana.length}枚${zero?`（0マナ${zero}枚）`:""}`;
+    el.innerHTML=(compact?"":`使用可 ${manaSumOf(pi,true)}マナ`)
       +(view==="chips"?manaCivChips(pi):"")
-      +(zero?`<span style="opacity:.7;margin-left:3px">0マナ${zero}枚</span>`:"");
+      +(zero?`<span style="opacity:.7;margin-left:3px">0マナ${zero}</span>`:"");
   }
   $(`sysinfo-${pi}`).textContent=`盾${Z.shield.length}`;
   const peekBtn=document.querySelector(`.zbtn[data-pi="1"][data-act="peek"]`);
@@ -28202,9 +28207,13 @@ function renderManaViewer(pi){
   const untap=manaSumOf(pi,true);
   const zeroN=Z.mana.filter(c=>manaValOf(c)===0).length;
   $("vTitle").textContent=`マナゾーン（使用可 ${untap} / 全 ${manaSumOf(pi,false)}マナ・${Z.mana.length}枚${zeroN?`／うち0マナ${zeroN}枚`:""}）　[${S.players[pi].label}]`;
-  $("vHint").textContent=MV_MENU?"☰メニューモード中：カードをタップすると操作メニュー（回収・移動・確認など）が開きます":"カードをタップ→タップ/アンタップ ／「☰メニュー」でタップ＝操作メニューに切替 ／ 横にドラッグで他ゾーンへ移動";
+  $("vHint").textContent=S.multi
+    ?`☑ 複数選択中（このゾーン ${S.msel.filter(x=>x.p===pi&&x.zone==="mana").length}枚）：カードをタップで選択・解除。下部バーの「操作」でまとめて処理できます`
+    :(MV_MENU?"☰メニューモード中：カードをタップすると操作メニュー（回収・移動・確認など）が開きます":"カードをタップ→タップ/アンタップ ／「☑複数選択」で1枚ずつ選択 ／「☰メニュー」でタップ＝操作メニューに切替 ／ 横にドラッグで他ゾーンへ移動");
   $("vSearch").style.display="none";
-  $("vOk").style.display="none";$("vStatus").textContent="";
+  $("vOk").style.display="none";
+  {const _mn=S.msel.filter(x=>x.p===pi&&x.zone==="mana").length;
+   $("vStatus").textContent=_mn?`☑ ${_mn}枚 選択中`:"";}
   const g=$("vGrid");g.innerHTML="";
   const bar=document.createElement("div");
   bar.style.cssText="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px";
@@ -28214,7 +28223,15 @@ function renderManaViewer(pi){
   mkb("全U",()=>{snap();Z.mana.forEach(c=>c.tapped=false);sfx("move");renderAll();renderManaViewer(pi);});
   mkb(S.noUntapMana?"自動U:OFF":"自動U:ON",()=>{S.noUntapMana=!S.noUntapMana;if(db)idbPut("misc","noUntapMana",S.noUntapMana);toast(S.noUntapMana?"ターン開始時のマナ自動アンタップ：OFF":"ターン開始時のマナ自動アンタップ：ON");renderAll();renderManaViewer(pi);});
   mkb("山上→マナ",()=>{if(!Z.deck.length){toast("山札がありません");return;}snap();const c=Z.deck.shift();c.faceup=true;c.sideways=false;const tp=manaTapIn(c);Z.mana.push(c);markArrive(c);sfx("move");renderAll();renderManaViewer(pi);toast(tp?`マナチャージ（多色・タップイン）：${c.name}`:`マナチャージ：${c.name}`);});
+  // ☑ マナパネルの中でも1枚ずつ選べるように、パネル専用の複数選択トグルを置く
+  mkb(S.multi?"☑複数選択:ON":"☑複数選択",()=>{
+    S.multi=!S.multi;
+    if(!S.multi)S.msel=S.msel.filter(x=>!(x.p===pi&&x.zone==="mana"));
+    renderAll();renderManaViewer(pi);
+    toast(S.multi?"☑ 複数選択：カードをタップで選択・解除できます（下部バーの「操作」でまとめて処理）":"複数選択を解除しました（タップ＝タップ/アンタップに戻ります）");
+  });
   mkb("全選択",()=>{if(!Z.mana.length){toast("カードがありません");return;}S.multi=true;S.msel=Z.mana.map(c=>({p:pi,zone:"mana",id:c.id}));renderAll();renderManaViewer(pi);toast("選択しました。下部バーの「操作」から一括処理できます");});
+  mkb("選択解除",()=>{S.msel=S.msel.filter(x=>!(x.p===pi&&x.zone==="mana"));renderAll();renderManaViewer(pi);toast("マナの選択を解除しました");});
   g.appendChild(bar);
   // 🎨 文明の内訳をパネル上部にも出す（どの文明がいくつ使えるか一目で分かるように）
   {
@@ -28264,6 +28281,14 @@ function renderManaViewer(pi){
       }
     }
     attachPointer(el,{p:pi,zone:"mana",id:c.id,viewer:true,tap:()=>{
+      // ☑ 複数選択モード：タップで選択・解除（タップ/アンタップや操作メニューより優先）
+      if(S.multi){
+        const k=S.msel.findIndex(x=>x.p===pi&&x.zone==="mana"&&x.id===c.id);
+        if(k>=0)S.msel.splice(k,1);
+        else S.msel.push({p:pi,zone:"mana",id:c.id});
+        sfx("tap");renderAll();renderManaViewer(pi);
+        return;
+      }
       if(MV_MENU){
         // ☰メニューモード：タップでこのカードの操作メニューを開く（回収・移動・確認など）
         $("viewerOlay").classList.remove("open");
