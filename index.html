@@ -1932,6 +1932,19 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxGrantDS"> 場にある間、手札の自分のクリーチャー全てに自身のシンパシーを付与（ゲイル・ヴェスパー型・複数で重複）</label>
         <div style="flex:1 1 100%;font-size:12px;font-weight:900;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:2px;margin-top:6px">常在効果（場にある間）</div>
         <label><input type="checkbox" id="fxStManaTap"> 相手のマナはタップして置かれる</label>
+        <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
+          <span style="font-size:12px;font-weight:700;color:#a78bfa">🔄 覚醒（自動で裏返る）</span>
+          <select id="fxAwakenEv" style="font-size:12px">
+            <option value="">（覚醒しない）</option>
+            <option value="turnStartMine">自分のターンの開始時</option>
+            <option value="turnStartAny">各ターンの開始時</option>
+            <option value="turnEndMine">自分のターンの終わりに</option>
+            <option value="turnEndOpp">相手のターンの終わりに</option>
+            <option value="turnEndAny">各ターンの終わりに</option>
+            <option value="selfAtkEnd">このクリーチャーの攻撃の終わりに</option>
+          </select>
+          <input type="text" id="fxAwakenCond" placeholder="条件式（例：バトル:パワー6000以上>=1・空欄=無条件）" title="このタイミングで条件を満たしていれば、多面登録の次の面に自動で裏返ります" style="flex:1;min-width:200px">
+        </div>
         <label title="このカード自身をマナゾーンに置く時、タップして置きます（多色カードや、テキストに『マナゾーンに置く時、このカードはタップして置く』とあるカード）"><input type="checkbox" id="fxManaTapInSelf"> ⤵ このカードはマナゾーンにタップして置く（自分自身）</label>
         <label><input type="checkbox" id="fxStAllSA"> 自分のクリーチャー全てスピードアタッカー</label>
         <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;flex:1 1 100%">
@@ -1977,6 +1990,17 @@ body.shake{animation:bodyShake .4s ease-out}
           <span style="font-size:12px;font-weight:700">常在ロック</span>
           <label><input type="checkbox" id="fxStLockSpell"> 相手は呪文を唱えられない</label>
         <label title="このカードが場にある間、どちらのプレイヤーも山札の探索（山札を見る操作）ができなくなります（巡霊者メスタポ型）"><input type="checkbox" id="fxStNoDeckPeek"> 👁 誰も山札を見ることはできない（メスタポ型）</label>
+        <label title="相手の呪文や相手のクリーチャーの能力で、自分のサイキック・クリーチャーが手札に戻される時、かわりにバトルゾーンにとどまります（時空の喧嘩屋キル型）"><input type="checkbox" id="fxRepPsyStay"> ↩ 自分のサイキックは相手の効果で手札に戻らない（キル型）</label>
+        <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
+          <label title="このカードが場にある間、条件に合う自分のクリーチャーは相手から攻撃されなくなります（アクア・アタック型）"><input type="checkbox" id="fxAGNoAtked"> 🛡 常在：自分の〔対象〕は攻撃されない</label>
+          <input type="text" id="fxAGFilt" list="raceList" placeholder="対象（例：水／ハンター・空欄＝すべて）" style="flex:1;min-width:170px">
+          <label title="上の常在付与を「自分の“他の”クリーチャー」に限定します（付与元自身は対象外）"><input type="checkbox" id="fxAGOthers"> 自分の“他の”に限定</label>
+        </div>
+        <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
+          <span style="font-size:12px;font-weight:700;color:#67e8f9">⚙ クロスギアの制限（ノーブル・エンフォーサー型）</span>
+          <input type="text" id="fxGearUncrossLock" placeholder="クロスされていない時、攻撃もブロックもできない対象（例：パワー2000以下）" title="このクロスギアがどのクリーチャーにもクロスされていない時、条件に合うクリーチャーは攻撃もブロックもできません（両プレイヤーが対象）" style="flex:1;min-width:220px">
+          <input type="text" id="fxGearNoAtkedBy" placeholder="クロスしたクリーチャーが攻撃・ブロックされない相手（例：パワー2000以下）" title="このクロスギアをクロスしたクリーチャーは、条件に合うクリーチャーから攻撃もブロックもされません" style="flex:1;min-width:220px">
+        </div>
         <label title="各プレイヤーは、自身の墓地にある呪文と同じ文明を持つ呪文を唱えられません（超電磁マクスウェル Z 型）"><input type="checkbox" id="fxStGraveCivSpellLock"> 🔒 自身の墓地の呪文と同じ文明の呪文を唱えられない（マクスウェル Z 型）</label>
           <input type="text" id="fxStLockSpellF" placeholder="対象条件（例：光以外／コスト5以下・「／」＝すべて満たす呪文のみ禁止・空欄＝全て）" style="flex:1;min-width:170px">
           <label><input type="checkbox" id="fxStLockCre"> 相手はクリーチャーを出せない</label>
@@ -3474,7 +3498,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.71";
+const APP_VER="v10.72";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -3962,6 +3986,44 @@ function deckPeekLocked(){
   }catch(e){}
   return null;
 }
+/* 🔄 覚醒の自動判定。
+   awakenEv＝判定するタイミング（turnStartMine／turnStartAny／turnEndMine／turnEndOpp／turnEndAny／selfAtkEnd 等）
+   awakenCond＝条件式（空欄なら無条件で裏返る）。表の面（face=0）でだけ判定する。 */
+async function checkAwaken(pi,ev){
+  try{
+    if(!S.expert)return;
+    const want=[ev];
+    if(ev==="turnStartMine")want.push("turnStartAny");
+    if(ev==="turnEndMine"||ev==="turnEndOpp")want.push("turnEndAny");
+    const sides=(ev==="turnStartMine")?[pi,(pi===0?1:0)]:[pi];
+    for(const side of sides){
+      const Zs=zonesOf(side);
+      if(!Zs||!Zs.battle)continue;
+      for(const c of [...Zs.battle]){
+        const r=getReg(c);
+        if(!r||!r.awakenEv)continue;
+        // 「自分のターン開始時」は持ち主のターンだけ、「各ターンの開始時」は誰のターンでも
+        if(r.awakenEv==="turnStartMine"&&side!==pi)continue;
+        if(!want.includes(r.awakenEv))continue;
+        if((c.face|0)!==0)continue;                 // すでに覚醒済み
+        if(isSealed(c)||isIgnored(c,side))continue;
+        const lk=LINKS.get(normName(c.name));
+        if(!lk||lk.length<2)continue;
+        const cond=String(r.awakenCond||"").trim();
+        if(cond&&!zoneCondOk(cond,side,c))continue;
+        if(!Zs.battle.some(x=>x.id===c.id))continue;
+        snap();
+        c.face=1;c.tapped=false;
+        markArrive(c);
+        sfx("flip");renderAll();
+        toast(`🔄 覚醒！ ${faceNameOf(c)}${cond?`（条件：${cond}）`:""}`);
+        logOnly(`🔄 覚醒：${S.players[side].label} の《${lk[0]}》が《${faceNameOf(c)}》に裏返った${cond?`（${cond}）`:""}`);
+        emitEvent(side,"summon");
+        enqueueFx(side,c);
+      }
+    }
+  }catch(e){}
+}
 function markBuffTurn(c,keys){
   if(!c.buff)c.buff={};
   c.buff._t=c.buff._t||[];
@@ -4038,6 +4100,22 @@ function markBuffNext(c,keys,owner){
 }
 /* ♾ フォーエバー・プリンセス型置換：カードcが所有者ownerの墓地に置かれる時、
    かわりに このカード＋ownerの墓地を山札に加えてシャッフルする。処理したらtrue（＝墓地には置かない）。 */
+/* ↩ 「相手の呪文またはクリーチャーの能力で自分のサイキックが手札に戻される時、かわりにバトルゾーンにとどまる」
+   （時空の喧嘩屋キル／巨人の覚醒者セツダン型）。戻される側の持ち主から見て、場に置換持ちがいれば true。 */
+function psyStayRepApply(c,owner,byFoe){
+  try{
+    if(!S.expert)return false;
+    if(!byFoe)return false;
+    const r=getReg(c);
+    if(!r||!(r.ctype==="psychic"||r.ctype==="psyevo"||c.isPsy))return false;
+    const src=zonesOf(owner).battle.find(x=>{const rx=getReg(x);
+      return rx&&rx.repPsyStay&&!isSealed(x)&&!isIgnored(x,owner);});
+    if(!src)return false;
+    toast(`↩ ${faceNameOf(src)}：${faceNameOf(c)} は手札に戻らずバトルゾーンにとどまる`);
+    logOnly(`↩ ${faceNameOf(src)} の効果により、${faceNameOf(c)} は手札に戻らずバトルゾーンにとどまった`);
+    return true;
+  }catch(e){return false;}
+}
 function graveShuffleRepApply(c,owner){
   if(!S.expert)return false;
   const r=getReg(c);
@@ -5207,6 +5285,9 @@ async function runTurnEndTriggers(cur2){
       const isMine=pi2===cur2;
       runWatchFxCond(pi2,(ev)=>ev==="turnEndBoth"||(isMine&&ev==="turnEndMine")||(!isMine&&ev==="turnEndOpp"));
     }
+    for(const pi2 of (S.vs?[0,1]:[0])){       // 🔄 覚醒（ターン終了時）
+      await checkAwaken(pi2,pi2===cur2?"turnEndMine":"turnEndOpp");
+    }
     // 誘発ジョブ（WATCH_CHAIN）と効果パネルの完了を待ってから次の終了時処理へ
     TURN_END_PHASE="⚡ターン終了時誘発の完了待ち（開いている効果パネルを完了してください）";
     await WATCH_CHAIN;
@@ -5534,6 +5615,7 @@ async function finishNextTurn(cur){
         renderAll();
       })();
     }
+    await checkAwaken(pi,"turnStartMine");   // 🔄 覚醒（ターン開始時）
     // 🪦 ドレッド・ブラッド型：自分のターン開始時、墓地にあるこのカードは、自分のクリーチャーn体を破壊して墓地から出せる（任意）
     const gRev=Z.grave.filter(c=>{const r=getReg(c);return r&&(+r.graveReviveN>0);});
     if(gRev.length){
@@ -7160,9 +7242,13 @@ const FX_TYPES=[
   ["hoganBlaster","🎰 自分の山札をシャッフルし、上から1枚を表向きにする。クリーチャーならバトルゾーンに出し、呪文ならコストを支払わずに唱える（どちらでもなければ手札へ・ホーガン・ブラスター型／条件欄で対象を絞れる）"],
   ["dartsHandes","🎯 数字をひとつ選び、相手の手札をランダムにn枚捨てさせる。捨てたカードのコストが選んだ数と同じなら、カードを1枚引く（アンラッキーダーツ型）"],
   ["anyToShield","🛡 クリーチャーをn体選び、持ち主の裏向きの新しいシールドにする（自分・相手どちらでも選べる／条件欄＝例：進化以外・魂と記憶の盾型）"],
+  ["myManaRecruit","🌱 自分のマナゾーンから条件に合うクリーチャーをn体選び、バトルゾーンに出す（条件欄＝例：進化以外・獰猛なる大地型）"],
+  ["slotReveal","🎰 自分の山札の上からn枚を表向きにし、その中からクリーチャー・呪文・クロスギア・城を1枚ずつ手札に加えてもよい。残りはランダムな順番で山札の一番下へ（フォーチュン・スロット型）"],
+  ["chargeBuffIfCre","🌱 自分の山札の上から1枚目をマナゾーンに置く。そのカードがクリーチャーなら、このターン、自分のクリーチャーすべてのパワーが+n（鼓動する石版型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
 const FX_NO_N=new Set(["turnEndUntapAll","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","hoganBlaster"]);
+/* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
@@ -7254,6 +7340,56 @@ async function showCardInfo(key){
     $("builderOlay").classList.remove("open");
     openFxEditor(nk);
   }
+}
+/* 🛡 常在で「攻撃されない」を与えられているか。
+   agNoAtked を持つカードが同じ場にあり、agFilt（対象条件）に合えば攻撃対象にできない。
+   さらに、クロスギアが自分にクロスされている場合の gearNoAtkedBy（相手側の条件）も見る。 */
+function noAtkedGrant(owner,t,rt){
+  try{
+    if(!S.expert)return false;
+    return zonesOf(owner).battle.some(b=>{
+      const rb=getReg(b);
+      if(!rb||!rb.agNoAtked)return false;
+      if(isSealed(b)||isIgnored(b,owner))return false;
+      if(rb.agOthers&&b.id===t.id)return false;
+      if(rb.agFilt&&!lockFilterOk(rb.agFilt,rt,t))return false;
+      return true;
+    });
+  }catch(e){return false;}
+}
+/* ⚙ 「これをクロスしたクリーチャーは、〔条件〕のクリーチャーに攻撃またはブロックされない」（ノーブル・エンフォーサー型）
+   attacker＝攻撃/ブロックしようとしている側のカード。条件に合えば false（できない）を返す。 */
+function gearProtectsFrom(t,attacker){
+  try{
+    if(!S.expert||!t||!attacker)return false;
+    if(!t.gear||!t.gear.length)return false;
+    const ra=getReg(attacker);
+    return t.gear.some(g=>{
+      const rg=getReg(g);
+      if(!rg||!rg.gearNoAtkedBy)return false;
+      return lockFilterOk(rg.gearNoAtkedBy,ra,attacker);
+    });
+  }catch(e){return false;}
+}
+/* ⚙ 「このカードがどのクリーチャーにもクロスされていない時、〔条件〕のクリーチャーは攻撃もブロックもできない」 */
+function uncrossedGearLock(c){
+  try{
+    if(!S.expert||!c)return null;
+    const rc=getReg(c);
+    for(const side of [0,1]){
+      const Zs=zonesOf(side);
+      if(!Zs||!Zs.battle)continue;
+      const hit=Zs.battle.find(g=>{
+        const rg=getReg(g);
+        if(!rg||!rg.gearUncrossLock)return false;
+        if(g.isCross)return false;                 // クロス中なら効果は働かない
+        if(isSealed(g)||isIgnored(g,side))return false;
+        return lockFilterOk(rg.gearUncrossLock,rc,c);
+      });
+      if(hit)return hit;
+    }
+  }catch(e){}
+  return null;
 }
 function allyGrant(pi,key,exceptId,selfId){
   const Z=zonesOf(pi);
@@ -8464,7 +8600,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🔧 条件欄を「対象の絞り込み／書式」として使う効果の一覧。
    これらの効果ではcondをゾーン条件式（マナ>=3など）として判定してはいけない。
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
-const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
+const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
@@ -9016,6 +9152,102 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🛡 ${S.players[tp].label} の《${faceNameOf(cc)}》を裏向きの新しいシールドにした`);
         logOnly(`🛡 ${faceNameOf(cc)} を ${S.players[tp].label} の新しいシールドへ（裏向き）`);
       }
+      renderAll();
+    }else if(f.t==="myManaRecruit"){
+      // 🌱 自分のマナゾーンから条件に合うクリーチャーを選んでバトルゾーンに出す（獰猛なる大地型）
+      const filt=String(f.cond||"").trim();
+      const put=[];
+      for(let i=0;i<n;i++){
+        const pool=Z.mana.filter(x=>{
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))return false;
+          if(put.some(y=>y.id===x.id))return false;
+          return !filt||lockFilterOk(filt,rx,x);
+        });
+        if(!pool.length){if(!put.length)toast(`🌱 自分のマナゾーンに該当クリーチャーがいません${filt?`（${filt}）`:""}`);break;}
+        const j=await pickCard(`🌱 自分のマナゾーンから出すクリーチャーを選択（${i+1}/${n}体目${filt?`・${filt}`:""}）\nキャンセルで終了`,pool,{});
+        if(j===null)break;
+        const tgt=pool[j];
+        const mi=Z.mana.findIndex(x=>x.id===tgt.id);
+        if(mi<0)continue;
+        if(!put.length)snap();
+        const cc=Z.mana.splice(mi,1)[0];
+        cc.faceup=true;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;
+        const rc=getReg(cc);
+        cc.sick=!(rc&&rc.sa);
+        if(!battleEntryOk(pi,cc)){Z.mana.push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないためマナゾーンに残しました`);continue;}
+        Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);put.push(cc);
+        sfx("move");renderAll();
+        toast(`🌱 ${faceNameOf(cc)} をマナゾーンからバトルゾーンに出した`);
+      }
+      for(const cc of put){
+        if(!Z.battle.find(x=>x.id===cc.id))continue;
+        LAST_ARRIVED=cc;emitEvent(pi,"summon");enqueueFx(pi,cc);
+      }
+      if(put.length)await waitFxIdle(inPump);
+      renderAll();
+    }else if(f.t==="slotReveal"){
+      // 🎰 山札の上からn枚を表向きにし、種類ごとに1枚ずつ手札へ。残りはランダムな順で山札の一番下（フォーチュン・スロット型）
+      if(!Z.deck.length){toast("🎰 山札がありません");renderAll();continue;}
+      snap();
+      const shown=[];
+      for(let i=0;i<n&&Z.deck.length;i++){const cc=Z.deck.shift();cc.faceup=true;Z.reveal.push(cc);shown.push(cc);}
+      renderAll();
+      toast(`🎰 山札の上から${shown.length}枚を表向きにした`);
+      logOnly(`🎰 公開：${shown.map(x=>`《${faceNameOf(x)}》`).join("")}`);
+      const KIND=[
+        ["クリーチャー",x=>{const r=getReg(x);return !!(r&&isCreatureReg(r));}],
+        ["呪文",x=>{const r=getReg(x);return !!(r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"));}],
+        ["クロスギア",x=>{const r=getReg(x);return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));}],
+        ["城",x=>{const r=getReg(x);return !!(r&&(r.ctype==="castle"||r.ctype==="gcastle"));}],
+      ];
+      const taken=[];
+      for(const [label,test] of KIND){
+        const pool=shown.filter(x=>test(x)&&!taken.some(y=>y.id===x.id));
+        if(!pool.length)continue;
+        const j=await pickCard(`🎰 ${label}を1枚、手札に加えますか？（キャンセルで加えない）`,pool,{});
+        if(j===null)continue;
+        taken.push(pool[j]);
+      }
+      for(const cc of taken){
+        const ri=Z.reveal.findIndex(x=>x.id===cc.id);
+        if(ri>=0)Z.reveal.splice(ri,1);
+        cc.faceup=true;Z.hand.push(cc);
+      }
+      const rest=shown.filter(x=>!taken.some(y=>y.id===x.id));
+      shuffle(rest);
+      for(const cc of rest){
+        const ri=Z.reveal.findIndex(x=>x.id===cc.id);
+        if(ri>=0)Z.reveal.splice(ri,1);
+        cc.faceup=false;cc.tapped=false;cc.sideways=false;
+        Z.deck.push(cc);
+      }
+      sfx("draw");renderAll();
+      toast(`🎰 ${taken.length?`${taken.map(x=>`《${faceNameOf(x)}》`).join("")} を手札に加えた。`:""}残り${rest.length}枚をランダムな順番で山札の一番下へ`);
+    }else if(f.t==="chargeBuffIfCre"){
+      // 🌱 山上1枚をマナへ。それがクリーチャーなら、このターン自分のクリーチャー全員にパワー+n（鼓動する石版型）
+      if(!Z.deck.length){toast("🌱 山札がありません");renderAll();continue;}
+      snap();
+      const cc=Z.deck.shift();
+      cc.faceup=true;cc.tapped=false;cc.sideways=false;
+      const rc=getReg(cc);
+      const wasCre=!!(rc&&isCreatureReg(rc));
+      Z.mana.push(cc);
+      sfx("move");renderAll();
+      toast(`🌱 ${faceNameOf(cc)} をマナゾーンに置いた`);
+      if(wasCre){
+        const amt=Math.max(0,n|0)||2000;
+        let cnt=0;
+        for(const x of Z.battle){
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))continue;
+          x.buff=x.buff||{};x.buff.pow=(x.buff.pow||0)+amt;
+          markBuffTurn(x,["pow"]);cnt++;
+        }
+        renderAll();
+        toast(`💪 クリーチャーだったので、このターン自分のクリーチャー${cnt}体のパワーが+${amt}`);
+        logOnly(`💪 鼓動する石版型：マナに置いた《${faceNameOf(cc)}》がクリーチャーのため、自分のクリーチャー${cnt}体に+${amt}（このターン）`);
+      }else toast("💪 クリーチャーではなかったのでパワーは上がりません");
       renderAll();
     }else if(f.t==="underDeck"){
       // 🌙 山札の上からn枚を裏向きでこのカードの下に置く（ザ・ラムーン型：G城/クリーチャーの下）
@@ -9980,6 +10212,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(isDestroy){
           await destroyWithReplace(tp,tgt);
         }else{
+          if(!isMana&&tp!==pi&&psyStayRepApply(tgt,tp,true)){renderAll();continue;} // ↩ キル型：相手の効果では手札に戻らない
           if(await offerTrueEscape(tp,tgt)){renderAll();continue;} // 真エスケープで離場キャンセル
           const idx=TZ.battle.findIndex(x=>x.id===tgt.id);
           if(idx<0)continue;
@@ -14719,10 +14952,17 @@ async function startAttack(pi,id){
   const reg=getReg(c);
   const atkAll=!!(reg&&(reg.atkUn||reg.machf))||!!(c.buff&&c.buff.attackUntapped);
   const targets=[];
+  const _lockedAtk=uncrossedGearLock(c);
+  if(_lockedAtk){
+    toast(`⛔ ${faceNameOf(_lockedAtk)}：${faceNameOf(c)} は攻撃できません`);
+    return;
+  }
   OZ.battle.forEach(t=>{
     const tr=getReg(t);
     if(tr&&tr.noAtked)return;
     if(!isCreatureReg(tr))return; // クリーチャー以外（D2フィールド/タマシード/クロスギア等）は攻撃対象外
+    if(noAtkedGrant(op,t,tr))return;      // 🛡 常在付与の「攻撃されない」（アクア・アタック型）
+    if(gearProtectsFrom(t,c))return;      // ⚙ クロスギアによる「攻撃されない」（ノーブル・エンフォーサー型）
     if(t.tapped||atkAll)targets.push({kind:"creature",cid:t.id,label:`⚔ ${faceNameOf(t)}${t.tapped?"（タップ中）":"（アンタップ）"}`});
   });
   if(OZ.shield.length)targets.push({kind:"shield",label:`🛡 相手プレイヤーを攻撃（シールド残り${OZ.shield.length}枚 → ブレイク）`});
@@ -14733,6 +14973,7 @@ async function startAttack(pi,id){
   let tg=targets[pick]; // 🔥 革命0トリガーでシールドが増えた場合にブレイクへ差し替えるため let
   c._atkFxDone=false; // 新規アタック宣言のたびにアタック時効果を再有効化（保留→再開は別経路なので影響なし）
   c._allyAtkDone=false;c._anyAtkDone=false;c._gearAtkDone=false; // 攻撃するたびに誘発し直せるよう毎回リセット
+  try{checkAwaken(pi,"selfAtkEnd");}catch(e){}  // 🔄 覚醒（攻撃に関する条件）
   c._sxAtkDone=false;
   c._mbDone=false;
   const wnames=watchNames(pi,tg.kind==="creature"?"atkC":"atkP");
@@ -15883,7 +16124,13 @@ async function execAttack(pi,id,tg){
     if(rb&&rb.cstCond&&rb.cstFx==="blocker"&&!isSealed(b)&&!isIgnored(b,op)&&zoneCondOk(rb.cstCond,op,b))return true;
     return false;
   };
-  const blockers=unblockInfo.ok?[]:OZ.battle.filter(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b));
+  // ⚙ クロスされていないクロスギアによるブロック禁止／クロスギアで守られている攻撃側はブロックされない
+  const _blkOk=b=>{
+    if(uncrossedGearLock(b))return false;              // ノーブル・エンフォーサー型：ブロックもできない
+    if(gearProtectsFrom(c,b))return false;              // 攻撃側がクロスギアで守られている
+    return true;
+  };
+  const blockers=unblockInfo.ok?[]:OZ.battle.filter(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b)&&_blkOk(b));
   if(unblockInfo.ok&&OZ.battle.some(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b))){
     toast(`🛡✋ ${unblockInfo.why}（ブロックの確認は出ません）`);
     logOnly(`🛡✋ ${unblockInfo.why}`);
@@ -17690,6 +17937,12 @@ function renderFxEditor(){
   $("fxAltCond").value=FXEDIT.altCond||"";
   $("fxStLockSpell").checked=!!FXEDIT.stLockSpell;
   {const e=$("fxStNoDeckPeek");if(e)e.checked=!!FXEDIT.stNoDeckPeek;}
+  {const e=$("fxRepPsyStay");if(e)e.checked=!!FXEDIT.repPsyStay;}
+  {const e=$("fxAGNoAtked");if(e)e.checked=!!FXEDIT.agNoAtked;}
+  {const e=$("fxAGFilt");if(e)e.value=FXEDIT.agFilt||"";}
+  {const e=$("fxAGOthers");if(e)e.checked=!!FXEDIT.agOthers;}
+  {const e=$("fxGearUncrossLock");if(e)e.value=FXEDIT.gearUncrossLock||"";}
+  {const e=$("fxGearNoAtkedBy");if(e)e.value=FXEDIT.gearNoAtkedBy||"";}
   {const e=$("fxStGraveCivSpellLock");if(e)e.checked=!!FXEDIT.stGraveCivSpellLock;}
   $("fxStLockSpellF").value=FXEDIT.stLockSpellF||"";
   $("fxStLockCre").checked=!!FXEDIT.stLockCre;
@@ -17758,6 +18011,8 @@ function renderFxEditor(){
   $("fxJBig1").checked=!!FXEDIT.jbig1;
   $("fxGrantDS").checked=!!FXEDIT.grantDS;
   $("fxStManaTap").checked=!!FXEDIT.stManaTap;
+  {const e=$("fxAwakenEv");if(e)e.value=FXEDIT.awakenEv||"";}
+  {const e=$("fxAwakenCond");if(e)e.value=FXEDIT.awakenCond||"";}
   {const e=$("fxManaTapInSelf");if(e)e.checked=!!FXEDIT.manaTapInSelf;}
   {const e=$("fxStKillCheat");if(e)e.checked=!!FXEDIT.stKillCheat;}
   {const e=$("fxStCheatManaKill");if(e)e.checked=!!FXEDIT.stCheatManaKill;}
@@ -19893,7 +20148,15 @@ function openFxEditor(key){
     jbig1:cur?!!cur.jbig1:false,
     grantDS:cur?!!cur.grantDS:false,
     stManaTap:cur?!!cur.stManaTap:false,
+    awakenEv:cur&&cur.awakenEv||"",
+    awakenCond:cur&&cur.awakenCond||"",
     stNoDeckPeek:cur?!!cur.stNoDeckPeek:false,
+    repPsyStay:cur?!!cur.repPsyStay:false,
+    agNoAtked:cur?!!cur.agNoAtked:false,
+    agFilt:cur&&cur.agFilt||"",
+    agOthers:cur?!!cur.agOthers:false,
+    gearUncrossLock:cur&&cur.gearUncrossLock||"",
+    gearNoAtkedBy:cur&&cur.gearNoAtkedBy||"",
     stGraveCivSpellLock:cur?!!cur.stGraveCivSpellLock:false,
     manaTapInSelf:cur?!!cur.manaTapInSelf:false,
     stKillCheat:cur?!!cur.stKillCheat:false,
@@ -20225,6 +20488,12 @@ $("fxSave").addEventListener("click",async ()=>{
     altCond:$("fxAltCond").value.trim(),
     stLockSpell:$("fxStLockSpell").checked,
     stNoDeckPeek:$("fxStNoDeckPeek")?$("fxStNoDeckPeek").checked:false,
+    repPsyStay:$("fxRepPsyStay")?$("fxRepPsyStay").checked:false,
+    agNoAtked:$("fxAGNoAtked")?$("fxAGNoAtked").checked:false,
+    agFilt:$("fxAGFilt")?$("fxAGFilt").value.trim():"",
+    agOthers:$("fxAGOthers")?$("fxAGOthers").checked:false,
+    gearUncrossLock:$("fxGearUncrossLock")?$("fxGearUncrossLock").value.trim():"",
+    gearNoAtkedBy:$("fxGearNoAtkedBy")?$("fxGearNoAtkedBy").value.trim():"",
     stGraveCivSpellLock:$("fxStGraveCivSpellLock")?$("fxStGraveCivSpellLock").checked:false,
     stSpellPT:+$("fxStSpellPT").value||0,
     stCrePT:+$("fxStCrePT").value||0,
@@ -20294,6 +20563,8 @@ $("fxSave").addEventListener("click",async ()=>{
     jbig1:$("fxJBig1").checked,
     grantDS:$("fxGrantDS").checked,
     stManaTap:$("fxStManaTap").checked,
+    awakenEv:$("fxAwakenEv")?$("fxAwakenEv").value:"",
+    awakenCond:$("fxAwakenCond")?$("fxAwakenCond").value.trim():"",
     manaTapInSelf:$("fxManaTapInSelf")?$("fxManaTapInSelf").checked:false,
     stKillCheat:$("fxStKillCheat")?$("fxStKillCheat").checked:false,
     stCheatManaKill:$("fxStCheatManaKill")?$("fxStCheatManaKill").checked:false,
@@ -20789,7 +21060,12 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.jbig1)attrs.push("ジョラゴン・ビッグ1");
     if(v.grantDS)attrs.push("手札にシンパシー付与");
     if(v.stManaTap)attrs.push("常在：相手マナはタップイン");
+    if(v.awakenEv)attrs.push(`覚醒：${v.awakenCond||"無条件"}`);
     if(v.stNoDeckPeek)attrs.push("常在：誰も山札を見られない");
+    if(v.repPsyStay)attrs.push("置換：自分のサイキックは手札に戻らない");
+    if(v.agNoAtked)attrs.push(`常在：${v.agFilt||"自分のクリーチャー"}は攻撃されない`);
+    if(v.gearUncrossLock)attrs.push(`ギア：未クロス時「${v.gearUncrossLock}」は攻撃・ブロック不可`);
+    if(v.gearNoAtkedBy)attrs.push(`ギア：「${v.gearNoAtkedBy}」から攻撃・ブロックされない`);
     if(v.stGraveCivSpellLock)attrs.push("常在：墓地の呪文と同じ文明の呪文を唱えられない");
     if(v.manaTapInSelf)attrs.push("マナはタップして置く");
     if(v.stKillCheat)attrs.push("常在：踏み倒したクリーチャーを破壊");
