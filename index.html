@@ -3483,6 +3483,8 @@ let PICK_GATE=makeDlgGate();  // pickCard / pickCards 用（🚑処理リセッ�
    選択を求めるパネル（pickCard 等）では必ず false にすること。
    ここを取り違えると、選択できずにターンが進まなくなる。 */
 let VIEWER_BROWSE=false;
+/* 👁 いま開いているカードのシートが「閲覧専用」か。これが true の間はロックを外さない */
+let SHEET_VIEW_ONLY=false;
 async function _serialDlg(acquire,open){
   const release=await acquire();
   try{ return await open(); }
@@ -3674,7 +3676,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.80";
+const APP_VER="v10.81";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4708,11 +4710,28 @@ const ONLINE={peer:null,conn:null,role:null,applying:false,timer:null,grantMe:fa
 function olActive(){return !!(typeof ONLINE!=="undefined"&&ONLINE&&ONLINE.conn&&ONLINE.conn.open);}
 function olMySeat(){return (typeof S!=="undefined"&&S)?(S.seat|0):0;}
 function olMyTurn(){return !(typeof S!=="undefined"&&S&&S.vs)||((S.who|0)===olMySeat());}
+/* 🔧 この端末が「まだ処理を終えていない」状態か。
+   ターンの切り替えは S.who を先に書き換えてから残りの処理を進めるため、
+   その途中でロックがかかると、自分で開いたパネルを自分で閉じられなくなり、
+   両方の端末が操作できないまま止まってしまう。処理中はロックを外す。 */
+function olBusyLocal(){
+  try{
+    if(typeof NEXT_TURN_HOLD!=="undefined"&&NEXT_TURN_HOLD>0)return true;      // ターン終了処理の途中
+    if(typeof fxRunning!=="undefined"&&fxRunning)return true;                   // 効果を解決中
+    if(typeof fxQueue!=="undefined"&&fxQueue&&fxQueue.length)return true;       // 効果の順番待ちがある
+    if(typeof WATCH_BUSY!=="undefined"&&WATCH_BUSY)return true;                 // 誘発の処理中
+    // 自分の操作を待っているパネルが開いている（確認・選択・効果パネル）
+    if(document.querySelector("#askOlay.open,#viewerOlay.open"))return true;
+    if(document.querySelector("#sheet.open")&&!SHEET_VIEW_ONLY)return true;
+  }catch(e){}
+  return false;
+}
 function olLocked(){
   if(!olActive())return false;
   if(typeof S==="undefined"||!S||!S.vs)return false;
   if(S.turn<=0)return false;      // 開始前の準備中は自由に触れる
   if(olMyTurn())return false;     // 自分のターン
+  if(olBusyLocal())return false;  // 🔧 自分が進めている処理が終わるまではロックしない
   return !ONLINE.grantMe;         // 許可をもらっていれば触れる
 }
 /* 🎬 対戦の開始を画面中央に大きく出す（オンラインは「始まったのが分かりにくい」対策） */
@@ -4844,10 +4863,14 @@ function olRenderBar(){
   const ab=document.getElementById("olAskBtn");
   const locked=olLocked();
   const mine=olMyTurn();
+  if(mine&&ONLINE.handoff){ONLINE.handoff=null;clearTimeout(ONLINE.handoffTimer);}
   bar.classList.toggle("locked",locked);
   bar.classList.toggle("granted",!locked&&!mine);
   if(msg){
+    const busySelf=(typeof olBusyLocal==="function")&&olBusyLocal()&&!mine;
     if(S.turn<=0)msg.textContent="🔗 接続中（準備中は両者操作できます）";
+    else if(busySelf)msg.textContent="⏳ ターン終了時の処理を進めています（この端末で完了してください）";
+    else if(ONLINE.handoff&&!mine)msg.textContent="⏳ 相手がターンを終えました（盤面の受信待ち）";
     else if(mine)msg.textContent=`🟢 自分のターン${ONLINE.grantOpp?"（相手に操作を許可中）":""}`;
     else if(ONLINE.grantMe)msg.textContent="🔓 相手のターン（操作を許可されています）";
     else msg.textContent="🔒 相手のターン（操作ロック中）";
@@ -5428,7 +5451,52 @@ function draw(pi,n=1){
 let NEXT_TURN_HOLD=0;
 let TURN_END_PHASE="";   // ⏳ いまターン終了処理のどの段階で待っているか（診断表示用）
 let NT_BLOCK_CNT=0;      // 「次のターン」が保留でブロックされた連続回数（3回で強制解除の提案）
-let NT_RUN_ID=0;         // 強制解除後に、止まっていた古い処理が後から完了してターンを二重に進めるのを防ぐ世代トークン
+let NT_RUN_ID=0;
+let NT_WD=null;          // ⏱ ターン終了処理が止まっていないか見張るタイマー
+/* ⏱ 一定時間たってもターン終了処理が終わらない時に、画面上部に案内と解除ボタンを出す。
+   オンラインだと「両方の端末が操作できない」状態に見えるので、自力で抜けられるようにしておく。 */
+function ntWatchdogStart(ntid){
+  clearTimeout(NT_WD);
+  NT_WD=setTimeout(()=>{
+    if(ntid!==NT_RUN_ID||NEXT_TURN_HOLD<=0)return;
+    ntWatchdogShow();
+  },20000);
+}
+function ntWatchdogHide(){
+  clearTimeout(NT_WD);NT_WD=null;
+  const b=document.getElementById("ntStuckBar");
+  if(b)b.remove();
+}
+function ntWatchdogShow(){
+  if(document.getElementById("ntStuckBar"))return;
+  const bar=document.createElement("div");
+  bar.id="ntStuckBar";
+  bar.style.cssText="position:fixed;left:50%;transform:translateX(-50%);top:8px;z-index:980;max-width:94vw;"
+    +"background:#2a1206;border:2px solid #f59e0b;border-radius:12px;padding:10px 14px;box-shadow:0 8px 30px rgba(0,0,0,.6);"
+    +"display:flex;gap:10px;align-items:center;flex-wrap:wrap";
+  const msg=document.createElement("div");
+  msg.style.cssText="font-size:13px;font-weight:800;color:#fbbf24;line-height:1.5";
+  msg.textContent=`⏳ ターン終了の処理が終わりません\n【待機中】${TURN_END_PHASE||"不明（開いているパネルの完了待ちかもしれません）"}`;
+  msg.style.whiteSpace="pre-wrap";
+  const btn=document.createElement("button");
+  btn.className="btn small warn";
+  btn.textContent="🔓 処理を打ち切ってターンを進める";
+  btn.onclick=async ()=>{
+    ntWatchdogHide();
+    NT_RUN_ID++;
+    NEXT_TURN_HOLD=0;TURN_END_PHASE="";NT_BLOCK_CNT=0;
+    toast("🔓 ターン終了処理を打ち切りました（打ち切った誘発は失われます。⌘Zで戻せます）");
+    logOnly("🔓 ターン終了処理を強制的に打ち切ってターンを進めた");
+    await finishNextTurn(S.vs?S.who:0);
+    renderAll();
+  };
+  const cl=document.createElement("button");
+  cl.className="btn small ghost";cl.textContent="✕";
+  cl.onclick=()=>ntWatchdogHide();
+  bar.appendChild(msg);bar.appendChild(btn);bar.appendChild(cl);
+  document.body.appendChild(bar);
+  sfx("flip");
+}         // 強制解除後に、止まっていた古い処理が後から完了してターンを二重に進めるのを防ぐ世代トークン
 let NT_GUARD_T=0; // 直近のターン進行時刻（二重進行ガード用）
 let LABY_RUN=false;
 let GAME_PAUSE=false;
@@ -5662,12 +5730,19 @@ function nextTurn(){
   //    切替時のアンタップで「タップしているなら」等の誘発条件が消え、効果が動いたり動かなかったりしていた。
   NEXT_TURN_HOLD++;
   const _ntid=++NT_RUN_ID;
+  ntWatchdogStart(_ntid);
   (async()=>{
     try{ if(S.expert)await runTurnEndTriggers(cur); }
     catch(e){ console.warn("turnEndTriggers",e); }
-    finally{ NEXT_TURN_HOLD=Math.max(0,NEXT_TURN_HOLD-1); TURN_END_PHASE=""; NT_BLOCK_CNT=0; }
+    finally{ NEXT_TURN_HOLD=Math.max(0,NEXT_TURN_HOLD-1); TURN_END_PHASE=""; NT_BLOCK_CNT=0; if(NEXT_TURN_HOLD<=0)ntWatchdogHide(); }
     if(_ntid!==NT_RUN_ID){ toast("（強制解除後のため、古いターン終了処理は破棄しました）"); return; }
-    await finishNextTurn(cur);
+    try{ await finishNextTurn(cur); }
+    catch(e){ console.warn("finishNextTurn",e); toast("⚠ ターン開始時の処理で問題が起きましたが、ターンは進めます"); }
+    finally{
+      ntWatchdogHide();
+      try{if(typeof olBroadcast==="function")olBroadcast(true);}catch(e2){}   // 📡 最終状態を確実に送る
+      try{renderAll();}catch(e2){}
+    }
   })();
 }
 /* ⏳ ターン終了時誘発を直列処理。完了するまでターンは切り替わらない */
@@ -5858,6 +5933,14 @@ async function finishNextTurn(cur){
     if(S.who===0)S.turn++;
   }else S.turn++;
   const pi=S.vs?S.who:0;
+  // 📡 ターンが移ったことだけ先に相手へ知らせる。
+  //    このあとのターン開始処理は時間がかかるので、待たせると相手の画面は
+  //    「まだ自分のターンではない」ままになり、両方とも操作できないように見えてしまう。
+  try{
+    if(typeof ONLINE!=="undefined"&&ONLINE.conn&&ONLINE.conn.open&&!ONLINE.applying){
+      ONLINE.conn.send({t:"turnHandoff",who:S.who|0,turn:S.turn|0});
+    }
+  }catch(e){}
   if(S.vs&&S.autoSeat&&(S.seat|0)!==pi){S.seat=pi;buildBoards();} // 視点自動切替：手動ボタンと同じく盤面を組み直す
   const Z=S.players[pi].zones;
   // 通しターンカウンタ（プレイヤーターン単位）＋ ターン限定ロック失効処理
@@ -25332,6 +25415,7 @@ function applyRemote(msg){
       S.players[i].zones=z;
     });
     S.sel=null;S.msel=[];
+    ONLINE.handoff=null;clearTimeout(ONLINE.handoffTimer);
     renderAll();
   }finally{ONLINE.applying=false;}
   // 🔒 ターンが変わったら手番外の操作許可は自動で失効（言い忘れ事故の防止）
@@ -25370,10 +25454,22 @@ function logRecv(e){
     if(typeof scheduleLogDock==="function")scheduleLogDock();
   }finally{LOG_RECV=false;}
 }
-function olBroadcast(){
+/* 📡 盤面の送信。
+   まとめ送りのために少し待つが、画面の描き直しが続くと待ち時間がずっと先送りされ、
+   相手にいつまでも届かないことがあった。前回の送信から500msたっていたら即座に送る。 */
+function olBroadcast(force){
   if(!ONLINE.conn||!ONLINE.conn.open||ONLINE.applying)return;
-  clearTimeout(ONLINE.timer);
+  const now=Date.now();
+  const last=ONLINE._lastSend||0;
+  if(force||now-last>=500){
+    clearTimeout(ONLINE.timer);ONLINE.timer=null;
+    ONLINE._lastSend=now;
+    try{ONLINE.conn.send(serializeFull());}catch(e){}
+    return;
+  }
+  if(ONLINE.timer)return;   // すでに予約済み（先送りしない）
   ONLINE.timer=setTimeout(()=>{
+    ONLINE.timer=null;ONLINE._lastSend=Date.now();
     try{ONLINE.conn.send(serializeFull());}catch(e){}
   },120);
 }
@@ -25503,6 +25599,18 @@ function setupConn(conn){
       toast(`🏆 ${S.players[msg.winner|0].label} の勝利！（${msg.reason||""}／戦績 ${SCORE[0]} - ${SCORE[1]}）`);
       sfx("atk");
       renderAll();
+    }
+    else if(msg&&msg.t==="turnHandoff"){
+      // 📡 相手がターンを渡した。盤面はこのあと届くので、まずは案内だけ出しておく。
+      ONLINE.handoff={who:msg.who|0,turn:msg.turn|0,at:Date.now()};
+      olRenderBar();
+      clearTimeout(ONLINE.handoffTimer);
+      ONLINE.handoffTimer=setTimeout(()=>{
+        // 盤面が届かないまま時間がたった時のための案内
+        if(ONLINE.handoff&&Date.now()-ONLINE.handoff.at>=9000){
+          toast("⏳ 相手の端末でターン終了時の処理が続いています\n（相手側の案内に従って完了してもらってください）");
+        }
+      },9000);
     }
     else if(msg&&msg.t==="matchStart"){
       // 🎬 相手が対戦開始した：こちらでもはっきり知らせる
@@ -28207,6 +28315,7 @@ function openCardSheet(ctx){
   const c=f.card;
   // 👁 相手のターン中（操作ロック中）は「閲覧専用」で開く。中身は見られるが操作ボタンは出さない。
   const viewOnly=!!ctx.viewOnly||(typeof olLocked==="function"&&olLocked());
+  SHEET_VIEW_ONLY=viewOnly;
   const masked=ctx.hidden;
   const link=LINKS.get(normName(c.name));
   const reg=getReg(c);
@@ -29684,7 +29793,7 @@ function openDeckMenu(pi){
   $("sheet").classList.add("open");
 }
 function closeSel(){S.sel=null;closeSheet();}
-function closeSheet(){$("sheet").classList.remove("open");if(S.sel){S.sel=null;renderAll();}}
+function closeSheet(){SHEET_VIEW_ONLY=false;$("sheet").classList.remove("open");if(S.sel){S.sel=null;renderAll();}}
 $("sheetClose").addEventListener("click",()=>{endMulti();closeSheet();renderAll();});
 $("board").addEventListener("click",()=>{
   if(PENDING){PENDING=null;endMulti();toast("重ね置きをキャンセルしました");renderAll();return;}
