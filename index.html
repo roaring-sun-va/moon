@@ -3676,7 +3676,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.81";
+const APP_VER="v10.83";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4709,6 +4709,20 @@ const ONLINE={peer:null,conn:null,role:null,applying:false,timer:null,grantMe:fa
    ロックしないもの：ログ／メッセージ／画像拡大／設定・投了などの読み取り系 */
 function olActive(){return !!(typeof ONLINE!=="undefined"&&ONLINE&&ONLINE.conn&&ONLINE.conn.open);}
 function olMySeat(){return (typeof S!=="undefined"&&S)?(S.seat|0):0;}
+/* 👤 オンライン中は席を固定（ホスト＝P1／ゲスト＝P2）。
+   何かの拍子にずれていたら元に戻す。ずれたままだと相手の手札が見えてしまう。 */
+function olFixSeat(){
+  try{
+    if(!olActive()||typeof S==="undefined"||!S)return false;
+    const want=(ONLINE.role==="guest")?1:0;
+    if((S.seat|0)===want)return false;
+    S.seat=want;
+    buildBoards();
+    toast(`👤 視点を ${S.players[want].label} に戻しました（オンラインでは席は固定です）`);
+    logOnly(`👤 席のずれを修正：${S.players[want].label} に戻した`);
+    return true;
+  }catch(e){return false;}
+}
 function olMyTurn(){return !(typeof S!=="undefined"&&S&&S.vs)||((S.who|0)===olMySeat());}
 /* 🔧 この端末が「まだ処理を終えていない」状態か。
    ターンの切り替えは S.who を先に書き換えてから残りの処理を進めるため、
@@ -4861,6 +4875,7 @@ function olRenderBar(){
   const msg=document.getElementById("olBarMsg");
   const gb=document.getElementById("olGrantBtn");
   const ab=document.getElementById("olAskBtn");
+  if(olFixSeat())return olRenderBar();   // 👤 席がずれていたら直してから描き直す
   const locked=olLocked();
   const mine=olMyTurn();
   if(mine&&ONLINE.handoff){ONLINE.handoff=null;clearTimeout(ONLINE.handoffTimer);}
@@ -5093,6 +5108,7 @@ async function autoSaveOfferRestore(){
   if(!yes){await autoSaveClear();return false;}
   try{
     S.turn=s.turn|0;S.who=s.who|0;S.seat=s.seat|0;S.vs=!!s.vs;
+    try{if(typeof olFixSeat==="function")olFixSeat();}catch(e){}  // 👤 オンライン中なら席を正しい側へ戻す
     if(s.expert!=null)S.expert=!!s.expert;
     if(s.freePlay!=null)S.freePlay=!!s.freePlay;
     if(s.gameMode)S.gameMode=s.gameMode;
@@ -5941,7 +5957,8 @@ async function finishNextTurn(cur){
       ONLINE.conn.send({t:"turnHandoff",who:S.who|0,turn:S.turn|0});
     }
   }catch(e){}
-  if(S.vs&&S.autoSeat&&(S.seat|0)!==pi){S.seat=pi;buildBoards();} // 視点自動切替：手動ボタンと同じく盤面を組み直す
+  // 👤 視点自動切替は「1台で2人分を操作する時」だけ。オンラインでは席を動かさない
+  if(S.vs&&S.autoSeat&&!olActive()&&(S.seat|0)!==pi){S.seat=pi;buildBoards();}
   const Z=S.players[pi].zones;
   // 通しターンカウンタ（プレイヤーターン単位）＋ ターン限定ロック失効処理
   S.pturn=(S.pturn|0)+1;
@@ -25416,6 +25433,7 @@ function applyRemote(msg){
     });
     S.sel=null;S.msel=[];
     ONLINE.handoff=null;clearTimeout(ONLINE.handoffTimer);
+    olFixSeat();                       // 👤 受信のたびに席が正しいか確認する
     renderAll();
   }finally{ONLINE.applying=false;}
   // 🔒 ターンが変わったら手番外の操作許可は自動で失効（言い忘れ事故の防止）
@@ -31496,8 +31514,24 @@ $("btnMulti").addEventListener("click",()=>{
   renderAll();
   toast(S.multi?"複数選択モード：カードをタップして選択（処理後は自動解除）":"複数選択モード解除");
 });
-$("btnWho").addEventListener("click",()=>{S.who=S.who?0:1;renderAll();});
+$("btnWho").addEventListener("click",async ()=>{
+  // 🔁 オンライン中に手番だけ勝手に動かすと相手とずれる。確認してから動かし、必ず送る
+  if(olActive()){
+    if(!await ask("🔁 手番を手動で入れ替えますか？\n（オンラインでは相手の画面にもそのまま反映されます）"))return;
+    S.who=S.who?0:1;
+    renderAll();
+    try{olBroadcast(true);}catch(e){}
+    logOnly(`🔁 手番を手動で ${S.players[S.who].label} に変更`);
+    return;
+  }
+  S.who=S.who?0:1;renderAll();
+});
 $("btnSeat").addEventListener("click",()=>{
+  // 👤 オンライン中に席を動かすと、相手の手札が見えたりターンの判定が壊れる
+  if(olActive()){
+    toast("👤 オンライン対戦中は視点（席）を変えられません\n（相手の手札が見えてしまうため）");
+    return;
+  }
   S.seat=S.seat?0:1;
   buildBoards();renderAll();
   toast(`視点：${S.players[S.seat].label} を手前に表示`);
@@ -31750,6 +31784,7 @@ $("setBattleBtns").addEventListener("change",async ()=>{
 });
 $("setAutoSeat").addEventListener("change",async ()=>{
   S.autoSeat=$("setAutoSeat").checked;
+  if(S.autoSeat&&olActive())toast("👤 オンライン対戦中は席が固定なので、視点は自動で切り替わりません");
   if(db)await idbPut("misc","autoSeat",S.autoSeat);
   toast(S.autoSeat?"視点の自動切り替え：ON":"視点の自動切り替え：OFF");
 });
