@@ -1662,6 +1662,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxNoAtked"> 攻撃されない</label>
         <label><input type="checkbox" id="fxNoChoose"> 選ばれない（アンタッチャブル）</label>
         <label title="「相手の呪文によって、相手がクリーチャーを選ぶ時、このクリーチャーは選べない」型（墓守の鐘ベルリンなど）。呪文以外の効果では普通に選ばれます"><input type="checkbox" id="fxNoChooseSpell"> 相手の呪文でだけ選ばれない</label>
+        <label title="「相手のクリーチャーの能力によって、相手がクリーチャーを選ぶ時、このクリーチャーは選べない」型（時空の支配者ディアボロス Z など）。呪文では普通に選ばれます"><input type="checkbox" id="fxNoChooseCre"> 相手のクリーチャーの能力でだけ選ばれない</label>
         <label title="相手のターン中だけ、相手はこのクリーチャーを選べない（自分のターン中は選べる／オニカマス型）。上の「選ばれない」と併用する必要はありません" style="opacity:.95"><input type="checkbox" id="fxNoChooseOppTurn"> └ 相手のターン中だけ選ばれない（オニカマス型）</label>
         <label><input type="checkbox" id="fxGS"> G・ストライク</label>
         <label><input type="checkbox" id="fxCharger"> チャージャー（呪文使用後マナへ／ツインパクト下面も可）</label>
@@ -2034,6 +2035,10 @@ body.shake{animation:bodyShake .4s ease-out}
           <span style="font-size:12px;font-weight:700">超無限進化：合計コスト</span>
           <input type="number" id="fxEvoSrcSum" style="width:80px" placeholder="0" min="0" title="0より大きくすると、進化元を好きな数まとめて選び、コストの合計がこの値以上になったら進化できます（超時空ストームG・XX型）">
           <label title="覚醒する時、下に重ねたカードをすべて墓地に置きます（メテオバーン覚醒）"><input type="checkbox" id="fxAwakenMeteor"> ☄ メテオバーン覚醒</label>
+          <span style="font-size:12px;font-weight:700">覚醒の支払い：自分のカード</span>
+          <input type="number" id="fxAwakenPayN" style="width:70px" placeholder="0" min="0" title="覚醒する時、指定した枚数を山札に加えてシャッフルします（「〜してもよい。そうした場合、裏返す」型）。0＝支払いなし">
+          <input type="text" id="fxAwakenPayZone" style="width:150px" placeholder="どこから（例：バトル+マナ）" title="支払いに使えるゾーン。「+」で複数指定（既定：バトル+マナ）">
+          <span style="font-size:12px;font-weight:700">枚を山札へ</span>
         </div>
         <label title="相手の、条件に合う進化クリーチャーは、出たターン攻撃できません（時空の探検家ジョン型）"><input type="checkbox" id="fxStFoeEvoSick"> ⛔ 相手の〔対象〕進化クリーチャーは出たターン攻撃できない</label>
         <input type="text" id="fxStFoeEvoSickF" placeholder="対象（例：コスト3以下・空欄＝すべて）" style="flex:1;min-width:170px">
@@ -3473,6 +3478,11 @@ function makeDlgGate(){
 }
 let ASK_GATE=makeDlgGate();   // ask / askNumber / askText / askChoice 用（🚑処理リセットで再生成される）
 let PICK_GATE=makeDlgGate();  // pickCard / pickCards 用（🚑処理リセットで再生成される）
+/* 👁 いま開いている一覧パネルが「ゾーンを眺めるだけ」かどうか。
+   true の時だけ、相手のターン中に中身を動かせないようにする。
+   選択を求めるパネル（pickCard 等）では必ず false にすること。
+   ここを取り違えると、選択できずにターンが進まなくなる。 */
+let VIEWER_BROWSE=false;
 async function _serialDlg(acquire,open){
   const release=await acquire();
   try{ return await open(); }
@@ -3664,7 +3674,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.78";
+const APP_VER="v10.80";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4218,7 +4228,59 @@ async function checkAwaken(pi,ev){
         const cond=String(r.awakenCond||"").trim();
         if(cond&&!zoneCondOk(cond,side,c))continue;
         if(!Zs.battle.some(x=>x.id===c.id))continue;
+        // 💠 覚醒の支払い：「〜してもよい。そうした場合、裏返す」型（時空の支配者ディアボロス Z 型）
+        const payN=+r.awakenPayN||0;
+        let payPicked=null;
+        if(payN>0){
+          const zones=String(r.awakenPayZone||"バトル+マナ").split(/[+＋]/).map(t=>t.trim()).filter(Boolean);
+          const zmap={"バトル":"battle","マナ":"mana","手札":"hand","墓地":"grave","盾":"shield","シールド":"shield"};
+          const pool0=[];
+          for(const zn of zones){
+            const zk=zmap[zn];
+            if(!zk)continue;
+            for(const x of (Zs[zk]||[])){
+              if(x.id===c.id)continue;                 // 自分自身は選べない
+              pool0.push({x,zk,zn});
+            }
+          }
+          if(pool0.length<payN)continue;               // 支払えないので覚醒しない
+          const yes=await ask(`🔄 ${faceNameOf(c)} の覚醒：${zones.join("・")}から自分のカードを${payN}枚、山札に加えてシャッフルしますか？\n（行った場合だけ覚醒します）`);
+          if(!yes)continue;
+          const chosen=[];
+          for(let i=0;i<payN;i++){
+            const pool=pool0.filter(o=>!chosen.some(y=>y.x.id===o.x.id));
+            if(!pool.length)break;
+            const jj=await pickCard(`🔄 山札に加えるカードを選択（${i+1}/${payN}枚目）`,pool.map(o=>o.x),
+              {sub:x=>{const o=pool.find(y=>y.x.id===x.id);return o?o.zn:"";}});
+            if(jj===null)break;
+            chosen.push(pool[jj]);
+          }
+          if(chosen.length<payN){toast("🔄 支払いを取りやめたため覚醒しません");continue;}
+          payPicked=chosen;
+        }
         snap();
+        if(payPicked){
+          for(const o of payPicked){
+            const arr=Zs[o.zk];
+            const ix=arr.findIndex(y=>y.id===o.x.id);
+            if(ix<0)continue;
+            const cc=arr.splice(ix,1)[0];
+            if(cc.under&&cc.under.length){const kids=cc.under.splice(0);kids.forEach(u=>{u.faceup=false;u.tapped=false;u.buff=null;Zs.deck.push(u);});}
+            cc.faceup=false;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;cc.face=0;
+            Zs.deck.push(cc);
+          }
+          shuffle(Zs.deck);
+          toast(`🔄 ${payPicked.map(o=>faceNameOf(o.x)).join("、")} を山札に加えてシャッフルした`);
+          logOnly(`🔄 覚醒の支払い：${S.players[side].label} は ${payPicked.map(o=>`《${faceNameOf(o.x)}》(${o.zn})`).join("")} を山札へ`);
+          if(!Zs.battle.some(x=>x.id===c.id))continue;   // 支払いで自身が場を離れたら覚醒しない
+        }
+        // ☄ メテオバーン覚醒：裏返す前に、下に重ねたカードをすべて墓地に置く
+        if(r.awakenMeteor&&c.under&&c.under.length){
+          const kids=c.under.splice(0);
+          kids.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.buff=null;Zs.grave.push(u);});
+          toast(`☄ メテオバーン：${kids.map(x=>faceNameOf(x)).join("、")} を墓地に置いた`);
+          logOnly(`☄ メテオバーン覚醒：${faceNameOf(c)} の下のカード${kids.length}枚を墓地へ`);
+        }
         c.face=1;c.tapped=false;
         markArrive(c);
         sfx("flip");renderAll();
@@ -4261,10 +4323,14 @@ function stackCountOf(c){return 1+((c&&c.under)?c.under.length:0);}
 /* 🔮 いま解決中の効果が「呪文」から出たものかどうか。
    「相手の呪文によって選ばれる時だけ選べない」（ベルリン型）の判定に使う。 */
 let FX_FROM_SPELL=false;
+/* 🐲 いま解決している効果が「クリーチャーの能力」かどうか。noChooseCre の判定に使う */
+let FX_FROM_CRE=false;
 function momoUntouchable(x){
   const r=getReg(x);
   // 🔮 相手の呪文の効果で選ぼうとしている時だけ選べない
   if(r&&r.noChooseSpell&&FX_FROM_SPELL)return true;
+  // 🐲 相手のクリーチャーの能力で選ぼうとしている時だけ選べない（時空の支配者ディアボロス Z 型）
+  if(r&&r.noChooseCre&&FX_FROM_CRE)return true;
   if(r&&r.momoKingX&&stackCountOf(x)<6)return true;
   // 🚫 相手のターン中だけ相手に選ばれない（オニカマス型）：持ち主のターンでない間だけ有効
   if(r&&r.noChooseOppTurn){
@@ -4685,6 +4751,8 @@ function olAllowedTarget(t){
   // 一覧パネル（マナ/墓地/山札/シールドのビューア）は「見るだけ」なら通す。
   // 中身を動かすボタン・カードのタップは通さない（誤操作で盤面が変わらないように）
   if(t.closest("#viewerOlay")){
+    // 「選んでください」のパネルは必ず操作できるようにする（塞ぐとターンが進まなくなる）
+    if(!VIEWER_BROWSE)return true;
     if(t.closest("#vCloseTop,#vCancel,#vPeek,#vSearch,#vTypeFilter"))return true;
     if(t.closest(".vcard")||t.closest("button"))return false;
     return true;   // タイトル・ヒント・余白・スクロール
@@ -4705,7 +4773,8 @@ function olGate(e){
   // 👁 カードをタップした時は、内容の確認だけできるように閲覧専用のシートを開く
   if(e.type==="click"){
     try{
-      const cardEl2=e.target&&e.target.closest&&e.target.closest(".card");
+      const busy=document.querySelector("#viewerOlay.open,#askOlay.open,.olay.open");
+      const cardEl2=busy?null:(e.target&&e.target.closest&&e.target.closest(".card"));
       if(cardEl2&&cardEl2.dataset&&cardEl2.dataset.cid){
         openCardSheet({p:+cardEl2.dataset.cp,zone:cardEl2.dataset.cz,id:cardEl2.dataset.cid,
                        hidden:cardEl2.dataset.chidden==="1",viewOnly:true});
@@ -6617,6 +6686,7 @@ async function findByCond(pi){
   sfx("ok");renderAll();
 }
 async function searchZone(pi,zone,kinds){
+  VIEWER_BROWSE=false;   // 👁 探索は選択操作なので塞がない
   const Z=zonesOf(pi);
   const src=Z[zone];
   const zoneName=zone==="deck"?"山札":zone==="grave"?"墓地":"マナゾーン";
@@ -9095,10 +9165,12 @@ async function runFxList(pi,list,srcCard,inPump){
   //    ツインパクトは唱えている面（face=1＝下面の呪文）で判定する。
   const _prevFromSpell=FX_FROM_SPELL;
   const _prevActor=FX_ACTOR;FX_ACTOR=pi;
+  const _prevFromCre=FX_FROM_CRE;
   try{
     const _rs=srcCard?getReg(srcCard):null;
     FX_FROM_SPELL=!!(_rs&&(_rs.ctype==="spell"||((_rs.twin||_rs.ctype==="twinpact")&&(srcCard.face|0)===1)));
-  }catch(e){FX_FROM_SPELL=false;}
+    FX_FROM_CRE=!!(_rs&&isCreatureReg(_rs)&&!FX_FROM_SPELL);
+  }catch(e){FX_FROM_SPELL=false;FX_FROM_CRE=false;}
   try{
   const _srcLbl=srcCard?faceNameOf(srcCard):"";
   for(const f of list){
@@ -12782,7 +12854,7 @@ async function runFxList(pi,list,srcCard,inPump){
     renderAll();
   }
   try{stampShieldSrc(_srcLbl);}catch(e){} // 🛡 最後の効果で増えた盾にも追加元を刻む
-  }finally{FX_FROM_SPELL=_prevFromSpell;FX_ACTOR=_prevActor;} // 🔮 入れ子で呼ばれても元に戻す
+  }finally{FX_FROM_SPELL=_prevFromSpell;FX_FROM_CRE=_prevFromCre;FX_ACTOR=_prevActor;} // 🔮 入れ子で呼ばれても元に戻す
 }
 const fxQueue=[];let fxRunning=false;
 let fxInsertAt=null; // 🔢 深さ優先の挿入位置。処理中カードの「出た時」で新たに出たカードのCIPは、次の兄弟より先に解決させる（1枚の効果解決が終わるまで割り込ませない）
@@ -18637,6 +18709,9 @@ function renderFxEditor(){
   $("fxStNoCheat").checked=!!FXEDIT.stNoCheat;
   {const e=$("fxNoChooseOppTurn");if(e)e.checked=!!FXEDIT.noChooseOppTurn;}
   {const e=$("fxNoChooseSpell");if(e)e.checked=!!FXEDIT.noChooseSpell;}
+  {const e=$("fxNoChooseCre");if(e)e.checked=!!FXEDIT.noChooseCre;}
+  {const e=$("fxAwakenPayN");if(e)e.value=FXEDIT.awakenPayN||"";}
+  {const e=$("fxAwakenPayZone");if(e)e.value=FXEDIT.awakenPayZone||"";}
   {const e=$("fxStBounceCheat");if(e)e.checked=!!FXEDIT.stBounceCheat;}
   {const e=$("fxStManaCheat");if(e)e.checked=!!FXEDIT.stManaCheat;}
   {const e=$("fxStCipToMana");if(e)e.checked=!!FXEDIT.stCipToMana;}
@@ -20793,6 +20868,9 @@ function openFxEditor(key){
     stNoCheat:cur?!!cur.stNoCheat:false,
     noChooseOppTurn:cur?!!cur.noChooseOppTurn:false,
     noChooseSpell:cur?!!cur.noChooseSpell:false,
+    noChooseCre:cur?!!cur.noChooseCre:false,
+    awakenPayN:cur&&(+cur.awakenPayN||0)||0,
+    awakenPayZone:cur&&cur.awakenPayZone||"",
     stBounceCheat:cur?!!cur.stBounceCheat:false,
     stManaCheat:cur?!!cur.stManaCheat:false,
     stCipToMana:cur?!!cur.stCipToMana:false,
@@ -21211,6 +21289,9 @@ $("fxSave").addEventListener("click",async ()=>{
     stNoCheat:$("fxStNoCheat").checked,
     noChooseOppTurn:$("fxNoChooseOppTurn")?$("fxNoChooseOppTurn").checked:false,
     noChooseSpell:$("fxNoChooseSpell")?$("fxNoChooseSpell").checked:false,
+    noChooseCre:$("fxNoChooseCre")?$("fxNoChooseCre").checked:false,
+    awakenPayN:$("fxAwakenPayN")?(Math.abs(+$("fxAwakenPayN").value)||0):0,
+    awakenPayZone:$("fxAwakenPayZone")?$("fxAwakenPayZone").value.trim():"",
     stBounceCheat:$("fxStBounceCheat")?$("fxStBounceCheat").checked:false,
     stManaCheat:$("fxStManaCheat")?$("fxStManaCheat").checked:false,
     stCipToMana:$("fxStCipToMana")?$("fxStCipToMana").checked:false,
@@ -21721,6 +21802,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.evoSrcFilt)attrs.push(`進化元：${v.evoSrcFilt}`);
     if(v.evoSrcSum)attrs.push(`超無限進化：合計コスト${v.evoSrcSum}以上`);
     if(v.awakenMeteor)attrs.push("メテオバーン覚醒");
+    if(v.noChooseCre)attrs.push("相手のクリーチャーの能力で選ばれない");
+    if(v.awakenPayN)attrs.push(`覚醒の支払い：${v.awakenPayZone||"バトル+マナ"}から${v.awakenPayN}枚を山札へ`);
     if(v.stFoeEvoSick)attrs.push(`常在：相手の${v.stFoeEvoSickF||""}進化は出たターン攻撃できない`);
     if(v.stExtraFirstDraw)attrs.push("最初のドローで1枚追加");
 
@@ -30165,6 +30248,7 @@ function vCardEl(name,opts={}){
   return el;
 }
 function closeViewer(){
+  VIEWER_BROWSE=false;   // 👁 閉じたら「眺めるだけ」の印は必ず外す（次の選択パネルを塞がないため）
   if(typeof B!=="undefined"&&B)B._viewerBack=null;
   if(typeof updateVPeek==="function")try{updateVPeek();}catch(e){}
   {const g=document.getElementById("vGrid");if(g){g.classList.remove("decklist");g.style.gridTemplateColumns="";}}
@@ -30206,6 +30290,7 @@ function pickCard(title,cards,opts={}){
   });
 }
 function _pickCardBase(title,cards,opts={}){
+  VIEWER_BROWSE=false;   // 👁 選択パネルなので、操作を塞がない
   if(!cards||!cards.length)return Promise.resolve(null); // 空は即返し（ゲート不要）
   // 👻 ゴースト自動応答：処理中は簡易ヒューリスティックで1枚選ぶ
   if(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO){
@@ -30255,6 +30340,7 @@ function _pickCardBase(title,cards,opts={}){
   }));
 }
 function openExileViewer(pi){
+  VIEWER_BROWSE=true;   // 👁 中身を眺めるだけのパネル
   const Z=zonesOf(pi);
   $("vTitle").textContent=`ゲーム外ゾーン（${Z.exile.length}枚）　[${S.players[pi].label}]`;
   $("vHint").textContent="タップ→操作 ／ ドラッグで他のゾーンへ戻せます";
@@ -30275,6 +30361,7 @@ function openExileViewer(pi){
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 function openHyperViewer(pi){
+  VIEWER_BROWSE=true;   // 👁 中身を眺めるだけのパネル
   const Z=zonesOf(pi);
   $("vTitle").textContent=`超次元ゾーン（${Z.hyper.length}枚）　[${S.players[pi].label}]`;
   $("vHint").textContent="タップ→操作 ／ 横にドラッグでバトルゾーンへ直接出せます（公開ゾーン）";
@@ -30297,7 +30384,7 @@ function openHyperViewer(pi){
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 let MV_MENU=false;
-function openManaViewer(pi){MV_MENU=false;renderManaViewer(pi);}
+function openManaViewer(pi){VIEWER_BROWSE=true;MV_MENU=false;renderManaViewer(pi);}
 function renderManaViewer(pi){
   const Z=zonesOf(pi);
   const untap=manaSumOf(pi,true);
@@ -30410,7 +30497,7 @@ function openOppHandViewer(op){
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
 let gvMulti=false;
-function openGraveViewer(pi){gvMulti=false;renderGraveViewer(pi);$("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();}
+function openGraveViewer(pi){VIEWER_BROWSE=true;gvMulti=false;renderGraveViewer(pi);$("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();}
 function renderGraveViewer(pi){
   const Z=zonesOf(pi);
   $("vTitle").textContent=`墓地（${Z.grave.length}枚）　[${S.players[pi].label}]`;
@@ -30441,6 +30528,7 @@ function renderGraveViewer(pi){
   if(!Z.grave.length)g.innerHTML="<div class='hint' style='grid-column:1/-1'>墓地は空です</div>";
 }
 function openShieldViewer(pi){
+  VIEWER_BROWSE=true;   // 👁 中身を眺めるだけのパネル
   const Z=zonesOf(pi);
   const svMulti=!!S.multi; // 🖐 複数選択モード中は、タップで選択／解除にする
   $("vTitle").textContent=`🛡 シールド確認（${Z.shield.length}枚）　[${S.players[pi].label}]`;
@@ -30649,6 +30737,7 @@ function openZeronPanel(pi,c){
   document.body.appendChild(ol);
 }
 function openDeckViewer(pi){
+  VIEWER_BROWSE=true;   // 👁 中身を眺めるだけのパネル
   B._viewerBack=B._viewerBack||"deck"; // ◀ 戻り先＝デッキ画面（ビルダー経由なら上書きしない）
   if(qqqxBlock(pi,"確認"))return;
   const Z=zonesOf(pi);
@@ -31086,6 +31175,7 @@ function noteChosenList(cards){
   try{(cards||[]).forEach(c=>{if(c)noteChosenByFoe(c);});}catch(e){}
 }
 function pickCards(pi,n,title,exclude){
+  VIEWER_BROWSE=false;   // 👁 選択パネルなので、操作を塞がない
   return _serialDlg(PICK_GATE,()=>new Promise(res=>{
     const P=S.players[pi];
     const agg=new Map();
