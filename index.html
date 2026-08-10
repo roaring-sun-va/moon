@@ -596,6 +596,42 @@ body.shake{animation:bodyShake .4s ease-out}
 .an-charge{animation:anFlash .6s ease-out}
 #resultOlay{position:fixed;inset:0;z-index:96;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(2,4,10,.88);animation:fadeIn .3s ease-out;overflow:hidden;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+/* ===== ✨ 対戦の演出（v10.97） =====
+   斜めに走る帯・放射状の光・切り裂き・揺れ で、TCGらしい見た目にする。
+   すべてCSSだけで描くので、画像を持たなくても成立する。 */
+@keyframes revIn{
+  0%  {transform:translateX(-14%) skewX(-12deg) scale(.86);opacity:0;filter:blur(6px)}
+  55% {transform:translateX(2%)   skewX(-12deg) scale(1.04);opacity:1;filter:blur(0)}
+  100%{transform:translateX(0)    skewX(-12deg) scale(1);   opacity:1}
+}
+@keyframes revOut{to{transform:translateX(6%) skewX(-12deg) scale(.96);opacity:0;filter:blur(3px)}}
+@keyframes revSweep{0%{left:-60%}100%{left:130%}}
+@keyframes revRays{0%{transform:rotate(0) scale(.6);opacity:.85}100%{transform:rotate(120deg) scale(1.5);opacity:0}}
+@keyframes revShake{0%,100%{transform:translate(0,0)}20%{transform:translate(-5px,3px)}40%{transform:translate(4px,-3px)}60%{transform:translate(-3px,-2px)}80%{transform:translate(3px,2px)}}
+@keyframes revSlash{0%{transform:translate(-50%,-50%) rotate(-24deg) scaleX(0);opacity:0}
+  30%{opacity:1}100%{transform:translate(-50%,-50%) rotate(-24deg) scaleX(1.4);opacity:0}}
+@keyframes revCardIn{0%{transform:translateY(16px) rotate(-6deg) scale(.7);opacity:0}
+  60%{transform:translateY(-3px) rotate(2deg) scale(1.06);opacity:1}
+  100%{transform:translateY(0) rotate(0) scale(1);opacity:1}}
+.revFxBanner{position:relative;overflow:hidden;transform:skewX(-12deg);
+  animation:revIn .34s cubic-bezier(.16,1.5,.4,1) both;will-change:transform,opacity}
+.revFxBanner.out{animation:revOut .24s ease-in both}
+.revFxBanner>*{transform:skewX(12deg)}   /* 中身は傾けずまっすぐ見せる */
+.revFxBanner .revSweep{position:absolute;top:0;bottom:0;width:38%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.42),transparent);
+  animation:revSweep .85s ease-out .1s both;transform:skewX(0)}
+.revFxBanner .revRays{position:absolute;left:50%;top:50%;width:280%;aspect-ratio:1;
+  transform:translate(-50%,-50%);pointer-events:none;opacity:.55;
+  background:repeating-conic-gradient(from 0deg,currentColor 0deg 4deg,transparent 4deg 14deg);
+  animation:revRays 1.1s ease-out both;mix-blend-mode:screen}
+.revFxBanner.big{animation:revIn .34s cubic-bezier(.16,1.5,.4,1) both,revShake .42s .3s ease-in-out}
+.revFxTitle{font-weight:900;letter-spacing:.06em;line-height:1.15;
+  text-shadow:0 2px 0 rgba(0,0,0,.85),0 0 14px currentColor;white-space:nowrap}
+.revFxSlash{position:fixed;left:50%;top:50%;width:150vw;height:8px;z-index:961;pointer-events:none;
+  transform-origin:center;animation:revSlash .5s ease-out both}
+.revFxCard{animation:revCardIn .4s cubic-bezier(.16,1.5,.4,1) .06s both}
+.revFxIcon{width:52px;height:52px;border-radius:50%;object-fit:cover;flex:0 0 auto;
+  border:2px solid currentColor;box-shadow:0 3px 12px rgba(0,0,0,.6)}
 @keyframes resPop{0%{transform:scale(.3) rotate(-6deg);opacity:0}55%{transform:scale(1.18) rotate(1deg)}100%{transform:scale(1) rotate(0);opacity:1}}
 /* 勝利：回転する金の放射光 */
 #resultOlay .rburst{position:absolute;left:50%;top:50%;width:240vmax;height:240vmax;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,rgba(251,191,36,.14) 0 7deg,transparent 7deg 16deg);animation:rSpin 14s linear infinite;pointer-events:none;mask-image:radial-gradient(circle,#000 0 34%,transparent 68%);-webkit-mask-image:radial-gradient(circle,#000 0 34%,transparent 68%)}
@@ -1152,6 +1188,20 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
       </div>
       <div class="hint">演出は処理を待たせません。オンラインでは相手の画面にも同じものが出ます。</div>
+      <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700">👤 演出に出す自分の画像</span>
+        <img id="fxIconPrev0" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid var(--line);display:none">
+        <input type="file" id="fxIconFile0" accept="image/*" style="flex:1;min-width:150px;font-size:12px">
+        <button class="btn small ghost" id="fxIconClr0">消す</button>
+      </div>
+      <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700">👤 相手側（P2）の画像</span>
+        <img id="fxIconPrev1" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid var(--line);display:none">
+        <input type="file" id="fxIconFile1" accept="image/*" style="flex:1;min-width:150px;font-size:12px">
+        <button class="btn small ghost" id="fxIconClr1">消す</button>
+      </div>
+      <div class="hint">好きな画像を丸く切り抜いて演出に出します（自分の端末にだけ保存され、相手には送りません）。<br>
+        アイコン、自分で描いたもの、推しのデッキの写真など、お好きなものをどうぞ。</div>
       <div class="row" style="align-items:center;gap:8px">
         <span style="font-size:12px;font-weight:700">効果登録済みの⚙マーク（手札）</span>
         <select id="setFxBadge" style="flex:1">
@@ -3747,7 +3797,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.96";
+const APP_VER="v10.97";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4055,7 +4105,7 @@ function markArrive(c){
       const rr=getReg(c);
       if(own!=null&&rr&&isCreatureReg(rr)){
         const via=c._viaCheat?"バトルゾーンへ！":"召喚！";
-        fxShare("summon",via,`${S.players[own].label}　《${faceNameOf(c)}》`,false,c.name);
+        fxShare("summon",via,`${S.players[own].label}`,false,c.name,own);
       }
     }
   }catch(e){}
@@ -4999,65 +5049,106 @@ function fxFlash(color){
     setTimeout(()=>{try{f.remove();}catch(e){}},380);
   }catch(e){}
 }
-function fxBanner(kind,title,sub,big,cardName){
+function fxBanner(kind,title,sub,big,cardName,side){
   try{
     if(!fxAllowed(kind))return;
     const st=FX_STYLE[kind]||FX_STYLE.summon;
     const L=fxLayer();
     while(L.children.length>=3)L.removeChild(L.firstChild);   // 積みすぎない
-    const b=document.createElement("div");
-    b.className="revFxBanner";     // ⚠ id は使わない（既存の #fxBanner と衝突するため）
-    const scale=big?1.12:1;
-    b.style.cssText="transform:translateY(-24px) scale(.75);opacity:0;"
-      +"max-width:94vw;pointer-events:none;text-align:center;"
-      +`background:${st.bg};border:${big?4:3}px solid ${st.bd};border-radius:16px;padding:${big?"16px 28px":"10px 20px"};`
-      +`box-shadow:0 14px 44px rgba(0,0,0,.75), 0 0 26px ${st.bd}66;`
-      +"transition:transform .2s cubic-bezier(.2,1.7,.4,1),opacity .2s";
-    if(big)fxFlash(st.bd);
     const esc=x=>String(x==null?"":x).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
-    b.innerHTML=`<div style="font-size:${big?34:24}px;line-height:1">${st.ic}</div>`
-      +`<div style="font-size:${big?22:16}px;font-weight:900;color:${st.fg};margin-top:4px;letter-spacing:.04em">${esc(title)}</div>`
-      +(sub?`<div style="font-size:${big?15:12.5}px;font-weight:700;color:#cbd5e1;margin-top:4px;word-break:break-word">${esc(sub)}</div>`:"");
-    if(cardName&&sub&&String(sub).includes(String(cardName))){
-      // カード画像を出すので、説明文からカード名を取り除いてすっきりさせる
-      const trimmed=String(sub).replace(`《${cardName}》`,"").replace(String(cardName),"").replace(/[　\s]+$/,"").trim();
-      const sd=b.lastElementChild;
-      if(sd)sd.textContent=trimmed;
+
+    const b=document.createElement("div");
+    b.className="revFxBanner"+(big?" big":"");
+    b.style.cssText="max-width:94vw;pointer-events:none;color:"+st.bd+";"
+      +`background:linear-gradient(105deg,${st.bg} 0%, rgba(0,0,0,.92) 58%, ${st.bg} 100%);`
+      +`border-left:${big?7:5}px solid ${st.bd};border-right:${big?7:5}px solid ${st.bd};`
+      +`border-radius:6px;padding:${big?"14px 30px":"9px 22px"};`
+      +`box-shadow:0 10px 34px rgba(0,0,0,.8), 0 0 30px ${st.bd}55, inset 0 0 24px ${st.bd}22;`;
+
+    // 背景の演出（放射状の光と、走る帯）
+    if(big){const ry=document.createElement("div");ry.className="revRays";b.appendChild(ry);}
+    const sw=document.createElement("div");sw.className="revSweep";b.appendChild(sw);
+
+    // 本体（アイコン＋文字＋カード画像を横並びに）
+    const row=document.createElement("div");
+    row.style.cssText="position:relative;display:flex;align-items:center;gap:"+(big?"16px":"11px")+";justify-content:center";
+
+    // 👤 プレイヤーの画像（設定で登録したもの）。無ければ種類のアイコン。
+    const icoSrc=(side!=null&&S.fxIcon&&S.fxIcon[side])?S.fxIcon[side]:null;
+    if(icoSrc){
+      const im=document.createElement("img");
+      im.src=icoSrc;im.className="revFxIcon";im.alt="";
+      if(big){im.style.width="66px";im.style.height="66px";}
+      row.appendChild(im);
+    }else{
+      const ic=document.createElement("div");
+      ic.style.cssText=`font-size:${big?38:27}px;line-height:1;filter:drop-shadow(0 0 10px ${st.bd})`;
+      ic.textContent=st.ic;
+      row.appendChild(ic);
     }
-    // 🖼 カード名が渡されていれば、その画像を大きく添える（登録画像が無ければ名前だけ出る）
+
+    const txt=document.createElement("div");
+    txt.style.cssText="text-align:left;min-width:0";
+    const t1=document.createElement("div");
+    t1.className="revFxTitle";
+    t1.style.cssText=`font-size:${big?26:17}px;color:${st.fg}`;
+    t1.textContent=title||"";
+    txt.appendChild(t1);
+    let subText=sub||"";
+    if(cardName&&subText.includes(String(cardName)))
+      subText=subText.replace(`《${cardName}》`,"").replace(String(cardName),"").replace(/[　\s]+$/,"").trim();
+    if(subText){
+      const t2=document.createElement("div");
+      t2.style.cssText=`font-size:${big?14:12}px;font-weight:800;color:#dbe4f0;margin-top:2px;`
+        +"text-shadow:0 1px 3px rgba(0,0,0,.9);word-break:break-word";
+      t2.textContent=subText;
+      txt.appendChild(t2);
+    }
+    row.appendChild(txt);
+
+    // 🖼 カード画像（あれば右に添える）
     if(cardName){
       try{
-        const wrap=document.createElement("div");
-        wrap.style.cssText=`margin-top:8px;display:flex;justify-content:center;filter:drop-shadow(0 6px 18px ${st.bd}88)`;
         const el=vCardEl(String(cardName));
-        el.style.cssText=`width:${big?132:100}px;pointer-events:none`;
-        const cn=el.querySelector(".cnt");if(cn)cn.remove();          // 枚数バッジは不要
-        const idx=el.querySelector(".idx");if(idx)idx.remove();
-        // カード名は画像側（画像が無ければ名前板）に出るので、下の帯は消して二重表示を防ぐ
+        el.classList.add("revFxCard");
+        el.style.cssText=`width:${big?92:70}px;pointer-events:none;flex:0 0 auto;`
+          +`border-radius:6px;outline:2px solid ${st.bd};filter:drop-shadow(0 4px 14px ${st.bd}99)`;
+        const cn=el.querySelector(".cnt");if(cn)cn.remove();
+        const ix=el.querySelector(".idx");if(ix)ix.remove();
         const vn=el.querySelector(".vname");if(vn)vn.remove();
-        el.style.outline=`2px solid ${st.bd}`;
-        el.style.borderRadius="8px";
-        wrap.appendChild(el);
-        b.appendChild(wrap);
+        row.appendChild(el);
       }catch(e){}
     }
+    b.appendChild(row);
     L.appendChild(b);
-    requestAnimationFrame(()=>{b.style.transform=`translateY(0) scale(${scale})`;b.style.opacity="1";});
+
+    // 大きな出来事は、画面を光らせて斜めに切り裂く
+    if(big){
+      fxFlash(st.bd);
+      try{
+        const sl=document.createElement("div");
+        sl.className="revFxSlash";
+        sl.style.background=`linear-gradient(90deg,transparent,${st.bd},#fff,${st.bd},transparent)`;
+        sl.style.boxShadow=`0 0 22px ${st.bd}`;
+        document.body.appendChild(sl);
+        setTimeout(()=>{try{sl.remove();}catch(e){}},520);
+      }catch(e){}
+    }
     try{sfx(st.se);}catch(e){}
     const ms=big?2200:1500;
     setTimeout(()=>{
-      b.style.opacity="0";b.style.transform="translateY(-14px) scale(.94)";
-      setTimeout(()=>{try{b.remove();}catch(e){}},220);
+      b.classList.add("out");
+      setTimeout(()=>{try{b.remove();}catch(e){}},260);
     },ms);
   }catch(e){}
 }
 /* 📡 演出を自分と相手の両方に出す。相手の画面にも出すことで「何をされたか」が伝わる。 */
-function fxShare(kind,title,sub,big,cardName){
+function fxShare(kind,title,sub,big,cardName,side){
   if(!fxAllowed(kind))return;   // 出さない設定なら送信もしない（通信を無駄にしない）
-  fxBanner(kind,title,sub,big,cardName);
+  fxBanner(kind,title,sub,big,cardName,side);
   try{
     if(olActive()&&ONLINE.conn&&ONLINE.conn.open&&!ONLINE.applying)
-      ONLINE.conn.send({t:"actionFx",kind,title,sub,big:!!big,card:cardName||""});
+      ONLINE.conn.send({t:"actionFx",kind,title,sub,big:!!big,card:cardName||"",side:(side==null?null:side|0)});
   }catch(e){}
 }
 /* 🎲 ガチンコ・ジャッジの結果を画面中央に出す。
@@ -6949,7 +7040,7 @@ function emitEvent(actor,type,card){
   // ✨ 呪文を唱えた演出（設定「多め」の時だけ）
   try{
     if(type==="spell"&&card&&fxAllowed("spell"))
-      fxShare("spell","呪文詠唱！",`${S.players[actor].label}　《${faceNameOf(card)}》`,false,card.name);
+      fxShare("spell","呪文詠唱！",`${S.players[actor].label}`,false,card.name,actor);
   }catch(e){}
   // ⚡ 「クリーチャーが出た時」系の誘発ゲート（v10.24）：出たカードがクリーチャーの時だけ発火する。
   //    クロスギア・D2フィールド・城・オーラなどクリーチャー以外のバトルゾーン配置では、
@@ -15473,7 +15564,7 @@ function processBroken(op,stack,label){
         {const rT=getReg(c);if(rT&&(rT.twin||rT.ctype==="twinpact"))c.face=1;}
         c.faceup=true;Z.resolve.push(c);markArrive(c);sfx("move");
         logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を唱えた（${stDefer.length+1}番目・パネル完了後に順番に解決）`);
-        fxShare("trig","S・トリガー発動！",`${S.players[op].label}　《${faceNameOf(c)}》`,true);
+        fxShare("trig","S・トリガー発動！",`${S.players[op].label}`,true,c.name,op);
         bumpEv("stTrig",op);
         stDefer.push({c,zone:"resolve"});
       }else if(zone==="battle"){
@@ -15482,7 +15573,7 @@ function processBroken(op,stack,label){
         c.faceup=true;Z.battle.push(c);markArrive(c);sfx("move");
         const r=getReg(c);if(r&&(r.d2||r.wide))applyD2Rot(op,c);
         logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を出した（${stDefer.length+1}番目・出た時効果はパネル完了後）`);
-        fxShare("trig","S・トリガー発動！",`${S.players[op].label}　《${faceNameOf(c)}》`,true);
+        fxShare("trig","S・トリガー発動！",`${S.players[op].label}`,true,c.name,op);
         bumpEv("stTrig",op);
         stDefer.push({c,zone:"battle"});
       }else if(zone==="hand"){
@@ -15825,7 +15916,7 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   try{
     const rest=Math.max(0,OZ.shield.length-total);
     fxShare("brk",`シールドブレイク ${total}枚！`,
-      `${S.players[op].label}　残り ${rest} 枚${attacker?`　←《${faceNameOf(attacker)}》`:""}`,total>=3);
+      `${S.players[op].label}　残り ${rest} 枚`,total>=3,attacker?attacker.name:"",(op===0?1:0));
     if(rest===1)setTimeout(()=>{try{fxShare("danger","シールド残り1枚！",`${S.players[op].label}　あと1枚`);}catch(e){}},1050);
     else if(rest===0)setTimeout(()=>{try{fxShare("danger","シールドが尽きた！",`${S.players[op].label}　次の攻撃で決着`,true);}catch(e){}},1050);
   }catch(e){}
@@ -16828,12 +16919,12 @@ async function execAttack(pi,id,tg){
   // ⚔ 攻撃の宣言を演出で知らせる。ダイレクトアタックは大きく出す。
   try{
     if(_atkKind==="direct"){
-      fxShare("direct","ダイレクトアタック！",`${S.players[pi].label}　《${faceNameOf(c)}》`,true);
+      fxShare("direct","ダイレクトアタック！",`${S.players[pi].label}　《${faceNameOf(c)}》`,true,c.name,pi);
     }else{
       const tgtName=(tg&&tg.kind==="creature")
         ? (()=>{const tc=zonesOf(pi===0?1:0).battle.find(x=>x.id===tg.cid);return tc?`《${faceNameOf(tc)}》へ`:"クリーチャーへ";})()
         : "シールドへ";
-      fxShare("attack","アタック！",`${S.players[pi].label}　《${faceNameOf(c)}》→ ${tgtName}`);
+      fxShare("attack","アタック！",`${S.players[pi].label}　${tgtName}`,false,c.name,pi);
     }
   }catch(e){}
   let _atkEndRan=false;
@@ -17921,7 +18012,7 @@ async function execAttack(pi,id,tg){
     sfx("atk");
     emitEvent(pi,"atkP");
     toast(`💥 ダイレクトアタック！`);
-    try{fxShare("direct","ダイレクトアタック成功！",`${S.players[pi].label}　《${faceNameOf(c)}》`,true);}catch(e){}
+    try{fxShare("direct","ダイレクトアタック成功！",`${S.players[pi].label}`,true,c.name,pi);}catch(e){}
     if(S.expert){
       const DZ2=zonesOf(op);
       const dw=DZ2.battle.filter(x=>{const r2=getReg(x);return r2&&r2.watchFx&&r2.watchFx.some(w=>w.ev==="atkP")&&!isSealed(x)&&!isIgnored(x,op);});
@@ -26339,12 +26430,12 @@ function setupConn(conn){
     else if(msg&&msg.t==="win"){
       if(msg.score){SCORE[0]=msg.score[0]|0;SCORE[1]=msg.score[1]|0;}
       toast(`🏆 ${S.players[msg.winner|0].label} の勝利！（${msg.reason||""}／戦績 ${SCORE[0]} - ${SCORE[1]}）`);
-      try{fxBanner("win",`${S.players[msg.winner|0].label} の勝利！`,msg.reason||"",true);}catch(e){}
+      try{fxBanner("win",`${S.players[msg.winner|0].label} の勝利！`,msg.reason||"",true,"",msg.winner|0);}catch(e){}
       renderAll();
     }
     else if(msg&&msg.t==="actionFx"){
       // ✨ 相手の端末で起きたことを、こちらの画面にも演出として出す
-      fxBanner(msg.kind,msg.title,msg.sub,!!msg.big,msg.card||"");
+      fxBanner(msg.kind,msg.title,msg.sub,!!msg.big,msg.card||"",(msg.side==null?null:msg.side|0));
     }
     else if(msg&&msg.t==="remoteAsk"){
       // 📨 相手から選択を頼まれた。自分の画面で選んで、答えだけ返す。
@@ -27981,7 +28072,7 @@ async function declareWin(winner,reason,askFirst=true){
   SCORE[winner]++;
   recordMatch(winner,reason);
   toast(`🏆 ${S.players[winner].label} の勝利！（${reason}／戦績 ${SCORE[0]} - ${SCORE[1]}）`);
-  fxBanner("win",`${S.players[winner].label} の勝利！`,reason,true);
+  fxBanner("win",`${S.players[winner].label} の勝利！`,reason,true,"",winner);
   showResultScreen(winner,reason);
   if(ONLINE.conn&&ONLINE.conn.open){
     try{ONLINE.conn.send({t:"win",winner,reason,score:SCORE.slice()});}catch(e){}
@@ -32512,6 +32603,37 @@ $("setBattleLabels").addEventListener("change",async ()=>{
   if(db)await idbPut("misc","battleLabels",S.battleLabels);
   renderAll();
 });
+/* 👤 演出に出す画像の登録。長辺160pxに縮めて端末に保存する（重くならないように） */
+for(const sideI of [0,1]){
+  const fi=$("fxIconFile"+sideI), pv=$("fxIconPrev"+sideI), cl=$("fxIconClr"+sideI);
+  if(fi)fi.addEventListener("change",async ()=>{
+    const f=fi.files&&fi.files[0];
+    if(!f)return;
+    try{
+      const url=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});
+      const img=await new Promise((res,rej)=>{const i2=new Image();i2.onload=()=>res(i2);i2.onerror=rej;i2.src=url;});
+      const M=160, sc=Math.min(1,M/Math.max(img.width,img.height));
+      const cv=document.createElement("canvas");
+      cv.width=Math.max(1,Math.round(img.width*sc));cv.height=Math.max(1,Math.round(img.height*sc));
+      cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
+      const small=cv.toDataURL("image/webp",0.85);
+      S.fxIcon=S.fxIcon||[null,null];
+      S.fxIcon[sideI]=small;
+      if(db)await idbPut("misc","fxIcon",S.fxIcon);
+      if(pv){pv.src=small;pv.style.display="";}
+      toast("👤 演出の画像を設定しました");
+      fxBanner("trig","この画像で出ます",`${S.players[sideI].label}`,true,"",sideI);
+    }catch(e){toast("⚠ 画像を読み込めませんでした");}
+    fi.value="";
+  });
+  if(cl)cl.addEventListener("click",async ()=>{
+    S.fxIcon=S.fxIcon||[null,null];
+    S.fxIcon[sideI]=null;
+    if(db)await idbPut("misc","fxIcon",S.fxIcon);
+    if(pv){pv.src="";pv.style.display="none";}
+    toast("👤 演出の画像を消しました");
+  });
+}
 $("setFxLevel").addEventListener("change",async ()=>{
   S.fxLevel=$("setFxLevel").value||"mid";
   if(db)await idbPut("misc","fxLevel",S.fxLevel);
@@ -34988,7 +35110,13 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
    try{if(typeof applyChatDockSize==="function")applyChatDockSize();
        if(typeof applyChatBox==="function")applyChatBox();}catch(e){}}
   {const fl=db?await idbGet("misc","fxLevel"):null;
-   if(fl)S.fxLevel=fl;}
+   if(fl)S.fxLevel=fl;
+   const fi2=db?await idbGet("misc","fxIcon"):null;
+   if(Array.isArray(fi2)){
+     S.fxIcon=fi2;
+     for(const k of [0,1]){const pv=document.getElementById("fxIconPrev"+k);
+       if(pv&&fi2[k]){pv.src=fi2[k];pv.style.display="";}}
+   }}
   {const fb=db?await idbGet("misc","fxBadge"):null;
    if(fb!==null&&fb!==undefined)S.fxBadge=!!fb;
    const fr=db?await idbGet("misc","fxRegBtn"):null;
