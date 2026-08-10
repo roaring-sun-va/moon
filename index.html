@@ -246,7 +246,8 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 #olBar.locked{border-color:#ff6b6b;color:#ffb3b3}
 #olBar.granted{border-color:#7fe0a8;color:#bff3d6}
 #olBar .btn{padding:4px 9px;font-size:11.5px}
-#chatFab{position:fixed;right:10px;bottom:calc(152px + env(safe-area-inset-bottom));z-index:84;
+#chatFab{position:fixed;right:var(--cfr,10px);bottom:var(--cfb,calc(152px + env(safe-area-inset-bottom)));z-index:84;
+  touch-action:none;
   width:48px;height:48px;border-radius:50%;border:1px solid var(--line);
   background:rgba(10,14,24,.92);color:#cbd3df;font-size:20px;
   display:none;align-items:center;justify-content:center;
@@ -255,6 +256,8 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 #chatFab .badge{position:absolute;top:-3px;right:-3px;min-width:17px;height:17px;border-radius:9px;
   background:#ff5c5c;color:#fff;font-size:10.5px;font-weight:900;line-height:17px;padding:0 4px;display:none}
 #chatFab.unread .badge{display:block}
+#chatFab:active{transform:scale(.92)}
+#chatFab.cf-drag{opacity:.9;box-shadow:0 10px 26px rgba(0,0,0,.7);border-color:var(--accent);transform:scale(1.06)}
 #chatDock{position:fixed;right:8px;bottom:calc(96px + env(safe-area-inset-bottom));
   width:300px;max-height:46dvh;z-index:85;touch-action:none;
   background:rgba(10,14,24,.97);border:1px solid var(--line);border-radius:12px;
@@ -3236,7 +3239,7 @@ window.addEventListener("resize",()=>{try{applyLogBox();}catch(e){}});
  const EDGE=22, NEED=44;
  window.addEventListener("pointerdown",ev=>{
    if(typeof S==="undefined"||!S||S.logSwipe===false)return;
-   if(ev.target&&ev.target.closest&&(ev.target.closest("#logFab")||ev.target.closest("#logDock .ld-head")||ev.target.closest("#logDock .ld-grip"))){sx=sy=null;edge=false;return;} // 丸ボタン・見出し・つかみ手のドラッグは払い操作にしない
+   if(ev.target&&ev.target.closest&&(ev.target.closest("#logFab")||ev.target.closest("#chatFab")||ev.target.closest("#logDock .ld-head")||ev.target.closest("#logDock .ld-grip")||ev.target.closest("#chatDock .cd-head")||ev.target.closest("#chatDock .cd-grip"))){sx=sy=null;edge=false;return;} // 丸ボタン・見出し・つかみ手のドラッグは払い操作にしない
    sx=ev.clientX;sy=ev.clientY;
    const d=document.getElementById("logDock");
    const open=!!(d&&d.classList.contains("show"));
@@ -3315,8 +3318,58 @@ function wireOnlineChatUI(){
   if(g)g.addEventListener("click",()=>olSendGrant(!ONLINE.grantOpp));
   const a=document.getElementById("olAskBtn");
   if(a)a.addEventListener("click",()=>olAskPermission());
+  // 💬 チャットの丸ボタン：タップで開閉、長押しで大きさ切替、ドラッグで移動（ログの丸ボタンと同じ操作）
   const f=document.getElementById("chatFab");
-  if(f)f.addEventListener("click",()=>chatToggle());
+  if(f){
+    let held=false,tm=null,sx=0,sy=0,drag=false,pid=null,lastR=0,lastB=0;
+    const applyPos=()=>{
+      const p=(typeof S!=="undefined"&&S&&S.chatFabPos)||null;
+      if(!p)return;
+      f.style.setProperty("--cfr",p.r+"px");
+      f.style.setProperty("--cfb",p.b+"px");
+    };
+    window.applyChatFabPos=applyPos;
+    applyPos();
+    f.addEventListener("pointerdown",ev=>{
+      held=false;drag=false;sx=ev.clientX;sy=ev.clientY;pid=ev.pointerId;
+      try{f.setPointerCapture(pid);}catch(e){}
+      tm=setTimeout(()=>{
+        if(drag)return;
+        held=true;
+        const b2=document.getElementById("cdSize");
+        if(b2){if(!document.getElementById("chatDock").classList.contains("show"))chatToggle(true);b2.click();}
+      },520);
+    });
+    f.addEventListener("pointermove",ev=>{
+      if(pid==null)return;
+      if(!drag&&(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy))<10)return;
+      if(!drag){drag=true;clearTimeout(tm);f.classList.add("cf-drag");}
+      const vw=window.innerWidth,vh=window.innerHeight,W=f.offsetWidth||48,H=f.offsetHeight||48;
+      const r=Math.max(4,Math.min(vw-W-4,Math.round(vw-ev.clientX-W/2)));
+      const b=Math.max(4,Math.min(vh-H-4,Math.round(vh-ev.clientY-H/2)));
+      lastR=r;lastB=b;
+      f.style.setProperty("--cfr",r+"px");
+      f.style.setProperty("--cfb",b+"px");
+      ev.preventDefault();
+    });
+    const releaseC=()=>{if(pid!=null){try{f.releasePointerCapture(pid);}catch(e){}pid=null;}};
+    f.addEventListener("pointerup",async ()=>{
+      clearTimeout(tm);releaseC();
+      if(drag){
+        drag=false;f.classList.remove("cf-drag");
+        const p={r:lastR,b:lastB};
+        if(typeof S!=="undefined"&&S){
+          S.chatFabPos=p;
+          try{if(db)await idbPut("misc","chatFabPos",p);}catch(e){}
+        }
+        toast("💬 メッセージボタンの位置を覚えました");
+        return;
+      }
+      if(!held)chatToggle();
+    });
+    f.addEventListener("pointerleave",()=>{if(!drag)clearTimeout(tm);});
+    f.addEventListener("pointercancel",()=>{clearTimeout(tm);releaseC();drag=false;f.classList.remove("cf-drag");});
+  }
   const cc=document.getElementById("cdClose");
   if(cc)cc.addEventListener("click",()=>chatToggle(false));
   const q=document.getElementById("cdQuick");
@@ -3676,7 +3729,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.84";
+const APP_VER="v10.87";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4149,7 +4202,8 @@ async function cheatManaKillPay(pTo,src){
   logOnly(`💎 ${faceNameOf(src)} により、${S.players[pTo].label} はマナの《${faceNameOf(cc)}》を墓地へ`);
 }
 /* 🎲 ガチンコ・ジャッジ（共通）。両者が山札の上から1枚を表向きにしてコストを比べ、
-   見せたカードはそのまま山札の一番下に置く。戻り値："win"／"lose"／"draw"／"ng"（山札切れ等） */
+   見せたカードはそのまま山札の一番下に置く。引き分けは仕掛けた側の勝ち。
+   戻り値："win"／"lose"／"ng"（山札切れ等） */
 async function runGachinkoJudge(pi,op,label){
   if(!S.vs){toast("🎲 ガチンコ・ジャッジは対戦モードでのみ行えます");return "ng";}
   const shown=[];
@@ -4174,9 +4228,9 @@ async function runGachinkoJudge(pi,op,label){
   let res;
   if(myC==null||opC==null){
     const j=await askChoice(`🎲 ガチンコ・ジャッジ（コスト未登録のカードがあるため手動判定）\n${S.players[pi].label}：《${faceNameOf(shown[0].c)}》${myC==null?"（コスト不明）":`コスト${myC}`}\n${S.players[op].label}：《${faceNameOf(shown[1].c)}》${opC==null?"（コスト不明）":`コスト${opC}`}`,
-      ["自分の勝ち","引き分け","自分の負け"]);
-    res=(j===0)?"win":(j===1)?"draw":"lose";
-  }else res=(myC>opC)?"win":(myC===opC)?"draw":"lose";
+      ["自分の勝ち（引き分けもこちら）","自分の負け"]);
+    res=(j===0)?"win":"lose";
+  }else res=(myC>=opC)?"win":"lose";   // 引き分けは仕掛けた側の勝ち
   // 見せたカードは公開後そのまま山札の一番下へ
   for(const {sp,c:cg} of shown){
     const Zg=zonesOf(sp);
@@ -4186,9 +4240,12 @@ async function runGachinkoJudge(pi,op,label){
     Zg.deck.push(cg);
   }
   renderAll();
-  toast(res==="win"?`🎲 ガチンコ・ジャッジ：${S.players[pi].label} の勝ち`
-       :res==="draw"?"🎲 ガチンコ・ジャッジ：引き分け"
-       :`🎲 ガチンコ・ジャッジ：${S.players[op].label} の勝ち`);
+  gachinkoBanner(`${S.players[pi].label}《${faceNameOf(shown[0].c)}》`,myC,
+                 `${S.players[op].label}《${faceNameOf(shown[1].c)}》`,opC,
+                 res,(myC!=null&&opC!=null&&myC===opC),label);
+  toast(res==="win"
+    ? `🎲 ${faceNameOf(shown[0].c)}(${myC==null?"?":myC}) vs ${faceNameOf(shown[1].c)}(${opC==null?"?":opC}) → ${S.players[pi].label} の勝ち${myC===opC?"（引き分け）":""}`
+    : `🎲 ${faceNameOf(shown[0].c)}(${myC==null?"?":myC}) vs ${faceNameOf(shown[1].c)}(${opC==null?"?":opC}) → ${S.players[op].label} の勝ち`);
   return res;
 }
 /* 👁 「誰も山札を見ることはできない」（巡霊者メスタポ型）が場にあるか */
@@ -4715,11 +4772,12 @@ function olMySeat(){return (typeof S!=="undefined"&&S)?(S.seat|0):0;}
    そこで、判断が必要なところだけ相手に投げて答えだけ受け取る。 */
 const OL_RPC={seq:0,wait:new Map()};
 function olRemoteReady(){return olActive()&&ONLINE.conn&&ONLINE.conn.open;}
-async function olRemoteChoice(title,options,fallbackIdx,ms){
+async function olRemoteChoice(title,options,fallbackIdx,ms,opt){
   if(!olRemoteReady())return fallbackIdx;
   const id=++OL_RPC.seq;
   try{olBroadcast(true);}catch(e){}          // 相手の盤面を最新にしてから聞く
-  try{ONLINE.conn.send({t:"remoteAsk",id,title,options});}
+  try{ONLINE.conn.send({t:"remoteAsk",id,title,options,
+        cards:(opt&&opt.cards)||null,hint:(opt&&opt.hint)||"",head:(opt&&opt.head)||""});}
   catch(e){return fallbackIdx;}
   olWaitBannerShow(title);
   const val=await new Promise(res=>{
@@ -4732,6 +4790,66 @@ async function olRemoteChoice(title,options,fallbackIdx,ms){
   });
   olWaitBannerHide();
   return val;
+}
+/* 🛡 相手から頼まれた選択を、いつものシールドブレイクと同じ見た目で出す。
+   カード画像を見ながら選べるようにするため、breakOlay をそのまま使う。 */
+function olRemotePanel(msg){
+  return new Promise(res=>{
+    const olay=$("breakOlay");
+    $("bkTitle").textContent=msg.head||"🛡 シールドブレイク";
+    $("bkHint").textContent=msg.hint||msg.title||"行き先を選んでください。";
+    const g=$("bkGrid");g.innerHTML="";
+    for(const nm of (msg.cards||[])){
+      let el;
+      try{el=vCardEl(nm);}catch(e){el=document.createElement("div");el.textContent=nm;}
+      el.style.outline="2px solid var(--accent)";
+      g.appendChild(el);
+    }
+    const bar=$("bkActions");bar.innerHTML="";bar.style.display="";
+    const head=document.createElement("div");
+    head.style.cssText="font-size:11px;font-weight:900;color:var(--accent);flex-basis:100%";
+    head.textContent=msg.title||"";
+    bar.appendChild(head);
+    let done=false;
+    const pick=(i)=>{
+      if(done)return;done=true;
+      olay.classList.remove("open");
+      bar.innerHTML="";bar.style.display="none";
+      $("bkDone").style.display="";
+      $("bkDone").onclick=null;
+      res(i);
+    };
+    (msg.options||[]).forEach((lb,i)=>{
+      const b=document.createElement("button");
+      b.className="btn small "+(i===0?"":"primary");
+      b.textContent=lb;
+      b.addEventListener("click",()=>pick(i));
+      bar.appendChild(b);
+    });
+    $("bkDone").style.display="none";   // 「残りをすべて手札へ」は使わない
+    olay.classList.add("open");
+    sfx("ok");
+  });
+}
+/* 📨 相手に「はい／いいえ」を聞く。オンラインでないか相手がいなければ、その場で ask() を出す。 */
+async function olAskYN(pi,title,head,cards,askText){
+  if(olRemoteReady()&&pi!==olMySeat()){
+    const j=await olRemoteChoice(title,["はい（使う）","いいえ（使わない）"],1,120000,
+      {cards:cards||null,head:head||"",hint:title});
+    return j===0;
+  }
+  return await ask(askText||title);
+}
+/* 📨 相手にカードを1枚選んでもらう。戻り値は配列の番号（キャンセルは null）。 */
+async function olPickRemote(pi,title,cards,head){
+  if(olRemoteReady()&&pi!==olMySeat()){
+    const opts=cards.map(x=>`《${faceNameOf(x)}》`);
+    opts.push("やめる");
+    const j=await olRemoteChoice(title,opts,opts.length-1,120000,
+      {cards:cards.map(x=>x.name),head:head||"",hint:title});
+    return (j==null||j>=cards.length)?null:j;
+  }
+  return await pickCard(title,cards);
 }
 /* ⏳ 相手の選択を待っている間の表示 */
 function olWaitBannerShow(txt){
@@ -4785,6 +4903,37 @@ function olLocked(){
   if(olMyTurn())return false;     // 自分のターン
   if(olBusyLocal())return false;  // 🔧 自分が進めている処理が終わるまではロックしない
   return !ONLINE.grantMe;         // 許可をもらっていれば触れる
+}
+/* 🎲 ガチンコ・ジャッジの結果を画面中央に出す。
+   処理は止めずに流れるよう、待たずに表示して自動で消える。 */
+function gachinkoBanner(myName,myCost,opName,opCost,res,tie,label){
+  try{
+    const old=document.getElementById("gjBanner");
+    if(old)old.remove();
+    const win=(res==="win");
+    const b=document.createElement("div");
+    b.id="gjBanner";
+    b.style.cssText="position:fixed;left:50%;top:14%;transform:translateX(-50%);z-index:970;max-width:94vw;"
+      +"background:rgba(8,12,22,.96);border:3px solid "+(win?"#4ade80":"#f87171")+";border-radius:16px;"
+      +"padding:14px 20px;box-shadow:0 14px 44px rgba(0,0,0,.7);text-align:center;pointer-events:none";
+    const esc=t=>String(t).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+    const cell=(nm,cost,strong)=>
+      `<div style="flex:1;min-width:0;max-width:44vw">`
+      +`<div style="font-size:12px;font-weight:800;color:#e8eefc;line-height:1.35;word-break:break-word">${esc(nm)}</div>`
+      +`<div style="font-size:11px;color:#8a93a8;font-weight:700;margin-top:2px">コスト</div>`
+      +`<div style="font-size:30px;font-weight:900;color:${strong?"#facc15":"#94a3b8"};line-height:1.1">${cost==null?"?":cost}</div></div>`;
+    b.innerHTML=
+      `<div style="font-size:13px;font-weight:900;color:#a78bfa;letter-spacing:.05em">🎲 ガチンコ・ジャッジ${label?`（${label}）`:""}</div>`
+      +`<div style="display:flex;gap:14px;align-items:center;margin-top:6px">`
+      +cell(myName,myCost,myCost!=null&&opCost!=null&&myCost>=opCost)
+      +`<div style="font-size:16px;font-weight:900;color:#64748b">VS</div>`
+      +cell(opName,opCost,myCost!=null&&opCost!=null&&opCost>myCost)
+      +`</div>`
+      +`<div style="margin-top:8px;font-size:20px;font-weight:900;color:${win?"#4ade80":"#f87171"}">`
+      +`${win?"◯ 勝ち":"✕ 負け"}${tie?"　（引き分けは仕掛けた側の勝ち）":""}</div>`;
+    document.body.appendChild(b);
+    setTimeout(()=>{try{b.remove();}catch(e){}},2400);
+  }catch(e){}
 }
 /* 🎬 対戦の開始を画面中央に大きく出す（オンラインは「始まったのが分かりにくい」対策） */
 function olMatchBanner(myTurn){
@@ -7542,9 +7691,9 @@ const EFFECTS=[
      const cA=jc(rA);
      const cB=jc(rB);
      if(cA!==null&&cB!==null){
-       if(cA>cB)toast(`ガチンコジャッジ！ ${S.players[a.pi].label}の勝利（コスト${cA} vs ${cB}）`);
-       else if(cB>cA)toast(`ガチンコジャッジ！ ${S.players[b.pi].label}の勝利（コスト${cB} vs ${cA}）`);
-       else toast(`ガチンコジャッジ：引き分け（コスト${cA} vs ${cB}）`);
+       // 引き分けは「仕掛けた側（先に選んだ a）」の勝ち
+       if(cA>=cB)toast(`ガチンコジャッジ！ ${S.players[a.pi].label}の勝利（コスト${cA} vs ${cB}）${cA===cB?"※引き分けは仕掛けた側の勝ち":""}`);
+       else toast(`ガチンコジャッジ！ ${S.players[b.pi].label}の勝利（コスト${cB} vs ${cA}）`);
      }else toast("ガチンコジャッジ：山札の上を公開しました（コスト未登録のため手動で比較してください）");
      // 公開したカードはそのまま山札の一番下へ（ガチンコ・ジャッジの処理）
      setTimeout(()=>{
@@ -7780,7 +7929,7 @@ const FX_TYPES=[
   ["manaKill","💎 相手のマナゾーンからn枚選び、持ち主の墓地に置く（マナ破壊・条件欄で対象を絞れる）"],
   ["psyOut","🌌 自分の超次元ゾーンからサイキック・クリーチャーをn体まで選んでバトルゾーンに出す（超次元ホール型／条件欄＝例：コスト9以下／闇。「合計6以下」と書くとコスト合計の上限になる）"],
   ["psyReturn","🌌 相手のサイキック・クリーチャーをn体選んで超次元ゾーンに戻す（ミスター・アクア型／条件欄で対象を絞れる）"],
-  ["gachinkoExtraTurn","🎲 相手とガチンコ・ジャッジし、自分が勝ったら、このターンの後にもう一度自分のターンを行う（鬼丸「覇」型／引き分けは追加ターンなし）"],
+  ["gachinkoExtraTurn","🎲 相手とガチンコ・ジャッジし、自分が勝ったら、このターンの後にもう一度自分のターンを行う（鬼丸「覇」型／引き分けは仕掛けた側の勝ち）"],
   ["selfManaThenFoeMana","🍃 このクリーチャーを自分のマナゾーンに置いてもよい。そうした場合、相手のクリーチャーn体をマナゾーンに置く（エリカッチュ型／条件欄＝例：タップ中／どちらもタップして置くので使用可能マナは増えない）"],
   ["deckSearch","🔎 山札から条件に合うカードをn体バトルゾーンへ（探索踏み倒し・3種提示のランダム・条件欄で対象を指定）→山札シャッフル"],
   ["graveRecruit","⚰ 墓地から条件に合うクリーチャーをn体バトルゾーンへ（蘇生・条件欄で対象を指定）"],
@@ -15039,6 +15188,7 @@ function processBroken(op,stack,label){
           const stSealed=(S.expert&&S.vs)?zonesOf(op===0?1:0).battle.some(x=>{const rx=getReg(x);return rx&&rx.stNoST&&!isSealed(x);}):false;
           const usable=c=>{
             const r=getReg(c);if(!r)return false;
+            if(r.sabaki||r.sback)return true;   // サバキZ／S・バックは手札に加えたあとに使うので確認する
             if(!stSealed&&((r.st)||shieldStGrantOk(op,c)))return true;
             if((r.gs)||shieldGSGrantOk(op,c))return true;
             if(r.stWhen||r.stCond){
@@ -15058,18 +15208,29 @@ function processBroken(op,stack,label){
             const r=getReg(c);
             const twin=!!(r&&(r.twin||r.ctype==="twinpact"));
             const sf=twin?(r.stFace|0):0;
+            const isSpell=!!(r&&r.ctype==="spell");
+            const isCre=!!(r&&isCreatureReg(r));
             const opts=[];const zones=[];
             opts.push("✋ 手札に加える");zones.push("hand");
-            if(sf!==1){opts.push("⚡ S・トリガーで唱える"+(twin?"（下面・呪文）":""));zones.push("resolve");}
-            if(sf!==2){opts.push("⚡ S・トリガーで出す"+(twin?"（上面・クリーチャー）":""));zones.push("battle");}
-            const j=await olRemoteChoice(`ブレイクされた《${faceNameOf(c)}》をどうしますか？`,opts,0);
-            put(c,zones[Math.max(0,Math.min(zones.length-1,j|0))]);
+            // カードの種類に合う行き先だけ出す（呪文に「出す」、クリーチャーに「唱える」を出さない）
+            if(sf!==1&&(twin||isSpell||!r)){opts.push("⚡ S・トリガーで唱える"+(twin?"（下面・呪文）":""));zones.push("resolve");}
+            if(sf!==2&&(twin||isCre||!r)){opts.push("⚡ S・トリガーで出す"+(twin?"（上面・クリーチャー）":""));zones.push("battle");}
+            const j=await olRemoteChoice(`《${faceNameOf(c)}》の行き先`,opts,0,120000,
+              {cards:[c.name],head:"🛡 シールドブレイク",
+               hint:"ブレイクされたシールドです。行き先を選んでください。S・トリガーで唱えた呪文は「処理中」に置かれ、効果の処理が終わると墓地へ送れます。"});
+            const zsel=zones[Math.max(0,Math.min(zones.length-1,j|0))];
+            put(c,zsel);
+            const zname={hand:"手札",resolve:"処理中（唱えた）",battle:"バトルゾーン"}[zsel]||zsel;
+            toast(`🛡 ${S.players[op].label}：${faceNameOf(c)} → ${zname}`);
+            logOnly(`🛡 ${S.players[op].label} の選択：《${faceNameOf(c)}》を ${zname} へ`);
+            try{olBroadcast(true);}catch(e){}
           }
         }catch(e){
           console.warn("remote break",e);
           for(const c of [...remaining])put(c,"hand");
         }
         finish();
+        try{olBroadcast(true);}catch(e){}
       })();
       return;
     }
@@ -15482,9 +15643,10 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
       });
       if(!cands.length)continue;
       const rIsSp=rsc&&rsc.ctype==="spell";
-      const yes=await ask(`↩ S・バック（${faceNameOf(sc)}）\nブレイクで手札に加わった${anyCard?"":`「${cond}」の`}カードを1枚捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rIsSp?"唱え":"召喚し"}ますか？`);
+      const sbMsg=`↩ S・バック（${faceNameOf(sc)}）\nブレイクで手札に加わった${anyCard?"":`「${cond}」の`}カードを1枚捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rIsSp?"唱え":"召喚し"}ますか？`;
+      const yes=await olAskYN(op,sbMsg,"↩ S・バック",[sc.name],sbMsg);
       if(!yes)continue;
-      const di=cands.length===1?0:await pickCard("↩ S・バックのコストに捨てるカードを選択（ブレイクで手札に加わったカード）",cands);
+      const di=cands.length===1?0:await olPickRemote(op,"↩ S・バックのコストに捨てるカードを選択（ブレイクで手札に加わったカード）",cands,"↩ S・バック");
       if(di===null)continue;
       const disc=cands[di];
       const hi=OZ.hand.findIndex(h=>h.id===disc.id);
@@ -15504,6 +15666,44 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
         OZ.battle.push(sc);sc._viaCheat=true;markArrive(sc);emitEvent(op,"summon");enqueueFx(op,sc);
         toast(`↩ S・バック！ ${faceNameOf(sc)} をコストを支払わず召喚した`);
       }
+      sfx("ok");renderAll();await waitFxIdle();
+    }
+  }
+  // ⚔ サバキZ：手札にあるサバキZ持ちを、ブレイクで手札に加わったカードを1枚捨てて使う。
+  //    盾から本体が加わった時も、他に捨てる対象があれば使える。
+  if(S.expert){
+    const brokenInHand2=()=>OZ.hand.filter(x=>stackIds.has(x.id));
+    const szCards=OZ.hand.filter(x=>{const r2=getReg(x);return r2&&r2.sabaki;});
+    for(const sc of szCards){
+      if(!OZ.hand.some(h=>h.id===sc.id))continue;
+      const rsc=getReg(sc);
+      const cands=brokenInHand2().filter(x=>x.id!==sc.id);
+      if(!cands.length)continue;
+      const rIsSp=rsc&&rsc.ctype==="spell";
+      const szMsg=`⚔ サバキZ（${faceNameOf(sc)}）\nブレイクで手札に加わったカードを1枚捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rIsSp?"唱え":"召喚し"}ますか？`;
+      const yes=await olAskYN(op,szMsg,"⚔ サバキZ",[sc.name],szMsg);
+      if(!yes)continue;
+      const di=cands.length===1?0:await olPickRemote(op,"⚔ サバキZのコストに捨てるカードを選択（ブレイクで手札に加わったカード）",cands,"⚔ サバキZ");
+      if(di===null)continue;
+      const disc=cands[di];
+      const hi=OZ.hand.findIndex(h=>h.id===disc.id);
+      if(hi<0)continue;
+      snap();
+      OZ.hand.splice(hi,1);disc.faceup=true;OZ.grave.push(disc);
+      toast(`⚔ サバキZ：${faceNameOf(disc)} を捨てた`);
+      const si=OZ.hand.findIndex(h=>h.id===sc.id);
+      if(si<0){renderAll();continue;}
+      OZ.hand.splice(si,1);
+      sc.faceup=true;sc.tapped=false;
+      if(rIsSp){
+        if(OZ.resolve.length){const olds=OZ.resolve.splice(0);olds.forEach(o=>resolveOut(OZ,o));}
+        OZ.resolve.push(sc);emitEvent(op,"spell",sc);enqueueFx(op,sc);
+        toast(`⚔ サバキZ！ ${faceNameOf(sc)} をコストを支払わず唱えた（解決中へ）`);
+      }else{
+        OZ.battle.push(sc);sc._viaCheat=true;markArrive(sc);emitEvent(op,"summon");enqueueFx(op,sc);
+        toast(`⚔ サバキZ！ ${faceNameOf(sc)} をコストを支払わず召喚した`);
+      }
+      logOnly(`⚔ サバキZ：${S.players[op].label} が《${faceNameOf(disc)}》を捨てて《${faceNameOf(sc)}》を使用`);
       sfx("ok");renderAll();await waitFxIdle();
     }
   }
@@ -16986,7 +17186,8 @@ async function execAttack(pi,id,tg){
       const blOpts=[...blockers.map(b=>`🛡 ${faceNameOf(b)} でブロック`),"ブロックしない"];
       // 📨 防御側が相手の端末なら、ブロックの判断も相手にしてもらう
       if(olRemoteReady()&&op!==olMySeat())
-        bl=await olRemoteChoice(`《${faceNameOf(c)}》の攻撃をブロックしますか？`,blOpts,blOpts.length-1);
+        bl=await olRemoteChoice(`《${faceNameOf(c)}》の攻撃をブロックしますか？`,blOpts,blOpts.length-1,120000,
+          {cards:[c.name],head:"⚔ ブロックの確認",hint:"相手の攻撃クリーチャーです。ブロックするか選んでください。"});
       else
         bl=await askChoice(`${S.players[op].label}：ブロックしますか？`,blOpts);
       GHOST_AUTO=_savedAuto;
@@ -25707,7 +25908,9 @@ function setupConn(conn){
       (async()=>{
         try{
           sfx("ok");
-          const j=await askChoice(`📨 あなたが選ぶ番です\n${msg.title||""}`,(msg.options||[]).slice(0,12));
+          const j=(msg.cards&&msg.cards.length)
+            ? await olRemotePanel(msg)
+            : await askChoice(`📨 あなたが選ぶ番です\n${msg.title||""}`,(msg.options||[]).slice(0,12));
           ONLINE.conn.send({t:"remoteAnswer",id:msg.id,value:(j==null?null:j)});
         }catch(e){
           try{ONLINE.conn.send({t:"remoteAnswer",id:msg.id,value:null});}catch(e2){}
@@ -34324,6 +34527,9 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   if(rsd)S.resolveSide=rsd;
   const mmd=db?await idbGet("misc","manaMode"):null;
   if(mmd)S.manaMode=mmd;
+  {const cfp=db?await idbGet("misc","chatFabPos"):null;
+   if(cfp)S.chatFabPos=cfp;
+   try{if(typeof applyChatFabPos==="function")applyChatFabPos();}catch(e){}}
   {const cs=db?await idbGet("misc","chatSize"):null;
    if(cs!==null&&cs!==undefined)S.chatSize=cs;
    const cb=db?await idbGet("misc","chatBox"):null;
