@@ -2023,6 +2023,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="相手がコストを支払わずにクリーチャーを出した時、そのクリーチャーを持ち主のマナゾーンに置く（フォーエバー・プリンセス型）。出た時の効果は先に誘発します"><input type="checkbox" id="fxStManaCheat"> 🌱 相手がコストを支払わずに出したクリーチャーを、持ち主のマナゾーンに置く（フォーエバー・プリンセス型）</label>
         <label title="どちらのプレイヤーでも、コストを支払わずにクリーチャーを出した時、そのクリーチャーを破壊します（早撃人形マグナム型）。自分が踏み倒した場合も対象です"><input type="checkbox" id="fxStKillCheat"> 💥 いずれかのプレイヤーがコストを支払わずに出したクリーチャーを破壊する（早撃人形マグナム型）</label>
         <label title="相手がコストを支払わずにクリーチャーを出した時だけ、そのクリーチャーを破壊します（自分の踏み倒しは対象外・ウソと盗みのエンターテイナー型）"><input type="checkbox" id="fxStKillCheatFoe"> 💥 相手がコストを支払わずに出したクリーチャーだけを破壊する</label>
+        <input type="text" id="fxExlifeCond" placeholder="💠 EXライフの条件式（例：マナ:闇>=1・空欄＝無条件）" title="EXライフ（盾を1枚墓地に置いて場に残る）を使える条件。満たしていない時は身代わりの選択肢に出ません" style="flex:1;min-width:200px">
         <label title="相手がコストを支払わずにクリーチャーを召喚した時、または呪文を唱えた時、相手は自身のマナゾーンからカードを1枚選んで墓地に置きます（ハイドラ・ギルザウルス型）"><input type="checkbox" id="fxStCheatManaKill"> 💎 相手がコストを支払わずに召喚／呪文を唱えた時、相手のマナを1枚墓地に置かせる（ハイドラ・ギルザウルス型）</label>
         <label><input type="checkbox" id="fxStNoCheat"> 相手は召喚以外でクリーチャーを出せない（センノー型。侵略/チェンジ/蘇生/ST出しなど不可・GR召喚や墓地召喚は「召喚」なので可）</label>
         <label title="相手の「このクリーチャーがバトルゾーンに出た時」で始まる能力を持つクリーチャーが出た時、そのクリーチャーを持ち主のマナゾーンに置く（黒豆だんしゃく型）。出た時の能力は先に解決されます。効果が未登録のカードは、出た時の能力を持つかどうかを確認します"><input type="checkbox" id="fxStCipToMana"> 🌱 相手の「出た時」能力を持つクリーチャーが出た時、そのクリーチャーをマナゾーンに置く（黒豆だんしゃく型）</label>
@@ -3731,7 +3732,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.89";
+const APP_VER="v10.91";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4252,6 +4253,18 @@ async function runGachinkoJudge(pi,op,label){
   toast(res==="win"
     ? `🎲 ${faceNameOf(shown[0].c)}(${myC==null?"?":myC}) vs ${faceNameOf(shown[1].c)}(${opC==null?"?":opC}) → ${S.players[pi].label} の勝ち${myC===opC?"（引き分け）":""}`
     : `🎲 ${faceNameOf(shown[0].c)}(${myC==null?"?":myC}) vs ${faceNameOf(shown[1].c)}(${opC==null?"?":opC}) → ${S.players[op].label} の勝ち`);
+  // 🎲 「ガチンコ・ジャッジでこのカードを見せた時」の誘発（逆転王女プリン型）。
+  //    山札の一番下に戻したあとに解決する（見せたこと自体が誘発条件なので、戻っていても発動する）
+  for(const {sp,c:cg} of shown){
+    try{
+      const rg=getReg(cg);
+      const list=((rg&&rg.watchFx)||[]).filter(w=>w&&w.ev==="gachinkoShown"&&w.t);
+      if(!list.length)continue;
+      toast(`🎲 ${faceNameOf(cg)}：ガチンコ・ジャッジで見せた時の効果`);
+      logOnly(`🎲 ${S.players[sp].label}：《${faceNameOf(cg)}》をガチンコ・ジャッジで見せた時の効果`);
+      await runFxList(sp,list,cg,false);
+    }catch(e){}
+  }
   return res;
 }
 /* 👁 「誰も山札を見ることはできない」（巡霊者メスタポ型）が場にあるか */
@@ -14741,7 +14754,14 @@ async function destroyWithReplace(pi,c){
       opts.push(["tescape",`🛡 真・エスケープ（かわりにシールドを2枚手札に加えて場に残る）${_own?"":"／付与"}`,_own?1:2]);
     }
     const exSh=Z.shield.findIndex(x=>x.exFor===c.id);
-    if(r.exlife&&(exSh>=0||Z.shield.length))opts.push(["exlife",exSh>=0?"💠 EXライフ（EX盾を墓地に置いて、場に残る）":"💠 EXライフ（盾を1枚墓地に置いて、場に残る）",1]);
+    // 💠 条件付きEXライフ：exlifeCond があれば、その条件を満たしている時だけ選べる
+    //    （威牙の幻ハンゾウ「自分のマナに闇のカードが1枚でもあれば」など）
+    const exOk=!r.exlifeCond||(typeof zoneCondOk==="function"&&zoneCondOk(String(r.exlifeCond).trim(),pi,c));
+    if(r.exlife&&exOk&&(exSh>=0||Z.shield.length))
+      opts.push(["exlife",(exSh>=0?"💠 EXライフ（EX盾を墓地に置いて、場に残る）":"💠 EXライフ（盾を1枚墓地に置いて、場に残る）")
+        +(r.exlifeCond?`／条件：${r.exlifeCond}`:""),1]);
+    else if(r.exlife&&!exOk&&Z.shield.length)
+      toast(`💠 ${faceNameOf(c)}：条件（${r.exlifeCond}）を満たしていないため身代わりにできません`);
     if((r.starEvo||["starevo","charismaevo","smaxevo","onismaxevo"].includes(r.ctype))&&c.under&&c.under.length)
       opts.push(["starTop","⭐ スター進化（自身のみ離れ、下は重なったまま場に残る）",1]);
     if((r.gneo||r.ctype==="gneo"||r.ctype==="gneodream")&&c.under&&c.under.length)opts.push(["gneoBottom","🔄 G・NEO進化（一番下が離れ、上のカードは場に残る）",1]);
@@ -18142,6 +18162,7 @@ const TRIG_EVS=[
   ["labyII","ラビリンス・マジック II の効果"],
   ["labyIII","ラビリンス・マジック III の効果"],
   ["chosenByFoe","👁 相手がこのクリーチャーを選んだ時（相手の効果の対象に選ばれた時・レッド・ABYTHEN・カイザー型）"],
+  ["gachinkoShown","🎲 ガチンコ・ジャッジでこのカードを見せた時（逆転王女プリン型）"],
   ["foeToGrave","⚰ 相手のカードがどこからでも墓地に置かれた時（偽りの王 ヴィルヘルム型／条件欄で対象を絞れる）"],
   ["myHandDiscarded","🗑 相手の効果で自分の手札が捨てられた時（墓守の鐘ベルリン型）"],
 ];
@@ -19301,6 +19322,7 @@ function renderFxEditor(){
   {const e=$("fxManaTapInSelf");if(e)e.checked=!!FXEDIT.manaTapInSelf;}
   {const e=$("fxStKillCheat");if(e)e.checked=!!FXEDIT.stKillCheat;}
   {const e=$("fxStKillCheatFoe");if(e)e.checked=!!FXEDIT.stKillCheatFoe;}
+  {const e=$("fxExlifeCond");if(e)e.value=FXEDIT.exlifeCond||"";}
   {const e=$("fxStCheatManaKill");if(e)e.checked=!!FXEDIT.stCheatManaKill;}
   {const e=$("fxStCostUpPer");if(e)e.value=FXEDIT.stCostUpPer||"";}
   {const e=$("fxCondGrantExpr");if(e)e.value=FXEDIT.condGrantExpr||"";}
@@ -21461,6 +21483,7 @@ function openFxEditor(key){
     manaTapInSelf:cur?!!cur.manaTapInSelf:false,
     stKillCheat:cur?!!cur.stKillCheat:false,
     stKillCheatFoe:cur?!!cur.stKillCheatFoe:false,
+    exlifeCond:cur&&cur.exlifeCond||"",
     stCheatManaKill:cur?!!cur.stCheatManaKill:false,
     stCostUpPer:cur&&cur.stCostUpPer||"",
     condGrantExpr:cur&&cur.condGrantExpr||"",
@@ -21883,6 +21906,7 @@ $("fxSave").addEventListener("click",async ()=>{
     manaTapInSelf:$("fxManaTapInSelf")?$("fxManaTapInSelf").checked:false,
     stKillCheat:$("fxStKillCheat")?$("fxStKillCheat").checked:false,
     stKillCheatFoe:$("fxStKillCheatFoe")?$("fxStKillCheatFoe").checked:false,
+    exlifeCond:$("fxExlifeCond")?$("fxExlifeCond").value.trim():"",
     stCheatManaKill:$("fxStCheatManaKill")?$("fxStCheatManaKill").checked:false,
     stCostUpPer:$("fxStCostUpPer")?$("fxStCostUpPer").value.trim():"",
     condGrantExpr:$("fxCondGrantExpr")?$("fxCondGrantExpr").value.trim():"",
@@ -22435,6 +22459,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.manaTapInSelf)attrs.push("マナはタップして置く");
     if(v.stKillCheat)attrs.push("常在：踏み倒したクリーチャーを破壊");
     if(v.stKillCheatFoe)attrs.push("常在：相手の踏み倒しだけ破壊");
+    if(v.exlifeCond)attrs.push(`EXライフの条件：${v.exlifeCond}`);
     if(v.stCheatManaKill)attrs.push("常在：相手の踏み倒し／呪文でマナ破壊");
     if(v.condGrantExpr&&(v.condGrantPA||v.condGrantBreaks))attrs.push(`条件付き：${v.condGrantPA?`PA+${v.condGrantPA}`:""}${v.condGrantPA&&v.condGrantBreaks?"・":""}${v.condGrantBreaks?`ブレイク${v.condGrantBreaks}`:""}`);
     if(v.stAllSA)attrs.push("常在：全員SA");
@@ -33845,11 +33870,11 @@ function zoneCondOk(expr,pi,selfCard){
           return op3===">="?a>=b:op3==="<="?a<=b:op3===">"?a>b:op3==="<"?a<b:a===b;
         }
       }
-      const m=t.match(/^(マナ|墓地合計|相手墓地|墓地|盾最少|盾合計|相手盾|盾|相手バトル|バトル合計|バトルマナ|バトル|相手手札|手札|山札)(?:：|:)?([^<>=]*)(>=|<=|=)(\d+)$/);
+      const m=t.match(/^(マナ|墓地合計|相手墓地|墓地|盾最少|盾合計|相手盾|盾|相手バトル|バトル合計|バトル他|バトルマナ|バトル|相手手札|手札|山札)(?:：|:)?([^<>=]*)(>=|<=|=)(\d+)$/);
       if(!m)return false;
       const zn=m[1],filt=(m[2]||"").trim().replace(/^[のにはがを、]+/,"").replace(/[のにはがを、]+$/,""),opr=m[3],n=+m[4];
       // 「盾最少」＝両者のうち盾が少ない方の枚数（鬼エンド＝盾最少=0 の判定に使う）
-      const arrs={"マナ":Z.mana,"墓地":Z.grave,"相手墓地":OZ.grave,"墓地合計":[...Z.grave,...OZ.grave],"盾":Z.shield,"相手盾":OZ.shield,"盾合計":[...Z.shield,...OZ.shield],"盾最少":(Z.shield.length<=OZ.shield.length?Z.shield:OZ.shield),"バトル":Z.battle,"バトル合計":[...Z.battle,...OZ.battle],"バトルマナ":[...Z.battle,...Z.mana],"相手バトル":OZ.battle,"手札":Z.hand,"相手手札":OZ.hand,"山札":Z.deck}[zn];
+      const arrs={"マナ":Z.mana,"墓地":Z.grave,"相手墓地":OZ.grave,"墓地合計":[...Z.grave,...OZ.grave],"盾":Z.shield,"相手盾":OZ.shield,"盾合計":[...Z.shield,...OZ.shield],"盾最少":(Z.shield.length<=OZ.shield.length?Z.shield:OZ.shield),"バトル":Z.battle,"バトル他":Z.battle.filter(x=>!(selfCard&&x.id===selfCard.id)),"バトル合計":[...Z.battle,...OZ.battle],"バトルマナ":[...Z.battle,...Z.mana],"相手バトル":OZ.battle,"手札":Z.hand,"相手手札":OZ.hand,"山札":Z.deck}[zn];
       if(!arrs)return false;
       let cnt;
       if(!filt)cnt=arrs.length;
