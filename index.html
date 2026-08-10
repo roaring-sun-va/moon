@@ -1143,6 +1143,16 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
       </div>
       <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700">✨ 対戦の演出</span>
+        <select id="setFxLevel" style="flex:1">
+          <option value="off">なし（表示しない）</option>
+          <option value="low">少なめ（S・トリガー／ダイレクト／決着だけ）</option>
+          <option value="mid">ふつう（＋攻撃・シールドブレイク）</option>
+          <option value="high">多め（＋召喚・呪文詠唱もカード画像つきで）</option>
+        </select>
+      </div>
+      <div class="hint">演出は処理を待たせません。オンラインでは相手の画面にも同じものが出ます。</div>
+      <div class="row" style="align-items:center;gap:8px">
         <span style="font-size:12px;font-weight:700">効果登録済みの⚙マーク（手札）</span>
         <select id="setFxBadge" style="flex:1">
           <option value="on">表示</option>
@@ -3650,6 +3660,11 @@ function sfxPlay(kind){
       ok:    [523, 784, .12, "sine",    .09],
       grave: [300, 140, .12, "sawtooth",.05],
       atk:   [200, 90,  .16, "sawtooth",.09],
+      break: [900, 160, .22, "sawtooth",.11],   // 💥 シールドブレイク
+      trig:  [660, 1760,.30, "square",  .12],   // ⚡ S・トリガー発動
+      direct:[140, 60,  .40, "sawtooth",.13],   // 💥 ダイレクトアタック
+      danger:[300, 300, .30, "square",  .08],   // ⚠ シールド残り1
+      win:   [523, 1568,.55, "sine",    .13],   // 🏆 勝利
     }[kind]||[600,600,.05,"sine",.06];
     o.type=conf[3];
     o.frequency.setValueAtTime(conf[0],t);
@@ -3732,7 +3747,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.91";
+const APP_VER="v10.94";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4030,6 +4045,19 @@ function turnEnteredCount(side,filt){
 }
 function markArrive(c){
   c.dealIdx=null;c._pfAsked=false;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
+  // ✨ 登場の演出。カード画像つきで「召喚！」を出す（設定「多め」の時だけ）
+  try{
+    if(!c._fxShown){
+      c._fxShown=true;
+      setTimeout(()=>{c._fxShown=false;},400);
+      const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
+      const rr=getReg(c);
+      if(own!=null&&rr&&isCreatureReg(rr)&&fxAllowed("summon")){
+        const via=c._viaCheat?"バトルゾーンへ！":"召喚！";
+        fxShare("summon",via,`${S.players[own].label}　《${faceNameOf(c)}》`,false,c.name);
+      }
+    }
+  }catch(e){}
   // 🌌 超次元・墓地・手札などからの登場（＝コストを支払わない登場）はここで踏み倒しメタを判定する。
   //    ドラッグ操作での登場は moveCardX 側が確認付きで判定するので、そちらに任せる。
   try{
@@ -4924,6 +4952,87 @@ function olLocked(){
   if(olMyTurn())return false;     // 自分のターン
   if(olBusyLocal())return false;  // 🔧 自分が進めている処理が終わるまではロックしない
   return !ONLINE.grantMe;         // 許可をもらっていれば触れる
+}
+/* ✨ 対戦を盛り上げるための演出バナー。
+   処理は絶対に止めない（表示するだけで、すぐ次へ進む）。
+   オンラインでは相手の端末にも同じものを出すので、
+   「相手が何をしたのか」が結果の盤面を見なくても分かるようにする。 */
+const FX_STYLE={
+  attack:{bd:"#f97316",fg:"#fdba74",bg:"rgba(40,16,4,.95)",ic:"⚔",se:"atk"},
+  summon:{bd:"#38bdf8",fg:"#7dd3fc",bg:"rgba(6,20,34,.95)",ic:"✨",se:"move"},
+  spell: {bd:"#a78bfa",fg:"#c4b5fd",bg:"rgba(20,12,40,.95)",ic:"🔮",se:"flip"},
+  brk:   {bd:"#facc15",fg:"#fde68a",bg:"rgba(38,28,4,.95)",ic:"💥",se:"break"},
+  trig:  {bd:"#4ade80",fg:"#86efac",bg:"rgba(6,32,18,.96)",ic:"⚡",se:"trig"},
+  direct:{bd:"#ef4444",fg:"#fca5a5",bg:"rgba(44,6,6,.96)",ic:"💥",se:"direct"},
+  danger:{bd:"#fb923c",fg:"#fdba74",bg:"rgba(40,20,4,.95)",ic:"⚠",se:"danger"},
+  win:   {bd:"#fbbf24",fg:"#fde68a",bg:"rgba(30,22,4,.97)",ic:"🏆",se:"win"},
+};
+/* ✨ 演出の量。人によってはうるさく感じるので選べるようにする。
+   なし＝出さない／少なめ＝山場だけ／ふつう＝＋攻撃とブレイク／多め＝＋召喚と呪文 */
+const FX_LEVELS={off:0,low:1,mid:2,high:3};
+const FX_MIN_LV={trig:1,direct:1,win:1,danger:1,brk:2,attack:2,summon:3,spell:3};
+function fxAllowed(kind){
+  const lv=FX_LEVELS[(typeof S!=="undefined"&&S&&S.fxLevel)||"mid"];
+  if(lv==null)return true;
+  return lv>=(FX_MIN_LV[kind]||2);
+}
+function fxBanner(kind,title,sub,big,cardName){
+  try{
+    if(!fxAllowed(kind))return;
+    const st=FX_STYLE[kind]||FX_STYLE.summon;
+    const old=document.getElementById("fxBanner");
+    if(old)old.remove();
+    const b=document.createElement("div");
+    b.id="fxBanner";
+    const scale=big?1.35:1;
+    b.style.cssText="position:fixed;left:50%;top:30%;transform:translate(-50%,-50%) scale(.7);opacity:0;"
+      +"z-index:965;max-width:92vw;pointer-events:none;text-align:center;"
+      +`background:${st.bg};border:3px solid ${st.bd};border-radius:16px;padding:${big?"18px 26px":"12px 20px"};`
+      +"box-shadow:0 14px 44px rgba(0,0,0,.7);transition:transform .16s cubic-bezier(.2,1.6,.4,1),opacity .16s";
+    const esc=x=>String(x==null?"":x).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+    b.innerHTML=`<div style="font-size:${big?34:24}px;line-height:1">${st.ic}</div>`
+      +`<div style="font-size:${big?22:16}px;font-weight:900;color:${st.fg};margin-top:4px;letter-spacing:.04em">${esc(title)}</div>`
+      +(sub?`<div style="font-size:${big?15:12.5}px;font-weight:700;color:#cbd5e1;margin-top:4px;word-break:break-word">${esc(sub)}</div>`:"");
+    if(cardName&&sub&&String(sub).includes(String(cardName))){
+      // カード画像を出すので、説明文からカード名を取り除いてすっきりさせる
+      const trimmed=String(sub).replace(`《${cardName}》`,"").replace(String(cardName),"").replace(/[　\s]+$/,"").trim();
+      const sd=b.lastElementChild;
+      if(sd)sd.textContent=trimmed;
+    }
+    // 🖼 カード名が渡されていれば、その画像を大きく添える（登録画像が無ければ名前だけ出る）
+    if(cardName){
+      try{
+        const wrap=document.createElement("div");
+        wrap.style.cssText=`margin-top:8px;display:flex;justify-content:center;filter:drop-shadow(0 6px 18px ${st.bd}88)`;
+        const el=vCardEl(String(cardName));
+        el.style.cssText=`width:${big?132:100}px;pointer-events:none`;
+        const cn=el.querySelector(".cnt");if(cn)cn.remove();          // 枚数バッジは不要
+        const idx=el.querySelector(".idx");if(idx)idx.remove();
+        // カード名は画像側（画像が無ければ名前板）に出るので、下の帯は消して二重表示を防ぐ
+        const vn=el.querySelector(".vname");if(vn)vn.remove();
+        el.style.outline=`2px solid ${st.bd}`;
+        el.style.borderRadius="8px";
+        wrap.appendChild(el);
+        b.appendChild(wrap);
+      }catch(e){}
+    }
+    document.body.appendChild(b);
+    requestAnimationFrame(()=>{b.style.transform=`translate(-50%,-50%) scale(${scale})`;b.style.opacity="1";});
+    try{sfx(st.se);}catch(e){}
+    const ms=big?1500:1000;
+    setTimeout(()=>{
+      b.style.opacity="0";b.style.transform="translate(-50%,-50%) scale(.9)";
+      setTimeout(()=>{try{b.remove();}catch(e){}},180);
+    },ms);
+  }catch(e){}
+}
+/* 📡 演出を自分と相手の両方に出す。相手の画面にも出すことで「何をされたか」が伝わる。 */
+function fxShare(kind,title,sub,big,cardName){
+  fxBanner(kind,title,sub,big,cardName);
+  try{
+    if(olActive()&&ONLINE.conn&&ONLINE.conn.open&&!ONLINE.applying)
+      ONLINE.conn.send({t:"actionFx",kind,title,sub,big:!!big,card:cardName||""});
+  }catch(e){}
 }
 /* 🎲 ガチンコ・ジャッジの結果を画面中央に出す。
    刃鬼のように続けて何回も判定するカードがあるので、1回ごとに上書きせず
@@ -6811,6 +6920,11 @@ async function offerSealPeel(actor){
   }
 }
 function emitEvent(actor,type,card){
+  // ✨ 呪文を唱えた演出（設定「多め」の時だけ）
+  try{
+    if(type==="spell"&&card&&fxAllowed("spell"))
+      fxShare("spell","呪文詠唱！",`${S.players[actor].label}　《${faceNameOf(card)}》`,false,card.name);
+  }catch(e){}
   // ⚡ 「クリーチャーが出た時」系の誘発ゲート（v10.24）：出たカードがクリーチャーの時だけ発火する。
   //    クロスギア・D2フィールド・城・オーラなどクリーチャー以外のバトルゾーン配置では、
   //    summon/oppSummon/oppSummonTapped/allyEnter/allyEvo を発火しない（ハデス型の誤反応対策）。
@@ -15333,6 +15447,7 @@ function processBroken(op,stack,label){
         {const rT=getReg(c);if(rT&&(rT.twin||rT.ctype==="twinpact"))c.face=1;}
         c.faceup=true;Z.resolve.push(c);markArrive(c);sfx("move");
         logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を唱えた（${stDefer.length+1}番目・パネル完了後に順番に解決）`);
+        fxShare("trig","S・トリガー発動！",`${S.players[op].label}　《${faceNameOf(c)}》`,true);
         bumpEv("stTrig",op);
         stDefer.push({c,zone:"resolve"});
       }else if(zone==="battle"){
@@ -15341,6 +15456,7 @@ function processBroken(op,stack,label){
         c.faceup=true;Z.battle.push(c);markArrive(c);sfx("move");
         const r=getReg(c);if(r&&(r.d2||r.wide))applyD2Rot(op,c);
         logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を出した（${stDefer.length+1}番目・出た時効果はパネル完了後）`);
+        fxShare("trig","S・トリガー発動！",`${S.players[op].label}　《${faceNameOf(c)}》`,true);
         bumpEv("stTrig",op);
         stDefer.push({c,zone:"battle"});
       }else if(zone==="hand"){
@@ -15680,6 +15796,14 @@ async function breakShields(op,count,attacker,forceIdx){
 async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   const total=count==="all"?OZ.shield.length:Math.min(count,OZ.shield.length);
   if(!total){toast("シールドがありません");return;}
+  // 💥 ブレイクの演出。割ったあとの残り枚数まで見せて、詰めの緊張感が伝わるようにする。
+  try{
+    const rest=Math.max(0,OZ.shield.length-total);
+    fxShare("brk",`シールドブレイク ${total}枚！`,
+      `${S.players[op].label}　残り ${rest} 枚${attacker?`　←《${faceNameOf(attacker)}》`:""}`,total>=3);
+    if(rest===1)setTimeout(()=>{try{fxShare("danger","シールド残り1枚！",`${S.players[op].label}　あと1枚`);}catch(e){}},1050);
+    else if(rest===0)setTimeout(()=>{try{fxShare("danger","シールドが尽きた！",`${S.players[op].label}　次の攻撃で決着`,true);}catch(e){}},1050);
+  }catch(e){}
   let idxs=null;
   // 🏰 セイント・キャッスル型（G城）：相手のクリーチャーがシールドを1つ以上ブレイクする時、
   // かわりにこのシールドをブレイクさせてもよい（W・T等の複数ブレイクもこの1枚に置換）
@@ -16676,6 +16800,17 @@ async function execAttack(pi,id,tg){
   //    「攻撃する時」の効果のあとが処理されない不具合になっていた（コーラレヒト型）。
   c._wasBlocked=false;               // 🛡 この攻撃がブロックされたか（覚醒条件の判定に使う）
   const _atkKind=(tg&&tg.kind)||"";  // 攻撃対象の種類（direct／break＝プレイヤー、creature＝クリーチャー）
+  // ⚔ 攻撃の宣言を演出で知らせる。ダイレクトアタックは大きく出す。
+  try{
+    if(_atkKind==="direct"){
+      fxShare("direct","ダイレクトアタック！",`${S.players[pi].label}　《${faceNameOf(c)}》`,true);
+    }else{
+      const tgtName=(tg&&tg.kind==="creature")
+        ? (()=>{const tc=zonesOf(pi===0?1:0).battle.find(x=>x.id===tg.cid);return tc?`《${faceNameOf(tc)}》へ`:"クリーチャーへ";})()
+        : "シールドへ";
+      fxShare("attack","アタック！",`${S.players[pi].label}　《${faceNameOf(c)}》→ ${tgtName}`);
+    }
+  }catch(e){}
   let _atkEndRan=false;
   const atkEnd=async()=>{
     if(_atkEndRan)return;
@@ -17761,6 +17896,7 @@ async function execAttack(pi,id,tg){
     sfx("atk");
     emitEvent(pi,"atkP");
     toast(`💥 ダイレクトアタック！`);
+    try{fxShare("direct","ダイレクトアタック成功！",`${S.players[pi].label}　《${faceNameOf(c)}》`,true);}catch(e){}
     if(S.expert){
       const DZ2=zonesOf(op);
       const dw=DZ2.battle.filter(x=>{const r2=getReg(x);return r2&&r2.watchFx&&r2.watchFx.some(w=>w.ev==="atkP")&&!isSealed(x)&&!isIgnored(x,op);});
@@ -26161,8 +26297,12 @@ function setupConn(conn){
     else if(msg&&msg.t==="win"){
       if(msg.score){SCORE[0]=msg.score[0]|0;SCORE[1]=msg.score[1]|0;}
       toast(`🏆 ${S.players[msg.winner|0].label} の勝利！（${msg.reason||""}／戦績 ${SCORE[0]} - ${SCORE[1]}）`);
-      sfx("atk");
+      try{fxBanner("win",`${S.players[msg.winner|0].label} の勝利！`,msg.reason||"",true);}catch(e){}
       renderAll();
+    }
+    else if(msg&&msg.t==="actionFx"){
+      // ✨ 相手の端末で起きたことを、こちらの画面にも演出として出す
+      fxBanner(msg.kind,msg.title,msg.sub,!!msg.big,msg.card||"");
     }
     else if(msg&&msg.t==="remoteAsk"){
       // 📨 相手から選択を頼まれた。自分の画面で選んで、答えだけ返す。
@@ -27799,7 +27939,7 @@ async function declareWin(winner,reason,askFirst=true){
   SCORE[winner]++;
   recordMatch(winner,reason);
   toast(`🏆 ${S.players[winner].label} の勝利！（${reason}／戦績 ${SCORE[0]} - ${SCORE[1]}）`);
-  sfx("atk");
+  fxBanner("win",`${S.players[winner].label} の勝利！`,reason,true);
   showResultScreen(winner,reason);
   if(ONLINE.conn&&ONLINE.conn.open){
     try{ONLINE.conn.send({t:"win",winner,reason,score:SCORE.slice()});}catch(e){}
@@ -32230,6 +32370,7 @@ function openSettings(){
   $("setResolveSide").value=S.resolveSide||"left";
   $("setManaMode").value=S.manaMode||"spread";
   $("setBattleLabels").value=(S.battleLabels===false)?"off":"on";
+  {const e=$("setFxLevel");if(e)e.value=S.fxLevel||"mid";}
   {const e=$("setFxBadge");if(e)e.value=(S.fxBadge===false)?"off":"on";}
   {const e=$("setFxRegBtn");if(e)e.value=(S.fxRegBtn===false)?"off":"on";}
   $("setBattleBtns").value=(S.battleBtns===false)?"off":"on";
@@ -32328,6 +32469,13 @@ $("setBattleLabels").addEventListener("change",async ()=>{
   S.battleLabels=$("setBattleLabels").value!=="off";
   if(db)await idbPut("misc","battleLabels",S.battleLabels);
   renderAll();
+});
+$("setFxLevel").addEventListener("change",async ()=>{
+  S.fxLevel=$("setFxLevel").value||"mid";
+  if(db)await idbPut("misc","fxLevel",S.fxLevel);
+  const nm={off:"なし",low:"少なめ",high:"多め"}[S.fxLevel]||"ふつう";
+  toast(`✨ 対戦の演出：${nm}`);
+  if(S.fxLevel!=="off")fxBanner("trig","演出はこのくらいの見え方です",`設定：${nm}`);
 });
 $("setFxBadge").addEventListener("change",async ()=>{
   S.fxBadge=$("setFxBadge").value!=="off";
@@ -34797,6 +34945,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
    if(cb)S.chatBox=cb;
    try{if(typeof applyChatDockSize==="function")applyChatDockSize();
        if(typeof applyChatBox==="function")applyChatBox();}catch(e){}}
+  {const fl=db?await idbGet("misc","fxLevel"):null;
+   if(fl)S.fxLevel=fl;}
   {const fb=db?await idbGet("misc","fxBadge"):null;
    if(fb!==null&&fb!==undefined)S.fxBadge=!!fb;
    const fr=db?await idbGet("misc","fxRegBtn"):null;
