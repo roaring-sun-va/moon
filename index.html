@@ -3797,7 +3797,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.97";
+const APP_VER="v10.98";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5017,11 +5017,51 @@ const FX_STYLE={
   direct:{bd:"#ef4444",fg:"#fca5a5",bg:"rgba(44,6,6,.96)",ic:"💥",se:"direct"},
   danger:{bd:"#fb923c",fg:"#fdba74",bg:"rgba(40,20,4,.95)",ic:"⚠",se:"danger"},
   win:   {bd:"#fbbf24",fg:"#fde68a",bg:"rgba(30,22,4,.97)",ic:"🏆",se:"win"},
+  destroy:{bd:"#ef4444",fg:"#fca5a5",bg:"rgba(38,6,6,.95)",ic:"💀",se:"grave"},
+  hand:  {bd:"#c084fc",fg:"#e9d5ff",bg:"rgba(26,10,38,.95)",ic:"🗑",se:"grave"},
+  mana:  {bd:"#34d399",fg:"#a7f3d0",bg:"rgba(4,30,22,.95)",ic:"💎",se:"move"},
+  draw:  {bd:"#60a5fa",fg:"#bfdbfe",bg:"rgba(6,16,36,.95)",ic:"🃏",se:"draw"},
+  revive:{bd:"#f472b6",fg:"#fbcfe8",bg:"rgba(34,6,22,.95)",ic:"⚰",se:"move"},
+  bounce:{bd:"#22d3ee",fg:"#a5f3fc",bg:"rgba(4,26,34,.95)",ic:"↩",se:"move"},
+  lock:  {bd:"#94a3b8",fg:"#e2e8f0",bg:"rgba(14,18,26,.95)",ic:"🔒",se:"flip"},
+};
+/* ✨ 効果の種類ごとに出す演出の対応表。
+   ここに載っているものだけパネルを出す（全部出すとうるさいため）。
+   大きく出すものは big:true。新しい効果を足した時、目立たせたければここに追記する。 */
+const FX_ACT_BANNER={
+  destroyPick:{k:"destroy",t:"破壊！",big:1}, destroyFiltAll:{k:"destroy",t:"全体除去！",big:1},
+  destroyAllCond:{k:"destroy",t:"全体除去！",big:1}, destroySumPow:{k:"destroy",t:"破壊！"},
+  destroySameName:{k:"destroy",t:"同名すべて破壊！",big:1}, selfDestroy:{k:"destroy",t:"自分のクリーチャーを破壊"},
+  killThenPsyOut:{k:"destroy",t:"破壊して超次元から！",big:1}, killThenRecruit:{k:"destroy",t:"破壊して踏み倒し！",big:1},
+  handes:{k:"hand",t:"ハンデス！"}, handesFiltAll:{k:"hand",t:"手札を根こそぎ！",big:1},
+  peepDiscard:{k:"hand",t:"ピーピングハンデス！"}, dartsHandes:{k:"hand",t:"アンラッキーダーツ！"},
+  selfDiscard:{k:"hand",t:"手札を捨てる"},
+  manaKill:{k:"mana",t:"マナ破壊！"}, manaKillAllBoth:{k:"mana",t:"マナを焼き払う！",big:1},
+  manaPick:{k:"mana",t:"マナ送り！"}, selfMana:{k:"mana",t:"マナ送り"},
+  charge:{k:"mana",t:"マナ加速！"}, manaUntapAll:{k:"mana",t:"マナ全回復！",big:1},
+  draw:{k:"draw",t:"ドロー！"}, drawFoe:{k:"draw",t:"相手がドロー"},
+  nWorldShuffle:{k:"draw",t:"リセット＆ドロー！",big:1}, tutor:{k:"draw",t:"サーチ！"},
+  slotReveal:{k:"draw",t:"めくって選ぶ！"}, hoganBlaster:{k:"draw",t:"ホーガン・ブラスター！",big:1},
+  graveRecruit:{k:"revive",t:"蘇生！",big:1}, deathGate:{k:"revive",t:"デス・ゲート！",big:1},
+  psyOut:{k:"revive",t:"超次元から登場！",big:1}, myManaRecruit:{k:"revive",t:"マナから踏み倒し！"},
+  foeManaRecruit:{k:"revive",t:"相手のマナから！"}, handManaRecruit:{k:"revive",t:"手札・マナから！"},
+  deckCastSpellAll:{k:"revive",t:"山札から呪文を！",big:1}, freeSummon:{k:"revive",t:"踏み倒し！",big:1},
+  bouncePick:{k:"bounce",t:"バウンス！"}, bounceFilt:{k:"bounce",t:"バウンス！"},
+  foeBounceAll:{k:"bounce",t:"全体バウンス！",big:1}, selfBounceAll:{k:"bounce",t:"全体バウンス！",big:1},
+  tapAllOp:{k:"lock",t:"全タップ！",big:1}, tapOpN:{k:"lock",t:"タップ！"},
+  tapToggle:{k:"lock",t:"タップ／アンタップ入替"}, noAtkAllTurn:{k:"lock",t:"攻撃を封じた！",big:1},
+  matenSwap:{k:"lock",t:"魔天降臨！",big:1}, anyToShield:{k:"lock",t:"シールド化！"},
+  shieldBreakN:{k:"brk",t:"追加ブレイク！",big:1}, shieldBreakRand:{k:"brk",t:"追加ブレイク！",big:1},
+  grantTurnAll:{k:"trig",t:"全体強化！",big:1}, grantAtkUn:{k:"trig",t:"アンタップ攻撃を付与"},
+  deckShield:{k:"lock",t:"シールド追加！"}, handShield:{k:"lock",t:"シールド追加！"},
 };
 /* ✨ 演出の量。人によってはうるさく感じるので選べるようにする。
    なし＝出さない／少なめ＝山場だけ／ふつう＝＋攻撃とブレイク／多め＝＋召喚と呪文 */
 const FX_LEVELS={off:0,low:1,mid:2,high:3};
-const FX_MIN_LV={trig:1,direct:1,win:1,danger:1,brk:2,attack:2,summon:3,spell:3};
+const FX_MIN_LV={trig:1,direct:1,win:1,danger:1,
+  destroy:2,revive:2,brk:2,attack:2,
+  hand:2,mana:3,draw:3,bounce:2,lock:2,
+  summon:3,spell:3};
 function fxAllowed(kind){
   const lv=FX_LEVELS[(typeof S!=="undefined"&&S&&S.fxLevel)||"mid"];
   if(lv==null)return true;
@@ -9751,6 +9791,13 @@ async function runFxList(pi,list,srcCard,inPump){
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
     const FILT_COND=FILT_COND_SET; // 🔧 共有の集合を参照（誘発側の判定でも使う）
+    // ✨ 効果ごとの演出。対応表に載っているものだけ出す。処理は待たせない。
+    try{
+      const bn=FX_ACT_BANNER[f.t];
+      if(bn&&fxAllowed(bn.k))
+        fxShare(bn.k,bn.t,`${S.players[pi].label}${_srcLbl?`　${_srcLbl}`:""}`,!!bn.big,
+                srcCard?srcCard.name:"",pi);
+    }catch(e){}
     // 🚦 発動条件（盤面）：条件式を満たさない時はこの行を飛ばす（「〜があれば」型）
     if(f.gate&&String(f.gate).trim()){
       if(typeof zoneCondOk!=="function"||!zoneCondOk(String(f.gate).trim(),pi,srcCard)){
