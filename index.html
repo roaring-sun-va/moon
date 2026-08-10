@@ -3676,7 +3676,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.83";
+const APP_VER="v10.84";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4709,6 +4709,44 @@ const ONLINE={peer:null,conn:null,role:null,applying:false,timer:null,grantMe:fa
    ロックしないもの：ログ／メッセージ／画像拡大／設定・投了などの読み取り系 */
 function olActive(){return !!(typeof ONLINE!=="undefined"&&ONLINE&&ONLINE.conn&&ONLINE.conn.open);}
 function olMySeat(){return (typeof S!=="undefined"&&S)?(S.seat|0):0;}
+/* 📨 相手の端末に選択をお願いして、答えを待つ。
+   処理は攻撃側の端末で走るため、そのままだと防御側の判断（S・トリガーを使うかなど）まで
+   攻撃側の画面に出てしまい、相手のシールドの中身まで見えてしまう。
+   そこで、判断が必要なところだけ相手に投げて答えだけ受け取る。 */
+const OL_RPC={seq:0,wait:new Map()};
+function olRemoteReady(){return olActive()&&ONLINE.conn&&ONLINE.conn.open;}
+async function olRemoteChoice(title,options,fallbackIdx,ms){
+  if(!olRemoteReady())return fallbackIdx;
+  const id=++OL_RPC.seq;
+  try{olBroadcast(true);}catch(e){}          // 相手の盤面を最新にしてから聞く
+  try{ONLINE.conn.send({t:"remoteAsk",id,title,options});}
+  catch(e){return fallbackIdx;}
+  olWaitBannerShow(title);
+  const val=await new Promise(res=>{
+    const to=setTimeout(()=>{
+      OL_RPC.wait.delete(id);
+      toast("⏳ 相手から返事がないため、こちらで処理します");
+      res(fallbackIdx);
+    },ms||120000);
+    OL_RPC.wait.set(id,v=>{clearTimeout(to);res(v==null?fallbackIdx:v);});
+  });
+  olWaitBannerHide();
+  return val;
+}
+/* ⏳ 相手の選択を待っている間の表示 */
+function olWaitBannerShow(txt){
+  try{
+    olWaitBannerHide();
+    const b=document.createElement("div");
+    b.id="olWaitBar";
+    b.style.cssText="position:fixed;left:50%;transform:translateX(-50%);top:8px;z-index:975;max-width:94vw;"
+      +"background:#0b1a2a;border:2px solid #38bdf8;border-radius:12px;padding:10px 16px;"
+      +"box-shadow:0 8px 30px rgba(0,0,0,.6);font-size:13px;font-weight:800;color:#7dd3fc;white-space:pre-wrap;text-align:center";
+    b.textContent=`⏳ 相手の選択を待っています\n${String(txt||"").slice(0,60)}`;
+    document.body.appendChild(b);
+  }catch(e){}
+}
+function olWaitBannerHide(){try{const b=document.getElementById("olWaitBar");if(b)b.remove();}catch(e){}}
 /* 👤 オンライン中は席を固定（ホスト＝P1／ゲスト＝P2）。
    何かの拍子にずれていたら元に戻す。ずれたままだと相手の手札が見えてしまう。 */
 function olFixSeat(){
@@ -14993,6 +15031,48 @@ function processBroken(op,stack,label){
       })();
       return;
     }
+    // 📨 オンラインで防御側が相手の端末なら、受け札を使うかどうかは相手に選んでもらう。
+    //    こちらの画面に相手のシールドの中身を出さないため、パネルは開かない。
+    if(olRemoteReady()&&op!==olMySeat()){
+      (async()=>{
+        try{
+          const stSealed=(S.expert&&S.vs)?zonesOf(op===0?1:0).battle.some(x=>{const rx=getReg(x);return rx&&rx.stNoST&&!isSealed(x);}):false;
+          const usable=c=>{
+            const r=getReg(c);if(!r)return false;
+            if(!stSealed&&((r.st)||shieldStGrantOk(op,c)))return true;
+            if((r.gs)||shieldGSGrantOk(op,c))return true;
+            if(r.stWhen||r.stCond){
+              if(r.stCond&&zoneCondOk(r.stCond,op))return true;
+              const w=r.stWhen;
+              if(w==="manual")return true;
+              if(w==="oppTurn"&&S.who!==op)return true;
+              const lim={s3:3,s2:2,s1:1,s0:0}[w];
+              if(lim!=null&&Z.shield.length<=lim)return true;
+            }
+            return false;
+          };
+          for(const c of [...remaining]){
+            const idx=remaining.findIndex(x=>x.id===c.id);
+            if(idx<0)continue;
+            if(!usable(c)){ put(c,"hand"); continue; }   // 受けに使えない札はそのまま手札へ
+            const r=getReg(c);
+            const twin=!!(r&&(r.twin||r.ctype==="twinpact"));
+            const sf=twin?(r.stFace|0):0;
+            const opts=[];const zones=[];
+            opts.push("✋ 手札に加える");zones.push("hand");
+            if(sf!==1){opts.push("⚡ S・トリガーで唱える"+(twin?"（下面・呪文）":""));zones.push("resolve");}
+            if(sf!==2){opts.push("⚡ S・トリガーで出す"+(twin?"（上面・クリーチャー）":""));zones.push("battle");}
+            const j=await olRemoteChoice(`ブレイクされた《${faceNameOf(c)}》をどうしますか？`,opts,0);
+            put(c,zones[Math.max(0,Math.min(zones.length-1,j|0))]);
+          }
+        }catch(e){
+          console.warn("remote break",e);
+          for(const c of [...remaining])put(c,"hand");
+        }
+        finish();
+      })();
+      return;
+    }
     const render=()=>{
       if(!remaining.length){finish();return;}
       $("breakOlay").classList.add("open");
@@ -16903,8 +16983,12 @@ async function execAttack(pi,id,tg){
       bl=bestI>=0?bestI:blockers.length; // 勝てるブロッカーが無ければブロックしない
     }else{
       if(GHOST_AUTO)GHOST_AUTO=false; // 人間の防御選択中は自動応答を止める
-      bl=await askChoice(`${S.players[op].label}：ブロックしますか？`,
-        [...blockers.map(b=>`🛡 ${faceNameOf(b)} でブロック`),"ブロックしない"]);
+      const blOpts=[...blockers.map(b=>`🛡 ${faceNameOf(b)} でブロック`),"ブロックしない"];
+      // 📨 防御側が相手の端末なら、ブロックの判断も相手にしてもらう
+      if(olRemoteReady()&&op!==olMySeat())
+        bl=await olRemoteChoice(`《${faceNameOf(c)}》の攻撃をブロックしますか？`,blOpts,blOpts.length-1);
+      else
+        bl=await askChoice(`${S.players[op].label}：ブロックしますか？`,blOpts);
       GHOST_AUTO=_savedAuto;
     }
     if(bl===null){renderAll();return;}
@@ -25617,6 +25701,22 @@ function setupConn(conn){
       toast(`🏆 ${S.players[msg.winner|0].label} の勝利！（${msg.reason||""}／戦績 ${SCORE[0]} - ${SCORE[1]}）`);
       sfx("atk");
       renderAll();
+    }
+    else if(msg&&msg.t==="remoteAsk"){
+      // 📨 相手から選択を頼まれた。自分の画面で選んで、答えだけ返す。
+      (async()=>{
+        try{
+          sfx("ok");
+          const j=await askChoice(`📨 あなたが選ぶ番です\n${msg.title||""}`,(msg.options||[]).slice(0,12));
+          ONLINE.conn.send({t:"remoteAnswer",id:msg.id,value:(j==null?null:j)});
+        }catch(e){
+          try{ONLINE.conn.send({t:"remoteAnswer",id:msg.id,value:null});}catch(e2){}
+        }
+      })();
+    }
+    else if(msg&&msg.t==="remoteAnswer"){
+      const fn=OL_RPC.wait.get(msg.id);
+      if(fn){OL_RPC.wait.delete(msg.id);fn(msg.value);}
     }
     else if(msg&&msg.t==="turnHandoff"){
       // 📡 相手がターンを渡した。盤面はこのあと届くので、まずは案内だけ出しておく。
