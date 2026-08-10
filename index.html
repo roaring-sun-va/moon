@@ -3747,7 +3747,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.94";
+const APP_VER="v10.96";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4050,9 +4050,10 @@ function markArrive(c){
     if(!c._fxShown){
       c._fxShown=true;
       setTimeout(()=>{c._fxShown=false;},400);
+      if(!fxAllowed("summon"))throw 0;   // 出さない設定なら何も調べない
       const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
       const rr=getReg(c);
-      if(own!=null&&rr&&isCreatureReg(rr)&&fxAllowed("summon")){
+      if(own!=null&&rr&&isCreatureReg(rr)){
         const via=c._viaCheat?"バトルゾーンへ！":"召喚！";
         fxShare("summon",via,`${S.players[own].label}　《${faceNameOf(c)}》`,false,c.name);
       }
@@ -4976,19 +4977,43 @@ function fxAllowed(kind){
   if(lv==null)return true;
   return lv>=(FX_MIN_LV[kind]||2);
 }
+/* 演出を重ねて出すための置き場。続けて起きた出来事が上書きで消えないよう、下にずらして並べる。 */
+function fxLayer(){
+  let L=document.getElementById("revFxLayer");
+  if(!L){
+    L=document.createElement("div");
+    L.id="revFxLayer";
+    L.style.cssText="position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:965;"
+      +"pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:94vw";
+    document.body.appendChild(L);
+  }
+  return L;
+}
+/* 💡 画面全体を一瞬光らせる。大きな出来事を見逃さないための合図。 */
+function fxFlash(color){
+  try{
+    const f=document.createElement("div");
+    f.style.cssText=`position:fixed;inset:0;z-index:960;pointer-events:none;background:${color};opacity:.42;transition:opacity .34s ease-out`;
+    document.body.appendChild(f);
+    requestAnimationFrame(()=>{f.style.opacity="0";});
+    setTimeout(()=>{try{f.remove();}catch(e){}},380);
+  }catch(e){}
+}
 function fxBanner(kind,title,sub,big,cardName){
   try{
     if(!fxAllowed(kind))return;
     const st=FX_STYLE[kind]||FX_STYLE.summon;
-    const old=document.getElementById("fxBanner");
-    if(old)old.remove();
+    const L=fxLayer();
+    while(L.children.length>=3)L.removeChild(L.firstChild);   // 積みすぎない
     const b=document.createElement("div");
-    b.id="fxBanner";
-    const scale=big?1.35:1;
-    b.style.cssText="position:fixed;left:50%;top:30%;transform:translate(-50%,-50%) scale(.7);opacity:0;"
-      +"z-index:965;max-width:92vw;pointer-events:none;text-align:center;"
-      +`background:${st.bg};border:3px solid ${st.bd};border-radius:16px;padding:${big?"18px 26px":"12px 20px"};`
-      +"box-shadow:0 14px 44px rgba(0,0,0,.7);transition:transform .16s cubic-bezier(.2,1.6,.4,1),opacity .16s";
+    b.className="revFxBanner";     // ⚠ id は使わない（既存の #fxBanner と衝突するため）
+    const scale=big?1.12:1;
+    b.style.cssText="transform:translateY(-24px) scale(.75);opacity:0;"
+      +"max-width:94vw;pointer-events:none;text-align:center;"
+      +`background:${st.bg};border:${big?4:3}px solid ${st.bd};border-radius:16px;padding:${big?"16px 28px":"10px 20px"};`
+      +`box-shadow:0 14px 44px rgba(0,0,0,.75), 0 0 26px ${st.bd}66;`
+      +"transition:transform .2s cubic-bezier(.2,1.7,.4,1),opacity .2s";
+    if(big)fxFlash(st.bd);
     const esc=x=>String(x==null?"":x).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
     b.innerHTML=`<div style="font-size:${big?34:24}px;line-height:1">${st.ic}</div>`
       +`<div style="font-size:${big?22:16}px;font-weight:900;color:${st.fg};margin-top:4px;letter-spacing:.04em">${esc(title)}</div>`
@@ -5016,18 +5041,19 @@ function fxBanner(kind,title,sub,big,cardName){
         b.appendChild(wrap);
       }catch(e){}
     }
-    document.body.appendChild(b);
-    requestAnimationFrame(()=>{b.style.transform=`translate(-50%,-50%) scale(${scale})`;b.style.opacity="1";});
+    L.appendChild(b);
+    requestAnimationFrame(()=>{b.style.transform=`translateY(0) scale(${scale})`;b.style.opacity="1";});
     try{sfx(st.se);}catch(e){}
-    const ms=big?1500:1000;
+    const ms=big?2200:1500;
     setTimeout(()=>{
-      b.style.opacity="0";b.style.transform="translate(-50%,-50%) scale(.9)";
-      setTimeout(()=>{try{b.remove();}catch(e){}},180);
+      b.style.opacity="0";b.style.transform="translateY(-14px) scale(.94)";
+      setTimeout(()=>{try{b.remove();}catch(e){}},220);
     },ms);
   }catch(e){}
 }
 /* 📡 演出を自分と相手の両方に出す。相手の画面にも出すことで「何をされたか」が伝わる。 */
 function fxShare(kind,title,sub,big,cardName){
+  if(!fxAllowed(kind))return;   // 出さない設定なら送信もしない（通信を無駄にしない）
   fxBanner(kind,title,sub,big,cardName);
   try{
     if(olActive()&&ONLINE.conn&&ONLINE.conn.open&&!ONLINE.applying)
@@ -15585,7 +15611,6 @@ function processBroken(op,stack,label){
             const zname={hand:"手札",resolve:"処理中（唱えた）",battle:"バトルゾーン"}[zsel]||zsel;
             toast(`🛡 ${S.players[op].label}：${faceNameOf(c)} → ${zname}`);
             logOnly(`🛡 ${S.players[op].label} の選択：《${faceNameOf(c)}》を ${zname} へ`);
-            try{olBroadcast(true);}catch(e){}
           }
         }catch(e){
           console.warn("remote break",e);
@@ -26157,21 +26182,38 @@ function logRecv(e){
 /* 📡 盤面の送信。
    まとめ送りのために少し待つが、画面の描き直しが続くと待ち時間がずっと先送りされ、
    相手にいつまでも届かないことがあった。前回の送信から500msたっていたら即座に送る。 */
+/* 📡 盤面の署名。ゾーンの枚数と手番だけを見る軽い指紋。
+   これが変わっていなければ送る意味がないので送信を省く（通信量とカクつきの対策）。 */
+function olStateSig(){
+  try{
+    let sig=`${S.turn}|${S.who}|`;
+    for(const p2 of [0,1]){
+      const z=zonesOf(p2);
+      for(const k of ["deck","hand","mana","battle","grave","shield","resolve","reveal","hyper","exile"])
+        sig+=(z[k]?z[k].length:0)+",";
+      sig+=z.battle.map(x=>`${x.id}${x.tapped?"t":""}${x.face|0}`).join("")+"|";
+    }
+    return sig;
+  }catch(e){return String(Math.random());}
+}
 function olBroadcast(force){
   if(!ONLINE.conn||!ONLINE.conn.open||ONLINE.applying)return;
+  const sig=olStateSig();
+  if(!force&&sig===ONLINE._lastSig)return;   // 変化なし＝送らない
   const now=Date.now();
   const last=ONLINE._lastSend||0;
-  if(force||now-last>=500){
+  const MIN=260;                              // これ未満の間隔では送らない（まとめる）
+  if(force||now-last>=MIN){
     clearTimeout(ONLINE.timer);ONLINE.timer=null;
-    ONLINE._lastSend=now;
+    ONLINE._lastSend=now;ONLINE._lastSig=sig;
     try{ONLINE.conn.send(serializeFull());}catch(e){}
     return;
   }
-  if(ONLINE.timer)return;   // すでに予約済み（先送りしない）
+  if(ONLINE.timer)return;                     // すでに予約済み
   ONLINE.timer=setTimeout(()=>{
-    ONLINE.timer=null;ONLINE._lastSend=Date.now();
+    ONLINE.timer=null;ONLINE._lastSend=Date.now();ONLINE._lastSig=olStateSig();
     try{ONLINE.conn.send(serializeFull());}catch(e){}
-  },120);
+  },MIN-(now-last));
 }
 function setupConn(conn){
   ONLINE.conn=conn;
