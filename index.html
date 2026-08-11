@@ -3797,7 +3797,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v11.0";
+const APP_VER="v11.1";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4103,7 +4103,9 @@ function markArrive(c){
       if(!fxAllowed("summon"))throw 0;   // 出さない設定なら何も調べない
       const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
       const rr=getReg(c);
-      if(own!=null&&rr&&isCreatureReg(rr)){
+      // 進化・チェンジ・侵略で重ねて出た時は、専用の演出が別に出るのでここでは出さない
+      const stacked=!!(c.under&&c.under.length)||!!c._fxEvoShown;
+      if(own!=null&&rr&&isCreatureReg(rr)&&!stacked){
         const via=c._viaCheat?"バトルゾーンへ！":"召喚！";
         fxShare("summon",via,`${S.players[own].label}`,false,c.name,own);
       }
@@ -4292,6 +4294,7 @@ async function cheatManaKillPay(pTo,src){
    戻り値："win"／"lose"／"ng"（山札切れ等） */
 async function runGachinkoJudge(pi,op,label){
   if(!S.vs){toast("🎲 ガチンコ・ジャッジは対戦モードでのみ行えます");return "ng";}
+  try{fxShare("declare","ガチンコ・ジャッジ！",`${S.players[pi].label}${label?`　${label}`:""}`,false,"",pi);}catch(e){}
   const shown=[];
   for(const sp of [pi,op]){
     const Zg=zonesOf(sp);
@@ -5034,6 +5037,10 @@ const FX_STYLE={
   kw:    {bd:"#f0abfc",fg:"#f5d0fe",bg:"rgba(30,6,34,.96)",ic:"✦",se:"trig"},   // キーワード能力
   awake: {bd:"#c4b5fd",fg:"#ddd6fe",bg:"rgba(20,10,44,.96)",ic:"🔄",se:"flip"}, // 覚醒・龍解・変身
   evo:   {bd:"#fb923c",fg:"#fed7aa",bg:"rgba(38,18,2,.96)",ic:"⤴",se:"trig"},   // 進化・チェンジ・侵略
+  kindan:{bd:"#dc2626",fg:"#fecaca",bg:"rgba(26,2,2,.97)",ic:"☠",se:"direct"},  // 禁断・零龍
+  declare:{bd:"#fde047",fg:"#fef9c3",bg:"rgba(32,28,2,.96)",ic:"🔢",se:"trig"}, // 数字宣言
+  judge: {bd:"#f87171",fg:"#fecaca",bg:"rgba(30,4,4,.96)",ic:"⚖",se:"danger"},  // オリオティス系
+  extra: {bd:"#a3e635",fg:"#d9f99d",bg:"rgba(14,28,2,.96)",ic:"⏭",se:"win"},    // エクストラターン
 };
 /* ✦ キーワード能力が決まった瞬間の演出。
    「無月の門！」のように能力名を大きく出す。使ったカードの画像も添える。 */
@@ -5074,6 +5081,7 @@ const FX_ACT_BANNER={
    なし＝出さない／少なめ＝山場だけ／ふつう＝＋攻撃とブレイク／多め＝＋召喚と呪文 */
 const FX_LEVELS={off:0,low:1,mid:2,high:3};
 const FX_MIN_LV={trig:1,direct:1,win:1,danger:1,kw:1,awake:1,evo:1,
+  kindan:1,declare:1,judge:1,extra:1,
   destroy:2,revive:2,brk:2,attack:2,
   hand:2,mana:3,draw:3,bounce:2,lock:2,
   summon:3,spell:3};
@@ -5259,7 +5267,7 @@ function gachinkoBanner(myName,myCost,opName,opCost,res,tie,label){
       const el=document.getElementById("gjBanner");
       if(el)el.remove();
       GJ_N=0;GJ_WIN=0;GJ_TIMER=null;
-    },2600);
+    },5200);   // 刃鬼のように何回も判定するカードでも読み切れるよう長めにとる
   }catch(e){}
 }
 /* 🎬 対戦の開始を画面中央に大きく出す（オンラインは「始まったのが分かりにくい」対策） */
@@ -7551,6 +7559,7 @@ function battleEntryOk(pi,c){
   if(lk||tl){
     sfx("flip");
     toast(`⛔ ロック：${faceNameOf(c)} は出せない！（${lk?`常在：${faceNameOf(lk)}`:turnLockLabel(tl)}）\n※例外的に通す場合は「踏倒:ON」で`);
+    try{fxShare("judge","出せない！",`${lk?faceNameOf(lk):turnLockLabel(tl)}　${faceNameOf(c)} を封じた`,true,lk?lk.name:"",pi);}catch(e){}
     return false;
   }
   if(tlU){
@@ -7605,25 +7614,16 @@ const EFFECTS=[
      }
      sfx("ok");renderAll();
      toast(`🔢 ${S.players[pi].label} が「${n}」を宣言（${["ラッキーナンバー","シャッフ","オーパーツ","立ち上がれ"][mode]}型）！画面上部に表示`);
+     try{fxShare("declare",`「${n}」を宣言！`,
+       `${S.players[pi].label}　${["ラッキーナンバー","シャッフ","オーパーツ","立ち上がれ"][mode]}`,true,"",pi);}catch(e){}
    }},
-  {name:"Vivy-ラプチャー",
-   desc:"両者の手札と墓地をすべて山札に加えてシャッフルし、それぞれ5枚ドロー",
+  {name:"Vivy-ラプチャー／サイバー・N・ワールド",
+   desc:"両者の手札と墓地をすべて山札に加えてシャッフルし、それぞれ5枚ドロー（登録の「🌐 手札と墓地を山札へ」と同じ処理）",
    async run(){
-     if(!await ask("Vivy-ラプチャーを解決しますか？\n両者の手札と墓地を山札に加えてシャッフルし、それぞれ5枚ドローします。"))return;
-     snap();
-     const pis=S.vs?[0,1]:[0];
-     for(const pi of pis){
-       const Z=S.players[pi].zones;
-       Z.deck.push(...Z.hand.splice(0),...Z.grave.splice(0));
-       Z.deck.forEach(c=>{c.tapped=false;c.faceup=true;c.sideways=false;});
-       shuffleDeck(Z);
-     }
-     for(const pi of pis){
-       const Z=S.players[pi].zones;
-       for(let i=0;i<5&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;if(toHand(Z,c))markArrive(c);}
-     }
-     closeSheet();renderAll();sfx("ok");
-     toast("Vivy-ラプチャー解決：手札・墓地→山札→各5ドロー");
+     if(!await ask("解決しますか？\n両者の手札と墓地を山札に加えてシャッフルし、それぞれ5枚ドローします。"))return;
+     closeSheet();
+     // 🌐 カード登録側（nWorldShuffle）と同じ処理を使う。動きが食い違わないよう1本にまとめてある。
+     await runFxList(S.vs?S.who:0,[{t:"nWorldShuffle",n:5}],null,false);
    }},
   {name:"特殊勝利（エクストラウィン）",
    desc:"カードの特殊勝利条件を満たした時に、勝者を選んで勝敗を記録",
@@ -9808,13 +9808,18 @@ async function runFxList(pi,list,srcCard,inPump){
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
     const FILT_COND=FILT_COND_SET; // 🔧 共有の集合を参照（誘発側の判定でも使う）
-    // ✨ 効果ごとの演出。対応表に載っているものだけ出す。処理は待たせない。
-    try{
-      const bn=FX_ACT_BANNER[f.t];
-      if(bn&&fxAllowed(bn.k))
-        fxShare(bn.k,bn.t,`${S.players[pi].label}${_srcLbl?`　${_srcLbl}`:""}`,!!bn.big,
-                srcCard?srcCard.name:"",pi);
-    }catch(e){}
+    // ✨ 効果ごとの演出は、対象を選び終えて処理が済んでから出す（選ぶ前に出ると先出しになるため）。
+    //    行の処理が終わったら必ず1回だけ呼ぶ。
+    const _fxAct=()=>{
+      try{
+        if(_fxActDone)return;_fxActDone=true;
+        const bn=FX_ACT_BANNER[f.t];
+        if(bn&&fxAllowed(bn.k))
+          fxShare(bn.k,bn.t,`${S.players[pi].label}${_srcLbl?`　${_srcLbl}`:""}`,!!bn.big,
+                  srcCard?srcCard.name:"",pi);
+      }catch(e){}
+    };
+    let _fxActDone=false;
     // 🚦 発動条件（盤面）：条件式を満たさない時はこの行を飛ばす（「〜があれば」型）
     if(f.gate&&String(f.gate).trim()){
       if(typeof zoneCondOk!=="function"||!zoneCondOk(String(f.gate).trim(),pi,srcCard)){
@@ -13018,6 +13023,7 @@ async function runFxList(pi,list,srcCard,inPump){
         S.extra[pi]=(S.extra[pi]||0)+1;
         sfx("ok");
         toast(`🎲 勝利！ このターンの後にもう一度 ${S.players[pi].label} のターンを行います（累計${S.extra[pi]}回）`);
+        try{fxShare("extra","エクストラターン！",`${S.players[pi].label}　もう一度このプレイヤーのターン`,true,srcCard?srcCard.name:"",pi);}catch(e){}
       }else toast("🎲 勝てませんでした（追加ターンなし）");
       renderAll();
     }else if(f.t==="gachinko"){
@@ -13673,6 +13679,7 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("ok");
     }
     renderAll();
+    _fxAct();   // ✨ この行の処理が終わったので演出を出す（対象を選び終えたあと）
   }
   try{stampShieldSrc(_srcLbl);}catch(e){} // 🛡 最後の効果で増えた盾にも追加元を刻む
   }finally{FX_FROM_SPELL=_prevFromSpell;FX_FROM_CRE=_prevFromCre;FX_ACTOR=_prevActor;} // 🔮 入れ子で呼ばれても元に戻す
@@ -15978,14 +15985,6 @@ async function breakShields(op,count,attacker,forceIdx){
 async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   const total=count==="all"?OZ.shield.length:Math.min(count,OZ.shield.length);
   if(!total){toast("シールドがありません");return;}
-  // 💥 ブレイクの演出。割ったあとの残り枚数まで見せて、詰めの緊張感が伝わるようにする。
-  try{
-    const rest=Math.max(0,OZ.shield.length-total);
-    fxShare("brk",`シールドブレイク ${total}枚！`,
-      `${S.players[op].label}　残り ${rest} 枚`,total>=3,attacker?attacker.name:"",(op===0?1:0));
-    if(rest===1)setTimeout(()=>{try{fxShare("danger","シールド残り1枚！",`${S.players[op].label}　あと1枚`);}catch(e){}},1050);
-    else if(rest===0)setTimeout(()=>{try{fxShare("danger","シールドが尽きた！",`${S.players[op].label}　次の攻撃で決着`,true);}catch(e){}},1050);
-  }catch(e){}
   let idxs=null;
   // 🏰 セイント・キャッスル型（G城）：相手のクリーチャーがシールドを1つ以上ブレイクする時、
   // かわりにこのシールドをブレイクさせてもよい（W・T等の複数ブレイクもこの1枚に置換）
@@ -16021,6 +16020,14 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
     idxs=await pickShieldIdxs(op,total);
     if(idxs===null)return;
   }
+  // 💥 ブレイクの演出。どの盾を割るか決まってから出す（S・トリガーの確認より前）。
+  try{
+    const rest=Math.max(0,OZ.shield.length-idxs.length);
+    fxShare("brk",`シールドブレイク ${idxs.length}枚！`,
+      `${S.players[op].label}　残り ${rest} 枚`,idxs.length>=3,attacker?attacker.name:"",(op===0?1:0));
+    if(rest===1)setTimeout(()=>{try{fxShare("danger","シールド残り1枚！",`${S.players[op].label}　あと1枚`);}catch(e){}},1050);
+    else if(rest===0)setTimeout(()=>{try{fxShare("danger","シールドが尽きた！",`${S.players[op].label}　次の攻撃で決着`,true);}catch(e){}},1050);
+  }catch(e){}
   snap();
   bumpEv("breaks",op?0:1,idxs.length); // opの盾がブレイクされた＝相手(op?0:1)のブレイク数
   idxs.sort((a,b)=>b-a);
@@ -16322,6 +16329,7 @@ async function dormaChoice(pi,c){
     if(c.seals.length){toast("封印が残っているため禁断爆発できません（選択は消費されました）");return;}
     sfx("ok");
     toast("💥 禁断爆発！「変形」で裏返せます");
+    try{fxShare("kindan","禁断爆発！",`${S.players[pi].label}`,true,c.name,pi);}catch(e){}
     if(S.vs&&await ask("相手のクリーチャーすべてに封印を1つずつ付けますか？（相手の山札の上から）")){
       const OZ=zonesOf(op);
       OZ.battle.forEach(t=>{
@@ -17700,6 +17708,7 @@ async function execAttack(pi,id,tg){
         Z.hand.splice(hi,1);
         sp.faceup=true;Z.resolve.push(sp);
         toast(`✨ アタック・チャンス：${faceNameOf(sp)} を唱えた（解決中へ）`);
+        try{fxKeyword(pi,"アタック・チャンス！",sp.name,"攻撃中に呪文を唱えた");}catch(e){}
         renderAll();
         const rs=getReg(sp);
         if(rs&&rs.faces&&rs.faces[0]&&rs.faces[0].length)await runFxList(pi,rs.faces[0],sp);
