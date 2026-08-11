@@ -1592,6 +1592,8 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="gneodream">G-NEOドリーム・クリーチャー（DMR・同名は2つ以上出ない）</option>
           <option value="twinpact">ツインパクト（上：クリーチャー／下：呪文）</option>
           <option value="lunatic">ルナティック進化</option><option value="tamaseed">タマシード</option><option value="exile">エグザイル・クリーチャー</option><option value="field">フィールド</option>
+          <option value="kindancre">禁断クリーチャー（ドキンダムX等）</option>
+          <option value="kindanbeat">禁断の鼓動（封印されし〜・クリーチャーではない）</option>
           <option value="ultimate">究極進化</option>
           <option value="spell">呪文</option>
           <option value="crossgear">クロスギア</option><option value="evocrossgear">進化クロスギア（クロスギアの上に重ねて進化）</option><option value="gigaaura">ギガオレガオーラ</option>
@@ -3798,7 +3800,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v11.4";
+const APP_VER="v11.6";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4260,7 +4262,7 @@ function dreamDupOf(pi,c){
   return zonesOf(pi).battle.find(x=>x.id!==c.id&&normName(x.name)===nm)||null;
 }
 /* クリーチャー種別判定（呪文/クロスギア/タマシード/D2フィールド/城/オーラ等は非クリーチャー）。未設定は通常クリーチャー扱い */
-const CRE_CTYPES=["creature","dream","evo","neoevo","starevo","charismaevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","psychic","twinpact","lunatic","ultimate","exile"];
+const CRE_CTYPES=["creature","dream","evo","neoevo","starevo","charismaevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","psychic","twinpact","lunatic","ultimate","exile","kindancre"];
 function isCreatureReg(r){
   if(!r||!r.ctype)return true;
   return CRE_CTYPES.includes(r.ctype);
@@ -8326,6 +8328,7 @@ const FX_TYPES=[
   ["shieldBreakRand","💥 相手のランダムなシールドをn枚ブレイクする（S・トリガーは通常どおり使える）"],
   ["shieldBreakN","💥 相手のシールドをn枚ブレイクする（通常のブレイク処理・どのシールドを割るかは選択／S・トリガーも通常どおり・シューヴェルト型）"],
   ["shieldBreakTo","💥 相手のシールドが n枚になるようにブレイクする（アイアン・マンハッタン型・すでにn枚以下なら何もしない）"],
+  ["foeSelfToDeckBottom","⬇ 相手は自身のクリーチャー1体または手札1枚を、自分の山札の一番下に置く（時空の封殺ディアス Z 型／n回ぶん繰り返す）"],
   ["deathGate","💀 相手のアンタップしているクリーチャー1体を破壊し、自分の墓地からそのクリーチャーよりコストが小さい進化ではないクリーチャー1枚を出してもよい（地獄門デス・ゲート型）"],
   ["gachinkoWinToHand","🎲 ガチンコ・ジャッジを行い、勝ったらこの呪文を墓地に置くかわりに手札に戻す（ガチンコ・ルーレット型）"],
   ["foeDeckRecruitByFoe","🚪 自分の山札を見て、条件に合うクリーチャーを『相手に』1体選ばせてバトルゾーンに出す→シャッフル（ミラクルとミステリーの扉型／条件欄で対象指定）"],
@@ -8351,7 +8354,7 @@ function cardInfoText(key){
   const r=FXDB.get(key);
   if(!r)return "（効果未登録のカードです）";
   const L=[];
-  const CTL={creature:"クリーチャー",spell:"呪文",twinpact:"ツインパクト",evo:"進化",neoevo:"NEO",ultimate:"究極進化",psychic:"サイキック",psyevo:"進化サイキック",crossgear:"クロスギア",evocrossgear:"進化クロスギア",lunatic:"ルナティック進化",d2:"D2フィールド",castle:"城",aura:"オレガオーラ",tamaseed:"タマシード",starevo:"スター進化",dream:"ドリーム",neodream:"NEOドリーム",gneo:"G-NEO"};
+  const CTL={creature:"クリーチャー",spell:"呪文",twinpact:"ツインパクト",evo:"進化",neoevo:"NEO",ultimate:"究極進化",psychic:"サイキック",psyevo:"進化サイキック",crossgear:"クロスギア",evocrossgear:"進化クロスギア",lunatic:"ルナティック進化",d2:"D2フィールド",castle:"城",aura:"オレガオーラ",tamaseed:"タマシード",starevo:"スター進化",dream:"ドリーム",neodream:"NEOドリーム",gneo:"G-NEO",kindancre:"禁断クリーチャー",kindanbeat:"禁断の鼓動"};
   const civJa={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};
   const head=[];
   head.push(CTL[r.ctype]||r.ctype||"クリーチャー");
@@ -9758,26 +9761,47 @@ async function payHenrei(pi,f,srcCard){
   for(let t=0;t<maxUse;t++){
     const mine=zonesOf(pi).grave.length;
     const theirs=useOpp?zonesOf(op).grave.length:0;
-    // 殲滅返霊は「各プレイヤーの墓地から n枚ずつ」なので、両方の墓地に n枚必要
-    if(useOpp?(mine<need||theirs<need):(mine<need)){
-      if(t===0)toast(useOpp
-        ? `🔮 ${label}${need}：両者の墓地に${need}枚ずつ必要です（自分${mine}枚／相手${theirs}枚）`
-        : `🔮 ${label}${need}：墓地が${mine}枚しかないため使えません`);
-      break;
+    // 殲滅返霊は「自分だけ／相手だけ／両方から n枚ずつ」を選べる。
+    let anniSides=null;
+    if(useOpp){
+      const canMine=mine>=need, canOpp=theirs>=need;
+      if(!canMine&&!canOpp){
+        if(t===0)toast(`🔮 ${label}${need}：どちらの墓地も${need}枚に足りません（自分${mine}枚／相手${theirs}枚）`);
+        break;
+      }
+      const opts=[];const map=[];
+      if(canMine){opts.push(`自分の墓地から${need}枚（${mine}枚）`);map.push([pi]);}
+      if(canOpp){opts.push(`相手の墓地から${need}枚（${theirs}枚）`);map.push([op]);}
+      if(canMine&&canOpp){opts.push(`両方の墓地から${need}枚ずつ（能力を2回使う）`);map.push([pi,op]);}
+      opts.push("使わない");
+      const jS=await askChoice(`🔮 ${label}${need}${srcCard?`\n《${faceNameOf(srcCard)}》`:""}\nどこの墓地から山札の一番下に置きますか？`,opts);
+      if(jS===null||jS>=map.length)break;
+      anniSides=map[jS];
+    }else{
+      if(mine<need){
+        if(t===0)toast(`🔮 ${label}${need}：墓地が${mine}枚しかないため使えません`);
+        break;
+      }
     }
-    const yes=await ask(`🔮 ${label}${need}${t>0?`（${t+1}回目）`:""}${srcCard?`\n《${faceNameOf(srcCard)}》`:""}\n${useOpp?`各プレイヤーの墓地から${need}枚ずつ`:`墓地から${need}枚`}を持ち主の山札の一番下に置いて、この効果を使いますか？\n（置かない場合、この効果は発動しません）`);
-    if(!yes)break;
+    if(!useOpp){
+      const yes=await ask(`🔮 ${label}${need}${t>0?`（${t+1}回目）`:""}${srcCard?`\n《${faceNameOf(srcCard)}》`:""}\n墓地から${need}枚を山札の一番下に置いて、この効果を使いますか？\n（置かない場合、この効果は発動しません）`);
+      if(!yes)break;
+    }
     const moved=[];       // 取り消し用に「どこから取ったか」も覚える
     let ok=true;
-    // 殲滅返霊は両者ぶん、それ以外は自分ぶんだけ
-    const sides=useOpp?[pi,op]:[pi];
+    // 殲滅返霊は選んだ墓地ぶん、それ以外は自分ぶんだけ
+    const sides=anniSides||[pi];
     const wantTotal=need*sides.length;
+    // 🃏 デュエプレ版の殲滅返霊は「ランダムなカード」。TCG版は自分で選ぶ。
+    const randPick=(useOpp&&S.gameMode!=="tcg");
     outer:
     for(const zp of sides){
       const GZ=zonesOf(zp);
       for(let i=0;i<need;i++){
         if(!GZ.grave.length){ok=false;break outer;}
-        const j2=(GZ.grave.length===1)?0:await pickCard(
+        let j2;
+        if(randPick)j2=randInt(GZ.grave.length);
+        else j2=(GZ.grave.length===1)?0:await pickCard(
           `🔮 ${label}：${S.players[zp].label} の墓地から山札の一番下に置くカードを選択（${i+1}/${need}${S.gameMode==="tcg"?"・選んだ順に下へ":"・下に置く順はランダム"}）`,
           GZ.grave,{hint:"タップで選択"});
         if(j2===null){ok=false;break outer;}
@@ -9815,10 +9839,10 @@ async function payHenrei(pi,f,srcCard){
         logDeckBottomOrder(zp2,cards,label,"（ランダム順）"); // 🔀 v10.30：実際に並んだ順を記録
       }
     }
-    used++;
+    used+=sides.length;   // 4枚につき1回。両方の墓地を使ったら2回ぶん
     sfx("move");
     const nms=moved.map(o=>`《${faceNameOf(o.sc)}》`).join("");
-    toast(`🔮 ${label}${need} 成立：${nms} を山札の一番下へ${S.gameMode!=="tcg"&&moved.length>1?"（順番はランダム）":""}`);
+    toast(`🔮 ${label}${need} 成立：${nms} を山札の一番下へ${randPick?"（デュエプレ版：ランダムに選ばれます）":(S.gameMode!=="tcg"&&moved.length>1?"（順番はランダム）":"")}${sides.length>1?"／能力を2回使えます":""}`);
     try{fxKeyword(pi,`${label}${need}！`,srcCard?srcCard.name:"",`${moved.length}枚を山札の一番下へ`);}catch(e){}
     logOnly(`🔮 ${S.players[pi].label}：${label}${need}（${nms} を山札の一番下へ）`);
     renderAll();
@@ -10396,6 +10420,50 @@ async function runFxList(pi,list,srcCard,inPump){
         logOnly(`💪 鼓動する石版型：マナに置いた《${faceNameOf(cc)}》がクリーチャーのため、自分のクリーチャー${cnt}体に+${amt}（このターン）`);
       }else toast("💪 クリーチャーではなかったのでパワーは上がりません");
       renderAll();
+    }else if(f.t==="foeSelfToDeckBottom"){
+      // ⬇ 相手は自身のクリーチャー1体または手札1枚を、自分の山札の一番下に置く（ディアス Z 型）
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      for(let i=0;i<n;i++){
+        const cres=OZ.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
+        if(!cres.length&&!OZ.hand.length){toast("⬇ 相手に置けるカードがありません");break;}
+        // どちらから出すかは相手が決める
+        let fromHand;
+        if(!cres.length)fromHand=true;
+        else if(!OZ.hand.length)fromHand=false;
+        else{
+          const jz=(olRemoteReady()&&op!==olMySeat())
+            ? await olRemoteChoice("どちらを山札の一番下に置きますか？",["クリーチャー1体","手札1枚"],0,120000,
+                {head:"⬇ 山札の一番下へ",hint:`${srcCard?faceNameOf(srcCard):""} の効果`})
+            : await askChoice(`⬇ ${S.players[op].label}：クリーチャー1体と手札1枚のどちらを山札の一番下に置きますか？`,
+                ["クリーチャー1体","手札1枚"]);
+          if(jz===null)break;
+          fromHand=(jz===1);
+        }
+        if(!i)snap();
+        if(fromHand){
+          const jh=OZ.hand.length===1?0:await olPickRemote(op,"⬇ 山札の一番下に置く手札を選択",OZ.hand,"⬇ 山札の一番下へ");
+          if(jh===null)break;
+          const cc=OZ.hand.splice(jh,1)[0];
+          cc.faceup=false;cc.tapped=false;cc.sideways=false;
+          OZ.deck.push(cc);
+          toast(`⬇ ${S.players[op].label} は手札から《${faceNameOf(cc)}》を山札の一番下へ`);
+          logOnly(`⬇ ${S.players[op].label}：手札の《${faceNameOf(cc)}》を山札の一番下へ`);
+        }else{
+          const jc=cres.length===1?0:await olPickRemote(op,"⬇ 山札の一番下に置くクリーチャーを選択",cres,"⬇ 山札の一番下へ");
+          if(jc===null)break;
+          const tgt=cres[jc];
+          const bi=OZ.battle.findIndex(x=>x.id===tgt.id);
+          if(bi<0)break;
+          const cc=OZ.battle.splice(bi,1)[0];
+          if(cc.under&&cc.under.length){const us=cc.under.splice(0);us.forEach(u=>{u.faceup=false;u.tapped=false;u.buff=null;OZ.deck.push(u);});}
+          if(cc.gear&&cc.gear.length){const gs=cc.gear.splice(0);gs.forEach(g=>gearOut(OZ,g));}
+          cc.faceup=false;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;
+          OZ.deck.push(cc);
+          toast(`⬇ ${S.players[op].label} は《${faceNameOf(cc)}》を山札の一番下へ`);
+          logOnly(`⬇ ${S.players[op].label}：《${faceNameOf(cc)}》を山札の一番下へ`);
+        }
+        sfx("move");renderAll();
+      }
     }else if(f.t==="shieldBreakTo"){
       // 💥 相手のシールドが n枚になるようにブレイク（アイアン・マンハッタン型）
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
@@ -22611,7 +22679,7 @@ $("btnLinkReg").addEventListener("click",async ()=>{
 function openCardCivSearch(){
   if(!FXDB.size){toast("登録済みカードがありません（先に⚡カード効果を登録してください）");return;}
   const CV={light:["光","#ffe082"],water:["水","#7fd7ff"],dark:["闇","#c58cff"],fire:["火","#ff8a80"],nature:["自然","#a5e88a"],zero:["ゼロ","#cfd8dc"]};
-  const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",evocrossgear:"進化クロスギア",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",aura:"オレガオーラ",evo:"進化",neoevo:"NEOクリーチャー",ultimate:"究極進化",lunatic:"ルナティック進化"};
+  const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",evocrossgear:"進化クロスギア",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",aura:"オレガオーラ",evo:"進化",neoevo:"NEOクリーチャー",ultimate:"究極進化",lunatic:"ルナティック進化",kindancre:"禁断クリーチャー",kindanbeat:"禁断の鼓動"};
   const sel=new Set();  // 選択中の文明フィルタ（空＝すべて）
   let multi=false;      // 多色のみ表示
   const wrap=document.createElement("div");
@@ -22713,7 +22781,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gimmick==="dorma")attrs.push("ドルマゲドン型");
     if(v.gimmick==="zeron")attrs.push("零龍型");
     if(v.cost!=null)attrs.push(`コスト${v.cost}${v.cost2!=null?"/"+v.cost2:""}`);
-    if(v.ctype){const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",evocrossgear:"進化クロスギア",d2:"D2",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",neodream:"NEOドリーム",gneodream:"G-NEOドリーム",aura:"オレガオーラ",evo:"進化",neoevo:"NEOクリーチャー",ultimate:"究極進化",lunatic:"ルナティック進化",other:"その他"};attrs.push(CT[v.ctype]||v.ctype);}
+    if(v.ctype){const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",evocrossgear:"進化クロスギア",d2:"D2",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",neodream:"NEOドリーム",gneodream:"G-NEOドリーム",aura:"オレガオーラ",evo:"進化",neoevo:"NEOクリーチャー",ultimate:"究極進化",lunatic:"ルナティック進化",other:"その他",kindancre:"禁断クリーチャー",kindanbeat:"禁断の鼓動"};attrs.push(CT[v.ctype]||v.ctype);}
     if(v.lunaTarget)attrs.push(`🌙ルナティック進化→《${v.lunaTarget}》${v.lunaCost?`(コスト${v.lunaCost})`:""}`);
     if(v.civs&&v.civs.length){const CV={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};attrs.push(v.civs.map(x=>CV[x]||x).join("/"));}
     if(v.st)attrs.push("⚡ST");
@@ -31167,14 +31235,15 @@ function stackDragAttach(el,u){
   });
 }
 async function mugetsuGate(pi,hostId,needN){
+  return new Promise(_gateDone=>{
   const Z=zonesOf(pi);
   const host=Z.battle.find(x=>x.id===hostId);
-  if(!host){toast("カードが見つかりません");return;}
+  if(!host){toast("カードが見つかりません");_gateDone();return;}
   const pool=[
     ...Z.battle.filter(x=>x.id!==hostId).map(c=>({c,src:"battle",tag:"場"})),
     ...Z.grave.map(c=>({c,src:"grave",tag:"墓"})),
   ];
-  if(!pool.length){toast("下に敷けるカードがありません");return;}
+  if(!pool.length){toast("下に敷けるカードがありません");_gateDone();return;}
   const needTxt=needN?`（魔導具など${needN}枚）`:"";
   $("vTitle").textContent=`🌑 無月の門：${faceNameOf(host)} の下に敷くカードを選択${needTxt}`;
   $("vHint").textContent="タップで選択/解除（墓地とバトルゾーンから同時に選べます）。⭐＝魔導具（種族） →「決定」";
@@ -31233,8 +31302,19 @@ async function mugetsuGate(pi,hostId,needN){
     sfx("ok");renderAll();
     toast(`🌑 無月の門！ ${faceNameOf(host)} の下に${names.length}枚：${names.join("、")}`);
     fxKeyword(pi,"無月の門！",host.name,`魔導具${names.length}枚を重ねた`);
+    _gateDone();          // 敷き終わってから次の処理（ムーゲッツ等）へ進む
+  };
+  // 閉じる／やめるを押した時も、待っている処理を進める
+  const _prevCancel=$("vCancel").onclick;
+  $("vCancel").onclick=()=>{
+    $("vCancel").onclick=_prevCancel||defaultVCancel;
+    ok.onclick=null;ok.style.display="none";
+    closeViewer();
+    toast("🌑 無月の門：下に敷きませんでした");
+    _gateDone();
   };
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
+  });
 }
 function openStackPanel(p,zone,id){
   stCtx={p,zone,id};stSel=new Set();
@@ -33909,12 +33989,20 @@ async function importAll(file){
 let BGM=null;
 function bgmSetState(t){const e=$("bgmState");if(e)e.textContent=t;}
 async function bgmLoad(){
-  const d=db?await idbGet("misc","bgmData"):null;
-  if(d){
+  try{
+    const d=db?await idbGet("misc","bgmData"):null;
+    if(!d){bgmSetState("未登録");return;}
     BGM=new Audio(d);
     BGM.loop=true;
     BGM.volume=(S.bgmVol!=null?S.bgmVol:40)/100;
+    BGM.addEventListener("error",()=>{
+      bgmSetState("読み込みに失敗しました（形式を確認してください）");
+      console.warn("BGM load error",BGM.error);
+    });
     bgmSetState("登録済み（▶で再生・ループ）");
+  }catch(e){
+    bgmSetState("読み込みに失敗しました");
+    console.warn("bgmLoad",e);
   }
 }
 $("bgmFile").addEventListener("change",async e=>{
@@ -33933,10 +34021,20 @@ $("bgmFile").addEventListener("change",async e=>{
   };
   r.readAsDataURL(f);
 });
-$("bgmPlay").addEventListener("click",()=>{
+$("bgmPlay").addEventListener("click",async ()=>{
   if(!BGM){toast("BGMが未登録です（ファイルを選択してください）");return;}
-  if(BGM.paused){BGM.play();$("bgmPlay").textContent="⏸ 停止";bgmSetState("再生中（ループ）");}
-  else{BGM.pause();$("bgmPlay").textContent="▶ 再生";bgmSetState("停止中");}
+  if(BGM.paused){
+    try{
+      await BGM.play();               // ブラウザに止められることがあるので結果を待つ
+      $("bgmPlay").textContent="⏸ 停止";bgmSetState("再生中（ループ）");
+    }catch(e){
+      // 自動再生の制限や、対応していない形式のとき
+      $("bgmPlay").textContent="▶ 再生";
+      bgmSetState("再生できませんでした");
+      toast(`🎵 BGMを再生できませんでした\n（${String(e&&e.name||e).slice(0,40)}）\n画面をタップしてからもう一度お試しください。mp3/m4a を推奨します`);
+      console.warn("BGM play failed",e);
+    }
+  }else{BGM.pause();$("bgmPlay").textContent="▶ 再生";bgmSetState("停止中");}
 });
 $("bgmDel").addEventListener("click",async ()=>{
   if(BGM){BGM.pause();BGM=null;}
