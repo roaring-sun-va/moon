@@ -3797,7 +3797,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v11.1";
+const APP_VER="v11.2";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4095,6 +4095,12 @@ function turnEnteredCount(side,filt){
 }
 function markArrive(c){
   c.dealIdx=null;c._pfAsked=false;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
+  // 🔓 封印外し（ドルマゲドンX型）の案内は、S・トリガーの受け札パネルなどで
+  //    1秒以上あとに処理されることがある。arrived が消えても取りこぼさないよう印を残す。
+  try{
+    const rA=getReg(c);
+    if(rA&&raceMatch(rA,"コマンド")){c._sealPeelPending=true;c._sealPeelDone=false;}
+  }catch(e){}
   // ✨ 登場の演出。カード画像つきで「召喚！」を出す（設定「多め」の時だけ）
   try{
     if(!c._fxShown){
@@ -7058,9 +7064,9 @@ function cardCivsOf(x){const r=getReg(x);return (r&&r.civs)||[];}
 async function offerSealPeel(actor){
   if(!S.expert)return;
   const AZ=zonesOf(actor);
-  const cmds=AZ.battle.filter(x=>arrived.has(x.id)&&!x._sealPeelDone&&(()=>{const r=getReg(x);return r&&raceMatch(r,"コマンド");})());
+  const cmds=AZ.battle.filter(x=>(arrived.has(x.id)||x._sealPeelPending)&&!x._sealPeelDone&&(()=>{const r=getReg(x);return r&&raceMatch(r,"コマンド");})());
   for(const cmd of cmds){
-    cmd._sealPeelDone=true;
+    cmd._sealPeelDone=true;cmd._sealPeelPending=false;
     const cmdCivs=cardCivsOf(cmd);
     if(!cmdCivs.length)continue;
     const match=(sealCard,sealedCre)=>{let sc=cardCivsOf(sealCard);if(!sc.length)sc=cardCivsOf(sealedCre);return sc.some(cv=>cmdCivs.includes(cv));};
@@ -7559,7 +7565,7 @@ function battleEntryOk(pi,c){
   if(lk||tl){
     sfx("flip");
     toast(`⛔ ロック：${faceNameOf(c)} は出せない！（${lk?`常在：${faceNameOf(lk)}`:turnLockLabel(tl)}）\n※例外的に通す場合は「踏倒:ON」で`);
-    try{fxShare("judge","出せない！",`${lk?faceNameOf(lk):turnLockLabel(tl)}　${faceNameOf(c)} を封じた`,true,lk?lk.name:"",pi);}catch(e){}
+    try{fxShare("judge","召喚ロック！",`${lk?faceNameOf(lk):turnLockLabel(tl)}　${faceNameOf(c)} を封じた`,true,lk?lk.name:"",pi);}catch(e){}
     return false;
   }
   if(tlU){
@@ -15606,6 +15612,7 @@ function processBroken(op,stack,label){
           if(lk||tl){
             sfx("flip");
             toast(`⛔ ロック：${faceNameOf(c)} は唱えられない！（${lk?`常在：${faceNameOf(lk)}`:turnLockLabel(tl)}）→「墓地へ」等を選んでください`);
+            try{fxShare("judge","呪文ロック！",`${lk?faceNameOf(lk):turnLockLabel(tl)}　${faceNameOf(c)} を封じた`,true,lk?lk.name:"",op);}catch(e){}
             return;
           }
         }else{
@@ -15648,6 +15655,7 @@ function processBroken(op,stack,label){
         logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を出した（${stDefer.length+1}番目・出た時効果はパネル完了後）`);
         fxShare("trig","S・トリガー発動！",`${S.players[op].label}`,true,c.name,op);
         bumpEv("stTrig",op);
+        c._sealPeelPending=true;   // 🔓 受け札パネルで時間が空いても封印外しの案内が出るように
         stDefer.push({c,zone:"battle"});
       }else if(zone==="hand"){
         c.faceup=true;const kept=toHand(Z,c);sfx(kept?"move":"grave");
@@ -17604,6 +17612,7 @@ async function execAttack(pi,id,tg){
           h.tapped=top.tapped;
           OZ.battle[bi]=h;
           toast(`⤴ 革命0トリガー！ ${faceNameOf(h)}（進化元：${faceNameOf(top)}）`);
+          try{fxKeyword(op,"革命0トリガー！",h.name,`${faceNameOf(top)} の上に`);}catch(e){}
           logOnly(`⤴ ${S.players[op].label}：革命0トリガーで ${cn(h)} を《${faceNameOf(top)}》の上に出した`);
           emitEvent(op,"summon",h);
         }else{
@@ -17624,6 +17633,7 @@ async function execAttack(pi,id,tg){
       enqueueFx(op,h);
       sfx("ok");renderAll();
       toast(`🔥 革命0トリガー！ ${faceNameOf(h)}`);
+      try{fxKeyword(op,"革命0トリガー！",h.name,"シールド0からの反撃");}catch(e){}
       rev0Used=true;
       await waitFxIdle();renderAll();
     }
@@ -23839,6 +23849,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     if(lk||tl){
       sfx("flip");
       toast(`⛔ ロック：${faceNameOf(f.card)} は唱えられない！（${lk?`常在：${faceNameOf(lk)}`:turnLockLabel(tl)}）\n※例外的に通す場合は「踏倒:ON」で`);
+      try{fxShare("judge","呪文ロック！",`${lk?faceNameOf(lk):turnLockLabel(tl)}　${faceNameOf(f.card)} を封じた`,true,lk?lk.name:"",pFrom);}catch(e){}
       MOVE_BLOCKED=true;return;
     }
   }
