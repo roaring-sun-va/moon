@@ -3797,7 +3797,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v10.98";
+const APP_VER="v11.0";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4436,12 +4436,14 @@ async function checkAwaken(pi,ev){
           const kids=c.under.splice(0);
           kids.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.buff=null;Zs.grave.push(u);});
           toast(`☄ メテオバーン：${kids.map(x=>faceNameOf(x)).join("、")} を墓地に置いた`);
+          try{fxShare("awake","メテオバーン！",`${S.players[side].label}　下のカード${kids.length}枚`,true,c.name,side);}catch(e){}
           logOnly(`☄ メテオバーン覚醒：${faceNameOf(c)} の下のカード${kids.length}枚を墓地へ`);
         }
         c.face=1;c.tapped=false;
         markArrive(c);
         sfx("flip");renderAll();
         toast(`🔄 覚醒！ ${faceNameOf(c)}${cond?`（条件：${cond}）`:""}`);
+        try{fxShare("awake","覚醒！",`${S.players[side].label}`,true,c.name,side);}catch(e){}
         logOnly(`🔄 覚醒：${S.players[side].label} の《${lk[0]}》が《${faceNameOf(c)}》に裏返った${cond?`（${cond}）`:""}`);
         emitEvent(side,"summon");
         enqueueFx(side,c);
@@ -4537,6 +4539,7 @@ async function momoKingCip(pi,c){
     c.under=c.under||[];found.tapped=false;found.faceup=true;c.under.push(found);
     rest.forEach(x=>{x.faceup=false;Z.deck.push(x);});
     toast(`🌟 禁断スター進化：${faceNameOf(found)} を《${faceNameOf(c)}》の下に置いた（計${stackCountOf(c)}枚）`);
+    try{fxShare("evo","禁断スター進化！",`${S.players[pi].label}`,true,c.name,pi);}catch(e){}
   }else{
     revealed.forEach(x=>{x.faceup=false;Z.deck.push(x);});
     toast(`🌟 禁断スター進化：進化ではないレクスターズが見つからなかった`);
@@ -4661,6 +4664,7 @@ async function playEvoCreature(p,zone,id){
     evc1._viaCheat=false;markArrive(evc1);
     closeSel();sfx("move");renderAll();
     toast(`⤴ 超無限進化：${srcs.map(x=>faceNameOf(x)).join("＋")} の上に ${faceNameOf(evc1)}（合計コスト ${srcs.reduce((a,x)=>{const r=getReg(x);return a+((r&&+r.cost)||0);},0)}）`);
+    try{fxShare("evo","超無限進化！",`${S.players[p].label}　${srcs.length}体の上に`,true,evc1.name,p);}catch(e){}
     LAST_ARRIVED=evc1;emitEvent(p,"summon");enqueueFx(p,evc1);
     return;
   }
@@ -4698,6 +4702,7 @@ async function playEvoCreature(p,zone,id){
   closeSel();
   sfx("ok");renderAll();
   toast(`⤴ ${isUlt?"究極進化":"進化"}！ ${faceNameOf(evc)}（進化元：${faceNameOf(host)}）`);
+  try{fxShare("evo",(isUlt?"究極進化！":"進化！"),`${S.players[p].label}　${faceNameOf(host)} の上に`,true,evc.name,p);}catch(e){}
 }
 async function playNeoCreature(p,zone,id){
   const f0=findCard(p,zone,id);
@@ -4748,6 +4753,7 @@ async function playNeoCreature(p,zone,id){
   closeSel();
   sfx("ok");renderAll();
   toast(`⤴ NEO進化！ ${faceNameOf(evc)}（進化元：${faceNameOf(host)}）`);
+  try{fxShare("evo","NEO進化！",`${S.players[p].label}　${faceNameOf(host)} の上に`,true,evc.name,p);}catch(e){}
 }
 /* ⤴ 進化クロスギアを、バトルゾーンのクロスギア（独立ギア or クロス中）に重ねて出す（進化）。
    進化元があれば重ねてtrue、無ければ/中断ならfalse。ドラッグ配置・カードメニュー両方から共用。 */
@@ -4778,6 +4784,7 @@ async function playEvoCrossGear(p,zone,id){
   markArrive(evc);emitEvent(p,"summon");enqueueFx(p,evc);
   closeSheet();closeSel();sfx("ok");renderAll();
   toast(`⤴ 進化クロスギア！ ${faceNameOf(base.card)} の上に ${faceNameOf(evc)} を重ねた${base.where==="gear"?"（クロス状態を継続）":""}`);
+  try{fxShare("evo","進化クロスギア！",`${S.players[p].label}`,true,evc.name,p);}catch(e){}
   return true;
 }
 /* 踏み倒しでクリーチャーを場に出す（NEOクリーチャーなら通常/NEO進化を選択可）。出せたらtrue。
@@ -5024,7 +5031,15 @@ const FX_STYLE={
   revive:{bd:"#f472b6",fg:"#fbcfe8",bg:"rgba(34,6,22,.95)",ic:"⚰",se:"move"},
   bounce:{bd:"#22d3ee",fg:"#a5f3fc",bg:"rgba(4,26,34,.95)",ic:"↩",se:"move"},
   lock:  {bd:"#94a3b8",fg:"#e2e8f0",bg:"rgba(14,18,26,.95)",ic:"🔒",se:"flip"},
+  kw:    {bd:"#f0abfc",fg:"#f5d0fe",bg:"rgba(30,6,34,.96)",ic:"✦",se:"trig"},   // キーワード能力
+  awake: {bd:"#c4b5fd",fg:"#ddd6fe",bg:"rgba(20,10,44,.96)",ic:"🔄",se:"flip"}, // 覚醒・龍解・変身
+  evo:   {bd:"#fb923c",fg:"#fed7aa",bg:"rgba(38,18,2,.96)",ic:"⤴",se:"trig"},   // 進化・チェンジ・侵略
 };
+/* ✦ キーワード能力が決まった瞬間の演出。
+   「無月の門！」のように能力名を大きく出す。使ったカードの画像も添える。 */
+function fxKeyword(side,name,cardName,sub){
+  try{fxShare("kw",name,`${S.players[side].label}${sub?`　${sub}`:""}`,true,cardName||"",side);}catch(e){}
+}
 /* ✨ 効果の種類ごとに出す演出の対応表。
    ここに載っているものだけパネルを出す（全部出すとうるさいため）。
    大きく出すものは big:true。新しい効果を足した時、目立たせたければここに追記する。 */
@@ -5058,7 +5073,7 @@ const FX_ACT_BANNER={
 /* ✨ 演出の量。人によってはうるさく感じるので選べるようにする。
    なし＝出さない／少なめ＝山場だけ／ふつう＝＋攻撃とブレイク／多め＝＋召喚と呪文 */
 const FX_LEVELS={off:0,low:1,mid:2,high:3};
-const FX_MIN_LV={trig:1,direct:1,win:1,danger:1,
+const FX_MIN_LV={trig:1,direct:1,win:1,danger:1,kw:1,awake:1,evo:1,
   destroy:2,revive:2,brk:2,attack:2,
   hand:2,mana:3,draw:3,bounce:2,lock:2,
   summon:3,spell:3};
@@ -8688,6 +8703,7 @@ async function autoTapCost(pi,c){
         [`G・ゼロで召喚（コスト0）`,`通常コスト（${cost}）で召喚`]);
       if(j===0){
         toast(`🆓 G・ゼロ：${faceNameOf(c)} をコストを支払わずに召喚`);
+        fxKeyword(pi,"G・ゼロ！",c.name,"コストを支払わずに召喚");
         logOnly(`🆓 G・ゼロ：${S.players[pi].label} が ${faceNameOf(c)} をコストなしで召喚`);
         if(paySide==="creature")noteSummonTurn(pi,c);
         return;
@@ -9642,6 +9658,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
         Z.battle[bi]=cc;
         transferAtkState([host.id],cc);markArrive(cc);
         toast(`⤴ 進化！ 《${faceNameOf(host)}》の上に《${faceNameOf(cc)}》を重ねた`);
+        try{fxShare("evo","進化！",`${S.players[pi].label}　${faceNameOf(host)} の上に`,true,cc.name,pi);}catch(e){}
       }
       played.push(cc);
       put++;renderAll();
@@ -14517,6 +14534,7 @@ async function offerInvadeZeroPrompt(def){
   enqueueFx(def,h);
   sfx("ok");renderAll();
   toast(`⚡0 侵略ZERO！ ${faceNameOf(h)}（手札から）`);
+  try{fxShare("evo","侵略ZERO！",`${S.players[def].label}　手札から`,true,h.name,def);}catch(e){}
   await waitFxIdle();renderAll();
 }
 async function waitFxIdle(inPump){
@@ -15102,6 +15120,7 @@ async function destroyWithReplace(pi,c){
             }else{
               stack.forEach(x=>{x.faceup=true;Z.grave.push(x);});
               toast(`💠 EXライフ！ ${faceNameOf(c)} は場に残る`);
+              fxKeyword(pi,"EXライフ！",c.name,"盾を1枚墓地に置いて場に残る");
               sfx("grave");
             }
             renderAll();return true;
@@ -16195,9 +16214,11 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
         if(OZ.resolve.length){const olds=OZ.resolve.splice(0);olds.forEach(o=>resolveOut(OZ,o));}
         OZ.resolve.push(sc);emitEvent(op,"spell",sc);enqueueFx(op,sc);
         toast(`↩ S・バック！ ${faceNameOf(sc)} をコストを支払わず唱えた（解決中へ）`);
+        fxKeyword(op,"S・バック！",sc.name,"手札から反撃");
       }else{
         OZ.battle.push(sc);sc._viaCheat=true;markArrive(sc);emitEvent(op,"summon");enqueueFx(op,sc);
         toast(`↩ S・バック！ ${faceNameOf(sc)} をコストを支払わず召喚した`);
+        fxKeyword(op,"S・バック！",sc.name,"手札から反撃");
       }
       sfx("ok");renderAll();await waitFxIdle();
     }
@@ -16224,6 +16245,7 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
       snap();
       OZ.hand.splice(hi,1);disc.faceup=true;OZ.grave.push(disc);
       toast(`⚔ サバキZ：${faceNameOf(disc)} を捨てた`);
+      fxKeyword(op,"サバキZ！",sc.name,"手札から反撃");
       const si=OZ.hand.findIndex(h=>h.id===sc.id);
       if(si<0){renderAll();continue;}
       OZ.hand.splice(si,1);
@@ -16253,6 +16275,7 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
           zc.hyper=true;
           sfx("ok");renderAll();
           toast(`⚡ Zラッシュ！ ハイパーモード解放：${faceNameOf(zc)}`);
+          try{fxShare("awake","Zラッシュ！ ハイパーモード解放",`${S.players[zp].label}`,true,zc.name,zp);}catch(e){}
         }
       }
     }
@@ -16430,9 +16453,11 @@ async function offerOniEnd(){
         if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
         Z.resolve.push(cc);emitEvent(p,"spell",cc);enqueueFx(p,cc);
         toast(`👹 鬼エンド！ ${faceNameOf(cc)} をコストを支払わず唱えた（解決中へ）`);
+        fxKeyword(p,"鬼エンド！",cc.name,"");
       }else{
         Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);emitEvent(p,"summon");enqueueFx(p,cc);
         toast(`👹 鬼エンド！ ${faceNameOf(cc)} をコストを支払わず出した`);
+        fxKeyword(p,"鬼エンド！",cc.name,"");
       }
       logOnly(`👹 鬼エンド：${S.players[p].label} が ${faceNameOf(cc)} をコストなしで出した`);
       sfx("ok");renderAll();
@@ -17301,6 +17326,8 @@ async function execAttack(pi,id,tg){
           hcard.under=[c,...(c.under?c.under.splice(0):[]),...(hcard.under||[])];
           Z.battle[bi]=hcard;
           toast(`${r.sInvade?"🌟S級侵略":"⚡侵略"}！ ${faceNameOf(hcard)}（攻撃継続）`);
+          try{fxShare("evo",(r.sInvade?"S級侵略！":"侵略！"),
+            `${S.players[pi].label}　${faceNameOf(c)} の上に`,true,hcard.name,pi);}catch(e){}
         }else{
           Z.battle[bi]=hcard;
           // 革命チェンジ：入れ替わるクリーチャーはスタックごと分解して戻る
@@ -17316,6 +17343,8 @@ async function execAttack(pi,id,tg){
             else Z.hand.push(bc);
           });
           toast(`${_toShield?"🐉S革命チェンジ":isJ?"🃏J・チェンジ":r.pKakumei?"🌌P革命チェンジ":"♻革命チェンジ"}！ ${faceNameOf(hcard)}（${faceNameOf(c)}は${_toShield?"表向きシールド":c.isGR?"GRゾーンの下":r.pKakumei?"超次元ゾーン":"手札"}へ・攻撃継続）`);
+          try{fxShare("evo",(_toShield?"S革命チェンジ！":isJ?"J・チェンジ！":r.pKakumei?"P革命チェンジ！":"革命チェンジ！"),
+            `${S.players[pi].label}　${faceNameOf(c)} と入れ替え`,true,hcard.name,pi);}catch(e){}
         }
         markArrive(hcard);
         emitEvent(pi,"summon");
@@ -17638,6 +17667,7 @@ async function execAttack(pi,id,tg){
       enqueueFx(op,h);
       sfx("ok");renderAll();
       toast(`🥷${cand[j].ura?"裏 裏ニンジャ・ストライク":" ニンジャ・ストライク"}！ ${faceNameOf(h)}`);
+      fxKeyword(op,cand[j].ura?"裏ニンジャ・ストライク！":"ニンジャ・ストライク！",h.name,"迎撃");
       await waitFxIdle();
       renderAll();
       toast(`🥷 ${cand[j].ura?"裏ニンジャ・ストライク":"ニンジャ・ストライク"}の処理中：効果を盤面で解決してください。攻撃を続ける場合は、もう一度「攻撃する」からやり直してください`);
@@ -25591,6 +25621,7 @@ function cardEl(pi,zone,c){
           markArrive(c);
           sfx("flip");renderAll();
           toast(`🔄 ${_flipWord}！ ${faceNameOf(c)}`);
+          try{fxShare("awake",`${_flipWord}！`,`${S.players[pi].label}`,true,c.name,pi);}catch(e){}
           logOnly(`🔄 ${_flipWord}：${S.players[pi].label} の《${was}》→《${faceNameOf(c)}》`);
           emitEvent(pi,"summon");
           enqueueFx(pi,c);
@@ -25988,6 +26019,7 @@ async function offerMugetsuOut(pi){
     enqueueFx(pi,h);
     sfx("ok");renderAll();
     toast(`🌙 ムーゲッツ！ ${faceNameOf(h)}（${zn==="grave"?"墓地":"手札"}から出た）`);
+    fxKeyword(pi,"ムーゲッツ！",h.name,zn==="grave"?"墓地から":"手札から");
     await waitFxIdle();
   }
 }
@@ -30235,6 +30267,7 @@ function openCardSheet(ctx){
             sfx("ok");closeSel();renderAll();
             fxAnim(c.id,"an-gold",700);
             toast(`⚡ ハイパーモード解放！ ${faceNameOf(c)}${rH.hyperNote?`（${rH.hyperNote}）`:""}（次の自分のターン開始まで）`);
+            try{fxShare("awake","ハイパーモード解放！",`${S.players[ctx.p].label}`,true,c.name,ctx.p);}catch(e){}
           },"primary",true));
         }
         if(rH.zrush){
@@ -30244,6 +30277,7 @@ function openCardSheet(ctx){
             sfx("ok");closeSel();renderAll();
             fxAnim(c.id,"an-gold",700);
             toast(`⚡ Zラッシュ！ ハイパーモード解放：${faceNameOf(c)}${rH.hyperNote?`（${rH.hyperNote}）`:""}`);
+            try{fxShare("awake","Zラッシュ！ ハイパーモード解放",`${S.players[ctx.p].label}`,true,c.name,ctx.p);}catch(e){}
           },"",true));
         }
       }else{
@@ -31118,6 +31152,7 @@ async function mugetsuGate(pi,hostId,needN){
     closeViewer();
     sfx("ok");renderAll();
     toast(`🌑 無月の門！ ${faceNameOf(host)} の下に${names.length}枚：${names.join("、")}`);
+    fxKeyword(pi,"無月の門！",host.name,`魔導具${names.length}枚を重ねた`);
   };
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
