@@ -224,6 +224,14 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   text-shadow:0 3px 0 rgba(0,0,0,.95), 0 0 22px #fb7185}
 .card .sealtag .sealTxt{font-size:clamp(9px,4cqw,15px);opacity:1;font-weight:900;
   background:rgba(244,63,94,.85);border-radius:4px;padding:0 6px;margin-top:2px}
+/* 🔏 どのカードが封印されているか分かるよう、名前を上部に出す */
+.card .sealtag .sealName{position:absolute;top:3px;left:4px;right:4px;
+  font-size:clamp(8px,3.4cqw,12px);font-weight:900;line-height:1.15;
+  color:#fff;text-shadow:0 1px 3px rgba(0,0,0,1);
+  background:rgba(0,0,0,.55);border-radius:4px;padding:1px 3px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* 全面を覆うが、上に置いたボタン（z-index 12）は押せるようにしておく */
+.card .sealtag{pointer-events:none}
 .card.gearside .sealtag,.card.gearside.auraside .sealtag,.card.gearside.crossside .sealtag{
   border-width:2px;border-radius:8px}
 .card{container-type:inline-size}
@@ -3830,7 +3838,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v11.9";
+const APP_VER="v12.0";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4368,9 +4376,10 @@ async function runGachinkoJudge(pi,op,label){
     Zg.deck.push(cg);
   }
   renderAll();
-  gachinkoBanner(`${S.players[pi].label}《${faceNameOf(shown[0].c)}》`,myC,
-                 `${S.players[op].label}《${faceNameOf(shown[1].c)}》`,opC,
-                 res,(myC!=null&&opC!=null&&myC===opC),label);
+  gachinkoBanner(`${S.players[pi].label}　${faceNameOf(shown[0].c)}`,myC,
+                 `${S.players[op].label}　${faceNameOf(shown[1].c)}`,opC,
+                 res,(myC!=null&&opC!=null&&myC===opC),label,
+                 shown[0].c.name,shown[1].c.name);
   toast(res==="win"
     ? `🎲 ${faceNameOf(shown[0].c)}(${myC==null?"?":myC}) vs ${faceNameOf(shown[1].c)}(${opC==null?"?":opC}) → ${S.players[pi].label} の勝ち${myC===opC?"（引き分け）":""}`
     : `🎲 ${faceNameOf(shown[0].c)}(${myC==null?"?":myC}) vs ${faceNameOf(shown[1].c)}(${opC==null?"?":opC}) → ${S.players[op].label} の勝ち`);
@@ -5349,58 +5358,126 @@ function fxShare(kind,title,sub,big,cardName,side){
    刃鬼のように続けて何回も判定するカードがあるので、1回ごとに上書きせず
    同じ枠に積み上げていく。最後の判定から少したつと自動で消える。処理は止めない。 */
 let GJ_TIMER=null, GJ_N=0, GJ_WIN=0;
-function gachinkoBanner(myName,myCost,opName,opCost,res,tie,label){
+function gachinkoBanner(myName,myCost,opName,opCost,res,tie,label,myCard,opCard){
   try{
-    const esc=t=>String(t).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+    const esc=t=>String(t==null?"":t).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
     const win=(res==="win");
     let b=document.getElementById("gjBanner");
     if(!b){
       GJ_N=0;GJ_WIN=0;
       b=document.createElement("div");
       b.id="gjBanner";
-      b.style.cssText="position:fixed;left:50%;top:12%;transform:translateX(-50%);z-index:970;max-width:94vw;min-width:min(92vw,340px);"
-        +"background:rgba(8,12,22,.96);border:3px solid #a78bfa;border-radius:16px;"
-        +"padding:12px 16px;box-shadow:0 14px 44px rgba(0,0,0,.7);pointer-events:none";
-      b.innerHTML=`<div id="gjHead" style="font-size:13px;font-weight:900;color:#a78bfa;letter-spacing:.05em;text-align:center"></div>`
-        +`<div id="gjRows" style="margin-top:8px;max-height:46vh;overflow:hidden;display:flex;flex-direction:column;gap:6px"></div>`;
+      b.style.cssText="position:fixed;left:50%;top:9%;transform:translateX(-50%);z-index:970;"
+        +"width:min(94vw,520px);pointer-events:none;"
+        +"background:linear-gradient(160deg,rgba(24,10,48,.97),rgba(6,4,14,.98));"
+        +"border:3px solid #a78bfa;border-radius:18px;padding:0;overflow:hidden;"
+        +"box-shadow:0 18px 54px rgba(0,0,0,.8), 0 0 34px rgba(167,139,250,.45)";
+      b.innerHTML=
+        `<div id="gjHead" style="position:relative;padding:10px 14px;text-align:center;`
+        +`background:linear-gradient(90deg,rgba(167,139,250,.25),rgba(167,139,250,.05),rgba(167,139,250,.25));`
+        +`border-bottom:2px solid rgba(167,139,250,.5);overflow:hidden">`
+        +`<div id="gjTitle" style="font-size:17px;font-weight:900;color:#ddd6fe;letter-spacing:.14em;`
+        +`text-shadow:0 2px 0 rgba(0,0,0,.9),0 0 18px #a78bfa">🎲 ガチンコ・ジャッジ</div>`
+        +`<div id="gjScore" style="font-size:13px;font-weight:900;color:#fde68a;margin-top:2px;letter-spacing:.08em"></div>`
+        +`</div>`
+        +`<div id="gjRows" style="padding:8px;max-height:52vh;overflow:hidden;display:flex;flex-direction:column;gap:6px"></div>`;
       document.body.appendChild(b);
+      // 上から差し込むように出す（animate 未対応の環境では省略）
+      try{
+        if(b.animate)b.animate([{opacity:0,transform:"translate(-50%,-24px) scale(.9)"},
+                 {opacity:1,transform:"translateX(-50%) scale(1)"}],
+                {duration:260,easing:"cubic-bezier(.2,1.6,.4,1)",fill:"both"});
+      }catch(e){}
     }
     GJ_N++; if(win)GJ_WIN++;
     b.style.borderColor = win ? "#4ade80" : "#f87171";
-    const head=b.querySelector("#gjHead");
-    if(head)head.textContent=`🎲 ガチンコ・ジャッジ　${GJ_N}回中 ${GJ_WIN}勝`;
+    b.style.boxShadow = `0 18px 54px rgba(0,0,0,.8), 0 0 34px ${win?"rgba(74,222,128,.55)":"rgba(248,113,113,.55)"}`;
+    const sc=b.querySelector("#gjScore");
+    if(sc)sc.textContent=`${GJ_N} 回中 ${GJ_WIN} 勝`;
+
     const rows=b.querySelector("#gjRows");
     const row=document.createElement("div");
-    row.style.cssText="display:flex;gap:8px;align-items:center;background:"+(win?"rgba(74,222,128,.10)":"rgba(248,113,113,.10)")
-      +";border-left:4px solid "+(win?"#4ade80":"#f87171")+";border-radius:8px;padding:6px 8px";
-    const cell=(nm,cost,strong)=>
-      `<div style="flex:1;min-width:0">`
-      +`<div style="font-size:11.5px;font-weight:800;color:#e8eefc;line-height:1.3;word-break:break-word">${esc(nm)}</div>`
-      +`<div style="font-size:20px;font-weight:900;color:${strong?"#facc15":"#94a3b8"};line-height:1.1">${cost==null?"?":cost}</div></div>`;
-    row.innerHTML=
-      `<div style="font-size:11px;font-weight:900;color:#8a93a8;min-width:2.4em;text-align:center">${label?esc(label):GJ_N+"回目"}</div>`
-      +cell(myName,myCost,myCost!=null&&opCost!=null&&myCost>=opCost)
-      +`<div style="font-size:12px;font-weight:900;color:#64748b">VS</div>`
-      +cell(opName,opCost,myCost!=null&&opCost!=null&&opCost>myCost)
-      +`<div style="font-size:17px;font-weight:900;color:${win?"#4ade80":"#f87171"};min-width:2.6em;text-align:right">${win?"◯":"✕"}</div>`;
+    row.style.cssText="position:relative;display:flex;gap:6px;align-items:stretch;border-radius:10px;overflow:hidden;"
+      +`background:linear-gradient(90deg,${win?"rgba(74,222,128,.18)":"rgba(248,113,113,.16)"},rgba(0,0,0,.25));`
+      +`border-left:5px solid ${win?"#4ade80":"#f87171"};padding:6px 8px`;
+    // 勝ち負けが決まった瞬間に滑り込む（animate 未対応の環境では省略）
+    try{
+      if(row.animate)row.animate([{transform:"translateX(-14px)",opacity:0},{transform:"translateX(0)",opacity:1}],
+        {duration:240,easing:"cubic-bezier(.2,1.5,.4,1)",fill:"both"});
+    }catch(e){}
+
+    // カード画像つきの枠（無ければ名前だけ）
+    const cardBox=(nm,cardName,cost,strong)=>{
+      const d=document.createElement("div");
+      d.style.cssText="flex:1;min-width:0;display:flex;gap:6px;align-items:center";
+      if(cardName){
+        try{
+          const el=vCardEl(String(cardName));
+          el.style.cssText=`width:38px;flex:0 0 auto;border-radius:4px;pointer-events:none;`
+            +`outline:2px solid ${strong?"#facc15":"#475569"};`
+            +(strong?"filter:drop-shadow(0 0 10px #facc15aa)":"opacity:.75");
+          ["\u002ecnt","\u002eidx","\u002evname"].forEach(q=>{const e2=el.querySelector(q);if(e2)e2.remove();});
+          d.appendChild(el);
+        }catch(e){}
+      }
+      const t=document.createElement("div");
+      t.style.cssText="min-width:0;flex:1";
+      // 画像を出した時は、名前からカード名を取り除いて「P1」などの持ち主だけにする
+      if(cardName&&String(nm).includes(String(cardName)))
+        nm=String(nm).replace(String(cardName),"").replace(/[　\s]+$/,"").trim();
+      t.innerHTML=`<div style="font-size:10.5px;font-weight:800;color:#cbd5e1;line-height:1.2;`
+        +`overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nm)}</div>`
+        +`<div style="font-size:${strong?26:20}px;font-weight:900;line-height:1.05;`
+        +`color:${strong?"#facc15":"#94a3b8"};text-shadow:${strong?"0 2px 0 rgba(0,0,0,.9),0 0 14px #facc15":"none"}">`
+        +`${cost==null?"?":cost}</div>`;
+      d.appendChild(t);
+      return d;
+    };
+    const idx=document.createElement("div");
+    idx.style.cssText="flex:0 0 auto;min-width:2.6em;display:flex;align-items:center;justify-content:center;"
+      +"font-size:11px;font-weight:900;color:#94a3b8";
+    idx.textContent=label?label:`${GJ_N}回目`;
+    row.appendChild(idx);
+    const bothKnown=(myCost!=null&&opCost!=null);
+    row.appendChild(cardBox(myName,myCard,myCost,bothKnown&&myCost>=opCost));
+    const vs=document.createElement("div");
+    vs.style.cssText="flex:0 0 auto;display:flex;align-items:center;font-size:12px;font-weight:900;color:#64748b;letter-spacing:.08em";
+    vs.textContent="VS";
+    row.appendChild(vs);
+    row.appendChild(cardBox(opName,opCard,opCost,bothKnown&&opCost>myCost));
+    const mark=document.createElement("div");
+    mark.style.cssText="flex:0 0 auto;min-width:2.2em;display:flex;align-items:center;justify-content:center;"
+      +`font-size:26px;font-weight:900;color:${win?"#4ade80":"#f87171"};`
+      +`text-shadow:0 2px 0 rgba(0,0,0,.9),0 0 16px ${win?"#4ade80":"#f87171"}`;
+    mark.textContent=win?"◯":"✕";
+    row.appendChild(mark);
     rows.appendChild(row);
+
     // 増えすぎたら古い行から消す（見出しの勝敗数は残る）
-    while(rows.children.length>8)rows.removeChild(rows.firstChild);
+    while(rows.children.length>6)rows.removeChild(rows.firstChild);
     if(tie){
       const nt=document.createElement("div");
-      nt.style.cssText="font-size:11px;color:#facc15;font-weight:700;text-align:center";
+      nt.style.cssText="font-size:11px;color:#facc15;font-weight:800;text-align:center;letter-spacing:.06em";
       nt.textContent="引き分けは仕掛けた側の勝ち";
       rows.appendChild(nt);
-      while(rows.children.length>9)rows.removeChild(rows.firstChild);
+      while(rows.children.length>7)rows.removeChild(rows.firstChild);
     }
     clearTimeout(GJ_TIMER);
     GJ_TIMER=setTimeout(()=>{
       const el=document.getElementById("gjBanner");
-      if(el)el.remove();
+      if(el){
+        try{
+          if(el.animate){
+            el.animate([{opacity:1},{opacity:0,transform:"translate(-50%,-14px) scale(.96)"}],
+              {duration:220,fill:"both"}).onfinish=()=>{try{el.remove();}catch(e){}};
+          }else el.remove();
+        }catch(e){try{el.remove();}catch(e2){}}
+      }
       GJ_N=0;GJ_WIN=0;GJ_TIMER=null;
     },5200);   // 刃鬼のように何回も判定するカードでも読み切れるよう長めにとる
-  }catch(e){}
+  }catch(e){console.warn("gachinkoBanner",e);}
 }
+
 /* 🎬 対戦の開始を画面中央に大きく出す（オンラインは「始まったのが分かりにくい」対策） */
 function olMatchBanner(myTurn){
   try{
@@ -8275,7 +8352,7 @@ const FX_TYPES=[
   ["tapOpN","相手のクリーチャーをn体まで選んでタップ（「〜体までタップ」型）（すでにタップしているクリーチャーも選べます／条件欄に「フリーズ」と書くと、選んだクリーチャーは次のターンのはじめにアンタップしません）"],
   ["tapAnyN","⤵ クリーチャーをn体まで選んでタップ（両者どちらのクリーチャーでも対象・神光のカルマ ウイ型）（自分/相手どちらでも・すでにタップしているクリーチャーも選べます／条件欄に「フリーズ」でアンタップしない）"],
   ["untapSelf","🔄 このクリーチャー自身をアンタップする（「攻撃の終わりに」と組み合わせて2回攻撃などに）"],
-  ["sealFoe","🔏 相手のクリーチャーをn体選び、それぞれに封印を1つ付ける（そのプレイヤーの山札の上から1枚を裏向きで置く・条件欄で対象を絞れる）"],
+  ["sealFoe","🔏 相手のクリーチャーをn体選び、それぞれに封印を1つ付ける（そのプレイヤーの山札の上から1枚を裏向きで置く・条件欄で対象を絞れる／条件欄に「すべて」と書くか回数を多めにすると、選ばずに全員へ付けます）"],
   ["sealSelf","🔏 自分のクリーチャーをn体選び、それぞれに封印を1つ付ける（自分の山札の上から1枚を裏向きで置く・条件欄で対象を絞れる）"],
   ["foeFreezeAll","❄ 相手のクリーチャーすべては、次の相手のターンのはじめにアンタップしない（ボルパンサー型・タップはしない）"],
   ["zenithSpark","🌟 自分の手札から最もコストの大きいカードをランダムに1枚表向きにし、そのコスト以下の相手クリーチャーをすべてタップ。表向きにしたのがゼニスなら、それらは次の相手のターン開始時にアンタップしない（創世と終焉のゼニスパーク型）"],
@@ -11141,8 +11218,41 @@ async function runFxList(pi,list,srcCard,inPump){
       const tp=(f.t==="sealFoe")?op:pi;
       if(f.t==="sealFoe"&&!S.vs){toast("（ソロのため封印はスキップ）");continue;}
       const TZ=zonesOf(tp);
-      const filt=String(f.cond||"").trim();
+      let filt=String(f.cond||"").trim();
+      // 「すべて」と書かれている、または回数が場のクリーチャー数以上なら、選ばせずに全員に付ける
+      let sealAll=/すべて|全て|全部|全体/.test(filt);
+      if(sealAll)filt=filt.replace(/すべて|全て|全部|全体/g,"").replace(/^[／\/、,\s]+|[／\/、,\s]+$/g,"");
+      {
+        let pool0=TZ.battle.filter(x=>isCreatureReg(getReg(x)));
+        if(filt)pool0=pool0.filter(x=>lockFilterOk(filt,getReg(x),x));
+        if(tp!==pi)pool0=pool0.filter(x=>{const rx=getReg(x);return !(((rx&&rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,tp));});
+        if(n>=pool0.length&&pool0.length>0)sealAll=true;   // 全員ぶんあるなら選ぶ意味がない
+      }
       let done=0,snapped=false;
+      if(sealAll){
+        let pool=TZ.battle.filter(x=>isCreatureReg(getReg(x)));
+        if(filt)pool=pool.filter(x=>lockFilterOk(filt,getReg(x),x));
+        if(tp!==pi)pool=pool.filter(x=>{const rx=getReg(x);return !(((rx&&rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,tp));});
+        if(!pool.length){
+          toast(`🔏 封印を付けられるクリーチャーがいません（対象：${S.players[tp].label}の場）`);
+        }else{
+          snap();
+          for(const t of pool){
+            if(typeof canSeal==="function"&&!canSeal(tp,t))continue;
+            if(!TZ.deck.length){toast(`（${S.players[tp].label}の山札が尽きたため、ここまで）`);break;}
+            const sc=TZ.deck.shift();
+            sc.faceup=false;sc.tapped=false;sc.sideways=false;
+            t.seals=t.seals||[];t.seals.push(sc);
+            done++;
+          }
+          sfx("flip");renderAll();
+          toast(`🔏 ${S.players[tp].label} のクリーチャー${done}体に封印を付けた`);
+          logOnly(`🔏 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[tp].label} のクリーチャー${done}体すべてに封印`);
+          try{fxShare("seal",done>=3?"全体封印！！":"封印！",`${S.players[tp].label}　${done}体を封印`,done>=3,srcCard?srcCard.name:"",pi);}catch(e){}
+        }
+        renderAll();
+        continue;
+      }
       for(let i=0;i<n;i++){
         let pool=TZ.battle.filter(x=>isCreatureReg(getReg(x)));
         if(filt)pool=pool.filter(x=>lockFilterOk(filt,getReg(x),x));
@@ -25655,7 +25765,9 @@ function cardEl(pi,zone,c){
   }
   if(c.seals&&c.seals.length){
     const sl=document.createElement("span");sl.className="sealtag";
-    sl.innerHTML=`<span style="font-size:1.15em;filter:drop-shadow(0 0 8px #f43f5e)">🔒</span>`
+    const _nmS=String(faceNameOf(c)||"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+    sl.innerHTML=`<span class="sealName">${_nmS}</span>`
+      +`<span style="font-size:1.05em;filter:drop-shadow(0 0 8px #f43f5e)">🔒</span>`
       +`<span class="sealNum">${c.seals.length}</span>`
       +`<span class="sealTxt">封 印 中</span>`;
     sl.title=`封印${c.seals.length}個：クリーチャーとして扱われません`;
@@ -25850,7 +25962,9 @@ function cardEl(pi,zone,c){
     xb.addEventListener("pointerdown",ev=>ev.stopPropagation());
     el.appendChild(xb);
   }
-  if((zone==="battle"||zone==="mana")&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!(zone==="battle"&&(isGearCard||isD2Card))){
+  // 禁断の鼓動はアンタップ・タップをしないので、タップボタンも出さない
+  if((zone==="battle"||zone==="mana")&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!(zone==="battle"&&(isGearCard||isD2Card))
+     &&!(zone==="battle"&&getReg(c)&&getReg(c).ctype==="kindanbeat")){
     const tb=document.createElement("button");
     tb.textContent=c.tapped?"⤴":"⤵";
     tb.title=c.tapped?"アンタップ":"タップ";
@@ -25867,17 +25981,20 @@ function cardEl(pi,zone,c){
   // 🔏 封印を付ける／外すボタン（禁断カード用）。カードの左下に出す。
   if(zone==="battle"&&c.faceup&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!isGearCard&&!isD2Card){
     const _rS=getReg(c);
+    // 封印を扱えるカード：禁断カード＝付ける／外す、それ以外＝封印されていれば外すだけ
     const _isKindanCard=!!(_rS&&(_rS.ctype==="kindancre"||_rS.ctype==="kindanbeat"||_rS.loseIfNotBattle
-      ||(_rS.races||[]).some(x=>/禁断/.test(String(x)))))||/禁断|ドキンダム|ドルマゲドン/.test(String(c.name||""));
-    if(_isKindanCard){
+      ||_rS.sealSelfOnFlip||(_rS.races||[]).some(x=>/禁断/.test(String(x)))))||/禁断|ドキンダム|ドルマゲドン/.test(String(c.name||""));
+    const _hasSealNow=!!(c.seals&&c.seals.length);
+    if(_isKindanCard||_hasSealNow){
       const sb=document.createElement("button");
       sb.textContent=(c.seals&&c.seals.length)?"🔓":"🔏";
       sb.title=(c.seals&&c.seals.length)
         ? `封印を1つ外す（いま${c.seals.length}個）`
         : "封印を付ける（自分の山札の上から1枚を裏向きで置く）";
-      sb.style.cssText="position:absolute;left:-6px;bottom:22%;z-index:8;width:26px;height:26px;border-radius:50%;"
-        +"border:2px solid #f43f5e;background:#1a020a;color:#fda4af;font-size:13px;font-weight:900;cursor:pointer;"
-        +"box-shadow:0 2px 8px rgba(0,0,0,.6);padding:0;line-height:1";
+      // 🔏 封印ラベルは全面を覆うので、ボタンはその上（z-index）かつカードの外にはみ出す位置に置く
+      sb.style.cssText="position:absolute;left:-8px;top:-8px;z-index:12;width:30px;height:30px;border-radius:50%;"
+        +"border:2px solid #fff;background:#be123c;color:#fff;font-size:15px;font-weight:900;cursor:pointer;"
+        +"box-shadow:0 3px 12px rgba(0,0,0,.8), 0 0 12px rgba(244,63,94,.9);padding:0;line-height:1";
       sb.addEventListener("click",async ev=>{
         ev.stopPropagation();ev.preventDefault();
         closeSheet();closeSel();
@@ -26005,7 +26122,9 @@ function cardEl(pi,zone,c){
       }
     }
   }
-  if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden&&!isSealed(c)&&showBBtn&&!isGearCard&&!isD2Card){
+  // 禁断の鼓動は攻撃しないので、攻撃ボタンは出さない（ボタンが重なるのを防ぐ）
+  const _isBeat=!!(getReg(c)&&getReg(c).ctype==="kindanbeat");
+  if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden&&!isSealed(c)&&showBBtn&&!isGearCard&&!isD2Card&&!_isBeat){
     const ab=document.createElement("button");
     ab.textContent="⚔";
     ab.title="攻撃";
