@@ -2134,6 +2134,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <input type="number" id="fxFlipSealN" style="width:70px" placeholder="1" min="0" max="9">
           <span style="font-size:12px;font-weight:700">個</span>
         </div>
+        <label title="この面に裏返った時、「同じカードが裏返った」ではなく「新しいクリーチャーがバトルゾーンに出た」として扱います。ゲーム外からの進化（大獄の封殺ディアス Z → 破獄の殲滅者ディアボロス Z 型）を多面登録で作る時に入れてください。オフのままだと覚醒・禁断解放・龍解と同じ扱いになり、相手の「タップして出る」常在効果は働きません"><input type="checkbox" id="fxFlipAsNew"> 🔄 裏返ったら新しいクリーチャーとして出る（ゲーム外からの進化・相手のタップイン常在が働く）</label>
         <label title="相手の、条件に合うクリーチャーは攻撃できなくなります（偽りの王 モーツァルト型）"><input type="checkbox" id="fxStLockAtkFoe"> ⛔ 相手の〔対象〕は攻撃できない</label>
         <label title="相手は手札をすべて公開したままプレイします（光神龍スペル・デル・フィン型）。相手の手札が常に表向きで表示されます"><input type="checkbox" id="fxStFoeHandOpen"> 👁 相手は手札をすべて公開してプレイする</label>
         <label title="自分のブロッカーを持つクリーチャーが受けている『相手プレイヤーを攻撃できない』効果をすべて無効化します（雷電の覚醒者グレート・チャクラ型）"><input type="checkbox" id="fxAGBlockerCanAtkP"> ⚡ 自分のブロッカーの「プレイヤーを攻撃できない」を無効化</label>
@@ -3839,7 +3840,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v12.1";
+const APP_VER="v12.2";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4135,7 +4136,13 @@ function turnEnteredCount(side,filt){
     return S._turnArrived.list.filter(a=>a.pi===side&&(!filt||lockFilterOk(filt,a.reg,a))).length;
   }catch(e){return 0;}
 }
-function markArrive(c){
+/* 🔄 opt.flip＝「同じカードが裏返っただけ」（覚醒・禁断解放・龍解・変身）。
+   この場合はバトルゾーンに「出て」いないので、タップインの常在効果は働かない。
+   ただし登録で「裏返ったら新しいクリーチャーとして出る」（＝ゲーム外からの進化）に
+   してあるカードは、裏返った先が新しいクリーチャーなので働く。 */
+function markArrive(c,opt){
+  opt=opt||{};
+  const _flipOnly=!!opt.flip&&!(()=>{const rF=getReg(c);return rF&&rF.flipAsNew;})();
   c.dealIdx=null;c._pfAsked=false;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
   // 🔓 封印外し（ドルマゲドンX型）の案内は、S・トリガーの受け札パネルなどで
   //    1秒以上あとに処理されることがある。arrived が消えても取りこぼさないよう印を残す。
@@ -4225,7 +4232,7 @@ function markArrive(c){
       if(r&&raceMatch(r,"魔導具")&&pOwn!=null)MUGETSU_PENDING.add(pOwn+":cre");
       // ⤵ 相手の常在「相手クリーチャーはタップして出る」（ボルシャック・ライジング・NEX型）を、
       //    召喚・進化・ルナティック進化・踏み倒しなど「すべての出方」に適用する（moveCardX以外の経路もここで拾う）。
-      if(S.expert&&S.vs&&pOwn!=null&&!c.tapped){
+      if(S.expert&&S.vs&&pOwn!=null&&!c.tapped&&!_flipOnly){
         const foeA=pOwn===0?1:0;
         const rIsCre=r?isCreatureReg(r):true;
         if(rIsCre&&zonesOf(foeA).battle.some(x=>{const r2=getReg(x);return r2&&r2.auraTapIn&&!isSealed(x)&&!isIgnored(x,foeA)&&(!r2.auraTapInNeo||isNeoEvoInstance(x));})){
@@ -4234,7 +4241,7 @@ function markArrive(c){
         }
       }
       // ⤵ チリ型：このカードより実効パワーが小さいクリーチャーは両者ともタップして出る（闇誦のイザナイ チリ型）
-      if(S.expert&&S.vs&&pOwn!=null&&!c.tapped){
+      if(S.expert&&S.vs&&pOwn!=null&&!c.tapped&&!_flipOnly){
         const rIsCre=r?isCreatureReg(r):true;
         const cPow=(rIsCre&&r&&r.power!=null&&r.power!=="")?(+r.power):null;
         if(rIsCre&&cPow!=null&&!isNaN(cPow)){
@@ -4492,7 +4499,7 @@ async function checkAwaken(pi,ev){
           logOnly(`☄ メテオバーン覚醒：${faceNameOf(c)} の下のカード${kids.length}枚を墓地へ`);
         }
         c.face=1;c.tapped=false;
-        markArrive(c);
+        markArrive(c,{flip:true});   // 🔄 覚醒＝裏返っただけ（出たわけではない）
         sfx("flip");renderAll();
         toast(`🔄 覚醒！ ${faceNameOf(c)}${cond?`（条件：${cond}）`:""}`);
         try{fxShare("awake","覚醒！",`${S.players[side].label}`,true,c.name,side);}catch(e){}
@@ -6324,7 +6331,7 @@ async function runLabyEnd(cur2){
         if(yes2){
           snap();
           lc.face=1;lc.tapped=false;lc.rot=0;lc.sideways=false;
-          markArrive(lc);
+          markArrive(lc,{flip:true});   // 🔄 変身＝裏返っただけ
           emitEvent(cur2,"summon");
           enqueueFx(cur2,lc);
           toast(`✨ 変身！ ${faceNameOf(lc)}`);
@@ -13912,7 +13919,7 @@ async function runFxList(pi,list,srcCard,inPump){
       snap();
       tgtC.face=nf;
       tgtC.tapped=false;
-      markArrive(tgtC);
+      markArrive(tgtC,{flip:true});   // 🔄 変身＝裏返っただけ
       emitEvent(pi,"summon");
       enqueueFx(pi,tgtC);
       sfx("flip");renderAll();
@@ -19998,6 +20005,7 @@ function renderFxEditor(){
   {const e=$("fxLoseIfNotBattle");if(e)e.checked=!!FXEDIT.loseIfNotBattle;}
   {const e=$("fxSealSelfOnFlip");if(e)e.value=FXEDIT.sealSelfOnFlip||"";}
   {const e=$("fxFlipSealWho");if(e)e.value=FXEDIT.flipSealWho||"";}
+  {const e=$("fxFlipAsNew");if(e)e.checked=!!FXEDIT.flipAsNew;}
   {const e=$("fxFlipSealN");if(e)e.value=FXEDIT.flipSealN||"";}
   {const e=$("fxStLockAtkFoe");if(e)e.checked=!!FXEDIT.stLockAtkFoe;}
   {const e=$("fxStFoeHandOpen");if(e)e.checked=!!FXEDIT.stFoeHandOpen;}
@@ -21944,6 +21952,7 @@ function fxKeyLabel(k){
     stLockSpellF:"呪文ロックの対象条件",stLockCreF:"召喚ロックの対象条件",
     stCostUp:"相手のコスト増加",stCostUpF:"コスト増加の対象",stCostUpT:"コスト増加の種別",
     stNoHandes:"ハンデス耐性",sback:"S・バック",cantAtkP:"相手プレイヤー攻撃不可",cantAtk:"攻撃不可",
+    flipAsNew:"裏返ったら新しいクリーチャー扱い",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
     cstPow:"条件付きパワー強化",cstPowCond:"条件付きパワーの条件",
     firstRed:"各ターン最初の召喚軽減",firstRedF:"軽減の対象",
     cantAtkCond:"攻撃に必要な条件",stSickAll:"出たターン攻撃不可の除外対象",
@@ -22232,6 +22241,7 @@ function openFxEditor(key){
     loseIfNotBattle:cur?!!cur.loseIfNotBattle:false,
     sealSelfOnFlip:cur&&(+cur.sealSelfOnFlip||0)||0,
     flipSealWho:cur&&cur.flipSealWho||"",
+    flipAsNew:cur?!!cur.flipAsNew:false,
     flipSealN:cur&&(+cur.flipSealN||0)||0,
     stLockAtkFoe:cur?!!cur.stLockAtkFoe:false,
     stFoeHandOpen:cur?!!cur.stFoeHandOpen:false,
@@ -22589,6 +22599,7 @@ $("fxSave").addEventListener("click",async ()=>{
     loseIfNotBattle:$("fxLoseIfNotBattle")?$("fxLoseIfNotBattle").checked:false,
     sealSelfOnFlip:$("fxSealSelfOnFlip")?(Math.abs(+$("fxSealSelfOnFlip").value)||0):0,
     flipSealWho:$("fxFlipSealWho")?$("fxFlipSealWho").value:"",
+    flipAsNew:$("fxFlipAsNew")?$("fxFlipAsNew").checked:false,
     flipSealN:$("fxFlipSealN")?(Math.abs(+$("fxFlipSealN").value)||0):0,
     stLockAtkFoe:$("fxStLockAtkFoe")?$("fxStLockAtkFoe").checked:false,
     stFoeHandOpen:$("fxStFoeHandOpen")?$("fxStFoeHandOpen").checked:false,
@@ -23218,6 +23229,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.loseIfNotBattle)attrs.push("☠ 場を離れたら敗北");
     if(v.sealSelfOnFlip)attrs.push(`🔏 自分に封印${v.sealSelfOnFlip}個`);
     if(v.flipSealWho)attrs.push(`裏返った時：${v.flipSealWho==="foe"?"相手全体":"自身"}に封印${v.flipSealN||1}個`);
+    if(v.flipAsNew)attrs.push("🔄 裏返ったら新しいクリーチャー扱い");
     if(v.stLockAtkFoe)attrs.push(`常在：相手の${v.stLockAtkFoeF||"クリーチャー"}は攻撃できない`);
     if(v.stFoeHandOpen)attrs.push("常在：相手は手札を公開してプレイ");
     if(v.agBlockerCanAtkP)attrs.push("常在：自分のブロッカーはプレイヤーを攻撃できる");
@@ -23924,7 +23936,7 @@ function openLinkProgress(pi,id){
       snap();
       c.face=((c.face||0)+1)%lk.length;
       c.tapped=false;
-      markArrive(c);
+      markArrive(c,{flip:true});   // 🔄 卍誕＝裏返っただけ
       emitEvent(pi,"summon");
       enqueueFx(pi,c);
       sfx("flip");
@@ -26124,7 +26136,7 @@ function cardEl(pi,zone,c){
           if(!yes)return;
           snap();
           c.face=nf;c.tapped=false;
-          markArrive(c);
+          markArrive(c,{flip:true});   // 🔄 覚醒／禁断解放／変身＝裏返っただけ（登録の「新しいクリーチャーとして出る」で上書きできる）
           // 🔏 裏返した先が「出た時に自分へ封印を付ける」カードなら自動で付ける
           //    （禁断 〜封印されし〜 → ドキンダムX のように、裏返った側に封印が必要な場合）
           try{
@@ -30471,7 +30483,7 @@ function openCardSheet(ctx){
         g.rot=(fr2&&(fr2.wide||fr2.d2))?((ctx.p===S.seat)?270:90):0;
         g.tapped=false;
         zonesOf(ctx.p).battle.push(g);
-        markArrive(g);sfx("ok");
+        markArrive(g,{flip:true});sfx("ok");   // 🐉 龍解＝裏返っただけ
         toast(`🐉 龍解！ ${faceNameOf(g)}${g.rot?"（横向き）":""}`);
       }else{
         g.face=0;g.rot=0;g.tapped=false;
