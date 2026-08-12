@@ -1283,6 +1283,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row"><label><input type="checkbox" id="setNoUntapMana"> ターン開始時にマナを自動アンタップしない</label></div>
       <div class="row"><label><input type="checkbox" id="setSpellAuto" checked> 呪文は効果処理後に自動で墓地へ（解決中スタック方式。保持したいカードは登録の「🕐解決中に保持」）</label></div>
       <div class="row"><label><input type="checkbox" id="setTapMultiMana"> 多色カード（文明2つ以上を登録）はタップしてマナに置く</label></div>
+      <div class="row"><label><input type="checkbox" id="setCivWarn" checked> マナに必要な文明が無いままプレイした時に警告のパネルを出す</label></div>
     </section>
     <section>
       <h3>データの書き出し / 読み込み（端末間の引っ越し用）</h3>
@@ -3790,7 +3791,7 @@ const S={
   ],
   multi:false, sel:null, msel:[],
   extra:[0,0],
-  gameMode:"dmps", autoTap:false, noUntapMana:false, tapMultiMana:true,
+  gameMode:"dmps", autoTap:false, noUntapMana:false, tapMultiMana:true, civWarn:true,
 };
 /* 🖼 登録画像の管理（Safariのメモリ対策）
    これまでは起動時に登録画像すべてぶんの一時URLを作っていたため、枚数が増えると
@@ -3838,7 +3839,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v12.0";
+const APP_VER="v12.1";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8725,6 +8726,23 @@ function dddCivOk(r,Zm){
   if(r.dddCiv)return has(r.dddCiv);
   return true;
 }
+/* 🎨 支払う面の必要文明を出す。ツインパクトの下面を選んで払う時は下面の文明を見る。
+   ゼロ文明は「文明を持たない」ため要求に数えない（ゼニス・オラクリオン）。 */
+function payCivNeed(r,c,paySide){
+  if(!r)return [];
+  const twin=!!(r.twin||r.ctype==="twinpact");
+  const low=twin&&(c&&c._twinPaid===1||paySide==="spell")&&Array.isArray(r.civs2)&&r.civs2.length;
+  const src=low?r.civs2:(r.civs||[]);
+  return [...new Set((src||[]).filter(cv=>cv&&cv!=="zero"))];
+}
+/* 🎨 必要な文明が、まだタップしていないマナにそろっているか調べる。
+   効果未登録のマナは文明が分からないので数えられない → その枚数も返して案内に出す。 */
+function payCivCheck(pi,need){
+  const un=zonesOf(pi).mana.filter(m=>!m.tapped);
+  const has=cv=>un.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);});
+  const unreg=un.filter(m=>{const rm=getReg(m);return !rm||!rm.civs||!rm.civs.length;}).length;
+  return {need,missing:(need||[]).filter(cv=>!has(cv)),unreg,untapped:un.length};
+}
 /* 💞 シンパシーの登録文字列を読む。「墓地:クリーチャー」のゾーン指定に加えて
    「墓地のクリーチャー」「自分の墓地にあるクリーチャー」といった書き方も受け付ける。
    対象を書かず「墓地:」だけにした場合は、そのゾーンのカードすべてを数える。 */
@@ -9190,11 +9208,42 @@ async function autoTapCost(pi,c){
     payN=Math.ceil(cost/2);
     toast(`💎✨ マナ2倍：コスト${cost} → タップは${payN}枚`);
   }
-  let n=0;
-  for(const m of Z.mana){
-    if(n>=payN)break;
-    if(!m.tapped){m.tapped=true;n++;}
+  // 🎨 支払いに必要な文明（ゼロ文明は要求しない。ツインパクトは払う面で見る）
+  const payCivs=payCivNeed(r,c,paySide);
+  // ⚠ 必要な文明がマナに無いままプレイした時の警告パネル（設定でオフにできる）
+  //    コスト0（G・ゼロ／踏み倒し等）は支払いが発生しないので文明も要らない＝警告しない
+  if(payN>0&&payCivs.length&&S.civWarn!==false&&!(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO)){
+    const ck=payCivCheck(pi,payCivs);
+    if(ck.missing.length){
+      const jp=cv=>CIV_JP_SEAL[cv]||cv;
+      const j=await askChoice(
+        `⚠ マナに必要な文明がありません\n`+
+        `《${faceNameOf(c)}》（必要な文明：${payCivs.map(jp).join("・")}）\n`+
+        `足りない文明：${ck.missing.map(jp).join("・")}\n`+
+        `アンタップのマナ：${ck.untapped}枚${ck.unreg?`（うち${ck.unreg}枚は効果が未登録で文明を判定できません）`:""}\n`+
+        `プレイ自体を取り消す場合は、このパネルを閉じてから ⌘Z（1手戻る）を使ってください。`,
+        [`このまま支払う（マナを${payN}枚タップ）`,`マナをタップしない（コストを支払わずに出した扱い）`]);
+      if(j!==0){
+        toast(`⚠ ${ck.missing.map(jp).join("・")}のマナが無いため、マナをタップしていません`);
+        logOnly(`⚠ 文明不足：${S.players[pi].label} が ${faceNameOf(c)} を ${ck.missing.map(jp).join("・")} 無しでプレイ（マナ未タップ）`);
+        return;
+      }
+      logOnly(`⚠ 文明不足：${S.players[pi].label} が ${faceNameOf(c)} を ${ck.missing.map(jp).join("・")} 無しでプレイ（そのまま支払い）`);
+    }
   }
+  // 💎 タップする順番：必要な文明を各1枚ずつ先に確保 → 残りは左から。
+  //    左から順に取ると、必要な文明のマナを残したまま枚数だけ払ってしまうことがある。
+  const payPick=[];
+  const restMana=()=>Z.mana.filter(m=>!m.tapped&&!payPick.includes(m));
+  for(const cv of payCivs){
+    if(payPick.length>=payN)break;
+    if(payPick.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}))continue;
+    const hit=restMana().find(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);});
+    if(hit)payPick.push(hit);
+  }
+  for(const m of restMana()){if(payPick.length>=payN)break;payPick.push(m);}
+  payPick.forEach(m=>{m.tapped=true;});
+  const n=payPick.length;
   renderAll();
   if(n<payN)toast(`⚠ マナ不足：${n}/${payN} だけタップしました`);
   else if(payN>0)toast(`マナ自動タップ：${payN}`);
@@ -33103,12 +33152,18 @@ function openSettings(){
   $("setFitBoard").checked=(S.fitBoard!==false);
   $("setNoUntapMana").checked=!!S.noUntapMana;
   $("setTapMultiMana").checked=!!S.tapMultiMana;
+  {const e=$("setCivWarn");if(e)e.checked=(S.civWarn!==false);}
   $("settingsOlay").classList.add("open");
 }
 $("setTapMultiMana").addEventListener("change",async ()=>{
   S.tapMultiMana=$("setTapMultiMana").checked;
   if(db)await idbPut("misc","tapMultiMana",S.tapMultiMana);
   toast(S.tapMultiMana?"多色タップイン：ON":"多色タップイン：OFF");
+});
+$("setCivWarn").addEventListener("change",async ()=>{
+  S.civWarn=$("setCivWarn").checked;
+  if(db)await idbPut("misc","civWarn",S.civWarn);
+  toast(S.civWarn?"文明不足の警告パネル：ON":"文明不足の警告パネル：OFF");
 });
 $("setNoUntapMana").addEventListener("change",async ()=>{
   S.noUntapMana=$("setNoUntapMana").checked;
@@ -35733,6 +35788,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   if(nu!==null&&nu!==undefined)S.noUntapMana=!!nu;
   const tm=db?await idbGet("misc","tapMultiMana"):null;
   if(tm!==null&&tm!==undefined)S.tapMultiMana=!!tm;
+  const cw=db?await idbGet("misc","civWarn"):null;
+  if(cw!==null&&cw!==undefined)S.civWarn=!!cw;
   for(const pi of [0,1]){
     const pn=db?await idbGet("misc","pname"+pi):null;
     if(pn)S.players[pi].label=String(pn).slice(0,12);
