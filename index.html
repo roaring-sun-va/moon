@@ -2135,6 +2135,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <input type="number" id="fxFlipSealN" style="width:70px" placeholder="1" min="0" max="9">
           <span style="font-size:12px;font-weight:700">個</span>
         </div>
+        <label title="このクリーチャーがバトルゾーンを離れる時、かわりに1つ前の面へ裏返して場に残ります（サイキック・クリーチャーの「解除」）。覚醒後の面に入れてください"><input type="checkbox" id="fxLeaveFlipBack"> 🔄 解除：離れる時、かわりに前の面へ裏返る</label>
         <label title="この面に裏返った時、「同じカードが裏返った」ではなく「新しいクリーチャーがバトルゾーンに出た」として扱います。ゲーム外からの進化（大獄の封殺ディアス Z → 破獄の殲滅者ディアボロス Z 型）を多面登録で作る時に入れてください。オフのままだと覚醒・禁断解放・龍解と同じ扱いになり、相手の「タップして出る」常在効果は働きません"><input type="checkbox" id="fxFlipAsNew"> 🔄 裏返ったら新しいクリーチャーとして出る（ゲーム外からの進化・相手のタップイン常在が働く）</label>
         <label title="相手の、条件に合うクリーチャーは攻撃できなくなります（偽りの王 モーツァルト型）"><input type="checkbox" id="fxStLockAtkFoe"> ⛔ 相手の〔対象〕は攻撃できない</label>
         <label title="相手は手札をすべて公開したままプレイします（光神龍スペル・デル・フィン型）。相手の手札が常に表向きで表示されます"><input type="checkbox" id="fxStFoeHandOpen"> 👁 相手は手札をすべて公開してプレイする</label>
@@ -3841,7 +3842,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v12.4";
+const APP_VER="v12.6";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4661,6 +4662,9 @@ function stackCountOf(c){return 1+((c&&c.under)?c.under.length:0);}
 /* 🔮 いま解決中の効果が「呪文」から出たものかどうか。
    「相手の呪文によって選ばれる時だけ選べない」（ベルリン型）の判定に使う。 */
 let FX_FROM_SPELL=false;
+/* ⚡ いま解決している誘発の「きっかけになったカード」（相手のクリーチャーが出た時＝出たクリーチャー等）。
+   trigPowDown のように、きっかけ側を対象にする効果で使う。 */
+let FX_TRIG=null;
 /* 🐲 いま解決している効果が「クリーチャーの能力」かどうか。noChooseCre の判定に使う */
 let FX_FROM_CRE=false;
 function momoUntouchable(x){
@@ -6691,6 +6695,33 @@ async function runTurnEndTriggers(cur2){
         })();
       }
     }
+  // 🥷 ニンジャ・ストライク／裏ニンジャ・ストライクで出したクリーチャーは、
+  //    そのターンの終わりに持ち主の山札の一番下へ置く。
+  {
+    const nsHit=[];
+    for(const pi2 of (S.vs?[0,1]:[0])){
+      for(const c of zonesOf(pi2).battle.slice())if(c._nsThisTurn)nsHit.push({pi:pi2,c});
+    }
+    if(nsHit.length){
+      TURN_END_PHASE="🥷 ニンジャ・ストライクで出したカードを山札の下へ";
+      snap();
+      const back=[];
+      for(const h of nsHit){
+        const Zn=zonesOf(h.pi);
+        h.c._nsThisTurn=false;
+        if(!Zn.battle.some(x=>x.id===h.c.id))continue;   // すでに離れている（破壊された等）
+        back.push(faceNameOf(h.c));
+        moveCard(h.pi,"battle",h.c.id,"deckBottom");
+      }
+      if(back.length){
+        toast(`🥷 ニンジャ・ストライク：${back.join("、")} を山札の一番下へ`);
+        fxBanner("kw","ニンジャ・ストライク","ターンの終わりに山札の下へ",false,back[0],cur2);
+        sfx("grave");renderAll();
+        await waitFxIdle();
+      }
+      TURN_END_PHASE="";
+    }
+  }
   await waitFxIdle();
   renderAll();
 }
@@ -7261,7 +7292,9 @@ function runWatchFx(pi,type,trigCard){
             logOnly(`⚡ ${faceNameOf(c)} の誘発（${type}）を解決（誘発時に場にいたため・現在：${whereIs(c)}）`);
           }
           toast(`⚡誘発処理：${faceNameOf(c)}`);
-          await runFxList(pi,fx,c);
+          const _prevTrig=FX_TRIG;FX_TRIG=trigCard||null;
+          try{ await runFxList(pi,fx,c); }
+          finally{ FX_TRIG=_prevTrig; }
           S._watchOnce=S._watchOnce||{};
           for(const k of _oks)S._watchOnce[k]=`${S.turn}:${S.who}`;
         };
@@ -7493,8 +7526,8 @@ function emitEvent(actor,type,card){
     const def=actor===0?1:0;
     const DZ=zonesOf(def);
     if(_sumCre){
-      runWatchFx(def,"oppSummon");
-      runWatchFx(def,"oppSummonTapped");
+      runWatchFx(def,"oppSummon",LAST_ARRIVED);
+      runWatchFx(def,"oppSummonTapped",LAST_ARRIVED);
     }
     // 🏯 超鯱城型（G城）：相手のマナ枚数よりコストが大きい相手クリーチャーが出た時、それを破壊
     {
@@ -8416,6 +8449,7 @@ const FX_TYPES=[
   ["tempBlockerAll","🛡 自分の〔対象〕すべてに「ブロッカー」を与える（次の自分のターン開始時まで・条件欄で対象指定、空欄＝全員）"],
   ["selfToZone","↪ このクリーチャー自身を〔ゾーン〕に置く（条件欄：マナ／手札／墓地／山札の下／シールド。ターン終了時誘発と組み合わせて）"],
   ["tempPowSelf1k","💪 そのターン、このクリーチャー自身のパワーを＋n×1000（ターン終了時まで・誘発と組み合わせて）"],
+  ["trigPowDown","⬇ そのターン、誘発のきっかけになったクリーチャー1体のパワーを−n×1000（「相手のクリーチャーがバトルゾーンに出た時」と組み合わせて「そのクリーチャーのパワーを−n」に・HADES型のメテオバーン）"],
   ["foePowDownAll","⬇ そのターン、条件に合う相手クリーチャーすべてのパワーを−n×1000（ターン終了時まで・条件欄で対象指定・空欄＝全部・HADES型）"],
   ["foePowDownPick","⬇ 相手クリーチャー1体を選び、そのターン、パワーを−n×1000（ターン終了時まで・パワー0以下で破壊・メテオバーン等の対象指定に）"],
   ["foePowDownPer","⬇ 相手クリーチャー1体を選び、〔ゾーン:対象〕の枚数×n×1000だけそのターンパワーマイナス（条件欄に「墓地:クリーチャー」等・墓地の数だけ−1000型／オブザ08号型）"],
@@ -12879,6 +12913,17 @@ async function runFxList(pi,list,srcCard,inPump){
           await checkZeroPower(); // 💥 パワー0以下は破壊
         }
       }
+    }else if(f.t==="trigPowDown"){
+      // ⬇ そのターン、誘発のきっかけになったクリーチャー1体のパワーを−n×1000
+      //    （FX_TRIG＝「相手のクリーチャーが出た時」なら、その出たクリーチャー）
+      if(!FX_TRIG){toast("⬇ きっかけになったクリーチャーが分からないためスキップしました");continue;}
+      const tgT=[0,1].map(pp=>zonesOf(pp).battle.find(x=>x.id===FX_TRIG.id)).find(Boolean);
+      if(!tgT){toast(`⬇ ${faceNameOf(FX_TRIG)} はもうバトルゾーンにいません`);continue;}
+      const amtT=n*1000;
+      tgT.buff=tgT.buff||{};tgT.buff.pow=(+tgT.buff.pow||0)-amtT;markBuffTurn(tgT,["pow"]);
+      sfx("ok");renderAll();
+      toast(`⬇ ${faceNameOf(tgT)} のパワー−${amtT}（ターン終了時まで）`);
+      await checkZeroPower(); // 💥 パワー0以下は破壊
     }else if(f.t==="foePowDownAll"){
       // ⬇ そのターン、条件(f.cond)に合う相手クリーチャーすべてのパワーを−n×1000（ターン終了時まで）
       const filt=String(f.cond||"").trim();
@@ -15278,6 +15323,23 @@ async function offerTrueEscape(pi,c){
   //    （マナ送り・バウンス・盾送り・山札送りなど、破壊以外の離場もここで置き換える）
   if(r&&r.underLeaveRep&&!isIgnored(c,pi)){
     if(await underLeaveReplace(pi,c))return true;
+  }
+  // 🔄 解除：バトルゾーンを離れる時、かわりに1つ前の面へ裏返して場に残る
+  //    （殲滅の覚醒者ディアボロス Z 型。覚醒後の面にだけ登録する）
+  if(r&&r.leaveFlipBack&&!isIgnored(c,pi)&&(c.face|0)>0){
+    const lkB=LINKS.get(normName(c.name))||LINKS.get(faceKeyOf(c));
+    if(lkB&&lkB.length>1){
+      snap();
+      const was=faceNameOf(c);
+      c.face=Math.max(0,(c.face|0)-1);
+      c.buff=null;c.mark=false;c.sideways=false;
+      {const rB=FXDB.get(lkB[c.face|0]);c.rot=(rB&&(rB.wide||rB.d2))?c.rot:0;}
+      toast(`🔄 解除！ ${was} は離れるかわりに《${faceNameOf(c)}》へ裏返った`);
+      logOnly(`🔄 解除：${S.players[pi].label} の《${was}》→《${faceNameOf(c)}》（離場をキャンセル）`);
+      try{fxShare("awake","解除！","離れるかわりに裏返る",true,c.name,pi);}catch(e){}
+      sfx("flip");renderAll();
+      return true;
+    }
   }
   if(!(r&&(r.trueEscape||allyGrant(pi,"agTEsc"))))return false;
   const Z=zonesOf(pi);
@@ -20045,6 +20107,7 @@ function renderFxEditor(){
   {const e=$("fxSealSelfOnFlip");if(e)e.value=FXEDIT.sealSelfOnFlip||"";}
   {const e=$("fxFlipSealWho");if(e)e.value=FXEDIT.flipSealWho||"";}
   {const e=$("fxFlipAsNew");if(e)e.checked=!!FXEDIT.flipAsNew;}
+  {const e=$("fxLeaveFlipBack");if(e)e.checked=!!FXEDIT.leaveFlipBack;}
   {const e=$("fxFlipSealN");if(e)e.value=FXEDIT.flipSealN||"";}
   {const e=$("fxStLockAtkFoe");if(e)e.checked=!!FXEDIT.stLockAtkFoe;}
   {const e=$("fxStFoeHandOpen");if(e)e.checked=!!FXEDIT.stFoeHandOpen;}
@@ -21991,7 +22054,7 @@ function fxKeyLabel(k){
     stLockSpellF:"呪文ロックの対象条件",stLockCreF:"召喚ロックの対象条件",
     stCostUp:"相手のコスト増加",stCostUpF:"コスト増加の対象",stCostUpT:"コスト増加の種別",
     stNoHandes:"ハンデス耐性",sback:"S・バック",cantAtkP:"相手プレイヤー攻撃不可",cantAtk:"攻撃不可",
-    flipAsNew:"裏返ったら新しいクリーチャー扱い",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
+    flipAsNew:"裏返ったら新しいクリーチャー扱い",leaveFlipBack:"解除（離れる時に前の面へ）",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
     cstPow:"条件付きパワー強化",cstPowCond:"条件付きパワーの条件",
     firstRed:"各ターン最初の召喚軽減",firstRedF:"軽減の対象",
     cantAtkCond:"攻撃に必要な条件",stSickAll:"出たターン攻撃不可の除外対象",
@@ -22281,6 +22344,7 @@ function openFxEditor(key){
     sealSelfOnFlip:cur&&(+cur.sealSelfOnFlip||0)||0,
     flipSealWho:cur&&cur.flipSealWho||"",
     flipAsNew:cur?!!cur.flipAsNew:false,
+    leaveFlipBack:cur?!!cur.leaveFlipBack:false,
     flipSealN:cur&&(+cur.flipSealN||0)||0,
     stLockAtkFoe:cur?!!cur.stLockAtkFoe:false,
     stFoeHandOpen:cur?!!cur.stFoeHandOpen:false,
@@ -22639,6 +22703,7 @@ $("fxSave").addEventListener("click",async ()=>{
     sealSelfOnFlip:$("fxSealSelfOnFlip")?(Math.abs(+$("fxSealSelfOnFlip").value)||0):0,
     flipSealWho:$("fxFlipSealWho")?$("fxFlipSealWho").value:"",
     flipAsNew:$("fxFlipAsNew")?$("fxFlipAsNew").checked:false,
+    leaveFlipBack:$("fxLeaveFlipBack")?$("fxLeaveFlipBack").checked:false,
     flipSealN:$("fxFlipSealN")?(Math.abs(+$("fxFlipSealN").value)||0):0,
     stLockAtkFoe:$("fxStLockAtkFoe")?$("fxStLockAtkFoe").checked:false,
     stFoeHandOpen:$("fxStFoeHandOpen")?$("fxStFoeHandOpen").checked:false,
@@ -23269,6 +23334,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.sealSelfOnFlip)attrs.push(`🔏 自分に封印${v.sealSelfOnFlip}個`);
     if(v.flipSealWho)attrs.push(`裏返った時：${v.flipSealWho==="foe"?"相手全体":"自身"}に封印${v.flipSealN||1}個`);
     if(v.flipAsNew)attrs.push("🔄 裏返ったら新しいクリーチャー扱い");
+    if(v.leaveFlipBack)attrs.push("🔄 解除（離れる時に前の面へ）");
     if(v.stLockAtkFoe)attrs.push(`常在：相手の${v.stLockAtkFoeF||"クリーチャー"}は攻撃できない`);
     if(v.stFoeHandOpen)attrs.push("常在：相手は手札を公開してプレイ");
     if(v.agBlockerCanAtkP)attrs.push("常在：自分のブロッカーはプレイヤーを攻撃できる");
@@ -26130,9 +26196,10 @@ function cardEl(pi,zone,c){
     // 禁断カード（封印を持つ／禁断解放するもの）は「禁断解放」と呼ぶ
     const _isKindan=!!(_rP&&(_rP.kindan||_rP.loseIfNotBattle||(_rP.races||[]).some(x=>/禁断/.test(String(x)))))
       ||/禁断/.test(String(c.name||""));
-    const _flipWord=_isKindan?"禁断解放":(_isPsy?"覚醒":"変身");
     const _backWord=_isPsy?"解除":"戻す";
     const _lk=LINKS.get(normName(c.name))||null;
+    const _isDrg=(()=>{const r0=FXDB.get(_lk&&_lk[0]);return !!(r0&&r0.ctype==="dragheart");})();
+    const _flipWord=_isKindan?"禁断解放":(_isPsy?"覚醒":(_isDrg?"龍解":"変身"));
     // 🔗 覚醒リンク中のカードは、右側に「リンク解除」ボタンを出す
     if(c.gl&&Array.isArray(c.under)&&c.under.length){
       const lb=document.createElement("button");
@@ -30137,6 +30204,9 @@ function openCardSheet(ctx){
       if(ctx.zone==="battle")c.rot=(fr&&(fr.wide||fr.d2))?((ctx.p===S.seat)?270:90):0;
       if(ctx.zone==="battle"&&c.sick){c.sick=false;toast("⚡ 変形（覚醒/龍解など）：召喚酔いが解けた");}
       sfx("flip");
+      {const _rf=FXDB.get(link[0])||{};
+       const _w=(_rf.ctype==="dragheart")?"龍解":((_rf.ctype==="psychic"||_rf.ctype==="psyevo")?"覚醒":"変形");
+       try{fxShare("awake",`${_w}！`,`${S.players[ctx.p].label}`,true,c.name,ctx.p);}catch(e){}}
       // 覚醒/龍解/究極進化など「裏返った時」の効果：変形後の面の出た時効果を発動できる
       if(ctx.zone==="battle"){
         const fire=await ask(`🔄 《${faceNameOf(c)}》へ変形しました。\n変形後（覚醒／龍解／究極進化など）の効果を発動しますか？`);
@@ -30525,6 +30595,8 @@ function openCardSheet(ctx){
         zonesOf(ctx.p).battle.push(g);
         markArrive(g,{flip:true});sfx("ok");   // 🐉 龍解＝裏返っただけ
         toast(`🐉 龍解！ ${faceNameOf(g)}${g.rot?"（横向き）":""}`);
+        try{fxShare("awake","龍解！",`${S.players[ctx.p].label}`,true,g.name,ctx.p);}catch(e){}
+        logOnly(`🐉 龍解：${S.players[ctx.p].label} の《${faceNameOf(g)}》`);
       }else{
         g.face=0;g.rot=0;g.tapped=false;
         zonesOf(ctx.p).hyper.push(g);
