@@ -2068,6 +2068,7 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="turnEndMine">自分のターンの終わりに</option>
             <option value="turnEndOpp">相手のターンの終わりに</option>
             <option value="turnEndAny">各ターンの終わりに</option>
+            <option value="graveAddMine">自分の墓地にカードが置かれた時（その一連の処理が終わってから）</option>
             <option value="selfAtkEnd">このクリーチャーの攻撃の終わりに</option>
             <option value="atkPlayerThrough">相手プレイヤーへの攻撃がブロックされずに通った後</option>
           </select>
@@ -3840,7 +3841,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v12.2";
+const APP_VER="v12.3";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4417,6 +4418,41 @@ function deckPeekLocked(){
     }
   }catch(e){}
   return null;
+}
+/* 🔄 「自分の墓地にカードが置かれた時」の覚醒／進化（大獄の封殺ディアス Z 型）。
+   墓地の枚数を描画のたびに見て、増えていたら覚醒を判定する。
+   効果の解決中・パネルが開いている間は何もしないので、
+   結果として「その一連の処理が終わってから」裏返ることになる。 */
+let AWAKE_GRAVE_N=[0,0];
+let AWAKE_GRAVE_BUSY=false;
+function awakeGraveSync(){try{for(const pi of [0,1])AWAKE_GRAVE_N[pi]=zonesOf(pi).grave.length;}catch(e){}}
+function checkGraveAwaken(){
+  try{
+    if(!S.expert||AWAKE_GRAVE_BUSY||(typeof REPLAY!=="undefined"&&REPLAY.on))return;
+    if(typeof fxRunning!=="undefined"&&fxRunning)return;                 // 効果を解決中
+    if(typeof fxQueue!=="undefined"&&fxQueue&&fxQueue.length)return;     // 順番待ちがある
+    if(typeof WATCH_BUSY!=="undefined"&&WATCH_BUSY)return;               // 誘発の処理中
+    if(typeof GAME_PAUSE!=="undefined"&&GAME_PAUSE)return;
+    if(document.querySelector("#askOlay.open,#viewerOlay.open"))return;  // 選択・確認パネルが開いている
+    const hit=[];
+    for(const pi of [0,1]){
+      const Zp=zonesOf(pi);
+      if(!Zp||!Zp.grave)continue;
+      const n=Zp.grave.length, prev=AWAKE_GRAVE_N[pi]|0;
+      AWAKE_GRAVE_N[pi]=n;
+      if(n>prev)hit.push(pi);
+    }
+    if(!hit.length)return;
+    // 🌐 オンライン対戦では、自分の席のカードだけ自分の端末で処理する（両方で走ると二重になる）
+    const mine=(typeof olActive==="function"&&olActive())?hit.filter(pi=>pi===(S.seat|0)):(S.vs?hit:hit.filter(pi=>pi===0));
+    if(!mine.length)return;
+    AWAKE_GRAVE_BUSY=true;
+    (async()=>{
+      try{for(const pi of mine)await checkAwaken(pi,"graveAddMine");}
+      catch(e){}
+      finally{AWAKE_GRAVE_BUSY=false;}
+    })();
+  }catch(e){AWAKE_GRAVE_BUSY=false;}
 }
 /* 🔄 覚醒の自動判定。
    awakenEv＝判定するタイミング（turnStartMine／turnStartAny／turnEndMine／turnEndOpp／turnEndAny／selfAtkEnd 等）
@@ -26639,6 +26675,7 @@ function renderAllNow(){
   try{if(typeof autoSaveSchedule==="function")autoSaveSchedule();}catch(e){} // 💾 リロード復帰用の自動保存
   checkLibWin();
   checkMugetsu(false);
+  checkGraveAwaken();   // 🔄 自分の墓地にカードが置かれた時の覚醒／進化
   // 🌟 モモキングダム✕型：含まれるカードの枚数を見張り、「ちょうど6枚になった」瞬間に −99999 を発動する。
   //    増えて6枚になった時だけでなく、7枚以上から減って6枚になった時（メテオバーン・退化など）も対象。
   if(S.expert){
