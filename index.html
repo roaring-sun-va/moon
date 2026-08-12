@@ -3841,7 +3841,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v12.3";
+const APP_VER="v12.4";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4264,6 +4264,9 @@ function markArrive(c,opt){
   }catch(e){}
 }
 function getReg(c){return FXDB.get(faceKeyOf(c))||FXDB.get(normName(c.name))||null;}
+/* 🃏 登録の「出た時（上面）／下面」の効果行を安全に取り出す。
+   faces を持たない登録（能力が誘発だけのカードなど）があるので、必ずこれを通す。 */
+function faceFx(r,i){const a=r&&r.faces&&r.faces[i|0];return Array.isArray(a)?a:[];}
 /* 進化系タイプの共通判定。ツインパクトは上面＝クリーチャー面なので twinTop（進化/NEO進化）で判定に含める */
 const EVO_CTYPES=["evo","neoevo","starevo","charismaevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","lunatic","ultimate"];
 /* 🌟 バトルゾーンの進化元がいらない進化かどうか。
@@ -14609,7 +14612,7 @@ function enqueueFx(pi,c){
   }
   if([0,1].some(p=>zonesOf(p).battle.some(b=>b.gear&&b.gear.includes(c))))return;
   const reg=getReg(c);
-  const hasFx=reg&&(reg.faces[0].length||(reg.twin&&reg.faces[1].length)||(reg.modeN|0)>0);
+  const hasFx=reg&&(faceFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0);
   if(!hasFx&&!(reg&&(reg.soulRaid||reg.momoKingX))&&!soulXCipFx(c).length)return;
   // 🔢 いまカードを1枚処理している最中に生まれたCIP（＝その効果の結果出たカード）は、
   //    残りの兄弟カードより先に解決する（カーソル位置に順番を保って挿入）。処理中でなければ末尾へ。
@@ -14700,13 +14703,13 @@ async function pumpFx(){
       if(c._twinPaid===0||c._twinPaid===1){pick=c._twinPaid;c._twinPaid=null;toast(`🃏 ${pick===0?"上面":"下面"}の効果を処理（支払った面）`);}
       else{
         pick=await askChoice(`《${faceNameOf(c)}》はツインパクトです。\nどちらの面の効果を処理しますか？`,
-          [`上面：${fxSummary(reg.faces[0])}`,`下面：${fxSummary(reg.faces[1])}`,"処理しない"]);
+          [`上面：${fxSummary(faceFx(reg,0))}`,`下面：${fxSummary(faceFx(reg,1))}`,"処理しない"]);
       }
-      if(pick===0)await runTimes(reg.faces[0]);
-      else if(pick===1)await runTimes(reg.faces[1]);
-    }else if(reg&&reg.faces[0].length){
+      if(pick===0)await runTimes(faceFx(reg,0));
+      else if(pick===1)await runTimes(faceFx(reg,1));
+    }else if(faceFx(reg,0).length){
       toast(`⚡自動処理：${faceNameOf(c)}`);
-      await runTimes(reg.faces[0]);
+      await runTimes(faceFx(reg,0));
     }
     const md=modeCountFor(reg,pi);
     if((reg.modeN|0)>0){
@@ -14782,7 +14785,7 @@ async function manualRunCip(pi,c){
   if(!S.expert){toast("⚡ EXモードのときだけ使えます（設定でEXをONにしてください）");return;}
   if(isSealed(c)){toast(`🔒 ${faceNameOf(c)} は封印中のため能力を使えません`);return;}
   const reg=getReg(c);
-  const hasFx=reg&&(reg.faces[0].length||(reg.twin&&reg.faces[1].length)||(reg.modeN|0)>0);
+  const hasFx=reg&&(faceFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0);
   if(!hasFx&&!(reg&&(reg.soulRaid||reg.momoKingX))&&!soulXCipFx(c).length){
     toast(`《${faceNameOf(c)}》には登録された出た時（CIP）効果がありません`);return;
   }
@@ -22076,7 +22079,7 @@ function openFxEditor(key){
     key, name:dispName.get(key)||key,
     twin:cur?!!cur.twin:false,
     twinTop:cur&&cur.twinTop||"creature",
-    faces:cur?[(cur.faces[0]||[]).map(f=>({...f})),(cur.faces[1]||[]).map(f=>({...f}))]:[[],[]],
+    faces:[faceFx(cur,0).map(f=>({...f})),faceFx(cur,1).map(f=>({...f}))],
     power:cur&&cur.power!=null?cur.power:null,
     dest:cur&&cur.dest||"grave",
     blocker:cur?!!cur.blocker:false,
@@ -28332,8 +28335,8 @@ function ghostFxOf(r,side){
   if(r.faces){
     // 単体カードは faces[0] が本体（呪文なら呪文効果・クリーチャーならCIP）。
     // ツインパクトのみ side="spell" で下面 faces[1] を見る。
-    if(twin&&side==="spell")push(r.faces[1]);
-    else push(r.faces[0]);
+    if(twin&&side==="spell")push(faceFx(r,1));
+    else push(faceFx(r,0));
   }
   if(r.fx)push(r.fx);
   if(r.watchFx)push(r.watchFx);
@@ -29991,7 +29994,7 @@ function openCardSheet(ctx){
   // ⚡ 出た時（CIP）を手動で実行：CIPの連鎖で処理が止まった時の復旧にも使う
   if(S.expert&&(ctx.zone==="battle"||ctx.zone==="resolve")&&c.faceup&&!masked&&!isSealed(c)){
     const rC=getReg(c);
-    const hasCipReg=!!(rC&&((rC.faces&&(rC.faces[0].length||(rC.twin&&rC.faces[1].length)))||(rC.modeN|0)>0||rC.soulRaid||rC.momoKingX))||soulXCipFx(c).length>0;
+    const hasCipReg=!!(rC&&(faceFx(rC,0).length||(rC.twin&&faceFx(rC,1).length)||(rC.modeN|0)>0||rC.soulRaid||rC.momoKingX))||soulXCipFx(c).length>0;
     if(hasCipReg){
       const isSp=rC&&rC.ctype==="spell";
       box.appendChild(actBtn(
