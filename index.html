@@ -204,12 +204,29 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   background:var(--tap);color:#04222a;
   font-size:9px;font-weight:800;padding:0 4px;border-bottom-left-radius:6px;
 }
+/* 🔒 封印は「クリーチャーとして扱われない」重い状態なので、ひと目で分かる大きさにする。
+   カード全面に暗幕をかけ、中央に大きく封印の数を出す。 */
+@keyframes sealPulse{0%,100%{box-shadow:inset 0 0 34px rgba(244,63,94,.65), 0 0 0 rgba(244,63,94,.6), 0 2px 10px rgba(0,0,0,.7)}
+  50%{box-shadow:inset 0 0 46px rgba(244,63,94,.85), 0 0 18px rgba(244,63,94,.85), 0 2px 10px rgba(0,0,0,.7)}}
 .card .sealtag{
-  position:absolute;left:0;top:0;z-index:2;
-  background:var(--danger);color:#fff;
-  font-size:12px;font-weight:900;padding:1px 7px;border-bottom-right-radius:8px;
-  box-shadow:0 1px 4px rgba(0,0,0,.6);letter-spacing:.5px;
+  position:absolute;inset:0;z-index:9;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  background:
+    repeating-linear-gradient(135deg, rgba(244,63,94,.30) 0 10px, transparent 10px 22px),
+    radial-gradient(circle at 50% 45%, rgba(190,18,60,.55), rgba(6,1,4,.90) 74%);
+  color:#fff;font-weight:900;letter-spacing:.08em;pointer-events:none;
+  border:4px solid #f43f5e;border-radius:10px;
+  animation:sealPulse 1.6s ease-in-out infinite;
+  text-shadow:0 2px 0 rgba(0,0,0,.95), 0 0 16px #f43f5e;
+  font-size:clamp(11px,4.4cqw,20px);
 }
+.card .sealtag .sealNum{font-size:clamp(24px,15cqw,58px);line-height:1;
+  text-shadow:0 3px 0 rgba(0,0,0,.95), 0 0 22px #fb7185}
+.card .sealtag .sealTxt{font-size:clamp(9px,4cqw,15px);opacity:1;font-weight:900;
+  background:rgba(244,63,94,.85);border-radius:4px;padding:0 6px;margin-top:2px}
+.card.gearside .sealtag,.card.gearside.auraside .sealtag,.card.gearside.crossside .sealtag{
+  border-width:2px;border-radius:8px}
+.card{container-type:inline-size}
 .card .bufftag{
   position:absolute;left:26px;bottom:0;z-index:2;max-width:calc(100% - 26px);
   background:#7b5cff;color:#fff;
@@ -2095,6 +2112,19 @@ body.shake{animation:bodyShake .4s ease-out}
           <label><input type="checkbox" id="fxStLockSpell"> 相手は呪文を唱えられない</label>
         <label title="このカードが場にある間、どちらのプレイヤーも山札の探索（山札を見る操作）ができなくなります（巡霊者メスタポ型）"><input type="checkbox" id="fxStNoDeckPeek"> 👁 誰も山札を見ることはできない（メスタポ型）</label>
         <label title="このカードがバトルゾーン以外のゾーンにあれば、持ち主はゲームに負けます（伝説の禁断 ドキンダムX 型）。バトルゾーンを離れた瞬間に判定します"><input type="checkbox" id="fxLoseIfNotBattle"> ☠ バトルゾーン以外にあれば自分はゲームに負ける（ドキンダムX型）</label>
+        <span style="font-size:12px;font-weight:700">🔏 裏返った時／出た時に自分へ付く封印の数</span>
+        <input type="number" id="fxSealSelfOnFlip" style="width:80px" placeholder="0" min="0" max="10" title="このカードが多面カードの裏返りで出た時、自分の山札の上から指定した数だけ封印を付けます（禁断の鼓動＝6／ドルマゲドン＝5 など）。0＝付けない">
+        <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
+          <span style="font-size:12px;font-weight:700;color:#fda4af">🔏 裏返った時に封印を付ける</span>
+          <select id="fxFlipSealWho" style="font-size:12px">
+            <option value="">（付けない）</option>
+            <option value="foe">相手のクリーチャーすべてに（ドキンダムX型）</option>
+            <option value="self">このカード自身に（ドルマゲドン型）</option>
+          </select>
+          <span style="font-size:12px;font-weight:700">1体あたり</span>
+          <input type="number" id="fxFlipSealN" style="width:70px" placeholder="1" min="0" max="9">
+          <span style="font-size:12px;font-weight:700">個</span>
+        </div>
         <label title="相手の、条件に合うクリーチャーは攻撃できなくなります（偽りの王 モーツァルト型）"><input type="checkbox" id="fxStLockAtkFoe"> ⛔ 相手の〔対象〕は攻撃できない</label>
         <label title="相手は手札をすべて公開したままプレイします（光神龍スペル・デル・フィン型）。相手の手札が常に表向きで表示されます"><input type="checkbox" id="fxStFoeHandOpen"> 👁 相手は手札をすべて公開してプレイする</label>
         <label title="自分のブロッカーを持つクリーチャーが受けている『相手プレイヤーを攻撃できない』効果をすべて無効化します（雷電の覚醒者グレート・チャクラ型）"><input type="checkbox" id="fxAGBlockerCanAtkP"> ⚡ 自分のブロッカーの「プレイヤーを攻撃できない」を無効化</label>
@@ -3800,7 +3830,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v11.6";
+const APP_VER="v11.9";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4457,6 +4487,7 @@ async function checkAwaken(pi,ev){
         toast(`🔄 覚醒！ ${faceNameOf(c)}${cond?`（条件：${cond}）`:""}`);
         try{fxShare("awake","覚醒！",`${S.players[side].label}`,true,c.name,side);}catch(e){}
         logOnly(`🔄 覚醒：${S.players[side].label} の《${lk[0]}》が《${faceNameOf(c)}》に裏返った${cond?`（${cond}）`:""}`);
+        applyFlipSeal(side,c);   // 🔏 裏返った時の封印
         emitEvent(side,"summon");
         enqueueFx(side,c);
       }
@@ -4470,6 +4501,11 @@ function foeHandOpenBy(pi){
     return zonesOf(pi).battle.find(x=>{const rx=getReg(x);
       return rx&&rx.stFoeHandOpen&&!isSealed(x)&&!isIgnored(x,pi);})||null;
   }catch(e){return null;}
+}
+/* 👁 handOwner の手札が、相手のカードによって公開状態になっているか。
+   （光神龍スペル・デル・フィン：自分の場にあると「相手は手札を公開してプレイする」） */
+function handIsOpenFor(handOwner){
+  return foeHandOpenBy(handOwner===0?1:0);
 }
 /* ⛔ 「相手の〔対象〕進化クリーチャーは、出たターン攻撃できない」（時空の探検家ジョン型） */
 function evoSickLockBy(pi,c){
@@ -4501,6 +4537,63 @@ async function kindanLoseCheck(owner,c){
     await declareWin(win,`☠ ${faceNameOf(c)} がバトルゾーン以外のゾーンにあるため、${S.players[owner].label} はゲームに負けた`);
     return true;
   }catch(e){return false;}
+}
+/* 🔏 カードに封印を付ける（自分の山札の上から裏向きで置く）。付けられた数を返す。 */
+/* 🔏 裏返った時に封印を付ける（ドキンダムX＝相手全体／ドルマゲドン＝自身）。
+   手動の🔄ボタンでも、自動の覚醒でも同じように呼ぶ。 */
+function applyFlipSeal(pi,c){
+  try{
+    const r=getReg(c);
+    if(!r||!r.flipSealWho)return;
+    const n=Math.max(1,+r.flipSealN||1);
+    if(r.flipSealWho==="self"){
+      const put=putSealsOn(pi,c,n);
+      if(put){
+        toast(`🔏 ${faceNameOf(c)} に封印を${put}個付けた`);
+        fxShare("seal","封印！",`${S.players[pi].label}　${faceNameOf(c)}（封印${(c.seals||[]).length}個）`,put>=4,c.name,pi);
+      }
+      return;
+    }
+    // 相手のクリーチャーすべてに（封印は「そのクリーチャーの持ち主の山札の上から」）
+    if(!S.vs)return;
+    const op2=pi===0?1:0;
+    const tgts=zonesOf(op2).battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
+    if(!tgts.length)return;
+    let cnt=0;
+    for(const t of tgts)cnt+=putSealsOn(op2,t,n);
+    if(cnt){
+      toast(`🔏 ${S.players[op2].label} のクリーチャー${tgts.length}体に封印を付けた（計${cnt}個）`);
+      logOnly(`🔏 ${faceNameOf(c)}：${S.players[op2].label} のクリーチャー${tgts.length}体に封印を付与`);
+      fxShare("seal","全体封印！！",`${S.players[op2].label}　${tgts.length}体を封印`,true,c.name,pi);
+    }
+  }catch(e){}
+}
+function putSealsOn(pi,c,n){
+  const Z=zonesOf(pi);
+  c.seals=c.seals||[];
+  let put=0;
+  for(let i=0;i<n;i++){
+    if(!Z.deck.length)break;
+    const sc=Z.deck.shift();
+    sc.faceup=false;sc.tapped=false;sc.sideways=false;
+    c.seals.push(sc);put++;
+  }
+  if(put<n)toast(`🔏 山札が足りないため${put}個だけ付けました`);
+  return put;
+}
+/* 🔓 封印を1つ外して墓地へ。 */
+function sealPeelOne(owner,c,quiet){
+  if(!c.seals||!c.seals.length)return false;
+  const Z=zonesOf(owner);
+  const sc=c.seals.pop();
+  sc.faceup=true;
+  Z.grave.push(sc);
+  if(!quiet){
+    sfx("flip");renderAll();
+    toast(`🔓 ${faceNameOf(c)} の封印を1つ外した（残り${c.seals.length}）`);
+    try{fxShare("seal","封印を1つ外した",`${S.players[owner].label}　${faceNameOf(c)}（残り${c.seals.length}）`,false,c.name,owner);}catch(e){}
+  }
+  return true;
 }
 function markBuffTurn(c,keys){
   if(!c.buff)c.buff={};
@@ -4986,6 +5079,10 @@ async function olPickRemote(pi,title,cards,head){
   }
   return await pickCard(title,cards);
 }
+/* 🖐 手動でカードを動かした時の演出。効果ではなく自分の操作なので、設定「多め」でだけ出す。 */
+function fxManual(pi,label,card){
+  try{fxShare("manual",label,`${S.players[pi].label}`,false,card?card.name:"",pi);}catch(e){}
+}
 /* ⏳ 相手の選択を待っている間の表示 */
 function olWaitBannerShow(txt){
   try{
@@ -5146,7 +5243,12 @@ function fxBanner(kind,title,sub,big,cardName,side){
     if(!fxAllowed(kind))return;
     const st=FX_STYLE[kind]||FX_STYLE.summon;
     const L=fxLayer();
-    while(L.children.length>=3)L.removeChild(L.firstChild);   // 積みすぎない
+    // 積みすぎ防止。ただし「大きい演出（進化・キーワード・S・トリガー等）」は残し、
+    // 小さいものから先に片付ける。大事な演出が一瞬で押し出されるのを防ぐ。
+    while(L.children.length>=4){
+      const small=[...L.children].find(x=>!x.classList.contains("big"));
+      L.removeChild(small||L.firstChild);
+    }
     const esc=x=>String(x==null?"":x).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
 
     const b=document.createElement("div");
@@ -5227,7 +5329,7 @@ function fxBanner(kind,title,sub,big,cardName,side){
       }catch(e){}
     }
     try{sfx(st.se);}catch(e){}
-    const ms=big?2200:1500;
+    const ms=big?2600:1400;
     setTimeout(()=>{
       b.classList.add("out");
       setTimeout(()=>{try{b.remove();}catch(e){}},260);
@@ -8329,6 +8431,7 @@ const FX_TYPES=[
   ["shieldBreakN","💥 相手のシールドをn枚ブレイクする（通常のブレイク処理・どのシールドを割るかは選択／S・トリガーも通常どおり・シューヴェルト型）"],
   ["shieldBreakTo","💥 相手のシールドが n枚になるようにブレイクする（アイアン・マンハッタン型・すでにn枚以下なら何もしない）"],
   ["foeSelfToDeckBottom","⬇ 相手は自身のクリーチャー1体または手札1枚を、自分の山札の一番下に置く（時空の封殺ディアス Z 型／n回ぶん繰り返す）"],
+  ["grantBlockerPick","🛡 自分のクリーチャーをn体選び、「ブロッカー」を与える（次の自分のターン開始時まで・光牙忍ハヤブサマル型／条件欄で対象を絞れる）"],
   ["deathGate","💀 相手のアンタップしているクリーチャー1体を破壊し、自分の墓地からそのクリーチャーよりコストが小さい進化ではないクリーチャー1枚を出してもよい（地獄門デス・ゲート型）"],
   ["gachinkoWinToHand","🎲 ガチンコ・ジャッジを行い、勝ったらこの呪文を墓地に置くかわりに手札に戻す（ガチンコ・ルーレット型）"],
   ["foeDeckRecruitByFoe","🚪 自分の山札を見て、条件に合うクリーチャーを『相手に』1体選ばせてバトルゾーンに出す→シャッフル（ミラクルとミステリーの扉型／条件欄で対象指定）"],
@@ -12375,6 +12478,34 @@ async function runFxList(pi,list,srcCard,inPump){
         moved++;
       }
       if(moved){sfx("move");renderAll();toast(`🛡→🌱 相手のシールドを${moved}つマナゾーンに置いた（ブレイクではないのでS・トリガーは使えません）`);}
+    }else if(f.t==="grantBlockerPick"){
+      // 🛡 自分のクリーチャーを選んでブロッカーを与える（ハヤブサマル型）
+      const filt=String(f.cond||"").trim();
+      const done=[];
+      for(let i=0;i<n;i++){
+        const pool=Z.battle.filter(x=>{
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))return false;
+          if(done.some(y=>y.id===x.id))return false;
+          if(x.buff&&x.buff.blocker)return false;         // すでにブロッカーなら選ぶ意味がない
+          const rr=getReg(x);
+          if(rr&&rr.blocker)return false;
+          return !filt||lockFilterOk(filt,rx,x);
+        });
+        if(!pool.length){if(!done.length)toast("🛡 ブロッカーを与えられるクリーチャーがいません");break;}
+        const j=pool.length===1?0:await pickCard(`🛡 「ブロッカー」を与えるクリーチャーを選択（${i+1}/${n}体目・キャンセルで終了）`,pool,{});
+        if(j===null)break;
+        const t2=pool[j];
+        if(!done.length)snap();
+        t2.buff=t2.buff||{};t2.buff.blocker=true;
+        markBuffNext(t2,["blocker"],pi);
+        done.push(t2);
+      }
+      if(!done.length){renderAll();continue;}
+      sfx("ok");renderAll();
+      toast(`🛡 ${done.map(x=>faceNameOf(x)).join("、")} に「ブロッカー」を与えた（次の自分のターン開始時まで）`);
+      logOnly(`🛡 ${S.players[pi].label}：${done.map(x=>`《${faceNameOf(x)}》`).join("")} にブロッカーを付与`);
+      try{fxShare("kw","ブロッカーを与えた！",`${S.players[pi].label}　${done.map(x=>faceNameOf(x)).join("、")}`,false,srcCard?srcCard.name:"",pi);}catch(e){}
     }else if(f.t==="tempBlockerAll"){
       // 🛡 自分の〔対象〕すべてに「ブロッカー」を付与（次の自分のターン開始時まで）。f.cond＝対象条件（空欄＝全員）
       const filt=String(f.cond||"").trim();
@@ -17803,10 +17934,18 @@ async function execAttack(pi,id,tg){
       sfx("ok");renderAll();
       toast(`🥷${cand[j].ura?"裏 裏ニンジャ・ストライク":" ニンジャ・ストライク"}！ ${faceNameOf(h)}`);
       fxKeyword(op,cand[j].ura?"裏ニンジャ・ストライク！":"ニンジャ・ストライク！",h.name,"迎撃");
+      h._nsThisTurn=true;   // 🥷 ターンの終わりに山札の一番下へ戻す印
       await waitFxIdle();
       renderAll();
-      toast(`🥷 ${cand[j].ura?"裏ニンジャ・ストライク":"ニンジャ・ストライク"}の処理中：効果を盤面で解決してください。攻撃を続ける場合は、もう一度「攻撃する」からやり直してください`);
-      return;
+      // 🥷 出た時の効果（ブロッカー付与など）まで終わったら、そのまま攻撃の処理を続けられるようにする。
+      //    これまでは必ず中断していたため、付与したブロッカーでブロックできなかった。
+      const goNS=await ask(`🥷 ${cand[j].ura?"裏ニンジャ・ストライク":"ニンジャ・ストライク"}の処理が終わりました。\nこのまま攻撃の処理（ブロック宣言→${tg.kind==="creature"?"バトル":tg.kind==="shield"?"ブレイク":"ダイレクトアタック"}）を続けますか？\n\n「いいえ」で中断すると盤面で手動処理できます`);
+      if(!goNS){
+        toast("🥷 攻撃の処理を中断しました（盤面で手動処理してください）");
+        renderAll();
+        return;
+      }
+      continue;   // 別のニンジャ・ストライクも使えるので、もう一度候補を見る
     }
   }
   // ✨ アタック・チャンス：攻撃宣言時＝ブロック宣言や対象解決の前に唱える（正式タイミング）
@@ -19698,6 +19837,9 @@ function renderFxEditor(){
   $("fxStLockSpell").checked=!!FXEDIT.stLockSpell;
   {const e=$("fxStNoDeckPeek");if(e)e.checked=!!FXEDIT.stNoDeckPeek;}
   {const e=$("fxLoseIfNotBattle");if(e)e.checked=!!FXEDIT.loseIfNotBattle;}
+  {const e=$("fxSealSelfOnFlip");if(e)e.value=FXEDIT.sealSelfOnFlip||"";}
+  {const e=$("fxFlipSealWho");if(e)e.value=FXEDIT.flipSealWho||"";}
+  {const e=$("fxFlipSealN");if(e)e.value=FXEDIT.flipSealN||"";}
   {const e=$("fxStLockAtkFoe");if(e)e.checked=!!FXEDIT.stLockAtkFoe;}
   {const e=$("fxStFoeHandOpen");if(e)e.checked=!!FXEDIT.stFoeHandOpen;}
   {const e=$("fxAGBlockerCanAtkP");if(e)e.checked=!!FXEDIT.agBlockerCanAtkP;}
@@ -21929,6 +22071,9 @@ function openFxEditor(key){
     awakenCond:cur&&cur.awakenCond||"",
     stNoDeckPeek:cur?!!cur.stNoDeckPeek:false,
     loseIfNotBattle:cur?!!cur.loseIfNotBattle:false,
+    sealSelfOnFlip:cur&&(+cur.sealSelfOnFlip||0)||0,
+    flipSealWho:cur&&cur.flipSealWho||"",
+    flipSealN:cur&&(+cur.flipSealN||0)||0,
     stLockAtkFoe:cur?!!cur.stLockAtkFoe:false,
     stFoeHandOpen:cur?!!cur.stFoeHandOpen:false,
     agBlockerCanAtkP:cur?!!cur.agBlockerCanAtkP:false,
@@ -22283,6 +22428,9 @@ $("fxSave").addEventListener("click",async ()=>{
     stLockSpell:$("fxStLockSpell").checked,
     stNoDeckPeek:$("fxStNoDeckPeek")?$("fxStNoDeckPeek").checked:false,
     loseIfNotBattle:$("fxLoseIfNotBattle")?$("fxLoseIfNotBattle").checked:false,
+    sealSelfOnFlip:$("fxSealSelfOnFlip")?(Math.abs(+$("fxSealSelfOnFlip").value)||0):0,
+    flipSealWho:$("fxFlipSealWho")?$("fxFlipSealWho").value:"",
+    flipSealN:$("fxFlipSealN")?(Math.abs(+$("fxFlipSealN").value)||0):0,
     stLockAtkFoe:$("fxStLockAtkFoe")?$("fxStLockAtkFoe").checked:false,
     stFoeHandOpen:$("fxStFoeHandOpen")?$("fxStFoeHandOpen").checked:false,
     agBlockerCanAtkP:$("fxAGBlockerCanAtkP")?$("fxAGBlockerCanAtkP").checked:false,
@@ -22909,6 +23057,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.awakenEv)attrs.push(`覚醒：${v.awakenCond||"無条件"}`);
     if(v.stNoDeckPeek)attrs.push("常在：誰も山札を見られない");
     if(v.loseIfNotBattle)attrs.push("☠ 場を離れたら敗北");
+    if(v.sealSelfOnFlip)attrs.push(`🔏 自分に封印${v.sealSelfOnFlip}個`);
+    if(v.flipSealWho)attrs.push(`裏返った時：${v.flipSealWho==="foe"?"相手全体":"自身"}に封印${v.flipSealN||1}個`);
     if(v.stLockAtkFoe)attrs.push(`常在：相手の${v.stLockAtkFoeF||"クリーチャー"}は攻撃できない`);
     if(v.stFoeHandOpen)attrs.push("常在：相手は手札を公開してプレイ");
     if(v.agBlockerCanAtkP)attrs.push("常在：自分のブロッカーはプレイヤーを攻撃できる");
@@ -25407,7 +25557,7 @@ function cardEl(pi,zone,c){
   const showBBtn=!(zone==="battle"&&S.battleBtns===false);    // バトルの操作ボタン表示
   let hidden=(S.vs&&S.hideOpp&&pi!==(S.seat|0)&&zone==="hand");
   // 👁 「相手は手札をすべて公開してプレイする」（光神龍スペル・デル・フィン型）が働いていれば、その相手の手札は隠さない
-  if(hidden&&typeof foeHandOpenBy==="function"&&foeHandOpenBy(pi===0?1:0))hidden=false;
+  if(hidden&&typeof handIsOpenFor==="function"&&handIsOpenFor(pi))hidden=false;
   const showFace=c.faceup&&!hidden;
   if(c.tapped)el.classList.add("tapped");
   if(!showFace)el.classList.add("facedown");
@@ -25504,7 +25654,11 @@ function cardEl(pi,zone,c){
     el.appendChild(st);
   }
   if(c.seals&&c.seals.length){
-    const sl=document.createElement("span");sl.className="sealtag";sl.textContent="封"+c.seals.length;
+    const sl=document.createElement("span");sl.className="sealtag";
+    sl.innerHTML=`<span style="font-size:1.15em;filter:drop-shadow(0 0 8px #f43f5e)">🔒</span>`
+      +`<span class="sealNum">${c.seals.length}</span>`
+      +`<span class="sealTxt">封 印 中</span>`;
+    sl.title=`封印${c.seals.length}個：クリーチャーとして扱われません`;
     el.appendChild(sl);
   }
   {
@@ -25710,6 +25864,46 @@ function cardEl(pi,zone,c){
     tb.addEventListener("pointerdown",ev=>ev.stopPropagation());
     el.appendChild(tb);
   }
+  // 🔏 封印を付ける／外すボタン（禁断カード用）。カードの左下に出す。
+  if(zone==="battle"&&c.faceup&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!isGearCard&&!isD2Card){
+    const _rS=getReg(c);
+    const _isKindanCard=!!(_rS&&(_rS.ctype==="kindancre"||_rS.ctype==="kindanbeat"||_rS.loseIfNotBattle
+      ||(_rS.races||[]).some(x=>/禁断/.test(String(x)))))||/禁断|ドキンダム|ドルマゲドン/.test(String(c.name||""));
+    if(_isKindanCard){
+      const sb=document.createElement("button");
+      sb.textContent=(c.seals&&c.seals.length)?"🔓":"🔏";
+      sb.title=(c.seals&&c.seals.length)
+        ? `封印を1つ外す（いま${c.seals.length}個）`
+        : "封印を付ける（自分の山札の上から1枚を裏向きで置く）";
+      sb.style.cssText="position:absolute;left:-6px;bottom:22%;z-index:8;width:26px;height:26px;border-radius:50%;"
+        +"border:2px solid #f43f5e;background:#1a020a;color:#fda4af;font-size:13px;font-weight:900;cursor:pointer;"
+        +"box-shadow:0 2px 8px rgba(0,0,0,.6);padding:0;line-height:1";
+      sb.addEventListener("click",async ev=>{
+        ev.stopPropagation();ev.preventDefault();
+        closeSheet();closeSel();
+        const Zs=zonesOf(pi);
+        if(c.seals&&c.seals.length){
+          if(!await ask(`🔓 ${faceNameOf(c)} の封印を1つ外しますか？（いま${c.seals.length}個）`))return;
+          snap();
+          sealPeelOne(pi,c);
+          if(!c.seals.length){
+            toast(`🔥 ${faceNameOf(c)} の封印がすべて外れた！（右の🔄で禁断解放できます）`);
+            fxShare("kindan","封印がすべて外れた！",`${S.players[pi].label}`,true,c.name,pi);
+          }
+        }else{
+          const num=await askNumber(`🔏 ${faceNameOf(c)} に封印をいくつ付けますか？（自分の山札の上から）`,6);
+          if(num==null||num<=0)return;
+          snap();
+          const put=putSealsOn(pi,c,num);
+          sfx("flip");renderAll();
+          toast(`🔏 ${faceNameOf(c)} に封印を${put}個付けた`);
+          fxShare("seal","封印！",`${S.players[pi].label}　${faceNameOf(c)}（封印${c.seals.length}個）`,put>=4,c.name,pi);
+        }
+      });
+      sb.addEventListener("pointerdown",ev=>ev.stopPropagation());
+      el.appendChild(sb);
+    }
+  }
   // 🔄 サイキック・クリーチャーの覚醒／解除ボタン（カードの右側）
   if(zone==="battle"&&c.faceup&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!isGearCard&&!isD2Card){
     const _rP=getReg(c);
@@ -25765,9 +25959,20 @@ function cardEl(pi,zone,c){
           snap();
           c.face=nf;c.tapped=false;
           markArrive(c);
+          // 🔏 裏返した先が「出た時に自分へ封印を付ける」カードなら自動で付ける
+          //    （禁断 〜封印されし〜 → ドキンダムX のように、裏返った側に封印が必要な場合）
+          try{
+            const rNew=getReg(c);
+            const nS=+(rNew&&rNew.sealSelfOnFlip)||0;
+            if(nS>0&&(!c.seals||!c.seals.length)){
+              const put=putSealsOn(pi,c,nS);
+              if(put)toast(`🔏 ${faceNameOf(c)} に封印を${put}個付けた`);
+            }
+          }catch(e){}
           sfx("flip");renderAll();
           toast(`🔄 ${_flipWord}！ ${faceNameOf(c)}`);
-          try{fxShare("awake",`${_flipWord}！`,`${S.players[pi].label}`,true,c.name,pi);}catch(e){}
+          try{fxShare(_isKindan?"kindan":"awake",`${_flipWord}！`,`${S.players[pi].label}`,true,c.name,pi);}catch(e){}
+          try{applyFlipSeal(pi,c);}catch(e){}   // 🔏 裏返った時の封印
           logOnly(`🔄 ${_flipWord}：${S.players[pi].label} の《${was}》→《${faceNameOf(c)}》`);
           emitEvent(pi,"summon");
           enqueueFx(pi,c);
@@ -29563,7 +29768,7 @@ function openCardSheet(ctx){
   if(ctx.zone==="battle"&&isSealed(c)){
     const inf=document.createElement("div");
     inf.style.cssText="font-size:12px;color:#f59e0b;font-weight:700;padding:4px 2px";
-    inf.textContent=`🔒 封印中（${c.seals.length}）：クリーチャーとして扱われません。攻撃・効果・ゾーン移動は不可。まず封印を外してください`;
+    inf.textContent=`🔒 封印中（${c.seals.length}個）：クリーチャーとして扱われません。攻撃・効果・ゾーン移動は不可。まず封印を外してください`;
     box.appendChild(inf);
   }
   // ⚡ 出た時（CIP）を手動で実行：CIPの連鎖で処理が止まった時の復旧にも使う
@@ -30616,6 +30821,7 @@ function openCardSheet(ctx){
         if(!f2)return;
         snap();
         closeSel();closeSheet();
+        fxShare("destroy","破壊！",`${S.players[ctx.p].label}`,false,f2.card.name,ctx.p);
         await destroyWithReplace(ctx.p,f2.card);
         renderAll();
       }));
@@ -30631,6 +30837,14 @@ function openCardSheet(ctx){
         if(await offerTrueEscape(ctx.p,c)){renderAll();return;}
         moveCard(ctx.p,ctx.zone,ctx.id,tz);renderAll();return;
       }
+      // 🖐 手動での移動。バウンス・マナ送りなどはそれらしい演出にする
+      const KIND={hand:["bounce","手札に戻した"],mana:["mana","マナに置いた"],
+        grave:["destroy","墓地に置いた"],shield:["lock","シールドにした"],
+        deckTop:["manual","山札の上へ"],deckBottom:["manual","山札の下へ"],
+        battle:["summon","バトルゾーンへ"],exile:["manual","超GRへ"]};
+      const kk=KIND[tz];
+      if(kk&&ctx.zone==="battle")fxShare(kk[0],kk[1],`${S.players[ctx.p].label}`,false,c.name,ctx.p);
+      else fxManual(ctx.p,label,c);
       moveCard(ctx.p,ctx.zone,ctx.id,tz);closeSel();renderAll();
     }));
   }
