@@ -2137,8 +2137,14 @@ body.shake{animation:bodyShake .4s ease-out}
           <input type="number" id="fxFlipSealN" style="width:70px" placeholder="1" min="0" max="9">
           <span style="font-size:12px;font-weight:700">個</span>
         </div>
+        <label title="自分のサイキック・クリーチャーがバトルゾーンに出た時、または覚醒した時、このカードを超次元ゾーンから出してもよい（超時空ストームG・XX 型）。超次元ゾーンに置いておくカードに入れてください"><input type="checkbox" id="fxHyperCallOnPsy"> 🌌 自分のサイキックが出た時・覚醒した時、超次元から出せる</label>
+        <label title="このカードは、多面登録の2面目（裏面）としても手札から召喚できます（大獄の封殺ディアス Z 型）。表の面に入れてください"><input type="checkbox" id="fxCastAsBack"> 🃏 手札から裏面としても召喚できる</label>
+        <label title="バトル中、自分のハンター1体につきパワー+1000（自身がハンターなら自身も数えます）。バトルの時だけで、除去のパワー参照には効きません"><input type="checkbox" id="fxHunting"> 🏹 ハンティング</label>
+        <label style="display:flex;align-items:center;gap:4px" title="J・O・E N：召喚する時、コストをN少なくしてもよい。そうした場合、このターンの終わりに山札の一番下に置き、カードを1枚引きます。0＝なし">🃏 J・O・E
+          <input type="number" id="fxJoe" style="width:70px" placeholder="0" min="0"></label>
         <label title="自分のシールドがブレイクされる時、そのシールドを見て、手札に加えるかわりに墓地に置いてもよい。そうした場合、超次元ゾーンからそのカードと同じコストのサイキック・クリーチャーを出します（ガイアール・カイザー型）"><input type="checkbox" id="fxBrkPsyOut"> 🌌 ブレイクされた盾を墓地に置いて、超次元から同コストを出す</label>
         <input type="text" id="fxBrkPsyOutFilt" list="raceList" placeholder="↑ 出せるサイキックの条件（例：ハンター・空欄＝すべて）" style="flex:1;min-width:180px">
+        <input type="text" id="fxLinkBreakHyper" placeholder="↑ そのうち超次元ゾーンに戻すカード名（「／」区切り・例：勝利のガイアール・カイザー）" style="flex:1;min-width:220px">
         <label title="覚醒リンクしたこのクリーチャーがバトルゾーンを離れる時、かわりにリンクを解除して、元のカードに戻して場に残ります（唯我独尊ガイアール・オレドラゴン型）。リンクした面に入れてください"><input type="checkbox" id="fxLinkBreakOnLeave"> 🔗 リンク解除：離れる時、かわりにリンクを解く</label>
         <label title="このクリーチャーがバトルゾーンを離れる時、かわりに1つ前の面へ裏返して場に残ります（サイキック・クリーチャーの「解除」）。覚醒後の面に入れてください"><input type="checkbox" id="fxLeaveFlipBack"> 🔄 解除：離れる時、かわりに前の面へ裏返る</label>
         <label title="この面に裏返った時、「同じカードが裏返った」ではなく「新しいクリーチャーがバトルゾーンに出た」として扱います。ゲーム外からの進化（大獄の封殺ディアス Z → 破獄の殲滅者ディアボロス Z 型）を多面登録で作る時に入れてください。オフのままだと覚醒・禁断解放・龍解と同じ扱いになり、相手の「タップして出る」常在効果は働きません"><input type="checkbox" id="fxFlipAsNew"> 🔄 裏返ったら新しいクリーチャーとして出る（ゲーム外からの進化・相手のタップイン常在が働く）</label>
@@ -3847,7 +3853,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v12.8";
+const APP_VER="v13.0";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4270,6 +4276,63 @@ function markArrive(c,opt){
   }catch(e){}
 }
 function getReg(c){return FXDB.get(faceKeyOf(c))||FXDB.get(normName(c.name))||null;}
+/* 🌌 自分のサイキック・クリーチャーが出た時／覚醒した時に、超次元ゾーンから出せるカード
+   （超時空ストームG・XX 型）。超次元ゾーンにあるカードは誘発の走査に載らないので、ここで別に見る。 */
+let HYPER_CALL_BUSY=false;
+function offerHyperCall(pi,why){
+  try{
+    if(!S.expert||HYPER_CALL_BUSY)return;
+    const Z=zonesOf(pi);
+    if(!Z.hyper||!Z.hyper.length)return;
+    const cands=Z.hyper.filter(x=>{const r=getReg(x);return r&&r.hyperCallOnPsy;});
+    if(!cands.length)return;
+    HYPER_CALL_BUSY=true;
+    enqueueWatchJob(async()=>{
+      try{
+        for(const c of cands){
+          if(!Z.hyper.some(x=>x.id===c.id))continue;   // すでに出ている
+          const r=getReg(c);
+          // 進化元になれるカードが無いなら聞かない
+          const need=+r.evoSrcSum||0;
+          const pool=Z.battle.filter(x=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize)&&evoSrcOk(r,x);});
+          if(!pool.length)continue;
+          if(need>0){
+            const sum=pool.reduce((a,x)=>{const rr=getReg(x);return a+((rr&&+rr.cost)||0);},0);
+            if(sum<need)continue;
+          }
+          const yes=await ask(`🌌 ${faceNameOf(c)}\n${why}。超次元ゾーンから出しますか？`);
+          if(!yes)continue;
+          await playEvoCreature(pi,"hyper",c.id);
+          await waitFxIdle();
+        }
+      }catch(e){}
+      finally{HYPER_CALL_BUSY=false;}
+    });
+  }catch(e){HYPER_CALL_BUSY=false;}
+}
+/* 🔗 リンク解除で戻る先をカードごとに分ける。
+   登録の「超次元ゾーンに戻すカード」（名前を「／」区切り、または種族などの条件）に合うものは
+   バトルゾーンに戻さず超次元ゾーンへ送る（唯我独尊ガイアール・オレドラゴン → 勝利のガイアール・カイザー）。 */
+function linkBreakSplit(pi,reg,parts){
+  const filt=String((reg&&reg.linkBreakHyper)||"").trim();
+  const stay=[],back=[];
+  if(!filt)return {stay:parts,back,label:parts.map(x=>faceNameOf(x)).join("＋")+" に戻った"};
+  const keys=filt.split(/[／\/、,｜|]/).map(t=>t.trim()).filter(Boolean).map(t=>normName(t));
+  for(const x of parts){
+    const nm=normName(faceNameOf(x));
+    const hit=keys.includes(nm)||keys.includes(normName(x.name))
+      ||(()=>{try{return lockFilterOk(filt,getReg(x),x);}catch(e){return false;}})();
+    (hit?back:stay).push(x);
+  }
+  const Z=zonesOf(pi);
+  if(back.length){
+    Z.hyper=Z.hyper||[];
+    for(const x of back){x.faceup=false;x.tapped=false;x.face=0;x.buff=null;x.under=[];Z.hyper.push(x);}
+  }
+  const lb=[stay.length?stay.map(x=>faceNameOf(x)).join("＋")+" に戻った":"",
+            back.length?back.map(x=>faceNameOf(x)).join("＋")+" は超次元ゾーンへ":""].filter(Boolean).join("／");
+  return {stay,back,label:lb};
+}
 /* 🃏 登録の「出た時（上面）／下面」の効果行を安全に取り出す。
    faces を持たない登録（能力が誘発だけのカードなど）があるので、必ずこれを通す。 */
 function faceFx(r,i){const a=r&&r.faces&&r.faces[i|0];return Array.isArray(a)?a:[];}
@@ -4546,6 +4609,7 @@ async function checkAwaken(pi,ev){
         c.face=1;c.tapped=false;
         markArrive(c,{flip:true});   // 🔄 覚醒＝裏返っただけ（出たわけではない）
         sfx("flip");renderAll();
+        try{offerHyperCall(side,`自分の《${faceNameOf(c)}》が覚醒しました`);}catch(e){}   // 🌌 超時空ストームG・XX 型
         toast(`🔄 覚醒！ ${faceNameOf(c)}${cond?`（条件：${cond}）`:""}`);
         try{fxShare("awake","覚醒！",`${S.players[side].label}`,true,c.name,side);}catch(e){}
         logOnly(`🔄 覚醒：${S.players[side].label} の《${lk[0]}》が《${faceNameOf(c)}》に裏返った${cond?`（${cond}）`:""}`);
@@ -6730,6 +6794,34 @@ async function runTurnEndTriggers(cur2){
         })();
       }
     }
+  // 🃏 J・O・E で召喚したクリーチャーは、ターンの終わりに山札の一番下へ置き、カードを1枚引く
+  {
+    const joeHit=[];
+    for(const pi2 of (S.vs?[0,1]:[0])){
+      for(const c of zonesOf(pi2).battle.slice())if(c._joeThisTurn)joeHit.push({pi:pi2,c});
+    }
+    if(joeHit.length){
+      TURN_END_PHASE="🃏 J・O・E：山札の下へ置いてドロー";
+      snap();
+      for(const h of joeHit){
+        const Zj=zonesOf(h.pi);
+        h.c._joeThisTurn=false;
+        if(!Zj.battle.some(x=>x.id===h.c.id))continue;   // すでに離れている
+        const nm=faceNameOf(h.c);
+        moveCard(h.pi,"battle",h.c.id,"deckBottom");
+        if(Zj.deck.length){
+          const dc=Zj.deck.shift();dc.faceup=true;Zj.hand.push(dc);
+          toast(`🃏 J・O・E：${nm} を山札の一番下へ置き、カードを1枚引いた`);
+        }else{
+          toast(`🃏 J・O・E：${nm} を山札の一番下へ置いた（山札が無いためドローなし）`);
+        }
+        logOnly(`🃏 J・O・E：${S.players[h.pi].label} の《${nm}》を山札の下へ → 1枚ドロー`);
+      }
+      sfx("move");renderAll();
+      await waitFxIdle();
+      TURN_END_PHASE="";
+    }
+  }
   // 🥷 ニンジャ・ストライク／裏ニンジャ・ストライクで出したクリーチャーは、
   //    そのターンの終わりに持ち主の山札の一番下へ置く。
   {
@@ -7551,6 +7643,11 @@ function emitEvent(actor,type,card){
   if(type==="summon"&&_sumCre){
     // ⚡ 自分のクリーチャーが出た時（allyEnter）：出た側のバトルゾーンの誘発を確認（ソロでも動く）
     runWatchFx(actor,"allyEnter",LAST_ARRIVED);
+    // 🌌 出たのがサイキックなら、超次元ゾーンから呼べるカードを確認する（超時空ストームG・XX 型）
+    try{
+      const _rp=LAST_ARRIVED&&getReg(LAST_ARRIVED);
+      if(_rp&&/psy/.test(String(_rp.ctype||"")))offerHyperCall(actor,`自分の《${faceNameOf(LAST_ARRIVED)}》がバトルゾーンに出ました`);
+    }catch(e){}
     // ⚡ 自分の他のクリーチャーが進化した時（allyEvo）：出たカードが進化（下敷きあり/NEO/進化ctype）なら発火
     const _la=LAST_ARRIVED, _rla=_la&&getReg(_la);
     if(_la&&((_la.under&&_la.under.length)||_la.neoEvo||(_rla&&isEvoReg(_rla)))){
@@ -9307,6 +9404,19 @@ async function autoTapCost(pi,c){
     sfx("ok");
     toast(`🎸 G・G・G！ 手札0枚 → コスト0で召喚！`);
   }
+  // 🃏 J・O・E N：召喚する時、コストをN少なくしてもよい。
+  //    そうした場合、このターンの終わりに山札の一番下へ置き、カードを1枚引く。
+  if((+r.joe||0)>0&&cost>0&&!c._viaCheat&&paySide==="creature"){
+    const nJ=+r.joe||0;
+    const useJ=await ask(`🃏 J・O・E${nJ}（${faceNameOf(c)}）\nコストを${nJ}少なくして召喚しますか？\n（そうした場合、このターンの終わりにこのクリーチャーを山札の一番下に置き、カードを1枚引きます）`);
+    if(useJ){
+      cost=Math.max(0,cost-nJ);
+      c._joeThisTurn=true;
+      toast(`🃏 J・O・E${nJ}：コスト${cost} で召喚（ターンの終わりに山札の下へ）`);
+      logOnly(`🃏 J・O・E${nJ}：${S.players[pi].label} の《${faceNameOf(c)}》をコスト${cost}で召喚`);
+      try{fxKeyword(pi,`J・O・E${nJ}`,c.name,"ターンの終わりに山札の下へ");}catch(e){}
+    }
+  }
   // 文明による下限（単色1・ゼロ0・多色は文明数）
   {
     const civ0=r.civs||[];
@@ -9508,9 +9618,10 @@ async function destroyCreature(pi,c,opts){
         const parts=c.under.splice(0);
         parts.forEach(b2=>{b2.tapped=false;b2.buff=null;b2.mark=false;b2.sideways=false;});
         c.gl=false;
-        arrL.splice(iL,1,...parts);
-        toast(`🔗 リンク解除！ ${was} は破壊されるかわりに ${parts.map(x=>faceNameOf(x)).join("＋")} に戻った`);
-        logOnly(`🔗 リンク解除：${S.players[pi].label} の《${was}》→ ${parts.map(x=>faceNameOf(x)).join("＋")}（破壊をキャンセル）`);
+        const spl=linkBreakSplit(pi,rZ,parts);
+        arrL.splice(iL,1,...spl.stay);
+        toast(`🔗 リンク解除！ ${was} は破壊されるかわりに ${spl.label}`);
+        logOnly(`🔗 リンク解除：${S.players[pi].label} の《${was}》→ ${spl.label}（破壊をキャンセル）`);
         try{fxShare("awake","リンク解除！","破壊されるかわりにリンクが解ける",true,c.name,pi);}catch(e){}
         sfx("flip");renderAll();
         return;
@@ -15339,6 +15450,19 @@ async function effPower(c,attacking,inBattle){
   if(attacking&&r&&r.pa)p+=(+r.pa||0);
   if(attacking&&r&&+r.condGrantPA>0&&condGrantOn(c,r))p+=(+r.condGrantPA||0);
   if(inBattle&&r&&r.pb)p+=(+r.pb||0);
+  // 🏹 ハンティング：バトル中、自分のハンター1体につきパワー+1000（自身がハンターなら自身も数える）
+  if(inBattle&&r&&r.hunting){
+    const ownH=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
+    if(ownH!=null){
+      let nH=0;
+      for(const b of zonesOf(ownH).battle){
+        if(isSealed(b))continue;
+        const rb=getReg(b);
+        if(rb&&isCreatureReg(rb)&&raceMatch(rb,"ハンター"))nH++;
+      }
+      p+=nH*1000;
+    }
+  }
   if(c.sfActive&&r&&r.sforceFx==="pw"&&r.sforceN)p+=(+r.sforceN||0);
   if(c.buff)p+=(c.buff.pa||0)+(c.buff.pm||0);
   if(r)p+=powPerBonus(c,r,attacking,inBattle);
@@ -15405,9 +15529,10 @@ async function offerTrueEscape(pi,c){
       const parts=c.under.splice(0);
       parts.forEach(b2=>{b2.tapped=false;b2.buff=null;b2.mark=false;b2.sideways=false;});
       c.gl=false;
-      arrL.splice(iL,1,...parts);
-      toast(`🔗 リンク解除！ ${was} は離れるかわりに ${parts.map(x=>faceNameOf(x)).join("＋")} に戻った`);
-      logOnly(`🔗 リンク解除：${S.players[pi].label} の《${was}》→ ${parts.map(x=>faceNameOf(x)).join("＋")}（離場をキャンセル）`);
+      const spl=linkBreakSplit(pi,r,parts);
+      arrL.splice(iL,1,...spl.stay);
+      toast(`🔗 リンク解除！ ${was} は離れるかわりに ${spl.label}`);
+      logOnly(`🔗 リンク解除：${S.players[pi].label} の《${was}》→ ${spl.label}（離場をキャンセル）`);
       try{fxShare("awake","リンク解除！","離れるかわりにリンクが解ける",true,c.name,pi);}catch(e){}
       sfx("flip");renderAll();
       return true;
@@ -20261,6 +20386,11 @@ function renderFxEditor(){
   {const e=$("fxLeaveFlipBack");if(e)e.checked=!!FXEDIT.leaveFlipBack;}
   {const e=$("fxNeverLeave");if(e)e.checked=!!FXEDIT.neverLeave;}
   {const e=$("fxLinkBreakOnLeave");if(e)e.checked=!!FXEDIT.linkBreakOnLeave;}
+  {const e=$("fxLinkBreakHyper");if(e)e.value=FXEDIT.linkBreakHyper||"";}
+  {const e=$("fxHunting");if(e)e.checked=!!FXEDIT.hunting;}
+  {const e=$("fxHyperCallOnPsy");if(e)e.checked=!!FXEDIT.hyperCallOnPsy;}
+  {const e=$("fxCastAsBack");if(e)e.checked=!!FXEDIT.castAsBack;}
+  {const e=$("fxJoe");if(e)e.value=FXEDIT.joe||"";}
   {const e=$("fxBrkPsyOut");if(e)e.checked=!!FXEDIT.brkPsyOut;}
   {const e=$("fxBrkPsyOutFilt");if(e)e.value=FXEDIT.brkPsyOutFilt||"";}
   {const e=$("fxNoChooseSpellCost");if(e)e.value=FXEDIT.noChooseSpellCost||"";}
@@ -22211,8 +22341,9 @@ function fxKeyLabel(k){
     stCostUp:"相手のコスト増加",stCostUpF:"コスト増加の対象",stCostUpT:"コスト増加の種別",
     stNoHandes:"ハンデス耐性",sback:"S・バック",cantAtkP:"相手プレイヤー攻撃不可",cantAtk:"攻撃不可",
     flipAsNew:"裏返ったら新しいクリーチャー扱い",leaveFlipBack:"解除（離れる時に前の面へ）",
-    neverLeave:"バトルゾーンを離れない",linkBreakOnLeave:"リンク解除（離れる時）",
-    brkPsyOut:"ブレイク盾を墓地に置いて超次元から出す",brkPsyOutFilt:"超次元から出す条件",noChooseSpellCost:"選ばれない呪文のコスト条件",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
+    neverLeave:"バトルゾーンを離れない",linkBreakOnLeave:"リンク解除（離れる時）",linkBreakHyper:"リンク解除で超次元へ戻すカード",
+    brkPsyOut:"ブレイク盾を墓地に置いて超次元から出す",brkPsyOutFilt:"超次元から出す条件",
+    hunting:"ハンティング",joe:"J・O・E",hyperCallOnPsy:"サイキック登場・覚醒で超次元から出せる",castAsBack:"手札から裏面としても召喚できる",noChooseSpellCost:"選ばれない呪文のコスト条件",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
     cstPow:"条件付きパワー強化",cstPowCond:"条件付きパワーの条件",
     firstRed:"各ターン最初の召喚軽減",firstRedF:"軽減の対象",
     cantAtkCond:"攻撃に必要な条件",stSickAll:"出たターン攻撃不可の除外対象",
@@ -22505,6 +22636,11 @@ function openFxEditor(key){
     leaveFlipBack:cur?!!cur.leaveFlipBack:false,
     neverLeave:cur?!!cur.neverLeave:false,
     linkBreakOnLeave:cur?!!cur.linkBreakOnLeave:false,
+    linkBreakHyper:cur&&cur.linkBreakHyper||"",
+    hunting:cur?!!cur.hunting:false,
+    hyperCallOnPsy:cur?!!cur.hyperCallOnPsy:false,
+    castAsBack:cur?!!cur.castAsBack:false,
+    joe:cur&&(+cur.joe||0)||0,
     brkPsyOut:cur?!!cur.brkPsyOut:false,
     brkPsyOutFilt:cur&&cur.brkPsyOutFilt||"",
     noChooseSpellCost:cur&&cur.noChooseSpellCost||"",
@@ -22869,6 +23005,11 @@ $("fxSave").addEventListener("click",async ()=>{
     leaveFlipBack:$("fxLeaveFlipBack")?$("fxLeaveFlipBack").checked:false,
     neverLeave:$("fxNeverLeave")?$("fxNeverLeave").checked:false,
     linkBreakOnLeave:$("fxLinkBreakOnLeave")?$("fxLinkBreakOnLeave").checked:false,
+    linkBreakHyper:$("fxLinkBreakHyper")?$("fxLinkBreakHyper").value.trim():"",
+    hunting:$("fxHunting")?$("fxHunting").checked:false,
+    hyperCallOnPsy:$("fxHyperCallOnPsy")?$("fxHyperCallOnPsy").checked:false,
+    castAsBack:$("fxCastAsBack")?$("fxCastAsBack").checked:false,
+    joe:$("fxJoe")?(Math.abs(+$("fxJoe").value)||0):0,
     brkPsyOut:$("fxBrkPsyOut")?$("fxBrkPsyOut").checked:false,
     brkPsyOutFilt:$("fxBrkPsyOutFilt")?$("fxBrkPsyOutFilt").value.trim():"",
     noChooseSpellCost:$("fxNoChooseSpellCost")?$("fxNoChooseSpellCost").value.trim():"",
@@ -23505,6 +23646,11 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.leaveFlipBack)attrs.push("🔄 解除（離れる時に前の面へ）");
     if(v.neverLeave)attrs.push("🚫 バトルゾーンを離れない");
     if(v.linkBreakOnLeave)attrs.push("🔗 リンク解除（離れる時）");
+    if(v.linkBreakHyper)attrs.push(`超次元へ戻す：${v.linkBreakHyper}`);
+    if(v.hunting)attrs.push("🏹 ハンティング");
+    if(v.hyperCallOnPsy)attrs.push("🌌 サイキック登場・覚醒で超次元から出せる");
+    if(v.castAsBack)attrs.push("🃏 手札から裏面としても召喚できる");
+    if(v.joe)attrs.push(`🃏 J・O・E${v.joe}`);
     if(v.brkPsyOut)attrs.push(`🌌 ブレイク盾→墓地で超次元から同コスト${v.brkPsyOutFilt?`（${v.brkPsyOutFilt}）`:""}`);
     if(v.noChooseSpellCost)attrs.push(`呪文のコスト条件：${v.noChooseSpellCost}`);
     if(v.stLockAtkFoe)attrs.push(`常在：相手の${v.stLockAtkFoeF||"クリーチャー"}は攻撃できない`);
@@ -24583,6 +24729,40 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       sfx("flip");
       toast(`⤴ 進化クロスギア《${faceNameOf(f.card)}》：重ねられるクロスギアがバトルゾーンにありません（先に通常クロスギアをジェネレート／クロスしてください）`);
       MOVE_BLOCKED=true;return;
+    }
+  }
+  // 🃏 「このカードは《裏面》として召喚してもよい」（大獄の封殺ディアス Z 型）。
+  //    多面登録の2面目として召喚できる。コストも進化元も、選んだ面のものを使う。
+  if(S.expert&&!S.freePlay&&toZone==="battle"&&fromZone==="hand"&&pFrom===pTo&&S.turn>0&&!f.card._backAsked){
+    const rBk=getReg(f.card);
+    if(rBk&&rBk.castAsBack&&(f.card.face|0)===0){
+      const lkBk=LINKS.get(normName(f.card.name))||LINKS.get(faceKeyOf(f.card));
+      if(lkBk&&lkBk.length>1){
+        MOVE_BLOCKED=true;
+        const card=f.card;
+        (async()=>{
+          const nmF=faceNameOf(card);
+          const nmB=(typeof dispName!=="undefined"&&dispName.get(lkBk[1]))||lkBk[1];
+          const rB2=FXDB.get(lkBk[1])||{};
+          const j=await askChoice(`🃏 《${nmF}》をどちらとして召喚しますか？`,
+            [`${nmF}（コスト${rBk.cost!=null?rBk.cost:"?"}）`,
+             `${nmB}（コスト${rB2.cost!=null?rB2.cost:"?"}・裏面として召喚）`,
+             "やめる"]);
+          if(j===null||j===2){renderAll();return;}
+          card._backAsked=true;
+          if(j===1)card.face=1;
+          try{
+            moveCard(pFrom,fromZone,card.id,toZone);
+            await new Promise(r=>setTimeout(r,60));
+            // 出せなかった（進化元が無い等）なら表の面に戻す
+            if(!zonesOf(pTo).battle.some(x=>x.id===card.id)&&j===1)card.face=0;
+          }finally{
+            card._backAsked=false;
+            renderAll();
+          }
+        })();
+        return;
+      }
     }
   }
   // 常在ロック／ターン限定ロック：クリーチャー（バトルゾーンに出す）
@@ -26415,6 +26595,7 @@ function cardEl(pi,zone,c){
           snap();
           c.face=nf;c.tapped=false;
           markArrive(c,{flip:true});   // 🔄 覚醒／禁断解放／変身＝裏返っただけ（登録の「新しいクリーチャーとして出る」で上書きできる）
+          try{if(_isPsy&&nf>0)offerHyperCall(pi,`自分の《${faceNameOf(c)}》が覚醒しました`);}catch(e){}   // 🌌 超時空ストームG・XX 型
           // 🔏 裏返した先が「出た時に自分へ封印を付ける」カードなら自動で付ける
           //    （禁断 〜封印されし〜 → ドキンダムX のように、裏返った側に封印が必要な場合）
           try{
