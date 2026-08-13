@@ -1753,6 +1753,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxNoAtked"> 攻撃されない</label>
         <label><input type="checkbox" id="fxNoChoose"> 選ばれない（アンタッチャブル）</label>
         <label title="「相手の呪文によって、相手がクリーチャーを選ぶ時、このクリーチャーは選べない」型（墓守の鐘ベルリンなど）。呪文以外の効果では普通に選ばれます"><input type="checkbox" id="fxNoChooseSpell"> 相手の呪文でだけ選ばれない</label>
+        <input type="text" id="fxNoChooseSpellCost" placeholder="↑ 呪文のコスト条件（例：4以下・空欄＝すべての呪文／伝説の禁断 ドキンダムX 型）" style="flex:1;min-width:200px">
+        <label title="このカードはバトルゾーンを離れません。破壊・手札・マナ・山札・シールド送りをすべて無効にします（禁断 ～封印されし～ 型）"><input type="checkbox" id="fxNeverLeave"> 🚫 バトルゾーンを離れない</label>
         <label title="「相手のクリーチャーの能力によって、相手がクリーチャーを選ぶ時、このクリーチャーは選べない」型（時空の支配者ディアボロス Z など）。呪文では普通に選ばれます"><input type="checkbox" id="fxNoChooseCre"> 相手のクリーチャーの能力でだけ選ばれない</label>
         <label title="相手のターン中だけ、相手はこのクリーチャーを選べない（自分のターン中は選べる／オニカマス型）。上の「選ばれない」と併用する必要はありません" style="opacity:.95"><input type="checkbox" id="fxNoChooseOppTurn"> └ 相手のターン中だけ選ばれない（オニカマス型）</label>
         <label><input type="checkbox" id="fxGS"> G・ストライク</label>
@@ -2135,6 +2137,9 @@ body.shake{animation:bodyShake .4s ease-out}
           <input type="number" id="fxFlipSealN" style="width:70px" placeholder="1" min="0" max="9">
           <span style="font-size:12px;font-weight:700">個</span>
         </div>
+        <label title="自分のシールドがブレイクされる時、そのシールドを見て、手札に加えるかわりに墓地に置いてもよい。そうした場合、超次元ゾーンからそのカードと同じコストのサイキック・クリーチャーを出します（ガイアール・カイザー型）"><input type="checkbox" id="fxBrkPsyOut"> 🌌 ブレイクされた盾を墓地に置いて、超次元から同コストを出す</label>
+        <input type="text" id="fxBrkPsyOutFilt" list="raceList" placeholder="↑ 出せるサイキックの条件（例：ハンター・空欄＝すべて）" style="flex:1;min-width:180px">
+        <label title="覚醒リンクしたこのクリーチャーがバトルゾーンを離れる時、かわりにリンクを解除して、元のカードに戻して場に残ります（唯我独尊ガイアール・オレドラゴン型）。リンクした面に入れてください"><input type="checkbox" id="fxLinkBreakOnLeave"> 🔗 リンク解除：離れる時、かわりにリンクを解く</label>
         <label title="このクリーチャーがバトルゾーンを離れる時、かわりに1つ前の面へ裏返して場に残ります（サイキック・クリーチャーの「解除」）。覚醒後の面に入れてください"><input type="checkbox" id="fxLeaveFlipBack"> 🔄 解除：離れる時、かわりに前の面へ裏返る</label>
         <label title="この面に裏返った時、「同じカードが裏返った」ではなく「新しいクリーチャーがバトルゾーンに出た」として扱います。ゲーム外からの進化（大獄の封殺ディアス Z → 破獄の殲滅者ディアボロス Z 型）を多面登録で作る時に入れてください。オフのままだと覚醒・禁断解放・龍解と同じ扱いになり、相手の「タップして出る」常在効果は働きません"><input type="checkbox" id="fxFlipAsNew"> 🔄 裏返ったら新しいクリーチャーとして出る（ゲーム外からの進化・相手のタップイン常在が働く）</label>
         <label title="相手の、条件に合うクリーチャーは攻撃できなくなります（偽りの王 モーツァルト型）"><input type="checkbox" id="fxStLockAtkFoe"> ⛔ 相手の〔対象〕は攻撃できない</label>
@@ -3842,7 +3847,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v12.6";
+const APP_VER="v12.8";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4665,12 +4670,23 @@ let FX_FROM_SPELL=false;
 /* ⚡ いま解決している誘発の「きっかけになったカード」（相手のクリーチャーが出た時＝出たクリーチャー等）。
    trigPowDown のように、きっかけ側を対象にする効果で使う。 */
 let FX_TRIG=null;
+/* 🔮 いま解決している呪文のコスト（noChooseSpellCost の判定に使う。呪文以外は null）。 */
+let FX_SPELL_COST=null;
 /* 🐲 いま解決している効果が「クリーチャーの能力」かどうか。noChooseCre の判定に使う */
 let FX_FROM_CRE=false;
 function momoUntouchable(x){
   const r=getReg(x);
   // 🔮 相手の呪文の効果で選ぼうとしている時だけ選べない
-  if(r&&r.noChooseSpell&&FX_FROM_SPELL)return true;
+  //    コスト条件（例「4以下」）が入っていれば、その条件に合う呪文の時だけ選べない（ドキンダムX型）
+  if(r&&r.noChooseSpell&&FX_FROM_SPELL){
+    const cc=String(r.noChooseSpellCost||"").trim();
+    if(!cc)return true;
+    const mcc=cc.match(/(\d+)\s*(以下|以上)?/);
+    if(!mcc)return true;
+    if(FX_SPELL_COST==null)return true;            // コストが分からない呪文は安全側で選べない
+    const nv=+mcc[1];
+    if(mcc[2]==="以上"?(FX_SPELL_COST>=nv):(FX_SPELL_COST<=nv))return true;
+  }
   // 🐲 相手のクリーチャーの能力で選ぼうとしている時だけ選べない（時空の支配者ディアボロス Z 型）
   if(r&&r.noChooseCre&&FX_FROM_CRE)return true;
   if(r&&r.momoKingX&&stackCountOf(x)<6)return true;
@@ -6136,6 +6152,25 @@ function startGame(picks){
   if(S.vs&&S.players[1].mainList.length)dealPlayer(1,picks&&picks[1]||null);
   S.turn=1;S.sel=null;S.msel=[];S.who=0;
   S.pturn=0;S.turnLock=[];ENTERED_CNT=0;S.finalRevUsed={};S.exRevPSUsed={};S.sumTurn={};S.firstSumUsed={};
+  // 🔏 ゲーム開始時のセットアップ：禁断の鼓動（ctype＝禁断の鼓動）は、山札から出して
+  //    バトルゾーンに置き、登録の「🔏 自分に封印n個」の数だけ封印を付ける。
+  //    デッキに複数入っていても1枚だけ置き、残りは山札に戻してシャッフルする。
+  if(S.expert){
+    for(const pi of (S.vs?[0,1]:[0])){
+      const Zk=zonesOf(pi);
+      const idx=Zk.deck.findIndex(x=>{const r=getReg(x);return r&&r.ctype==="kindanbeat";});
+      if(idx<0)continue;
+      const kb=Zk.deck.splice(idx,1)[0];
+      kb.faceup=true;kb.tapped=false;kb.face=0;kb.sick=false;
+      Zk.battle.push(kb);
+      shuffle(Zk.deck);
+      const rKb=getReg(kb);
+      const nKb=Math.max(0,+((rKb&&rKb.sealSelfOnFlip))||0);
+      const put=nKb?putSealsOn(pi,kb,nKb):0;
+      toast(`🔏 ${S.players[pi].label}：${faceNameOf(kb)} をバトルゾーンに置き、封印を${put}個付けました`);
+      logOnly(`🔏 開始時セットアップ：${S.players[pi].label} の《${faceNameOf(kb)}》を配置（封印${put}個）`);
+    }
+  }
   if(S.expert){
     for(const pi of (S.vs?[0,1]:[0])){
       const hasZeron=zonesOf(pi).battle.some(x=>{const r=getReg(x);return r&&r.gimmick==="zeron";});
@@ -9463,6 +9498,30 @@ async function destroyCreature(pi,c,opts){
       toast(`🌙 零龍カードは離れない！（破壊されない）`);
       return;
     }
+    // 🔗 リンク解除：破壊される時も、かわりにリンクを解除して場に残る
+    if(S.expert&&rZ&&rZ.linkBreakOnLeave&&!isIgnored(c,pi)&&Array.isArray(c.under)&&c.under.length){
+      const arrL=Z.battle;
+      const iL=arrL.findIndex(x=>x.id===c.id);
+      if(iL>=0){
+        snap();
+        const was=faceNameOf(c);
+        const parts=c.under.splice(0);
+        parts.forEach(b2=>{b2.tapped=false;b2.buff=null;b2.mark=false;b2.sideways=false;});
+        c.gl=false;
+        arrL.splice(iL,1,...parts);
+        toast(`🔗 リンク解除！ ${was} は破壊されるかわりに ${parts.map(x=>faceNameOf(x)).join("＋")} に戻った`);
+        logOnly(`🔗 リンク解除：${S.players[pi].label} の《${was}》→ ${parts.map(x=>faceNameOf(x)).join("＋")}（破壊をキャンセル）`);
+        try{fxShare("awake","リンク解除！","破壊されるかわりにリンクが解ける",true,c.name,pi);}catch(e){}
+        sfx("flip");renderAll();
+        return;
+      }
+    }
+    // 🚫 バトルゾーンを離れない（禁断の鼓動型）
+    if(S.expert&&rZ&&rZ.neverLeave&&!isIgnored(c,pi)){
+      toast(`🚫 ${faceNameOf(c)} はバトルゾーンを離れない！`);
+      logOnly(`🚫 ${S.players[pi].label} の《${faceNameOf(c)}》は離れない（破壊を無効）`);
+      return;
+    }
   }
   if(S.expert){
     const rDC=getReg(c);
@@ -10166,11 +10225,16 @@ async function runFxList(pi,list,srcCard,inPump){
   const _prevFromSpell=FX_FROM_SPELL;
   const _prevActor=FX_ACTOR;FX_ACTOR=pi;
   const _prevFromCre=FX_FROM_CRE;
+  const _prevSpellCost=FX_SPELL_COST;
   try{
     const _rs=srcCard?getReg(srcCard):null;
     FX_FROM_SPELL=!!(_rs&&(_rs.ctype==="spell"||((_rs.twin||_rs.ctype==="twinpact")&&(srcCard.face|0)===1)));
     FX_FROM_CRE=!!(_rs&&isCreatureReg(_rs)&&!FX_FROM_SPELL);
-  }catch(e){FX_FROM_SPELL=false;FX_FROM_CRE=false;}
+    // 🔮 唱えている呪文のコスト（ツインパクトの下面は cost2）。「コスト4以下の呪文では選べない」型の判定用
+    FX_SPELL_COST=FX_FROM_SPELL&&_rs
+      ? (((_rs.twin||_rs.ctype==="twinpact")&&(srcCard.face|0)===1&&_rs.cost2!=null)?+_rs.cost2:(_rs.cost!=null?+_rs.cost:null))
+      : null;
+  }catch(e){FX_FROM_SPELL=false;FX_FROM_CRE=false;FX_SPELL_COST=null;}
   try{
   const _srcLbl=srcCard?faceNameOf(srcCard):"";
   for(const f of list){
@@ -14183,7 +14247,7 @@ async function runFxList(pi,list,srcCard,inPump){
     _fxAct();   // ✨ この行の処理が終わったので演出を出す（対象を選び終えたあと）
   }
   try{stampShieldSrc(_srcLbl);}catch(e){} // 🛡 最後の効果で増えた盾にも追加元を刻む
-  }finally{FX_FROM_SPELL=_prevFromSpell;FX_FROM_CRE=_prevFromCre;FX_ACTOR=_prevActor;} // 🔮 入れ子で呼ばれても元に戻す
+  }finally{FX_FROM_SPELL=_prevFromSpell;FX_FROM_CRE=_prevFromCre;FX_SPELL_COST=_prevSpellCost;FX_ACTOR=_prevActor;} // 🔮 入れ子で呼ばれても元に戻す
 }
 const fxQueue=[];let fxRunning=false;
 let fxInsertAt=null; // 🔢 深さ優先の挿入位置。処理中カードの「出た時」で新たに出たカードのCIPは、次の兄弟より先に解決させる（1枚の効果解決が終わるまで割り込ませない）
@@ -15319,10 +15383,35 @@ async function effPower(c,attacking,inBattle){
 async function offerTrueEscape(pi,c){
   if(!S.expert)return false;
   const r=getReg(c);
+  // 🚫 バトルゾーンを離れない（禁断の鼓動型）。手札・マナ・山札・盾送りもすべて無効にする
+  if(r&&r.neverLeave&&!isIgnored(c,pi)){
+    toast(`🚫 ${faceNameOf(c)} はバトルゾーンを離れない！`);
+    logOnly(`🚫 ${S.players[pi].label} の《${faceNameOf(c)}》は離れない（離場を無効）`);
+    return true;
+  }
   // 🔽 ジャオウガ型：離れる時、かわりに下のカードを1枚墓地に置いて場に残る
   //    （マナ送り・バウンス・盾送り・山札送りなど、破壊以外の離場もここで置き換える）
   if(r&&r.underLeaveRep&&!isIgnored(c,pi)){
     if(await underLeaveReplace(pi,c))return true;
+  }
+  // 🔗 リンク解除：バトルゾーンを離れる時、かわりにリンクを解除して、元のカードに戻して場に残る
+  //    （唯我独尊ガイアール・オレドラゴン型。覚醒リンクした面に登録する）
+  if(r&&r.linkBreakOnLeave&&!isIgnored(c,pi)&&Array.isArray(c.under)&&c.under.length){
+    const arrL=zonesOf(pi).battle;
+    const iL=arrL.findIndex(x=>x.id===c.id);
+    if(iL>=0){
+      snap();
+      const was=faceNameOf(c);
+      const parts=c.under.splice(0);
+      parts.forEach(b2=>{b2.tapped=false;b2.buff=null;b2.mark=false;b2.sideways=false;});
+      c.gl=false;
+      arrL.splice(iL,1,...parts);
+      toast(`🔗 リンク解除！ ${was} は離れるかわりに ${parts.map(x=>faceNameOf(x)).join("＋")} に戻った`);
+      logOnly(`🔗 リンク解除：${S.players[pi].label} の《${was}》→ ${parts.map(x=>faceNameOf(x)).join("＋")}（離場をキャンセル）`);
+      try{fxShare("awake","リンク解除！","離れるかわりにリンクが解ける",true,c.name,pi);}catch(e){}
+      sfx("flip");renderAll();
+      return true;
+    }
   }
   // 🔄 解除：バトルゾーンを離れる時、かわりに1つ前の面へ裏返して場に残る
   //    （殲滅の覚醒者ディアボロス Z 型。覚醒後の面にだけ登録する）
@@ -16667,7 +16756,69 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
     sfx("move");renderAll();
     toast(`🔀 Q.Q.QX（${faceNameOf(attacker)}）：ブレイクした${stack.length}枚を${S.players[op].label}の山札の上から4枚目に横向きで差し込んだ（引くと特殊敗北）`);
   }else{
-    await processBroken(op,stack,`🛡 ${shs.length>1?"同時ブレイク":"ブレイク"}：${S.players[op].label}のシールド（計${stack.length}枚）`);
+    // 🌌 ガイアール・カイザー型：自分のシールドがブレイクされる時、そのシールドを見て、
+    //    手札に加えるかわりに墓地に置いてもよい。そうした場合、超次元ゾーンから
+    //    そのカードと同じコストの、条件に合うサイキック・クリーチャーを出す。
+    if(S.expert){
+      const owners=OZ.battle.filter(x=>{
+        const r2=getReg(x);
+        return r2&&r2.brkPsyOut&&!isSealed(x)&&!isIgnored(x,op);
+      });
+      if(owners.length&&stack.length&&(zonesOf(op).hyper||[]).length){
+        const HZ=zonesOf(op);
+        for(const own of owners){
+          const rOwn=getReg(own);
+          const filt=String(rOwn.brkPsyOutFilt||"").trim();
+          for(const sc of [...stack]){
+            if(!stack.some(x=>x.id===sc.id))continue;
+            const rSc=getReg(sc);
+            const scCost=(rSc&&rSc.cost!=null&&!isNaN(+rSc.cost))?+rSc.cost:null;
+            let pool=HZ.hyper.filter(x=>{
+              const rx=getReg(x);
+              if(!rx||rx.cost==null||isNaN(+rx.cost))return false;
+              if(scCost==null||+rx.cost!==scCost)return false;
+              return !filt||lockFilterOk(filt,rx,x);
+            });
+            if(!pool.length)continue;
+            const _q=`🌌 ${faceNameOf(own)}\nブレイクされた《${faceNameOf(sc)}》（コスト${scCost}）を手札に加えるかわりに墓地に置いて、\n超次元ゾーンからコスト${scCost}の${filt||"サイキック・クリーチャー"}を出しますか？`;
+            const yes=await olAskYN(op,_q,"",[sc],_q);
+            if(!yes)continue;
+            const j=await pickCard(`🌌 超次元ゾーンから出すカードを選択（コスト${scCost}${filt?`・${filt}`:""}）`,pool,
+              {sub:x=>{const rx=getReg(x);return rx&&rx.cost!=null?`コスト${rx.cost}`:"";}});
+            if(j===null)continue;
+            const tgt=pool[j];
+            snap();
+            // 盾は手札に加えず墓地へ
+            const si=stack.findIndex(x=>x.id===sc.id);
+            if(si>=0)stack.splice(si,1);
+            sc.tapped=false;sc.faceup=true;sc.mark=false;sc.sideways=false;
+            OZ.grave.push(sc);
+            queueToGrave(op,sc,"shield");
+            // 超次元ゾーンから出す
+            const hi=HZ.hyper.findIndex(x=>x.id===tgt.id);
+            if(hi>=0){
+              const cc=HZ.hyper.splice(hi,1)[0];
+              cc.faceup=true;cc.tapped=false;cc.sideways=false;cc.isPsy=true;
+              const rc=getReg(cc);
+              cc.sick=(S.turn>0)&&!(rc&&rc.sa)&&!/psy/.test(String(rc&&rc.ctype||""));
+              if(!battleEntryOk(op,cc)){HZ.hyper.push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないため超次元ゾーンに残しました`);}
+              else{
+                HZ.battle.push(cc);cc._viaCheat=true;markArrive(cc);
+                sfx("move");renderAll();
+                toast(`🌌 ${faceNameOf(own)}：《${faceNameOf(sc)}》を墓地に置き、${faceNameOf(cc)} を超次元ゾーンから出した`);
+                logOnly(`🌌 ${S.players[op].label}：ブレイクされた《${faceNameOf(sc)}》を墓地へ → 超次元から《${faceNameOf(cc)}》`);
+                try{fxShare("gr","超次元から登場！",`${S.players[op].label}`,true,cc.name,op);}catch(e){}
+                LAST_ARRIVED=cc;emitEvent(op,"summon");enqueueFx(op,cc);
+                await waitFxIdle();
+              }
+            }
+            await drainToGrave();
+          }
+        }
+        renderAll();
+      }
+    }
+    if(stack.length)await processBroken(op,stack,`🛡 ${shs.length>1?"同時ブレイク":"ブレイク"}：${S.players[op].label}のシールド（計${stack.length}枚）`);
   }
   // G・ストライク：手札に加わったGS持ちを確認（複数枚それぞれ発動可・登録した追加効果も処理）
   if(S.expert){
@@ -20108,6 +20259,11 @@ function renderFxEditor(){
   {const e=$("fxFlipSealWho");if(e)e.value=FXEDIT.flipSealWho||"";}
   {const e=$("fxFlipAsNew");if(e)e.checked=!!FXEDIT.flipAsNew;}
   {const e=$("fxLeaveFlipBack");if(e)e.checked=!!FXEDIT.leaveFlipBack;}
+  {const e=$("fxNeverLeave");if(e)e.checked=!!FXEDIT.neverLeave;}
+  {const e=$("fxLinkBreakOnLeave");if(e)e.checked=!!FXEDIT.linkBreakOnLeave;}
+  {const e=$("fxBrkPsyOut");if(e)e.checked=!!FXEDIT.brkPsyOut;}
+  {const e=$("fxBrkPsyOutFilt");if(e)e.value=FXEDIT.brkPsyOutFilt||"";}
+  {const e=$("fxNoChooseSpellCost");if(e)e.value=FXEDIT.noChooseSpellCost||"";}
   {const e=$("fxFlipSealN");if(e)e.value=FXEDIT.flipSealN||"";}
   {const e=$("fxStLockAtkFoe");if(e)e.checked=!!FXEDIT.stLockAtkFoe;}
   {const e=$("fxStFoeHandOpen");if(e)e.checked=!!FXEDIT.stFoeHandOpen;}
@@ -22054,7 +22210,9 @@ function fxKeyLabel(k){
     stLockSpellF:"呪文ロックの対象条件",stLockCreF:"召喚ロックの対象条件",
     stCostUp:"相手のコスト増加",stCostUpF:"コスト増加の対象",stCostUpT:"コスト増加の種別",
     stNoHandes:"ハンデス耐性",sback:"S・バック",cantAtkP:"相手プレイヤー攻撃不可",cantAtk:"攻撃不可",
-    flipAsNew:"裏返ったら新しいクリーチャー扱い",leaveFlipBack:"解除（離れる時に前の面へ）",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
+    flipAsNew:"裏返ったら新しいクリーチャー扱い",leaveFlipBack:"解除（離れる時に前の面へ）",
+    neverLeave:"バトルゾーンを離れない",linkBreakOnLeave:"リンク解除（離れる時）",
+    brkPsyOut:"ブレイク盾を墓地に置いて超次元から出す",brkPsyOutFilt:"超次元から出す条件",noChooseSpellCost:"選ばれない呪文のコスト条件",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
     cstPow:"条件付きパワー強化",cstPowCond:"条件付きパワーの条件",
     firstRed:"各ターン最初の召喚軽減",firstRedF:"軽減の対象",
     cantAtkCond:"攻撃に必要な条件",stSickAll:"出たターン攻撃不可の除外対象",
@@ -22345,6 +22503,11 @@ function openFxEditor(key){
     flipSealWho:cur&&cur.flipSealWho||"",
     flipAsNew:cur?!!cur.flipAsNew:false,
     leaveFlipBack:cur?!!cur.leaveFlipBack:false,
+    neverLeave:cur?!!cur.neverLeave:false,
+    linkBreakOnLeave:cur?!!cur.linkBreakOnLeave:false,
+    brkPsyOut:cur?!!cur.brkPsyOut:false,
+    brkPsyOutFilt:cur&&cur.brkPsyOutFilt||"",
+    noChooseSpellCost:cur&&cur.noChooseSpellCost||"",
     flipSealN:cur&&(+cur.flipSealN||0)||0,
     stLockAtkFoe:cur?!!cur.stLockAtkFoe:false,
     stFoeHandOpen:cur?!!cur.stFoeHandOpen:false,
@@ -22704,6 +22867,11 @@ $("fxSave").addEventListener("click",async ()=>{
     flipSealWho:$("fxFlipSealWho")?$("fxFlipSealWho").value:"",
     flipAsNew:$("fxFlipAsNew")?$("fxFlipAsNew").checked:false,
     leaveFlipBack:$("fxLeaveFlipBack")?$("fxLeaveFlipBack").checked:false,
+    neverLeave:$("fxNeverLeave")?$("fxNeverLeave").checked:false,
+    linkBreakOnLeave:$("fxLinkBreakOnLeave")?$("fxLinkBreakOnLeave").checked:false,
+    brkPsyOut:$("fxBrkPsyOut")?$("fxBrkPsyOut").checked:false,
+    brkPsyOutFilt:$("fxBrkPsyOutFilt")?$("fxBrkPsyOutFilt").value.trim():"",
+    noChooseSpellCost:$("fxNoChooseSpellCost")?$("fxNoChooseSpellCost").value.trim():"",
     flipSealN:$("fxFlipSealN")?(Math.abs(+$("fxFlipSealN").value)||0):0,
     stLockAtkFoe:$("fxStLockAtkFoe")?$("fxStLockAtkFoe").checked:false,
     stFoeHandOpen:$("fxStFoeHandOpen")?$("fxStFoeHandOpen").checked:false,
@@ -23335,6 +23503,10 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.flipSealWho)attrs.push(`裏返った時：${v.flipSealWho==="foe"?"相手全体":"自身"}に封印${v.flipSealN||1}個`);
     if(v.flipAsNew)attrs.push("🔄 裏返ったら新しいクリーチャー扱い");
     if(v.leaveFlipBack)attrs.push("🔄 解除（離れる時に前の面へ）");
+    if(v.neverLeave)attrs.push("🚫 バトルゾーンを離れない");
+    if(v.linkBreakOnLeave)attrs.push("🔗 リンク解除（離れる時）");
+    if(v.brkPsyOut)attrs.push(`🌌 ブレイク盾→墓地で超次元から同コスト${v.brkPsyOutFilt?`（${v.brkPsyOutFilt}）`:""}`);
+    if(v.noChooseSpellCost)attrs.push(`呪文のコスト条件：${v.noChooseSpellCost}`);
     if(v.stLockAtkFoe)attrs.push(`常在：相手の${v.stLockAtkFoeF||"クリーチャー"}は攻撃できない`);
     if(v.stFoeHandOpen)attrs.push("常在：相手は手札を公開してプレイ");
     if(v.agBlockerCanAtkP)attrs.push("常在：自分のブロッカーはプレイヤーを攻撃できる");
