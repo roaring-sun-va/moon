@@ -26,7 +26,6 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,6 +37,28 @@ jobs:
         with:
           # Upload entire repository
           path: '.'
-      - name: Deploy to GitHub Pages
-        id: deployment
+      # GitHub Pages API は一時的に 503 (No server is currently available)
+      # を返すことがある。1回の失敗で公開を諦めず、間隔を置いて最大3回試す。
+      - name: Deploy to GitHub Pages (attempt 1)
+        id: deployment_1
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+
+      - name: Wait before retry 2
+        if: steps.deployment_1.outcome == 'failure'
+        run: sleep 20
+
+      - name: Deploy to GitHub Pages (attempt 2)
+        id: deployment_2
+        if: steps.deployment_1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+
+      - name: Wait before retry 3
+        if: steps.deployment_1.outcome == 'failure' && steps.deployment_2.outcome == 'failure'
+        run: sleep 30
+
+      - name: Deploy to GitHub Pages (attempt 3)
+        id: deployment_3
+        if: steps.deployment_1.outcome == 'failure' && steps.deployment_2.outcome == 'failure'
         uses: actions/deploy-pages@v5
