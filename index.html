@@ -2229,6 +2229,7 @@ body.shake{animation:bodyShake .4s ease-out}
           </select>
           <label><input type="checkbox" id="fxRepInNC"> 召喚は対象外（侵略/チェンジ/超次元/踏み倒し/侵略ZERO等のみ置換・マバユキ型）</label>
           <label><input type="checkbox" id="fxRepInOppTurn"> 相手のターン中のみ置換（コナユキ'26型）</label>
+          <label style="display:flex;align-items:center;gap:5px" title="相手がそのターン中に、すでにこの数の他のクリーチャーをバトルゾーンに出していたら、次からは召喚・踏み倒しを問わずマナへ置換（リツイーギョ型）">相手がそのターン他のクリーチャーを<input type="number" id="fxRepInAfterN" min="0" max="99" value="0" style="width:54px">体以上出していれば次から置換（0=無効）</label>
           <input type="text" id="fxRepInF" list="raceList" placeholder="対象条件（単色/多色/文明/種族/名前・「／」区切り・空欄＝全て）" style="flex:1;min-width:170px">
         </div>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -3880,7 +3881,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.6";
+const APP_VER="v13.7";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -20819,6 +20820,7 @@ function renderFxEditor(){
   $("fxRepInF").value=FXEDIT.repInF||"";
   $("fxRepInNC").checked=!!FXEDIT.repInNC;
   {const e=$("fxRepInOppTurn");if(e)e.checked=!!FXEDIT.repInOppTurn;}
+  {const e=$("fxRepInAfterN");if(e)e.value=FXEDIT.repInAfterN||0;}
   $("fxMadness").value=FXEDIT.madness==="on"?"eternal":(FXEDIT.madness||"");
   $("fxIgnore").value=FXEDIT.ignore||"";
   $("fxCivil").value=String(FXEDIT.civil||0);
@@ -23003,6 +23005,7 @@ function openFxEditor(key){
     repInF:cur&&cur.repInF||"",
     repInNC:cur?!!cur.repInNC:false,
     repInOppTurn:cur?!!cur.repInOppTurn:false,
+    repInAfterN:cur&&(+cur.repInAfterN||0)||0,
     madness:cur&&cur.madness||"",
     ignore:cur&&cur.ignore||"",
     ignoreN:cur&&cur.ignoreN||0,
@@ -23450,6 +23453,7 @@ $("fxSave").addEventListener("click",async ()=>{
     repInF:$("fxRepInF").value.trim(),
     repInNC:$("fxRepInNC").checked,
     repInOppTurn:$("fxRepInOppTurn")?$("fxRepInOppTurn").checked:false,
+    repInAfterN:$("fxRepInAfterN")?(Math.max(0,+$("fxRepInAfterN").value||0)):0,
     madness:$("fxMadness").value||"",
     ignore:$("fxIgnore").value||"",
     ignoreN:+$("fxIgnoreN").value||0,
@@ -24003,7 +24007,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.stNoHandes)attrs.push("常在：ハンデスされない");
     if(v.libWin)attrs.push("常在：山札0で勝利（シャコガイル型）");
     if(v.petensy)attrs.push("ペテンシー型（相手ターン終了時・3体以上で無料使用）");
-    if(v.repIn)attrs.push(`常在：置換ロック（${v.repIn==="manaOverMax"?"相手・最大マナ超のコスト→マナ（ヤドック型）":`${v.repInF||"相手全て"}${v.repInNC?"・召喚以外":""}${v.repInOppTurn?"・相手ターンのみ":""}→${v.repIn==="grave"?"墓地":v.repIn==="shield"?"シールド":v.repIn==="mana"?"マナ":"山下"}`}）`);
+    if(v.repIn)attrs.push(`常在：置換ロック（${v.repIn==="manaOverMax"?"相手・最大マナ超のコスト→マナ（ヤドック型）":v.repInAfterN>0?`相手がそのターン他のクリーチャーを${v.repInAfterN}体以上出していれば、次から→マナ（リツイーギョ型）`:`${v.repInF||"相手全て"}${v.repInNC?"・召喚以外":""}${v.repInOppTurn?"・相手ターンのみ":""}→${v.repIn==="grave"?"墓地":v.repIn==="shield"?"シールド":v.repIn==="mana"?"マナ":"山下"}`}）`);
     if(v.madness)attrs.push(v.madness==="baiken"?"マッドネス（バイケン型）":"マッドネス（永遠型）");
     if(v.ignore)attrs.push(v.ignore==="cost"?`能力無視：コスト${v.ignoreN}以下`:"能力無視：名前指定");
     if(v.stCostM)attrs.push(`常在：${v.stCostF?v.stCostF+"の":""}${v.stCostT==="creature"?"クリーチャーの":v.stCostT==="spell"?"呪文の":""}召喚コスト−${v.stCostM}`);
@@ -24834,6 +24838,19 @@ function applyEnterReplacement(pTo,c,mode){
     if(zonesOf(pTo).battle.find(x=>x.id===c.id))enqueueFx(pTo,c);
     renderAll();
   };
+  if(rL.repIn==="mana"&&rL.repInAfterN>0){
+    // 🌸 リツイーギョ型：そのターン、相手がすでに他のクリーチャーをN体以上出していれば、次からマナへ。
+    // markArriveの登場カウントより前に同期置換し、置換されたカード自身は「出した数」に含めない。
+    const used=(S.playedTurn&&S.playedTurn[pTo])||0;
+    if(used<+rL.repInAfterN)return false;
+    const bi=Z.battle.findIndex(x=>x.id===c.id);
+    if(bi<0)return false;
+    Z.battle.splice(bi,1);c.tapped=false;c.faceup=true;c.sideways=false;
+    dropStack();Z.mana.push(c);c._repPending=true;
+    sfx("grave");renderAll();
+    toast(`🌸 置換ロック（${faceNameOf(locker)}）：このターンすでに${used}体出しているため、${c.name} は出るかわりにマナゾーンへ！（出た時効果は発動しません）`);
+    return mode==="defer"?"pending":"replaced";
+  }
   if(rL.repIn==="manaOverMax"){
     // ヤドック型：相手（pTo自身）の最大マナ（マナゾーンの総枚数）よりコストの大きいクリーチャーを、かわりにマナゾーンへ置換
     const maxMana=manaSumOf(pTo,false); // 💠 最大マナ＝合計マナ数（0マナのカードは数えない）
