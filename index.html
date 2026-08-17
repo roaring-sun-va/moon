@@ -3881,7 +3881,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.7";
+const APP_VER="v13.8";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -29627,8 +29627,13 @@ async function fxMergeIncoming(pack,from,opts={}){
     const cur=FXDB.get(k);
     const inV=(v._v|0);
     const curV=cur?(cur._v|0):0;
-    if(cur&&cur._src==="self"){ if(inV>curV)held[k]=v; continue; }
-    if(cur&&inV<=curV)continue;
+    // 古い共有パックには _v が無いものがある。内容が違うのに「時刻0＝古い」として黙って捨てると、
+    // 画像だけ入り効果が更新されないため、内容差分も判定する。自分で編集した登録は必ず確認画面へ。
+    const stripMeta=o=>{try{const z=JSON.parse(JSON.stringify(o||{}));delete z._v;delete z._src;return JSON.stringify(z);}catch(e){return "";}};
+    const differs=!!cur&&stripMeta(cur)!==stripMeta(v);
+    if(cur&&cur._src==="self"){if(differs&&(inV===0||inV>curV))held[k]=v;continue;}
+    if(cur&&!differs)continue;
+    if(cur&&inV>0&&inV<=curV)continue;
     let reg;try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
     reg._v=inV||Date.now();
     reg._src=srcTag;
