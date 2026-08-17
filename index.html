@@ -2139,6 +2139,7 @@ body.shake{animation:bodyShake .4s ease-out}
         </div>
         <label title="自分のサイキック・クリーチャーがバトルゾーンに出た時、または覚醒した時、このカードを超次元ゾーンから出してもよい（超時空ストームG・XX 型）。超次元ゾーンに置いておくカードに入れてください"><input type="checkbox" id="fxHyperCallOnPsy"> 🌌 自分のサイキックが出た時・覚醒した時、超次元から出せる</label>
         <label title="このカードは、多面登録の2面目（裏面）としても手札から召喚できます（大獄の封殺ディアス Z 型）。表の面に入れてください"><input type="checkbox" id="fxCastAsBack"> 🃏 手札から裏面としても召喚できる</label>
+        <label title="自分のクリーチャーに「ブロッカー」を与えます（滝川るる＆ラフルル型）。「このカード自身は含まない」「付与の対象条件」は上のパワー付与の欄と共通です"><input type="checkbox" id="fxStAuraBlocker"> 🛡 常在：味方に「ブロッカー」を与える</label>
         <label title="バトル中、自分のハンター1体につきパワー+1000（自身がハンターなら自身も数えます）。バトルの時だけで、除去のパワー参照には効きません"><input type="checkbox" id="fxHunting"> 🏹 ハンティング</label>
         <label style="display:flex;align-items:center;gap:4px" title="J・O・E N：召喚する時、コストをN少なくしてもよい。そうした場合、このターンの終わりに山札の一番下に置き、カードを1枚引きます。0＝なし">🃏 J・O・E
           <input type="number" id="fxJoe" style="width:70px" placeholder="0" min="0"></label>
@@ -3853,7 +3854,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.2";
+const APP_VER="v13.3";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8916,7 +8917,7 @@ function blockerAtkPFree(pi,c){
   try{
     if(!S.expert||!c)return false;
     const rc=getReg(c);
-    const isBlk=!!((rc&&rc.blocker)||(c.buff&&c.buff.blocker)||(typeof gearBlockerOn==="function"&&gearBlockerOn(c)));
+    const isBlk=!!((rc&&rc.blocker)||(c.buff&&c.buff.blocker)||(typeof gearBlockerOn==="function"&&gearBlockerOn(c))||auraBlockerOn(c));
     if(!isBlk)return false;
     return zonesOf(pi).battle.some(b=>{
       const rb=getReg(b);
@@ -12779,7 +12780,7 @@ async function runFxList(pi,list,srcCard,inPump){
       let cnt=0;
       for(const x of Z.battle){
         const rx=getReg(x);
-        const isBlk=!!((rx&&rx.blocker)||(x.buff&&x.buff.blocker)||gearBlockerOn(x));
+        const isBlk=!!((rx&&rx.blocker)||(x.buff&&x.buff.blocker)||gearBlockerOn(x)||auraBlockerOn(x));
         if(!isBlk)continue;
         x.buff=x.buff||{};x.buff.stayIfPow=true;markBuffNext(x,["stayIfPow"],pi);cnt++;
       }
@@ -14562,7 +14563,7 @@ function lockFilterOk(filt,r,c,lockPi,face){
     if(tk==="多色")return !!(r&&r.civs&&r.civs.length>=2);
     if(tk==="単色")return !!(r&&r.civs&&r.civs.length===1&&r.civs[0]!=="zero");
     if(tk==="無色")return !!(r&&r.civs&&r.civs.includes("zero"));
-    if(tk==="ブロッカー")return !!((r&&r.blocker)||(c&&c.buff&&c.buff.blocker)||gearBlockerOn(c));
+    if(tk==="ブロッカー")return !!((r&&r.blocker)||(c&&c.buff&&c.buff.blocker)||gearBlockerOn(c)||auraBlockerOn(c));
     if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(c)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」・通常召喚状態や手札では「進化以外」（ヘブンズ・ゲート／爆進ダブル両対応）
     // 🧬 NEOクリーチャー：山札や手札の状態でも種別として判定する（「進化」トークンは場でNEO進化している時だけ真になるため別に用意）
     if(tk==="NEOクリーチャー"||tk==="NEO")return ["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype);
@@ -15450,6 +15451,22 @@ function gearPowSum(c,own){
 }
 function gearBlockerOn(c){
   return (c&&c.gear||[]).some(g=>{const rg=getReg(g);return rg&&rg.gearBlocker;});
+}
+/* 🛡 常在：自分のクリーチャーに「ブロッカー」を与える（滝川るる＆ラフルル型）。
+   付与元は自分のバトルゾーンにあること。封印・無視中は働かない。 */
+function auraBlockerOn(c){
+  try{
+    const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
+    if(own==null)return false;
+    const rC=getReg(c);
+    return zonesOf(own).battle.some(b=>{
+      const rb=getReg(b);
+      if(!rb||!rb.stAuraBlocker)return false;
+      if(isSealed(b)||isIgnored(b,own))return false;
+      if(rb.stAuraOthers&&b.id===c.id)return false;
+      return !rb.stAuraFilt||(rC&&lockFilterOk(rb.stAuraFilt,rC,c));
+    });
+  }catch(e){return false;}
 }
 function gearSlayerOn(c){
   return (c&&c.gear||[]).some(g=>{const rg=getReg(g);return rg&&rg.gearSlayer;});
@@ -18638,6 +18655,7 @@ async function execAttack(pi,id,tg){
     if(rb&&rb.blocker)return true;
     if(b.buff&&b.buff.blocker)return true;
     if(gearBlockerOn(b))return true; // ⚙ クロスギアの「ブロッカー」付与
+    if(auraBlockerOn(b))return true; // 🛡 常在：味方への「ブロッカー」付与
     if(rb&&(rb.hmBlocker||rb.hmBK)&&b.hyper&&!isSealed(b)&&!isIgnored(b,op))return true;
     if(!isSealed(b)&&!isIgnored(b,op)&&allyGrant(op,"agBlocker",null,b.id))return true;
     if(rb&&rb.cstCond&&rb.cstFx==="blocker"&&!isSealed(b)&&!isIgnored(b,op)&&zoneCondOk(rb.cstCond,op,b))return true;
@@ -20475,6 +20493,7 @@ function renderFxEditor(){
   {const e=$("fxLinkBreakOnLeave");if(e)e.checked=!!FXEDIT.linkBreakOnLeave;}
   {const e=$("fxLinkBreakHyper");if(e)e.value=FXEDIT.linkBreakHyper||"";}
   {const e=$("fxHunting");if(e)e.checked=!!FXEDIT.hunting;}
+  {const e=$("fxStAuraBlocker");if(e)e.checked=!!FXEDIT.stAuraBlocker;}
   {const e=$("fxHyperCallOnPsy");if(e)e.checked=!!FXEDIT.hyperCallOnPsy;}
   {const e=$("fxCastAsBack");if(e)e.checked=!!FXEDIT.castAsBack;}
   {const e=$("fxJoe");if(e)e.value=FXEDIT.joe||"";}
@@ -22430,7 +22449,7 @@ function fxKeyLabel(k){
     flipAsNew:"裏返ったら新しいクリーチャー扱い",leaveFlipBack:"解除（離れる時に前の面へ）",
     neverLeave:"バトルゾーンを離れない",linkBreakOnLeave:"リンク解除（離れる時）",linkBreakHyper:"リンク解除で超次元へ戻すカード",
     brkPsyOut:"ブレイク盾を墓地に置いて超次元から出す",brkPsyOutFilt:"超次元から出す条件",
-    hunting:"ハンティング",joe:"J・O・E",hyperCallOnPsy:"サイキック登場・覚醒で超次元から出せる",castAsBack:"手札から裏面としても召喚できる",noChooseSpellCost:"選ばれない呪文のコスト条件",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
+    hunting:"ハンティング",joe:"J・O・E",stAuraBlocker:"常在ブロッカー付与",hyperCallOnPsy:"サイキック登場・覚醒で超次元から出せる",castAsBack:"手札から裏面としても召喚できる",noChooseSpellCost:"選ばれない呪文のコスト条件",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
     cstPow:"条件付きパワー強化",cstPowCond:"条件付きパワーの条件",
     firstRed:"各ターン最初の召喚軽減",firstRedF:"軽減の対象",
     cantAtkCond:"攻撃に必要な条件",stSickAll:"出たターン攻撃不可の除外対象",
@@ -22725,6 +22744,7 @@ function openFxEditor(key){
     linkBreakOnLeave:cur?!!cur.linkBreakOnLeave:false,
     linkBreakHyper:cur&&cur.linkBreakHyper||"",
     hunting:cur?!!cur.hunting:false,
+    stAuraBlocker:cur?!!cur.stAuraBlocker:false,
     hyperCallOnPsy:cur?!!cur.hyperCallOnPsy:false,
     castAsBack:cur?!!cur.castAsBack:false,
     joe:cur&&(+cur.joe||0)||0,
@@ -23094,6 +23114,7 @@ $("fxSave").addEventListener("click",async ()=>{
     linkBreakOnLeave:$("fxLinkBreakOnLeave")?$("fxLinkBreakOnLeave").checked:false,
     linkBreakHyper:$("fxLinkBreakHyper")?$("fxLinkBreakHyper").value.trim():"",
     hunting:$("fxHunting")?$("fxHunting").checked:false,
+    stAuraBlocker:$("fxStAuraBlocker")?$("fxStAuraBlocker").checked:false,
     hyperCallOnPsy:$("fxHyperCallOnPsy")?$("fxHyperCallOnPsy").checked:false,
     castAsBack:$("fxCastAsBack")?$("fxCastAsBack").checked:false,
     joe:$("fxJoe")?(Math.abs(+$("fxJoe").value)||0):0,
@@ -23735,6 +23756,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.linkBreakOnLeave)attrs.push("🔗 リンク解除（離れる時）");
     if(v.linkBreakHyper)attrs.push(`超次元へ戻す：${v.linkBreakHyper}`);
     if(v.hunting)attrs.push("🏹 ハンティング");
+    if(v.stAuraBlocker)attrs.push("🛡 味方にブロッカー付与");
     if(v.hyperCallOnPsy)attrs.push("🌌 サイキック登場・覚醒で超次元から出せる");
     if(v.castAsBack)attrs.push("🃏 手札から裏面としても召喚できる");
     if(v.joe)attrs.push(`🃏 J・O・E${v.joe}`);
@@ -35409,7 +35431,7 @@ function zoneCondOk(expr,pi,selfCard){
             if(tk==="呪文")return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"); // ツインパクトは呪文としても数える（呪文貯蔵型・デュエプレ準拠）
             if(tk==="クリーチャー")return r&&r.ctype!=="spell";
             if(tk==="ツインパクト")return r&&(r.twin||r.ctype==="twinpact");
-            if(tk==="ブロッカー")return !!((r&&r.blocker)||(x.buff&&x.buff.blocker)||gearBlockerOn(x));
+            if(tk==="ブロッカー")return !!((r&&r.blocker)||(x.buff&&x.buff.blocker)||gearBlockerOn(x)||auraBlockerOn(x));
             if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(x)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」・通常召喚状態や手札では「進化以外」（ヘブンズ・ゲート／爆進ダブル両対応）
             if(tk==="クロスギア")return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));
             if(tk==="無色"||tk==="ゼロ文明")return !!(r&&(!r.civs||!r.civs.length||(r.civs.length===1&&r.civs[0]==="zero")));
