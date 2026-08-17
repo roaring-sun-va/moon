@@ -3960,7 +3960,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.23";
+const APP_VER="v13.24";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -29957,18 +29957,116 @@ function showFxDiffPanel(){
   document.body.appendChild(ol);
   refresh();
 }
+/* 📦 送るカードを1枚ずつ選ぶパネル。選んだキーの配列を返す（やめた時は null）。
+   名前でしぼり込み、まとめて選ぶ・外すもできる。多面登録（ツインパクト等）は相方も自動で付く。 */
+function pickFxKeysPanel(){
+  return new Promise(res=>{
+    const keys=[...FXDB.keys()];
+    if(!keys.length){toast("登録されているカードがありません");res(null);return;}
+    const nameOf=k=>dispName.get(k)||k;
+    keys.sort((a,b)=>String(nameOf(a)).localeCompare(String(nameOf(b)),"ja"));
+    const pick=new Set();
+    const ol=document.createElement("div");
+    ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:996;display:flex;flex-direction:column;padding:12px;gap:8px";
+    const head=document.createElement("div");
+    head.style.cssText="color:#fff;font-weight:900;font-size:15px;line-height:1.5";
+    head.textContent="📦 送るカードを選ぶ";
+    ol.appendChild(head);
+    const note=document.createElement("div");
+    note.style.cssText="color:#9aa4b5;font-size:12px;line-height:1.5";
+    note.textContent="タップで選択／解除します。ツインパクトなど多面登録のカードは、選ぶと相方も一緒に送ります。";
+    ol.appendChild(note);
+    const bar=document.createElement("div");
+    bar.style.cssText="display:flex;gap:6px;flex-wrap:wrap;align-items:center";
+    const sIn=document.createElement("input");
+    sIn.type="text";sIn.placeholder="カード名でしぼり込み";
+    sIn.style.cssText="flex:1 1 200px;background:#0d1119;color:#e6ecf7;border:1px solid #2a3346;border-radius:8px;padding:7px;font-size:13px";
+    bar.appendChild(sIn);
+    const mkb=(t,fn)=>{const b2=document.createElement("button");b2.className="btn small";b2.textContent=t;b2.addEventListener("click",fn);bar.appendChild(b2);return b2;};
+    mkb("表示中をすべて選ぶ",()=>{shown().forEach(k=>pick.add(k));draw();});
+    mkb("選択をすべて外す",()=>{pick.clear();draw();});
+    ol.appendChild(bar);
+    const cnt=document.createElement("div");
+    cnt.style.cssText="color:#fbbf24;font-size:13px;font-weight:800";
+    ol.appendChild(cnt);
+    const grid=document.createElement("div");
+    grid.style.cssText="flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;align-content:start";
+    ol.appendChild(grid);
+    const shown=()=>{
+      const q=sIn.value.trim().toLowerCase();
+      return keys.filter(k=>!q||String(nameOf(k)).toLowerCase().includes(q));
+    };
+    const draw=()=>{
+      grid.innerHTML="";
+      const arr=shown();
+      cnt.textContent=`${pick.size}件を選択中（表示 ${arr.length}／全 ${keys.length}）`;
+      if(!arr.length){grid.innerHTML="<div style='grid-column:1/-1;color:#9aa4b5;font-size:13px'>見つかりません</div>";return;}
+      for(const k of arr){
+        const on=pick.has(k);
+        const el=document.createElement("div");
+        el.className="fxPickTile"+(on?" on":"");
+        el.dataset.key=k;
+        el.style.cssText=`position:relative;border:2px solid ${on?"#fbbf24":"#2a3346"};border-radius:10px;overflow:hidden;background:#0d1119;cursor:pointer;${on?"box-shadow:0 0 0 2px rgba(251,191,36,.35) inset":""}`;
+        const art=document.createElement("div");
+        art.style.cssText="height:84px;background:#141a27;display:flex;align-items:center;justify-content:center;overflow:hidden";
+        const url=imgURL.get(k);
+        if(url){const im=document.createElement("img");im.src=url;im.style.cssText="width:100%;height:84px;object-fit:cover;object-position:center 22%";im.draggable=false;art.appendChild(im);}
+        else{const t2=document.createElement("div");t2.style.cssText="font-size:11px;color:#6b7686;padding:0 6px;text-align:center";t2.textContent="画像なし";art.appendChild(t2);}
+        el.appendChild(art);
+        const nm=document.createElement("div");
+        nm.style.cssText="padding:5px 7px;font-size:12px;font-weight:700;color:#e6ecf7;line-height:1.3;word-break:break-word";
+        nm.textContent=nameOf(k);
+        el.appendChild(nm);
+        if(on){
+          const chk=document.createElement("span");
+          chk.style.cssText="position:absolute;top:4px;right:4px;background:#fbbf24;color:#1a1204;font-size:12px;font-weight:900;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center";
+          chk.textContent="✓";
+          el.appendChild(chk);
+        }
+        el.addEventListener("click",()=>{
+          if(pick.has(k))pick.delete(k);else pick.add(k);
+          draw();
+        });
+        grid.appendChild(el);
+      }
+    };
+    sIn.oninput=draw;
+    const foot=document.createElement("div");
+    foot.style.cssText="display:flex;gap:8px;justify-content:flex-end";
+    const bCancel=document.createElement("button");bCancel.className="btn small";bCancel.textContent="やめる";
+    bCancel.addEventListener("click",()=>{ol.remove();res(null);});
+    const bOk=document.createElement("button");bOk.className="btn small primary";bOk.textContent="この内容で送る";
+    bOk.addEventListener("click",()=>{
+      if(!pick.size){toast("1枚も選ばれていません");return;}
+      // 🔗 多面登録は相方も一緒に送らないと、相手の端末で裏面が引けなくなる
+      const out=new Set(pick);
+      for(const k of pick){const l=LINKS.get(k);if(l)for(const f of l)if(FXDB.has(f))out.add(f);}
+      ol.remove();res([...out]);
+    });
+    foot.appendChild(bCancel);foot.appendChild(bOk);
+    ol.appendChild(foot);
+    document.body.appendChild(ol);
+    draw();
+  });
+}
 $("olFxShare").addEventListener("click",async ()=>{
   const inb=fxInboxCount();
   const j=await askChoice(`📦 カード登録の受け渡し（合言葉でつないだ相手と）\n※ 送ったあとに「画像も送りますか？」と聞きます（画像は容量が大きいので枚数にご注意）`,
-    ["📤 全部を送る",
+    ["📤 カードを選んで送る",
+     "📤 全部を送る",
      "📤 いま選んでいるデッキで使うカードだけ送る",
      "📤 最近2週間に更新した分だけ送る",
      `📥 受け取った登録を確認して取り込む（${inb}件）`]);
   if(j===null)return;
-  if(j===3){showFxDiffPanel();return;}
+  if(j===4){showFxDiffPanel();return;}
   let keys=[],label="",_sendDeckObj=null;
-  if(j===0){keys=fxShareKeys("all");label="全部";}
-  else if(j===1){
+  if(j===0){
+    const sel=await pickFxKeysPanel();
+    if(!sel||!sel.length)return;
+    keys=sel;label=`選んだ${sel.length}枚`;
+  }
+  else if(j===1){keys=fxShareKeys("all");label="全部";}
+  else if(j===2){
     const n=$("stDeck0").value||S.players[0].deckName;
     if(!n){toast("上の「自分」欄でデッキを選択してください");return;}
     const d=await getDeck(n);
