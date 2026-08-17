@@ -637,6 +637,11 @@ body.shake{animation:bodyShake .4s ease-out}
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 3px rgba(0,0,0,.95)}
 .dpCard .dpCap .dpSub{margin-top:5px;font-size:13px;color:#ccd4e2;line-height:1.3;text-shadow:0 1px 3px rgba(0,0,0,.95)}
 .dpCard .dpCap .dpCiv{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:3px;vertical-align:-1px;box-shadow:0 0 0 1px rgba(0,0,0,.6)}
+@media (max-width:1000px){#dpGrid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))!important}}
+@media (max-width:430px){
+  #dpGrid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))!important;gap:7px!important}
+  .dpCard{height:108px!important;min-height:108px!important;max-height:108px!important}
+}
 @media (max-width:760px){
   #dpGrid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))!important;gap:8px!important}
   .dpCard{height:124px!important;min-height:124px!important;max-height:124px!important}
@@ -801,7 +806,7 @@ body.shake{animation:bodyShake .4s ease-out}
 #bGrid.bg-tiny .vcard .vname{font-size:7.5px;-webkit-line-clamp:1}
 #bGrid.bg-tiny .vcard .cnt{font-size:9px;padding:0 2px;min-width:12px}
 #bGrid.bg-micro .vcard .vname{display:none}
-.dl-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;margin-top:8px;align-content:start}
+.dl-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:8px;align-content:start}
 .dl-item{min-width:0}
 .dl-item.open{grid-column:1/-1}
 .dl-item .dl-name.dpCard{width:100%}
@@ -810,9 +815,16 @@ body.shake{animation:bodyShake .4s ease-out}
   padding:10px;background:#0f1524;margin-top:-6px}
 .dl-item.open .dl-open{display:block}
 .dl-item.open .dl-name.dpCard{border-radius:12px 12px 0 0}
+/* 📐 開いた時は横幅いっぱいになるので、絵が間延びしないよう少しだけ高さを足す */
+.dl-item.open .dl-name.dpCard{height:200px!important;min-height:200px!important;max-height:200px!important}
+@media (max-width:760px){.dl-item.open .dl-name.dpCard{height:132px!important;min-height:132px!important;max-height:132px!important}}
 .dl-pack-cb{position:absolute;top:8px;left:8px;width:22px;height:22px;accent-color:var(--accent);z-index:4}
+@media (max-width:1000px){.dl-tiles{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}}
 @media (max-width:760px){
-  .dl-tiles{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .dl-tiles{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))!important;gap:8px}
+}
+@media (max-width:430px){
+  .dl-tiles{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))!important;gap:7px}
 }
 /* 📁 デッキのフォルダ移動（つかんで運ぶ） */
 .dl-grip{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-right:6px;
@@ -1388,9 +1400,9 @@ body.shake{animation:bodyShake .4s ease-out}
 </div>
 
 <div class="olay" id="deckListOlay">
-  <div class="panelbox">
+  <div class="panelbox" style="max-width:1180px">
     <h2>デッキ一覧</h2>
-    <div class="hint">デッキ名をタップでリスト表示。</div>
+    <div class="hint">デッキをタップすると、そのデッキの中身と操作ボタンが開きます。</div>
     <div class="row">
       <input type="text" id="dlSearch" placeholder="🔍 デッキ名・カード名で検索" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
     </div>
@@ -3910,7 +3922,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.14";
+const APP_VER="v13.15";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
