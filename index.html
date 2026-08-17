@@ -1781,8 +1781,10 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このカードはバトルゾーンを離れません。破壊・手札・マナ・山札・シールド送りをすべて無効にします（禁断 ～封印されし～ 型）"><input type="checkbox" id="fxNeverLeave"> 🚫 バトルゾーンを離れない</label>
         <label title="「相手のクリーチャーの能力によって、相手がクリーチャーを選ぶ時、このクリーチャーは選べない」型（時空の支配者ディアボロス Z など）。呪文では普通に選ばれます"><input type="checkbox" id="fxNoChooseCre"> 相手のクリーチャーの能力でだけ選ばれない</label>
         <label title="相手のターン中だけ、相手はこのクリーチャーを選べない（自分のターン中は選べる／オニカマス型）。上の「選ばれない」と併用する必要はありません" style="opacity:.95"><input type="checkbox" id="fxNoChooseOppTurn"> └ 相手のターン中だけ選ばれない（オニカマス型）</label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="自分の他の指定種族がバトルゾーンにいる間、相手はこのクリーチャーを選べない（エモーショナル・ハードコア型）"><span style="font-size:12px;font-weight:700">🛡 他の指定種族がいれば選ばれない</span><input type="text" id="fxNoChooseIfAlly" list="raceList" placeholder="種族（例：オラクル／ドラゴン）" style="width:210px"></label>
         <label><input type="checkbox" id="fxGS"> G・ストライク</label>
         <label><input type="checkbox" id="fxCharger"> チャージャー（呪文使用後マナへ／ツインパクト下面も可）</label>
+        <label title="水晶チャージャー：この呪文を唱えた後、墓地に置くかわりに裏向きにしてマナゾーンに置く。チャージャーも自動でオンになります"><input type="checkbox" id="fxCrystalCharger"> 💎 水晶チャージャー（裏向きでマナへ）</label>
         <label><input type="checkbox" id="fxHoldResolve"> 🕐 解決中に保持（ザフィヴォ型：処理の途中で他のカードを使う呪文。自動で墓地に置かず、手動で墓地に置いた時に虚無月の門等が誘発）</label>
         <label><input type="checkbox" id="fxCastle"> 城/要塞（盾に重ねて要塞化・表向き）</label>
         <label title="相手のクリーチャーがシールドを1つ以上ブレイクする時、かわりにこのシールドをブレイクさせてもよい（セイント・キャッスル）"><input type="checkbox" id="fxGcRedirect"> 🏰 ブレイク肩代わり（G城・セイント・キャッスル型）</label>
@@ -3878,7 +3880,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.5";
+const APP_VER="v13.6";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -20547,6 +20549,7 @@ function renderFxEditor(){
   $("fxNoChoose").checked=!!FXEDIT.noChoose;
   $("fxGS").checked=!!FXEDIT.gs;
   $("fxCharger").checked=!!FXEDIT.charger;
+  {const e=$("fxCrystalCharger");if(e)e.checked=!!FXEDIT.crystalCharger;}
   $("fxHoldResolve").checked=!!FXEDIT.holdResolve;
   $("fxCastle").checked=!!FXEDIT.castle;
   $("fxGcRedirect").checked=!!FXEDIT.gcRedirect;
@@ -20679,6 +20682,7 @@ function renderFxEditor(){
   {const e=$("fxBrkPsyOut");if(e)e.checked=!!FXEDIT.brkPsyOut;}
   {const e=$("fxBrkPsyOutFilt");if(e)e.value=FXEDIT.brkPsyOutFilt||"";}
   {const e=$("fxNoChooseSpellCost");if(e)e.value=FXEDIT.noChooseSpellCost||"";}
+  {const e=$("fxNoChooseIfAlly");if(e)e.value=FXEDIT.noChooseIfAlly||"";}
   {const e=$("fxFlipSealN");if(e)e.value=FXEDIT.flipSealN||"";}
   {const e=$("fxStLockAtkFoe");if(e)e.checked=!!FXEDIT.stLockAtkFoe;}
   {const e=$("fxStFoeHandOpen");if(e)e.checked=!!FXEDIT.stFoeHandOpen;}
@@ -22742,6 +22746,7 @@ function openFxEditor(key){
     noChoose:cur?!!cur.noChoose:false,
     gs:cur?!!cur.gs:false,
     charger:cur?!!cur.charger:false,
+    crystalCharger:cur?!!cur.crystalCharger:false,
     holdResolve:cur?!!cur.holdResolve:false,
     castle:cur?!!cur.castle:false,
     gcRedirect:cur?!!cur.gcRedirect:false,
@@ -22930,6 +22935,7 @@ function openFxEditor(key){
     brkPsyOut:cur?!!cur.brkPsyOut:false,
     brkPsyOutFilt:cur&&cur.brkPsyOutFilt||"",
     noChooseSpellCost:cur&&cur.noChooseSpellCost||"",
+    noChooseIfAlly:cur&&cur.noChooseIfAlly||"",
     flipSealN:cur&&(+cur.flipSealN||0)||0,
     stLockAtkFoe:cur?!!cur.stLockAtkFoe:false,
     stFoeHandOpen:cur?!!cur.stFoeHandOpen:false,
@@ -23135,6 +23141,10 @@ async function showNamedList(){
   }
 })();
 $("fxTwin").addEventListener("change",()=>{FXEDIT.twin=$("fxTwin").checked;renderFxEditor();});
+{const cc=document.getElementById("fxCrystalCharger");if(cc)cc.addEventListener("change",()=>{
+  if(cc.checked){$("fxCharger").checked=true;if(FXEDIT){FXEDIT.charger=true;FXEDIT.crystalCharger=true;}}
+  else if(FXEDIT)FXEDIT.crystalCharger=false;
+});}
 {const s=document.getElementById("fxTwinTop");if(s)s.addEventListener("change",()=>{if(FXEDIT)FXEDIT.twinTop=s.value;});}
 // コナユキ型/シフォン型（→マナ/→シールド）を選んだら「召喚は対象外」を自動オン（正規召喚をマナ送りしないため）
 {const rs=document.getElementById("fxRepIn");if(rs)rs.addEventListener("change",()=>{
@@ -23177,6 +23187,7 @@ $("fxSave").addEventListener("click",async ()=>{
     noChoose:$("fxNoChoose").checked,
     gs:$("fxGS").checked,
     charger:$("fxCharger").checked,
+    crystalCharger:$("fxCrystalCharger")?$("fxCrystalCharger").checked:false,
     holdResolve:$("fxHoldResolve").checked,
     castle:$("fxCastle").checked,
     gcRedirect:$("fxGcRedirect").checked,
@@ -23301,6 +23312,7 @@ $("fxSave").addEventListener("click",async ()=>{
     brkPsyOut:$("fxBrkPsyOut")?$("fxBrkPsyOut").checked:false,
     brkPsyOutFilt:$("fxBrkPsyOutFilt")?$("fxBrkPsyOutFilt").value.trim():"",
     noChooseSpellCost:$("fxNoChooseSpellCost")?$("fxNoChooseSpellCost").value.trim():"",
+    noChooseIfAlly:$("fxNoChooseIfAlly")?$("fxNoChooseIfAlly").value.trim():"",
     flipSealN:$("fxFlipSealN")?(Math.abs(+$("fxFlipSealN").value)||0):0,
     stLockAtkFoe:$("fxStLockAtkFoe")?$("fxStLockAtkFoe").checked:false,
     stFoeHandOpen:$("fxStFoeHandOpen")?$("fxStFoeHandOpen").checked:false,
@@ -23816,8 +23828,10 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.noBlock)attrs.push("ブロックされない");
     if(v.noAtked)attrs.push("攻撃されない");
     if(v.noChoose)attrs.push("選ばれない");
+    if(v.noChooseIfAlly)attrs.push(`🛡 他の${v.noChooseIfAlly}がいれば選ばれない`);
     if(v.gs)attrs.push("Gストライク");
-    if(v.charger)attrs.push("チャージャー");
+    if(v.crystalCharger)attrs.push("💎水晶チャージャー（裏向きでマナへ）");
+    else if(v.charger)attrs.push("チャージャー");
     if(v.holdResolve)attrs.push("🕐解決中に保持");
     if(v.castle)attrs.push("城/要塞");
     if(v.gcRedirect)attrs.push("🏰ブレイク肩代わり");
