@@ -833,6 +833,7 @@ body.shake{animation:bodyShake .4s ease-out}
 .dl-grip:active{cursor:grabbing}
 .dl-item.dl-dragging{opacity:.45}
 .dl-drop-on{outline:2px dashed var(--accent)!important;outline-offset:2px;background:rgba(245,197,66,.10)}
+.dl-item.dl-drop-on{border-radius:12px;box-shadow:-4px 0 0 0 var(--accent)}
 #dlRootDrop{display:none;margin:6px 0;padding:9px 10px;border:1px dashed var(--line);border-radius:10px;
   font-size:12px;font-weight:800;color:var(--muted);text-align:center}
 #dlBody.dl-dragmode #dlRootDrop{display:block}
@@ -1407,10 +1408,18 @@ body.shake{animation:bodyShake .4s ease-out}
       <input type="text" id="dlSearch" placeholder="🔍 デッキ名・カード名で検索" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
     </div>
     <div class="row" style="align-items:center;gap:8px">
+      <label class="hint" style="margin:0;display:inline-flex;align-items:center;gap:4px">並び順
+        <select id="dlSort" style="width:auto;font-size:12px;padding:3px 6px">
+          <option value="name">名前順</option>
+          <option value="created">登録した順</option>
+          <option value="used">最近使った順</option>
+          <option value="manual">自分の並び（⠿でドラッグ）</option>
+        </select>
+      </label>
       <button class="btn small" id="dlNewFolder">📁 新規フォルダ</button>
       <button class="btn small" id="dlPackMode">📤 まとめて渡す</button>
-      <span class="hint" style="margin:0">デッキ名を「フォルダ名/デッキ名」にしてもフォルダ分けされます／行の左の <b>⠿</b> をつかんでフォルダの見出しに落とすと移動できます</span>
     </div>
+    <div class="row"><span class="hint" style="margin:0">デッキ名を「フォルダ名/デッキ名」にしてもフォルダ分けされます／タイル右上の <b>⠿</b> をつかみ、<b>フォルダの見出し</b>に落とすと移動、<b>別のタイル</b>に落とすとその手前へ並べ替えます</span></div>
     <div class="row" id="dlPackBar" style="display:none;align-items:center;gap:8px;background:#0f1524;border:1px solid var(--line);border-radius:10px;padding:8px">
       <span id="dlPackCount" style="font-size:12px;font-weight:800;color:var(--accent)">0個 選択中</span>
       <button class="btn small primary" id="dlPackExport">📤 選んだデッキを書き出す</button>
@@ -1494,6 +1503,14 @@ body.shake{animation:bodyShake .4s ease-out}
     <h2 id="dpTitle">🃏 デッキを選ぶ</h2>
     <div class="row" style="margin-top:0">
       <input type="text" id="dpSearch" placeholder="デッキ名でしぼり込み" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
+      <label class="hint" style="margin:0;display:inline-flex;align-items:center;gap:4px">並び順
+        <select id="dpSort" style="width:auto;font-size:12px;padding:3px 6px">
+          <option value="name">名前順</option>
+          <option value="created">登録した順</option>
+          <option value="used">最近使った順</option>
+          <option value="manual">自分の並び</option>
+        </select>
+      </label>
     </div>
     <div id="dpGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;max-height:66vh;overflow-y:auto;overflow-x:hidden;padding:4px 2px;align-content:start"></div>
     <div class="row" style="justify-content:flex-end">
@@ -3922,7 +3939,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.15";
+const APP_VER="v13.16";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6364,10 +6381,78 @@ function parseList(t){
 }
 const listTotal=l=>l.reduce((s,c)=>s+c.count,0);
 const listToText=l=>l.map(c=>`${c.count} ${c.name}`).join("\n");
-async function saveDeck(name,main,gr,hy,sp,ex,cover){if(db)await idbPut("decks",name,{main,gr,hy,sp,ex,cover:cover||null});else memDecks.set(name,{main,gr,hy,sp,ex,cover:cover||null});}
+/* 🗂 デッキの並び順。3つを覚えておく。
+   ・DECK_META[名前] = {c:登録した時刻, u:最後に使った時刻}
+   ・DECK_ORDER = 手で並べた順（名前の配列。ここに無いものは後ろへ）
+   ・DECK_SORT = いま選んでいる並び順（name / created / used / manual）
+   いずれも misc に保存する。デッキ本体のデータは触らない。 */
+let DECK_META={},DECK_ORDER=[],DECK_SORT="name";
+let _deckMetaLoaded=false;
+async function loadDeckOrder(){
+  if(_deckMetaLoaded)return;
+  try{DECK_META=(db?await idbGet("misc","deckMeta"):null)||{};}catch(e){DECK_META={};}
+  try{DECK_ORDER=(db?await idbGet("misc","deckOrder"):null)||[];}catch(e){DECK_ORDER=[];}
+  try{DECK_SORT=(db?await idbGet("misc","deckSort"):null)||"name";}catch(e){DECK_SORT="name";}
+  _deckMetaLoaded=true;
+}
+async function saveDeckMeta(){try{if(db)await idbPut("misc","deckMeta",DECK_META);}catch(e){}}
+async function saveDeckOrder(){try{if(db)await idbPut("misc","deckOrder",DECK_ORDER);}catch(e){}}
+async function saveDeckSort(v){DECK_SORT=v;try{if(db)await idbPut("misc","deckSort",v);}catch(e){}}
+function markDeckCreated(name){
+  if(!DECK_META[name])DECK_META[name]={};
+  if(!DECK_META[name].c)DECK_META[name].c=Date.now();
+  saveDeckMeta();
+}
+function touchDeckUsed(name){
+  if(!name)return;
+  if(!DECK_META[name])DECK_META[name]={};
+  DECK_META[name].u=Date.now();
+  saveDeckMeta();
+}
+/* 🗂 名前の配列を、いま選んでいる並び順に直す。
+   「登録した順」「最近使った順」で記録が無いデッキは、名前順で後ろにまとめる。 */
+function sortDeckNames(names,mode){
+  const m=mode||DECK_SORT||"name";
+  const byName=(a,b)=>String(a).localeCompare(String(b),"ja");
+  const arr=[...names];
+  if(m==="manual"){
+    const idx=new Map(DECK_ORDER.map((n,i)=>[n,i]));
+    return arr.sort((a,b)=>{
+      const ia=idx.has(a)?idx.get(a):Infinity, ib=idx.has(b)?idx.get(b):Infinity;
+      return ia-ib||byName(a,b);
+    });
+  }
+  if(m==="created"||m==="used"){
+    const k=m==="created"?"c":"u";
+    return arr.sort((a,b)=>{
+      const va=(DECK_META[a]&&DECK_META[a][k])||0, vb=(DECK_META[b]&&DECK_META[b][k])||0;
+      if(!va&&!vb)return byName(a,b);
+      if(!va)return 1;
+      if(!vb)return -1;
+      return (m==="created"?va-vb:vb-va);
+    });
+  }
+  return arr.sort(byName);
+}
+/* 🗂 手で並べ替える：src を tgt の手前へ入れる（tgt が無ければ末尾へ） */
+async function reorderDeck(src,tgt,allNames){
+  if(!DECK_ORDER.length)DECK_ORDER=sortDeckNames(allNames||[],"name");
+  for(const n of (allNames||[]))if(!DECK_ORDER.includes(n))DECK_ORDER.push(n);
+  DECK_ORDER=DECK_ORDER.filter(n=>n!==src);
+  const i=tgt?DECK_ORDER.indexOf(tgt):-1;
+  if(i<0)DECK_ORDER.push(src);else DECK_ORDER.splice(i,0,src);
+  await saveDeckOrder();
+  if(DECK_SORT!=="manual")await saveDeckSort("manual");
+}
+async function saveDeck(name,main,gr,hy,sp,ex,cover){
+  await loadDeckOrder();
+  markDeckCreated(name);
+  if(db)await idbPut("decks",name,{main,gr,hy,sp,ex,cover:cover||null});else memDecks.set(name,{main,gr,hy,sp,ex,cover:cover||null});
+}
 async function getDeck(name){return db?await idbGet("decks",name):memDecks.get(name);}
 async function deckNames(){return db?await idbKeys("decks"):Array.from(memDecks.keys());}
 function setPlayerDeck(pi,name,d){
+  try{touchDeckUsed(name);}catch(e){}
   const P=S.players[pi];
   P.deckName=name;P.mainList=d.main;P.grList=d.gr||[];P.hyList=d.hy||[];P.spList=d.sp||[];P.exList=d.ex||[];
 }
@@ -33568,6 +33653,14 @@ async function startCustom(withShields){
 /* ================= bars ================= */
 $("stPick0").addEventListener("click",()=>openDeckPick("stDeck0","🃏 自分のデッキを選ぶ"));
 $("stPick1").addEventListener("click",()=>openDeckPick("stDeck1","🃏 相手のデッキを選ぶ"));
+{const e=$("dpSort");if(e)e.addEventListener("change",async ()=>{
+  await saveDeckSort(e.value);
+  await openDeckPick(DP_TARGET,$("dpTitle").textContent);
+});}
+{const e=$("dlSort");if(e)e.addEventListener("change",async ()=>{
+  await saveDeckSort(e.value);
+  renderDeckList();
+});}
 $("dpClose").addEventListener("click",()=>closeDeckPick());
 $("dpNone").addEventListener("click",()=>{
   dpApply("");
@@ -33621,7 +33714,8 @@ async function saveDeckCover(deckName,imgKey){
   return true;
 }
 async function deckPickCards(){
-  const names=await deckNames();
+  await loadDeckOrder();
+  const names=sortDeckNames(await deckNames());
   const out=[];
   for(const n of names){
     let d=null;
@@ -33738,6 +33832,8 @@ async function openDeckPick(selId,title){
   grid.innerHTML="<div class='hint' style='grid-column:1/-1'>読み込み中…</div>";
   $("dpSearch").value="";
   $("deckPickOlay").classList.add("open");
+  await loadDeckOrder();
+  {const sel=$("dpSort");if(sel&&sel.value!==DECK_SORT)sel.value=DECK_SORT;}
   const list=await deckPickCards();
   const cur=$(selId)?$(selId).value:"";
   const draw=(q)=>{
@@ -33779,6 +33875,7 @@ async function openDeckPick(selId,title){
       cap.appendChild(sub);
       el.appendChild(cap);
       el.addEventListener("click",()=>{
+        touchDeckUsed(dk.name);
         dpApply(dk.name);
         closeDeckPick();
       });
@@ -34944,6 +35041,9 @@ function dlAttachDrag(grip,name){
   const targetAt=(x,y)=>{
     const el=document.elementFromPoint(x,y);
     if(!el)return null;
+    // 🗂 フォルダの見出し（移動）と、別のタイル（並べ替え）の両方を落とし先にする
+    const it=el.closest(".dl-item");
+    if(it&&it!==grip.closest(".dl-item"))return it;
     return el.closest("[data-dlfolder]");
   };
   grip.addEventListener("pointerdown",ev=>{
@@ -34992,6 +35092,17 @@ function dlAttachDrag(grip,name){
     const body=document.getElementById("dlBody");
     if(body)body.classList.remove("dl-dragmode");
     if(!moved||!tgt)return;
+    // 🗂 別のタイルに落とした → その手前へ並べ替える（並び順は「自分の並び」に切り替わる）
+    if(tgt.classList&&tgt.classList.contains("dl-item")){
+      const to=tgt.getAttribute("data-deckname")||"";
+      if(!to||to===name)return;
+      await loadDeckOrder();
+      await reorderDeck(name,to,await deckNames());
+      {const sel=$("dlSort");if(sel)sel.value=DECK_SORT;}
+      toast(`🗂 「${name}」を「${to}」の手前へ移動しました（並び順：自分の並び）`);
+      renderDeckList();
+      return;
+    }
     const folder=tgt.getAttribute("data-dlfolder")||"";
     const cur=name.includes("/")?name.split("/")[0]:"";
     if(folder===cur)return;
@@ -35010,8 +35121,10 @@ function dlAttachDrag(grip,name){
 }
 async function renderDeckList(){
   const body=$("dlBody");body.innerHTML="";
+  await loadDeckOrder();
+  {const sel=$("dlSort");if(sel&&sel.value!==DECK_SORT)sel.value=DECK_SORT;}
   const q=(($("dlSearch")&&$("dlSearch").value)||"").trim();
-  const names=await deckNames();
+  const names=sortDeckNames(await deckNames());
   const groups=new Map();
   for(const f of (S.deckFolders||[]))if(!groups.has(f))groups.set(f,[]);
   if(!names.length&&!groups.size){body.innerHTML="<div class='hint'>保存されたデッキはありません。「📁 新規フォルダ」や「デッキを組む」から始められます</div>";return;}
@@ -35075,6 +35188,7 @@ async function renderDeckList(){
     container=tiles;
   for(const [n,d] of groups.get(folder)){
     const item=document.createElement("div");item.className="dl-item";
+    item.setAttribute("data-deckname",n);
     const dispN=folder?n.slice(folder.length+1):n;
     // 🖼 タイル：対戦開始のデッキ選択と同じ見た目（絵を背景に、名前と枚数を下に重ねる）
     const nm=document.createElement("div");nm.className="dl-name dpCard";
