@@ -619,20 +619,22 @@ body.shake{animation:bodyShake .4s ease-out}
 @keyframes anCharge{0%{box-shadow:inset 0 0 0 3px rgba(74,222,128,.95),inset 0 0 24px 8px rgba(74,222,128,.7);background:rgba(74,222,128,.30);opacity:1}100%{box-shadow:none;background:transparent;opacity:0}}
 .an-charge::after{animation:anCharge .6s ease-out forwards}
 .an-charge{animation:anFlash .6s ease-out}
-.dpCard{position:relative;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0d1119;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+.dpCard{position:relative;display:block;height:132px;min-height:132px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#141a27 center 24%/cover no-repeat;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
 .dpCard:hover{transform:translateY(-2px);border-color:#7b4bd6;box-shadow:0 6px 18px rgba(123,75,214,.28)}
-.dpCard.cur{border-color:#fbbf24;box-shadow:0 0 0 2px rgba(251,191,36,.35) inset}
-.dpCard .dpArt{flex:0 0 auto;position:relative;height:96px;min-height:96px;background:#141a27;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.dpCard .dpArt img{display:block;width:100%;height:96px;object-fit:cover;object-position:center 24%}
-.dpCard .dpArt .dpNo{font-size:11px;color:var(--muted);padding:0 6px;text-align:center;line-height:1.3}
-.dpCard .dpName{flex:0 0 auto;padding:6px 8px 2px;font-size:13px;font-weight:700;line-height:1.25;word-break:break-word}
-.dpCard .dpSub{flex:0 0 auto;padding:0 8px 7px;font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.dpCard .dpCiv{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:2px;vertical-align:-1px}
+.dpCard.cur{border-color:#fbbf24;box-shadow:0 0 0 2px rgba(251,191,36,.45) inset}
+.dpCard .dpNo{position:absolute;top:8px;left:8px;right:8px;font-size:11px;color:var(--muted);line-height:1.3;white-space:pre-line}
+.dpCap{position:absolute;left:0;right:0;bottom:0;padding:16px 9px 8px;
+  background:linear-gradient(to top,rgba(4,7,13,.96) 0%,rgba(4,7,13,.88) 55%,rgba(4,7,13,0) 100%)}
+.dpCap .dpName{font-size:14px;font-weight:800;line-height:1.25;color:#f2f5fb;word-break:break-word;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.dpCap .dpSub{margin-top:3px;font-size:11px;color:#c3cbd9;display:flex;gap:7px;align-items:center;flex-wrap:wrap;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.dpCiv{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:2px;vertical-align:-1px;box-shadow:0 0 0 1px rgba(0,0,0,.6)}
 @media (max-width:640px){
-  #dpGrid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;max-height:58vh}
-  .dpCard .dpArt,.dpCard .dpArt img{height:72px;min-height:72px}
-  .dpCard .dpName{font-size:12px;padding:5px 6px 2px}
-  .dpCard .dpSub{font-size:10px;padding:0 6px 6px}
+  #dpGrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))!important;gap:8px}
+  .dpCard{height:108px;min-height:108px}
+  .dpCap{padding:14px 7px 6px}
+  .dpCap .dpName{font-size:12px}
+  .dpCap .dpSub{font-size:10px}
 }
 #resultOlay{position:fixed;inset:0;z-index:96;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(2,4,10,.88);animation:fadeIn .3s ease-out;overflow:hidden;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -1460,7 +1462,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <div class="row" style="margin-top:0">
       <input type="text" id="dpSearch" placeholder="デッキ名でしぼり込み" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
     </div>
-    <div id="dpGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;max-height:62vh;overflow-y:auto;overflow-x:hidden;padding:4px 2px;align-content:start"></div>
+    <div id="dpGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;max-height:64vh;overflow-y:auto;overflow-x:hidden;padding:4px 2px;align-content:start"></div>
     <div class="row" style="justify-content:flex-end">
       <button class="btn small" id="dpNone">選ばない</button>
       <button class="btn small" id="dpClose">閉じる</button>
@@ -3887,7 +3889,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.9";
+const APP_VER="v13.10";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -33646,27 +33648,31 @@ async function openDeckPick(selId,title){
     const arr=list.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase()));
     if(!arr.length){grid.innerHTML="<div class='hint' style='grid-column:1/-1'>デッキがありません</div>";return;}
     for(const dk of arr){
+      // 🃏 1枚の箱に「絵を背景」「デッキ名と枚数を下に重ねる」形にする。
+      //    入れ子のflexだと環境によって文字の行が潰れてデッキ名が消えたため、重ねる作りにした。
       const el=document.createElement("div");
       el.className="dpCard"+(dk.name===cur?" cur":"");
-      const art=document.createElement("div");art.className="dpArt";
+      el.title=dk.name;
       const url=(dk.key&&dk.hasImg)?imgURL.get(normName(dk.key)):null;
-      if(url){const im=document.createElement("img");im.src=url;im.decoding="async";im.draggable=false;art.appendChild(im);}
+      if(url)el.style.backgroundImage=`url("${url}")`;
       else{
         const p2=document.createElement("div");p2.className="dpNo";
         p2.textContent=dk.key?`${dk.key}\n（画像未登録）`:"カードなし";
-        p2.style.whiteSpace="pre-line";
-        art.appendChild(p2);
+        el.appendChild(p2);
       }
-      el.appendChild(art);
-      const nm=document.createElement("div");nm.className="dpName";nm.textContent=dk.name;el.appendChild(nm);
+      const cap=document.createElement("div");cap.className="dpCap";
+      const nm=document.createElement("div");nm.className="dpName";nm.textContent=dk.name;cap.appendChild(nm);
       const sub=document.createElement("div");sub.className="dpSub";
-      const civ=document.createElement("span");
-      civ.innerHTML=dk.civs.map(v=>`<i class="dpCiv" style="background:${CIV_DOT[v]||"#94a3b8"}"></i>`).join("")||"";
-      sub.appendChild(civ);
+      if(dk.civs.length){
+        const civ=document.createElement("span");
+        civ.innerHTML=dk.civs.map(v=>`<i class="dpCiv" style="background:${CIV_DOT[v]||"#94a3b8"}"></i>`).join("");
+        sub.appendChild(civ);
+      }
       const cnt=document.createElement("span");
       cnt.textContent=`${dk.total}枚${dk.gr?`／GR${dk.gr}`:""}${dk.hy?`／超次元${dk.hy}`:""}`;
       sub.appendChild(cnt);
-      el.appendChild(sub);
+      cap.appendChild(sub);
+      el.appendChild(cap);
       el.addEventListener("click",()=>{
         dpApply(dk.name);
         closeDeckPick();
