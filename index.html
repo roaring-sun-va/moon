@@ -815,7 +815,14 @@ body.shake{animation:bodyShake .4s ease-out}
 #dlGhost{position:fixed;z-index:9999;pointer-events:none;padding:6px 10px;border-radius:8px;
   border:1px solid var(--accent);background:rgba(15,21,36,.96);color:var(--accent);
   font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.6);white-space:nowrap}
-.dl-item .dl-name{font-weight:800;color:var(--accent);cursor:pointer;font-size:13px}
+.dl-item .dl-name{font-weight:800;color:var(--accent);cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px}
+.dl-thumb{width:74px;height:52px;object-fit:cover;object-position:50% 22%;border-radius:8px;
+  border:1px solid var(--line);flex:0 0 auto;background:#141a27}
+.dl-more{margin-top:4px;padding-top:6px;border-top:1px dashed var(--line)}
+@media (max-width:760px){
+  .dl-thumb{width:56px;height:40px}
+  .dl-item .dl-name{font-size:13px;gap:6px}
+}
 .dl-grid{display:none;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px;margin-top:8px}
 .dl-item.open .dl-grid{display:grid}
 
@@ -3899,7 +3906,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.12";
+const APP_VER="v13.13";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -33589,16 +33596,13 @@ async function fillStartDecks(){
 /* 🃏 デッキ一覧から選ぶ（デュエプレのデッキ一覧に近い見た目）。
    キーカード＝メインデッキで最もコストの大きいカード（同じなら枚数の多いほう）の画像を使う。 */
 const CIV_DOT={light:"#fde68a",water:"#7dd3fc",dark:"#a78bfa",fire:"#fca5a5",nature:"#86efac",zero:"#e5e7eb"};
-/* 🖼 デッキ一覧の絵に使うカードを、デッキごとに手で決められるようにする。
-   { デッキ名: カード名 } の形で misc に保存する（デッキ本体のデータは触らない）。 */
-let DECK_KEY_CARD={};
-async function loadDeckKeyCards(){
-  try{DECK_KEY_CARD=(db?await idbGet("misc","deckKeyCard"):null)||{};}catch(e){DECK_KEY_CARD={};}
-  return DECK_KEY_CARD;
-}
-async function saveDeckKeyCard(deck,card){
-  if(card)DECK_KEY_CARD[deck]=card; else delete DECK_KEY_CARD[deck];
-  try{if(db)await idbPut("misc","deckKeyCard",DECK_KEY_CARD);}catch(e){}
+/* 🖼 デッキの絵（表紙）は `d.cover`（normNameのキー）に一本化する。
+   デッキ一覧の「🖼 表紙」でも、対戦開始のデッキ選択の「🖼 絵」でも同じ場所を書き換える。 */
+async function saveDeckCover(deckName,imgKey){
+  const d=await getDeck(deckName);
+  if(!d)return false;
+  await saveDeck(deckName,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],imgKey||null);
+  return true;
 }
 async function deckPickCards(){
   const names=await deckNames();
@@ -33627,11 +33631,14 @@ async function deckPickCards(){
       }
     }
     let hasImg=!!key;
+    let imgKey=key?normName(key):null;
     if(!key)key=alt||(main.length?main[0].name:null);
-    // 🖼 手で決めたキーカードがあれば、それを最優先にする
-    const pick=DECK_KEY_CARD[n];
-    if(pick&&main.some(it=>it.name===pick)){key=pick;hasImg=imgURL.has(normName(pick));}
-    out.push({name:n,key,hasImg,total,civs:[...civs],
+    // 🖼 表紙が決めてあればそれを最優先（デッキ一覧の「🖼 表紙」と同じ場所を見る）
+    if(d&&d.cover&&imgURL.has(d.cover)){
+      imgKey=d.cover;hasImg=true;
+      key=dispName.get(d.cover)||d.cover;
+    }
+    out.push({name:n,key,imgKey,hasImg,total,civs:[...civs],
       gr:((d&&d.gr)||[]).reduce((a,x)=>a+(+x.count||0),0),
       hy:((d&&d.hy)||[]).reduce((a,x)=>a+(+x.count||0),0)});
   }
@@ -33639,7 +33646,30 @@ async function deckPickCards(){
 }
 /* 🖼 デッキ一覧に出す絵（キーカード）を、そのデッキのカードから選び直す。
    画像が登録されているカードを先に並べ、無いものは後ろにまとめる。 */
-async function pickDeckKeyCard(deckName){
+/* 🧩 デッキを編集欄に読み込んで、そのままデッキビルダーを開く。
+   デッキ一覧の「🧩 編成」と、対戦開始のデッキ選択の「🧩」の両方から呼ぶ。 */
+async function editDeckByName(name){
+  const d=await getDeck(name);
+  if(!d){toast("デッキが見つかりません");return;}
+  if(DECK_DIRTY&&!await ask("編集欄に未保存の変更があります。破棄してこのデッキを編成しますか？"))return;
+  $("deckName").value=name;
+  $("deckText").value=listToText(d.main||[]);
+  $("grText").value=listToText(d.gr||[]);
+  $("hyText").value=listToText(d.hy||[]);
+  $("exText").value=listToText(d.ex||[]);
+  $("spText").value=listToText(d.sp||[]);
+  DECK_DIRTY=false;updateEditingBanner();
+  renderCostCurve();
+  if(!dispName.size){toast("先に画像を登録してください");return;}
+  $("deckListOlay").classList.remove("open");
+  $("deckPickOlay").classList.remove("open");
+  $("startOlay").classList.remove("open");
+  $("deckOlay").classList.add("open");
+  bSeed();bSetMode("main");reopenBuilder();
+  const disp=name.includes("/")?name.slice(name.indexOf("/")+1):name;
+  toast(`🧩 「${disp}」を編成します（閉じると編集欄に反映されます）`);
+}
+async function pickDeckCover(deckName,after){
   const d=await getDeck(deckName);
   if(!d){toast("デッキが見つかりません");return;}
   const seen=new Set(),pool=[];
@@ -33656,13 +33686,13 @@ async function pickDeckKeyCard(deckName){
     const ia=imgURL.has(normName(a))?0:1, ib=imgURL.has(normName(b))?0:1;
     return ia-ib || costOf(b)-costOf(a) || String(a).localeCompare(String(b),"ja");
   });
-  const cards=pool.map(nm=>({name:nm}));
-  const j=await pickCard(`🖼 「${deckName}」の一覧に出す絵を選ぶ`,cards,
-    {sub:c=>imgURL.has(normName(c.name))?"":"画像なし"});
+  const cards=[{name:"（自動で選ぶ）"},...pool.map(nm=>({name:nm}))];
+  const j=await pickCard(`🖼 「${deckName}」の表紙にするカードを選ぶ`,cards,
+    {sub:(c,i)=>i===0?"おまかせ":(imgURL.has(normName(c.name))?"":"画像なし")});
   if(j===null)return;
-  await saveDeckKeyCard(deckName,cards[j].name);
-  toast(`🖼 「${deckName}」の絵を《${cards[j].name}》にしました`);
-  if($("deckPickOlay").classList.contains("open"))await openDeckPick(DP_TARGET,$("dpTitle").textContent);
+  await saveDeckCover(deckName,j===0?null:normName(cards[j].name));
+  toast(j===0?`🖼 「${deckName}」の表紙を自動に戻しました`:`🖼 「${deckName}」の表紙を《${cards[j].name}》にしました`);
+  if(typeof after==="function")await after();
 }
 let DP_TARGET=null;
 /* 🃏 デッキ一覧を閉じて、対戦開始のパネルへ戻す。
@@ -33692,7 +33722,6 @@ async function openDeckPick(selId,title){
   grid.innerHTML="<div class='hint' style='grid-column:1/-1'>読み込み中…</div>";
   $("dpSearch").value="";
   $("deckPickOlay").classList.add("open");
-  await loadDeckKeyCards();
   const list=await deckPickCards();
   const cur=$(selId)?$(selId).value:"";
   const draw=(q)=>{
@@ -33705,7 +33734,7 @@ async function openDeckPick(selId,title){
       const el=document.createElement("div");
       el.className="dpCard"+(dk.name===cur?" cur":"");
       el.title=dk.name;
-      const url=(dk.key&&dk.hasImg)?imgURL.get(normName(dk.key)):null;
+      const url=(dk.hasImg&&dk.imgKey)?imgURL.get(dk.imgKey):null;
       if(url)el.style.backgroundImage=`url("${url}")`;
       else{
         const p2=document.createElement("div");p2.className="dpNo";
@@ -33720,8 +33749,9 @@ async function openDeckPick(selId,title){
         b2.addEventListener("click",e=>{e.stopPropagation();e.preventDefault();fn();});
         tools.appendChild(b2);
       };
-      mkTool("🖼 絵を変える","このデッキの一覧に出す絵（キーカード）を選び直す",()=>pickDeckKeyCard(dk.name));
-      mkTool("📋 中身","このデッキのカードを一覧で見る",()=>openDeckViewer(dk.name));
+      mkTool("📋","中身を見る（このデッキのカード一覧）",()=>openDeckViewer(dk.name));
+      mkTool("🧩","編成する（このデッキを編集画面で開く）",()=>editDeckByName(dk.name));
+      mkTool("🖼","表紙を変える（一覧に出す絵を選ぶ）",()=>pickDeckCover(dk.name,()=>openDeckPick(DP_TARGET,$("dpTitle").textContent)));
       el.appendChild(tools);
       const cap=document.createElement("div");cap.className="dpCap";
       const nm=document.createElement("div");nm.className="dpName";nm.textContent=dk.name;cap.appendChild(nm);
@@ -35037,11 +35067,23 @@ async function renderDeckList(){
       nm.appendChild(grip);
     }
     {
-      const ck=d.cover||(d.main&&d.main.length?normName(d.main[0].name):null);
-      if(ck&&imgURL.has(ck)){
+      // 🖼 サムネイル：表紙 → 画像が登録されているカードのうち最もコストが大きいもの
+      let ck=(d.cover&&imgURL.has(d.cover))?d.cover:null;
+      if(!ck){
+        let best=null,bestCost=-1;
+        for(const it of (d.main||[])){
+          const k2=normName(it.name);
+          if(!imgURL.has(k2))continue;
+          const r2=FXDB.get(k2);
+          const c2=(r2&&r2.cost!=null&&!isNaN(+r2.cost))?+r2.cost:-1;
+          if(c2>bestCost){best=k2;bestCost=c2;}
+        }
+        ck=best;
+      }
+      if(ck){
         const th=document.createElement("img");
         th.src=imgURL.get(ck);
-        th.style.cssText="width:40px;height:40px;object-fit:cover;object-position:50% 22%;border-radius:6px;margin-right:8px;border:1px solid var(--line);vertical-align:middle;float:left";
+        th.className="dl-thumb";
         nm.appendChild(th);
       }
     }
@@ -35113,31 +35155,21 @@ async function renderDeckList(){
       setPlayerDeck(1,n,d);
       toast(`相手デッキ：${n}`);
     },"",true));
-    row.appendChild(actBtn("🧩 編成",async ()=>{
-      // 🧩 このデッキを編集欄に読み込んでから、そのままデッキビルダーを開く
-      if(DECK_DIRTY&&!await ask("編集欄に未保存の変更があります。破棄してこのデッキを編成しますか？"))return;
-      $("deckName").value=n;
-      $("deckText").value=listToText(d.main);
-      $("grText").value=listToText(d.gr||[]);
-      $("hyText").value=listToText(d.hy||[]);
-      $("exText").value=listToText(d.ex||[]);
-      $("spText").value=listToText(d.sp||[]);
-      DECK_DIRTY=false;updateEditingBanner();
-      renderCostCurve();
-      if(!dispName.size){toast("先に画像を登録してください");return;}
-      $("deckListOlay").classList.remove("open");
-      $("deckOlay").classList.add("open");
-      bSeed();bSetMode("main");reopenBuilder();
-      toast(`🧩 「${dispN}」を編成します（閉じると編集欄に反映されます）`);
-    },"primary",true));
-    row.appendChild(actBtn("🖼 表紙",async ()=>{
-      const k=await pickImage(`「${dispN}」の表紙カードを選ぶ`);
-      if(!k)return;
-      await saveDeck(n,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],k);
-      toast(`表紙を設定しました`);
-      renderDeckList();
-    },"",true));
-    row.appendChild(actBtn("📁移動",async ()=>{
+    row.appendChild(actBtn("🧩 編成",()=>editDeckByName(n),"primary",true));
+    const bCover=actBtn("🖼 表紙",()=>pickDeckCover(n,()=>renderDeckList()),"",true);
+    // 🎛 よく使う3つ（自分で使用／相手で使用／編成）だけ出して、残りは「⋯ その他」に畳む。
+    //    ボタンが9個並ぶとデッキ名より目立ってしまうため。
+    const more=document.createElement("div");
+    more.className="row dl-more";
+    more.style.display="none";
+    const bMore=actBtn("⋯ その他",()=>{
+      const willOpen=more.style.display==="none";
+      more.style.display=willOpen?"":"none";
+      bMore.textContent=willOpen?"✕ 閉じる":"⋯ その他";
+    },"",true);
+    row.appendChild(bMore);
+    more.appendChild(bCover);
+    more.appendChild(actBtn("📁移動",async ()=>{
       const base=n.includes("/")?n.slice(n.indexOf("/")+1):n;
       const allF=[...new Set([...(S.deckFolders||[]),...(await deckNames()).filter(x=>x.includes("/")).map(x=>x.split("/")[0])])].sort((a,b)=>a.localeCompare(b,"ja"));
       const opts=[...allF.map(f=>`📁 ${f}`),"（フォルダなしに戻す）","＋新規フォルダを作って移動"];
@@ -35158,7 +35190,7 @@ async function renderDeckList(){
       const tf=nn.includes("/")?nn.split("/")[0]:"";
       if(await moveDeckToFolder(n,tf))renderDeckList();
     },"",true));
-    row.appendChild(actBtn("改名",async ()=>{
+    more.appendChild(actBtn("改名",async ()=>{
       const nn=(window.prompt(`新しい名前（「フォルダ名/デッキ名」でフォルダ分け）`,n)||"").trim();
       if(!nn||nn===n)return;
       await saveDeck(nn,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover);
@@ -35167,7 +35199,7 @@ async function renderDeckList(){
       toast(`「${nn}」に変更しました`);
       renderDeckList();
     },"",true));
-    row.appendChild(actBtn("複製",async ()=>{
+    more.appendChild(actBtn("複製",async ()=>{
       const nn=(window.prompt("複製先の名前",n+"のコピー")||"").trim();
       if(!nn)return;
       await saveDeck(nn,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover);
@@ -35175,20 +35207,20 @@ async function renderDeckList(){
       toast(`複製しました：${nn}`);
       renderDeckList();
     },"",true));
-    row.appendChild(actBtn("📤 渡す",async ()=>{
+    more.appendChild(actBtn("📤 渡す",async ()=>{
       const j=await askChoice(`「${dispN}」を1ファイルに書き出して他の人に渡します。\nカード画像も含めますか？`,
         ["画像も含める（そのまま遊べる・ファイル大）","効果登録のみ（軽量・相手は画像を各自用意）","やめる"]);
       if(j===null||j===2)return;
       await exportDeckShare(n,j===0);
     },"",true));
-    row.appendChild(actBtn("削除",async ()=>{
+    more.appendChild(actBtn("削除",async ()=>{
       if(!await ask(`デッキ「${n}」を削除しますか？`))return;
       if(db)await idbDel("decks",n);else memDecks.delete(n);
       await refreshDeckSelects();
       toast(`「${n}」を削除しました`);
       renderDeckList();
     },"warn",true));
-    item.appendChild(nm);item.appendChild(grid);item.appendChild(row);
+    item.appendChild(nm);item.appendChild(grid);item.appendChild(row);item.appendChild(more);
     container.appendChild(item);
   }
   }
