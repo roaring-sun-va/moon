@@ -806,6 +806,13 @@ body.shake{animation:bodyShake .4s ease-out}
 #bGrid.bg-tiny .vcard .vname{font-size:7.5px;-webkit-line-clamp:1}
 #bGrid.bg-tiny .vcard .cnt{font-size:9px;padding:0 2px;min-width:12px}
 #bGrid.bg-micro .vcard .vname{display:none}
+.dpChip{font-size:12px;font-weight:700;padding:6px 11px;border-radius:999px;cursor:pointer;
+  background:#141c2e;color:#cbd3df;border:1px solid var(--line);white-space:nowrap}
+.dpChip:hover{border-color:#7b4bd6}
+.dpChip.on{background:var(--accent);color:#1a1204;border-color:var(--accent)}
+.dpSect{grid-column:1/-1;font-size:12px;font-weight:800;color:var(--accent);letter-spacing:.06em;
+  padding:6px 2px 0;border-top:1px solid var(--line);margin-top:4px}
+.dpSect:first-child{border-top:none;margin-top:0;padding-top:0}
 .dl-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:8px;align-content:start}
 .dl-item{min-width:0}
 .dl-item.open{grid-column:1/-1}
@@ -1512,6 +1519,7 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
       </label>
     </div>
+    <div id="dpFolders" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px"></div>
     <div id="dpGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;max-height:66vh;overflow-y:auto;overflow-x:hidden;padding:4px 2px;align-content:start"></div>
     <div class="row" style="justify-content:flex-end">
       <button class="btn small" id="dpNone">選ばない</button>
@@ -3939,7 +3947,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.16";
+const APP_VER="v13.17";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -33805,6 +33813,7 @@ async function pickDeckCover(deckName,after){
   if(typeof after==="function")await after();
 }
 let DP_TARGET=null;
+let DP_FOLDER="__all__";   // 📁 デッキ選択で今しぼり込んでいるフォルダ
 /* 🃏 デッキ一覧を閉じて、対戦開始のパネルへ戻す。
    対戦開始から開いた時（stDeck0 / stDeck1）だけ、対戦開始を開き直す。 */
 /* 🃏 選んだデッキ名を <select> に反映する。
@@ -33836,11 +33845,55 @@ async function openDeckPick(selId,title){
   {const sel=$("dpSort");if(sel&&sel.value!==DECK_SORT)sel.value=DECK_SORT;}
   const list=await deckPickCards();
   const cur=$(selId)?$(selId).value:"";
+  // 📁 フォルダの帯。デッキ名が「フォルダ名/デッキ名」のものをまとめる
+  const folderOf=nm=>nm.includes("/")?nm.split("/")[0]:"";
+  const allFolders=[...new Set(list.map(x=>folderOf(x.name)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  const hasLoose=list.some(x=>!folderOf(x.name));
+  const drawChips=()=>{
+    const bar=$("dpFolders");
+    if(!bar)return;
+    bar.innerHTML="";
+    if(!allFolders.length){bar.style.display="none";return;}
+    bar.style.display="flex";
+    const mk=(val,label,n)=>{
+      const b2=document.createElement("button");
+      b2.type="button";
+      b2.className="dpChip"+(DP_FOLDER===val?" on":"");
+      b2.textContent=n!=null?`${label}（${n}）`:label;
+      b2.addEventListener("click",()=>{DP_FOLDER=val;drawChips();draw($("dpSearch").value.trim());});
+      bar.appendChild(b2);
+    };
+    mk("__all__","すべて",list.length);
+    for(const f of allFolders)mk(f,`📁 ${f}`,list.filter(x=>folderOf(x.name)===f).length);
+    if(hasLoose)mk("__none__","フォルダなし",list.filter(x=>!folderOf(x.name)).length);
+  };
   const draw=(q)=>{
     grid.innerHTML="";
-    const arr=list.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase()));
+    let arr=list.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase()));
+    // 📁 帯で選んだフォルダにしぼる（検索中はフォルダをまたいで探せるよう「すべて」扱い）
+    if(!q&&DP_FOLDER&&DP_FOLDER!=="__all__"){
+      arr=arr.filter(x=>DP_FOLDER==="__none__"?!folderOf(x.name):folderOf(x.name)===DP_FOLDER);
+    }
     if(!arr.length){grid.innerHTML="<div class='hint' style='grid-column:1/-1'>デッキがありません</div>";return;}
+    // 📁「すべて」の時は、フォルダごとに見出しを入れて並べる
+    const showSect=(!q&&(!DP_FOLDER||DP_FOLDER==="__all__")&&allFolders.length>0);
+    if(showSect){
+      const ord=[...allFolders,""];
+      arr=arr.slice().sort((a,b)=>{
+        const fa=folderOf(a.name),fb=folderOf(b.name);
+        if(fa!==fb)return ord.indexOf(fa)-ord.indexOf(fb);
+        return 0;
+      });
+    }
+    let lastF=null;
     for(const dk of arr){
+      const fd=folderOf(dk.name);
+      if(showSect&&fd!==lastF){
+        lastF=fd;
+        const h=document.createElement("div");h.className="dpSect";
+        h.textContent=fd?`📁 ${fd}`:"📁 フォルダなし";
+        grid.appendChild(h);
+      }
       // 🃏 1枚の箱に「絵を背景」「デッキ名と枚数を下に重ねる」形にする。
       //    入れ子のflexだと環境によって文字の行が潰れてデッキ名が消えたため、重ねる作りにした。
       const el=document.createElement("div");
@@ -33866,7 +33919,9 @@ async function openDeckPick(selId,title){
       mkTool("🖼","表紙を変える（一覧に出す絵を選ぶ）",()=>pickDeckCover(dk.name,()=>openDeckPick(DP_TARGET,$("dpTitle").textContent)));
       el.appendChild(tools);
       const cap=document.createElement("div");cap.className="dpCap";
-      const nm=document.createElement("div");nm.className="dpName";nm.textContent=dk.name;cap.appendChild(nm);
+      const nm=document.createElement("div");nm.className="dpName";
+      nm.textContent=fd?dk.name.slice(fd.length+1):dk.name;
+      cap.appendChild(nm);
       const sub=document.createElement("div");sub.className="dpSub";
       const dots=dk.civs.map(v=>`<i class="dpCiv" style="background:${CIV_DOT[v]||"#94a3b8"}"></i>`).join("");
       const txt=`${dk.total}枚${dk.gr?`／GR${dk.gr}`:""}${dk.hy?`／超次元${dk.hy}`:""}`;
@@ -33882,8 +33937,9 @@ async function openDeckPick(selId,title){
       grid.appendChild(el);
     }
   };
+  drawChips();
   draw("");
-  $("dpSearch").oninput=()=>draw($("dpSearch").value.trim());
+  $("dpSearch").oninput=()=>{drawChips();draw($("dpSearch").value.trim());};
 }
 async function openStartOlay(){
   await fillStartDecks();
