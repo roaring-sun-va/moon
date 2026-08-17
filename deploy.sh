@@ -17,29 +17,29 @@ public_version() {
 }
 
 wait_pages_action() {
-  local sha="$1" json status conclusion url
+  local sha="$1" json action_status conclusion action_url
   echo "⏳ GitHub Pagesの公開処理を確認中…"
   for i in {1..18}; do
     json=$(curl -fsSL "${API_RUNS}?head_sha=${sha}&per_page=5" 2>/dev/null || true)
     if [ -n "$json" ]; then
-      read status conclusion url <<< "$(printf '%s' "$json" | python3 -c '
+      read action_status conclusion action_url <<< "$(printf '%s' "$json" | python3 -c '
 import json,sys
 try:
  d=json.load(sys.stdin); r=(d.get("workflow_runs") or [{}])[0]
  print(r.get("status", ""), r.get("conclusion") or "-", r.get("html_url", ""))
 except Exception: print("", "-", "")
 ')"
-      if [ "$status" = "completed" ]; then
+      if [ "$action_status" = "completed" ]; then
         if [ "$conclusion" = "success" ]; then
           echo "✅ GitHub Actions: success"
           return 0
         fi
         echo "❌ GitHub Pagesの公開処理が失敗しました（${conclusion}）"
-        [ -n "$url" ] && echo "   確認・再実行: $url"
+        [ -n "$action_url" ] && echo "   確認・再実行: $action_url"
         echo "   git pushは済んでいますが、公開サイトは更新されていません。"
         return 1
       fi
-      printf "   %s（%s/18）\n" "${status:-Actions待ち}" "$i"
+      printf "   %s（%s/18）\n" "${action_status:-Actions待ち}" "$i"
     else
       printf "   Actions登録待ち（%s/18）\n" "$i"
     fi
