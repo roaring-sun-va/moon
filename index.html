@@ -619,6 +619,15 @@ body.shake{animation:bodyShake .4s ease-out}
 @keyframes anCharge{0%{box-shadow:inset 0 0 0 3px rgba(74,222,128,.95),inset 0 0 24px 8px rgba(74,222,128,.7);background:rgba(74,222,128,.30);opacity:1}100%{box-shadow:none;background:transparent;opacity:0}}
 .an-charge::after{animation:anCharge .6s ease-out forwards}
 .an-charge{animation:anFlash .6s ease-out}
+.dpCard{position:relative;display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0d1119;cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+.dpCard:hover{transform:translateY(-2px);border-color:#7b4bd6;box-shadow:0 6px 18px rgba(123,75,214,.28)}
+.dpCard.cur{border-color:#fbbf24;box-shadow:0 0 0 2px rgba(251,191,36,.35) inset}
+.dpCard .dpArt{position:relative;height:104px;background:#141a27;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.dpCard .dpArt img{width:100%;height:100%;object-fit:cover;object-position:center 22%}
+.dpCard .dpArt .dpNo{font-size:11px;color:var(--muted)}
+.dpCard .dpName{padding:6px 8px;font-size:13px;font-weight:700;line-height:1.25;word-break:break-all}
+.dpCard .dpSub{padding:0 8px 7px;font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.dpCard .dpCiv{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:2px;vertical-align:-1px}
 #resultOlay{position:fixed;inset:0;z-index:96;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(2,4,10,.88);animation:fadeIn .3s ease-out;overflow:hidden;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 /* ===== ✨ 対戦の演出（v10.97） =====
@@ -1371,16 +1380,31 @@ body.shake{animation:bodyShake .4s ease-out}
   </div>
 </div>
 
+<div class="olay" id="deckPickOlay">
+  <div class="panelbox" style="max-width:820px">
+    <h2 id="dpTitle">🃏 デッキを選ぶ</h2>
+    <div class="row" style="margin-top:0">
+      <input type="text" id="dpSearch" placeholder="デッキ名でしぼり込み" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
+    </div>
+    <div id="dpGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;max-height:62vh;overflow:auto;padding:4px 2px"></div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn small" id="dpNone">選ばない</button>
+      <button class="btn small" id="dpClose">閉じる</button>
+    </div>
+  </div>
+</div>
 <div class="olay" id="startOlay">
   <div class="panelbox">
     <h2>対戦開始</h2>
     <div class="row" style="margin-top:0">
       <span style="font-size:12px;color:var(--muted);width:44px">自分</span>
       <select id="stDeck0" style="flex:1"></select>
+      <button class="btn small" id="stPick0">🖼 一覧</button>
     </div>
     <div class="row">
       <span style="font-size:12px;color:var(--muted);width:44px">相手</span>
       <select id="stDeck1" style="flex:1"></select>
+      <button class="btn small" id="stPick1">🖼 一覧</button>
     </div>
     <div class="row">
       <span style="font-size:12px;color:var(--muted);width:44px">名前</span>
@@ -3854,7 +3878,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.3";
+const APP_VER="v13.4";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4154,9 +4178,127 @@ function turnEnteredCount(side,filt){
    この場合はバトルゾーンに「出て」いないので、タップインの常在効果は働かない。
    ただし登録で「裏返ったら新しいクリーチャーとして出る」（＝ゲーム外からの進化）に
    してあるカードは、裏返った先が新しいクリーチャーなので働く。 */
+/* 🚫 踏み倒しメタのまとめ（オニカマス型／フォーエバー・プリンセス型／マグナム型／センノー型）。
+   moveCardX を通らない登場（効果が直接 battle.push するもの・ミラクルとミステリーの扉など）でも
+   働くように、markArrive からも呼ぶ。二重に聞かないよう 1.5 秒の窓で1回だけ通す。 */
+function queueCheatWatchers(pTo,c){
+  if(!S.expert||!c)return;
+  try{
+    const now=Date.now();
+    if(c._cheatQAt&&now-c._cheatQAt<1500)return;
+    c._cheatQAt=now;
+      const foeN=pTo===0?1:0;
+      // ↩ オニカマス型：相手のターン中、相手が召喚以外で出したクリーチャーを手札に戻してもよい
+      //    （センノーと違い場には出るので、出た時の効果は先に誘発する）
+      {
+        // ↩ 発動条件は2つとも必須：
+        //   ① 出たクリーチャーが「相手（＝オニカマスの持ち主から見た相手）」のもの＝ zonesOf(pTo) に出た
+        //   ② その相手のターン中である＝ S.who===pTo（オニカマスの持ち主はターンプレイヤーではない）
+        //   さらに、出たカード自身がオニカマスだった場合に自分で反応しないよう id で除外する
+        const kamasu=(S.vs&&S.who===pTo)
+          ? zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return x.id!==c.id&&rx&&rx.stBounceCheat&&!isSealed(x)&&!isIgnored(x,foeN);})
+          : null;
+        const rNew=getReg(c);
+        if(kamasu&&rNew&&isCreatureReg(rNew)&&!c._kamasuChk){
+          c._kamasuChk=true;
+          // ⏱ APNAP：オニカマスの持ち主はターンプレイヤーではないので、
+          //    出したクリーチャーの「出た時」が先に解決される。効果キューが空くまで待ってから確認する。
+          const _kid=kamasu.id;
+          enqueueWatchJob(async()=>{
+            c._kamasuChk=false;
+            const live=zonesOf(foeN).battle.find(x=>x.id===_kid&&!isSealed(x)&&!isIgnored(x,foeN));
+            if(!live)return;                                   // 出た時の効果でオニカマスが離れていたら発動しない
+            if(!zonesOf(pTo).battle.some(x=>x.id===c.id))return; // 出たクリーチャーが既に場を離れていたら何もしない
+            const j=await askChoice(`↩ ${S.players[foeN].label} の《${faceNameOf(live)}》\n（相手のターン中・相手が召喚以外で出したクリーチャーだけが対象）\n\n${S.players[pTo].label} が出した《${faceNameOf(c)}》は【召喚】でしたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝そのまま。侵略・革命チェンジ・蘇生・トリガー出しは召喚以外）`,
+              ["召喚で出した（そのまま）","召喚以外だった → 手札に戻す","召喚以外だが戻さない"]);
+            if(j!==1)return;
+            const ZB=zonesOf(pTo);
+            const bi=ZB.battle.findIndex(x=>x.id===c.id);
+            if(bi<0)return;
+            snap();
+            leaveBattleCleanup(ZB,c,"hand"); // 装備・封印・重なっていたカードを整理
+            ZB.battle.splice(bi,1);
+            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.faceup=true;c.mark=false;
+            if(typeof toHand==="function")toHand(ZB,c);else ZB.hand.push(c);
+            sfx("move");renderAll();
+            toast(`↩ ${faceNameOf(live)}：${faceNameOf(c)} を手札に戻した`);
+            logOnly(`↩ ${S.players[foeN].label} の《${faceNameOf(live)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》を手札へ（召喚以外で出たため）`);
+          });
+        }
+      }
+      // 🌱 フォーエバー・プリンセス型：相手がコストを支払わずに出したクリーチャーを持ち主のマナゾーンへ。
+      //    オニカマス型と同じ流れだが、相手のターン中に限らず、行き先がマナになる。
+      {
+        const prin=(S.vs&&pTo!==foeN)
+          ? zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return x.id!==c.id&&rx&&rx.stManaCheat&&!isSealed(x)&&!isIgnored(x,foeN);})
+          : null;
+        const rNew2=getReg(c);
+        if(prin&&rNew2&&isCreatureReg(rNew2)&&!c._prinChk){
+          c._prinChk=true;
+          const _pid=prin.id;
+          enqueueWatchJob(async()=>{
+            c._prinChk=false;
+            const live=zonesOf(foeN).battle.find(x=>x.id===_pid&&!isSealed(x)&&!isIgnored(x,foeN));
+            if(!live)return;
+            if(!zonesOf(pTo).battle.some(x=>x.id===c.id))return;
+            const j=await askChoice(`🌱 ${S.players[foeN].label} の《${faceNameOf(live)}》\n\n${S.players[pTo].label} が出した《${faceNameOf(c)}》は【コストを支払って】出しましたか？\n（支払わずに出したなら持ち主のマナゾーンに置きます）`,
+              ["コストを支払った（そのまま）","コストを支払わずに出した → マナゾーンへ"]);
+            if(j!==1)return;
+            const ZB2=zonesOf(pTo);
+            const bi2=ZB2.battle.findIndex(x=>x.id===c.id);
+            if(bi2<0)return;
+            snap();
+            leaveBattleCleanup(ZB2,c,"mana");
+            ZB2.battle.splice(bi2,1);
+            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.faceup=true;c.mark=false;
+            ZB2.mana.push(c);
+            sfx("move");renderAll();
+            toast(`🌱 ${faceNameOf(live)}：${faceNameOf(c)} を持ち主のマナゾーンへ`);
+            logOnly(`🌱 ${S.players[foeN].label} の《${faceNameOf(live)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》をマナゾーンへ（コストを支払わずに出たため）`);
+          });
+        }
+      }
+      // 💥 踏み倒しメタ（マグナム／ギルザウルス）：確認を出したうえで判定する
+      queueCheatMeta(pTo,c,false);
+      const noCheat=zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoCheat&&!isSealed(x);});
+      if(noCheat&&!c._noCheatChk){
+        c._noCheatChk=true;
+        (async()=>{
+          const j=await askChoice(`🚫 ${faceNameOf(noCheat)}：相手は召喚以外でクリーチャーを出せない\n《${c.name}》は【召喚】で出しましたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝OK。侵略・革命チェンジ・蘇生・トリガー出しは不可）`,
+            ["召喚で出した（そのまま）","召喚以外（出せない→戻す）"]);
+          c._noCheatChk=false;
+          if(j!==1)return;
+          const ZB5=zonesOf(pTo).battle;
+          const bi5=ZB5.findIndex(x=>x.id===c.id);
+          if(bi5<0)return;
+          snap();
+          const k=await askChoice(`《${c.name}》の戻し先を選択（出す前の場所へ）`,
+            ["手札へ","墓地へ","超次元へ","GRゾーンの下へ","山札の上へ"]);
+          if(k===null)return;
+          ZB5.splice(bi5,1);
+          c.tapped=false;
+          const Z5=zonesOf(pTo);
+          if(k===0){c.faceup=true;Z5.hand.push(c);}
+          else if(k===1){c.faceup=true;Z5.grave.push(c);}
+          else if(k===2){c.faceup=true;Z5.hyper.push(c);}
+          else if(k===3){c.faceup=false;Z5.gr.push(c);}
+          else{c.faceup=false;Z5.deck.unshift(c);}
+          sfx("grave");renderAll();
+          toast(`🚫 ${c.name} は出せなかった（召喚以外）`);
+        })();
+      }
+  }catch(e){}
+}
 function markArrive(c,opt){
   opt=opt||{};
   const _flipOnly=!!opt.flip&&!(()=>{const rF=getReg(c);return rF&&rF.flipAsNew;})();
+  // 🚫 踏み倒しメタ：効果が直接バトルゾーンに置いた場合もここで拾う（裏返りは対象外）
+  if(!opt.flip){
+    try{
+      const _pOwn=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
+      if(_pOwn!=null)queueCheatWatchers(_pOwn,c);
+    }catch(e){}
+  }
   c.dealIdx=null;c._pfAsked=false;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
   // 🔓 封印外し（ドルマゲドンX型）の案内は、S・トリガーの受け札パネルなどで
   //    1秒以上あとに処理されることがある。arrived が消えても取りこぼさないよう印を残す。
@@ -25204,108 +25346,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     }
   }
   if(toZone==="battle"){
-    if(S.expert){
-      const foeN=pTo===0?1:0;
-      // ↩ オニカマス型：相手のターン中、相手が召喚以外で出したクリーチャーを手札に戻してもよい
-      //    （センノーと違い場には出るので、出た時の効果は先に誘発する）
-      {
-        // ↩ 発動条件は2つとも必須：
-        //   ① 出たクリーチャーが「相手（＝オニカマスの持ち主から見た相手）」のもの＝ zonesOf(pTo) に出た
-        //   ② その相手のターン中である＝ S.who===pTo（オニカマスの持ち主はターンプレイヤーではない）
-        //   さらに、出たカード自身がオニカマスだった場合に自分で反応しないよう id で除外する
-        const kamasu=(S.vs&&S.who===pTo)
-          ? zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return x.id!==c.id&&rx&&rx.stBounceCheat&&!isSealed(x)&&!isIgnored(x,foeN);})
-          : null;
-        const rNew=getReg(c);
-        if(kamasu&&rNew&&isCreatureReg(rNew)&&!c._kamasuChk){
-          c._kamasuChk=true;
-          // ⏱ APNAP：オニカマスの持ち主はターンプレイヤーではないので、
-          //    出したクリーチャーの「出た時」が先に解決される。効果キューが空くまで待ってから確認する。
-          const _kid=kamasu.id;
-          enqueueWatchJob(async()=>{
-            c._kamasuChk=false;
-            const live=zonesOf(foeN).battle.find(x=>x.id===_kid&&!isSealed(x)&&!isIgnored(x,foeN));
-            if(!live)return;                                   // 出た時の効果でオニカマスが離れていたら発動しない
-            if(!zonesOf(pTo).battle.some(x=>x.id===c.id))return; // 出たクリーチャーが既に場を離れていたら何もしない
-            const j=await askChoice(`↩ ${S.players[foeN].label} の《${faceNameOf(live)}》\n（相手のターン中・相手が召喚以外で出したクリーチャーだけが対象）\n\n${S.players[pTo].label} が出した《${faceNameOf(c)}》は【召喚】でしたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝そのまま。侵略・革命チェンジ・蘇生・トリガー出しは召喚以外）`,
-              ["召喚で出した（そのまま）","召喚以外だった → 手札に戻す","召喚以外だが戻さない"]);
-            if(j!==1)return;
-            const ZB=zonesOf(pTo);
-            const bi=ZB.battle.findIndex(x=>x.id===c.id);
-            if(bi<0)return;
-            snap();
-            leaveBattleCleanup(ZB,c,"hand"); // 装備・封印・重なっていたカードを整理
-            ZB.battle.splice(bi,1);
-            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.faceup=true;c.mark=false;
-            if(typeof toHand==="function")toHand(ZB,c);else ZB.hand.push(c);
-            sfx("move");renderAll();
-            toast(`↩ ${faceNameOf(live)}：${faceNameOf(c)} を手札に戻した`);
-            logOnly(`↩ ${S.players[foeN].label} の《${faceNameOf(live)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》を手札へ（召喚以外で出たため）`);
-          });
-        }
-      }
-      // 🌱 フォーエバー・プリンセス型：相手がコストを支払わずに出したクリーチャーを持ち主のマナゾーンへ。
-      //    オニカマス型と同じ流れだが、相手のターン中に限らず、行き先がマナになる。
-      {
-        const prin=(S.vs&&pTo!==foeN)
-          ? zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return x.id!==c.id&&rx&&rx.stManaCheat&&!isSealed(x)&&!isIgnored(x,foeN);})
-          : null;
-        const rNew2=getReg(c);
-        if(prin&&rNew2&&isCreatureReg(rNew2)&&!c._prinChk){
-          c._prinChk=true;
-          const _pid=prin.id;
-          enqueueWatchJob(async()=>{
-            c._prinChk=false;
-            const live=zonesOf(foeN).battle.find(x=>x.id===_pid&&!isSealed(x)&&!isIgnored(x,foeN));
-            if(!live)return;
-            if(!zonesOf(pTo).battle.some(x=>x.id===c.id))return;
-            const j=await askChoice(`🌱 ${S.players[foeN].label} の《${faceNameOf(live)}》\n\n${S.players[pTo].label} が出した《${faceNameOf(c)}》は【コストを支払って】出しましたか？\n（支払わずに出したなら持ち主のマナゾーンに置きます）`,
-              ["コストを支払った（そのまま）","コストを支払わずに出した → マナゾーンへ"]);
-            if(j!==1)return;
-            const ZB2=zonesOf(pTo);
-            const bi2=ZB2.battle.findIndex(x=>x.id===c.id);
-            if(bi2<0)return;
-            snap();
-            leaveBattleCleanup(ZB2,c,"mana");
-            ZB2.battle.splice(bi2,1);
-            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.faceup=true;c.mark=false;
-            ZB2.mana.push(c);
-            sfx("move");renderAll();
-            toast(`🌱 ${faceNameOf(live)}：${faceNameOf(c)} を持ち主のマナゾーンへ`);
-            logOnly(`🌱 ${S.players[foeN].label} の《${faceNameOf(live)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》をマナゾーンへ（コストを支払わずに出たため）`);
-          });
-        }
-      }
-      // 💥 踏み倒しメタ（マグナム／ギルザウルス）：確認を出したうえで判定する
-      queueCheatMeta(pTo,c,false);
-      const noCheat=zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoCheat&&!isSealed(x);});
-      if(noCheat&&!c._noCheatChk){
-        c._noCheatChk=true;
-        (async()=>{
-          const j=await askChoice(`🚫 ${faceNameOf(noCheat)}：相手は召喚以外でクリーチャーを出せない\n《${c.name}》は【召喚】で出しましたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝OK。侵略・革命チェンジ・蘇生・トリガー出しは不可）`,
-            ["召喚で出した（そのまま）","召喚以外（出せない→戻す）"]);
-          c._noCheatChk=false;
-          if(j!==1)return;
-          const ZB5=zonesOf(pTo).battle;
-          const bi5=ZB5.findIndex(x=>x.id===c.id);
-          if(bi5<0)return;
-          snap();
-          const k=await askChoice(`《${c.name}》の戻し先を選択（出す前の場所へ）`,
-            ["手札へ","墓地へ","超次元へ","GRゾーンの下へ","山札の上へ"]);
-          if(k===null)return;
-          ZB5.splice(bi5,1);
-          c.tapped=false;
-          const Z5=zonesOf(pTo);
-          if(k===0){c.faceup=true;Z5.hand.push(c);}
-          else if(k===1){c.faceup=true;Z5.grave.push(c);}
-          else if(k===2){c.faceup=true;Z5.hyper.push(c);}
-          else if(k===3){c.faceup=false;Z5.gr.push(c);}
-          else{c.faceup=false;Z5.deck.unshift(c);}
-          sfx("grave");renderAll();
-          toast(`🚫 ${c.name} は出せなかった（召喚以外）`);
-        })();
-      }
-    }
+    queueCheatWatchers(pTo,c);   // 🚫 踏み倒しメタ（オニカマス／フォーエバー・プリンセス／マグナム／センノー）
     if(S.expert&&!c._viaMadness){
       // 🔒 出る時の置換ロック：共通関数へ集約（v10.23）。同期置換（ヤドック型・コスト判明時）は以降の処理を中断
       const _rep=applyEnterReplacement(pTo,c,"sync");
@@ -33408,6 +33449,14 @@ async function startCustom(withShields){
 }
 
 /* ================= bars ================= */
+$("stPick0").addEventListener("click",()=>openDeckPick("stDeck0","🃏 自分のデッキを選ぶ"));
+$("stPick1").addEventListener("click",()=>openDeckPick("stDeck1","🃏 相手のデッキを選ぶ"));
+$("dpClose").addEventListener("click",()=>$("deckPickOlay").classList.remove("open"));
+$("dpNone").addEventListener("click",()=>{
+  const sel=$(DP_TARGET);
+  if(sel){sel.value="";sel.dispatchEvent(new Event("change"));}
+  $("deckPickOlay").classList.remove("open");
+});
 $("btnStart").addEventListener("click",async ()=>{
   const names=await deckNames();
   if(!S.players[0].mainList.length&&!names.length){openDeckPanel();toast("先にデッキを登録してください");return;}
@@ -33443,6 +33492,74 @@ async function fillStartDecks(){
       sel.appendChild(o);
     }
   }
+}
+/* 🃏 デッキ一覧から選ぶ（デュエプレのデッキ一覧に近い見た目）。
+   キーカード＝メインデッキで最もコストの大きいカード（同じなら枚数の多いほう）の画像を使う。 */
+const CIV_DOT={light:"#fde68a",water:"#7dd3fc",dark:"#a78bfa",fire:"#fca5a5",nature:"#86efac",zero:"#e5e7eb"};
+async function deckPickCards(){
+  const names=await deckNames();
+  const out=[];
+  for(const n of names){
+    let d=null;
+    try{d=await getDeck(n);}catch(e){}
+    const main=(d&&d.main)||[];
+    let total=0,key=null,keyCost=-1,keyCnt=0;
+    const civs=new Set();
+    for(const it of main){
+      const cnt=+it.count||0;total+=cnt;
+      const r=FXDB.get(normName(it.name));
+      if(r&&r.civs)r.civs.forEach(v=>civs.add(v));
+      const cost=(r&&r.cost!=null&&!isNaN(+r.cost))?+r.cost:-1;
+      if(cost>keyCost||(cost===keyCost&&cnt>keyCnt)){key=it.name;keyCost=cost;keyCnt=cnt;}
+    }
+    if(!key&&main.length)key=main[0].name;
+    out.push({name:n,key,total,civs:[...civs],
+      gr:((d&&d.gr)||[]).reduce((a,x)=>a+(+x.count||0),0),
+      hy:((d&&d.hy)||[]).reduce((a,x)=>a+(+x.count||0),0)});
+  }
+  return out;
+}
+let DP_TARGET=null;
+async function openDeckPick(selId,title){
+  DP_TARGET=selId;
+  const t=$("dpTitle");if(t)t.textContent=title||"🃏 デッキを選ぶ";
+  const grid=$("dpGrid");
+  grid.innerHTML="<div class='hint' style='grid-column:1/-1'>読み込み中…</div>";
+  $("dpSearch").value="";
+  $("deckPickOlay").classList.add("open");
+  const list=await deckPickCards();
+  const cur=$(selId)?$(selId).value:"";
+  const draw=(q)=>{
+    grid.innerHTML="";
+    const arr=list.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase()));
+    if(!arr.length){grid.innerHTML="<div class='hint' style='grid-column:1/-1'>デッキがありません</div>";return;}
+    for(const dk of arr){
+      const el=document.createElement("div");
+      el.className="dpCard"+(dk.name===cur?" cur":"");
+      const art=document.createElement("div");art.className="dpArt";
+      const url=dk.key?imgURL.get(normName(dk.key)):null;
+      if(url){const im=document.createElement("img");im.src=url;im.loading="lazy";im.decoding="async";im.draggable=false;art.appendChild(im);}
+      else{const p2=document.createElement("div");p2.className="dpNo";p2.textContent=dk.key||"画像なし";art.appendChild(p2);}
+      el.appendChild(art);
+      const nm=document.createElement("div");nm.className="dpName";nm.textContent=dk.name;el.appendChild(nm);
+      const sub=document.createElement("div");sub.className="dpSub";
+      const civ=document.createElement("span");
+      civ.innerHTML=dk.civs.map(v=>`<i class="dpCiv" style="background:${CIV_DOT[v]||"#94a3b8"}"></i>`).join("")||"";
+      sub.appendChild(civ);
+      const cnt=document.createElement("span");
+      cnt.textContent=`${dk.total}枚${dk.gr?`／GR${dk.gr}`:""}${dk.hy?`／超次元${dk.hy}`:""}`;
+      sub.appendChild(cnt);
+      el.appendChild(sub);
+      el.addEventListener("click",()=>{
+        const sel=$(DP_TARGET);
+        if(sel){sel.value=dk.name;sel.dispatchEvent(new Event("change"));}
+        $("deckPickOlay").classList.remove("open");
+      });
+      grid.appendChild(el);
+    }
+  };
+  draw("");
+  $("dpSearch").oninput=()=>draw($("dpSearch").value.trim());
 }
 async function openStartOlay(){
   await fillStartDecks();
