@@ -801,7 +801,19 @@ body.shake{animation:bodyShake .4s ease-out}
 #bGrid.bg-tiny .vcard .vname{font-size:7.5px;-webkit-line-clamp:1}
 #bGrid.bg-tiny .vcard .cnt{font-size:9px;padding:0 2px;min-width:12px}
 #bGrid.bg-micro .vcard .vname{display:none}
-.dl-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:6px;background:#0f1524}
+.dl-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;margin-top:8px;align-content:start}
+.dl-item{min-width:0}
+.dl-item.open{grid-column:1/-1}
+.dl-item .dl-name.dpCard{width:100%}
+.dl-item.open .dl-name.dpCard{border-color:var(--accent)}
+.dl-open{display:none;border:1px solid var(--line);border-top:none;border-radius:0 0 12px 12px;
+  padding:10px;background:#0f1524;margin-top:-6px}
+.dl-item.open .dl-open{display:block}
+.dl-item.open .dl-name.dpCard{border-radius:12px 12px 0 0}
+.dl-pack-cb{position:absolute;top:8px;left:8px;width:22px;height:22px;accent-color:var(--accent);z-index:4}
+@media (max-width:760px){
+  .dl-tiles{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+}
 /* 📁 デッキのフォルダ移動（つかんで運ぶ） */
 .dl-grip{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-right:6px;
   border-radius:6px;border:1px solid var(--line);background:#141c2e;color:var(--muted);
@@ -815,16 +827,8 @@ body.shake{animation:bodyShake .4s ease-out}
 #dlGhost{position:fixed;z-index:9999;pointer-events:none;padding:6px 10px;border-radius:8px;
   border:1px solid var(--accent);background:rgba(15,21,36,.96);color:var(--accent);
   font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.6);white-space:nowrap}
-.dl-item .dl-name{font-weight:800;color:var(--accent);cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px}
-.dl-thumb{width:74px;height:52px;object-fit:cover;object-position:50% 22%;border-radius:8px;
-  border:1px solid var(--line);flex:0 0 auto;background:#141a27}
 .dl-more{margin-top:4px;padding-top:6px;border-top:1px dashed var(--line)}
-@media (max-width:760px){
-  .dl-thumb{width:56px;height:40px}
-  .dl-item .dl-name{font-size:13px;gap:6px}
-}
-.dl-grid{display:none;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px;margin-top:8px}
-.dl-item.open .dl-grid{display:grid}
+.dl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px;margin-bottom:8px}
 
 .fxrow{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin-top:8px;padding:8px;background:#0e1420;border:1px solid var(--line);border-radius:10px}
 .fxrow .fxr-top{display:flex;gap:6px;align-items:center;width:100%;flex-wrap:wrap}
@@ -3906,7 +3910,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.13";
+const APP_VER="v13.14";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -35025,6 +35029,7 @@ async function renderDeckList(){
   const folders=[...groups.keys()].sort((a,b)=>(a||"～～").localeCompare(b||"～～","ja"));
   for(const folder of folders){
     let container=body;
+    let tiles=null;
     if(folder){
       const det=document.createElement("details");
       det.open=!!q;
@@ -35052,22 +35057,17 @@ async function renderDeckList(){
       body.appendChild(det);
       container=det;
     }
+    // 🧱 タイルを並べる箱（フォルダごと・フォルダ無しのぶんも1つ作る）
+    tiles=document.createElement("div");tiles.className="dl-tiles";
+    container.appendChild(tiles);
+    container=tiles;
   for(const [n,d] of groups.get(folder)){
     const item=document.createElement("div");item.className="dl-item";
-    const nm=document.createElement("div");nm.className="dl-name";
     const dispN=folder?n.slice(folder.length+1):n;
-    if(!DL_PACK_MODE){
-      // ⠿ つかんでフォルダの見出しに落とすと移動できる
-      const grip=document.createElement("span");
-      grip.className="dl-grip";
-      grip.textContent="⠿";
-      grip.title="つかんでフォルダの見出しに落とすと、そのフォルダへ移動します";
-      grip.addEventListener("click",e=>{e.stopPropagation();});
-      dlAttachDrag(grip,n);
-      nm.appendChild(grip);
-    }
+    // 🖼 タイル：対戦開始のデッキ選択と同じ見た目（絵を背景に、名前と枚数を下に重ねる）
+    const nm=document.createElement("div");nm.className="dl-name dpCard";
     {
-      // 🖼 サムネイル：表紙 → 画像が登録されているカードのうち最もコストが大きいもの
+      // 表紙 → 画像が登録されているカードのうち最もコストが大きいもの
       let ck=(d.cover&&imgURL.has(d.cover))?d.cover:null;
       if(!ck){
         let best=null,bestCost=-1;
@@ -35080,29 +35080,47 @@ async function renderDeckList(){
         }
         ck=best;
       }
-      if(ck){
-        const th=document.createElement("img");
-        th.src=imgURL.get(ck);
-        th.className="dl-thumb";
-        nm.appendChild(th);
-      }
+      if(ck)nm.style.backgroundImage=`url("${imgURL.get(ck)}")`;
     }
+    const civs=new Set();
+    for(const it of (d.main||[])){const r2=FXDB.get(normName(it.name));if(r2&&r2.civs)r2.civs.forEach(v=>civs.add(v));}
     const label=`${dispN}（${listTotal(d.main)}枚${listTotal(d.gr||[])?` +GR${listTotal(d.gr)}`:""}${listTotal(d.hy||[])?` +超次元${listTotal(d.hy)}`:""}${listTotal(d.sp||[])?` +特殊${listTotal(d.sp)}`:""}）`;
-    const nmTxt=document.createElement("span");
-    nmTxt.textContent="▸ "+label;
-    // 📤 まとめて渡すモード：チェックボックスを表示し、行タップで選択トグル（展開はしない）
+    const cap=document.createElement("div");cap.className="dpCap";
+    const nmTxt=document.createElement("div");nmTxt.className="dpName";
+    nmTxt.textContent="▸ "+dispN;
+    cap.appendChild(nmTxt);
+    {
+      const sub=document.createElement("div");sub.className="dpSub";
+      const dots=[...civs].map(v=>`<i class="dpCiv" style="background:${CIV_DOT[v]||"#94a3b8"}"></i>`).join("");
+      sub.innerHTML=dots+(dots?"&nbsp;&nbsp;":"")+`<span class="dpCnt"></span>`;
+      sub.querySelector(".dpCnt").textContent=`${listTotal(d.main)}枚${listTotal(d.gr||[])?`／GR${listTotal(d.gr)}`:""}${listTotal(d.hy||[])?`／超次元${listTotal(d.hy)}`:""}${listTotal(d.sp||[])?`／特殊${listTotal(d.sp)}`:""}`;
+      cap.appendChild(sub);
+    }
+    nm.appendChild(cap);
+    nm.title=dispN;
+    if(!DL_PACK_MODE){
+      // ⠿ つかんでフォルダの見出しに落とすと移動できる
+      const tools=document.createElement("div");tools.className="dpTools";
+      const grip=document.createElement("span");
+      grip.className="dl-grip";
+      grip.textContent="⠿";
+      grip.title="つかんでフォルダの見出しに落とすと、そのフォルダへ移動します";
+      grip.addEventListener("click",e=>{e.stopPropagation();});
+      dlAttachDrag(grip,n);
+      tools.appendChild(grip);
+      nm.appendChild(tools);
+    }
+    // 📤 まとめて渡すモード：チェックだけ出して、展開はしない
     if(DL_PACK_MODE){
       const cb=document.createElement("input");
       cb.type="checkbox";cb.checked=DL_PACK_SEL.has(n);
-      cb.style.cssText="width:18px;height:18px;margin-right:8px;vertical-align:middle;accent-color:var(--accent)";
+      cb.className="dl-pack-cb";
       cb.addEventListener("click",e=>{
         e.stopPropagation();
         if(cb.checked)DL_PACK_SEL.add(n);else DL_PACK_SEL.delete(n);
         const cnt=$("dlPackCount");if(cnt)cnt.textContent=`${DL_PACK_SEL.size}個 選択中`;
       });
       nm.appendChild(cb);
-      nm.appendChild(nmTxt);
-      nm.style.cursor="pointer";
       nm.addEventListener("click",()=>{
         cb.checked=!cb.checked;
         if(cb.checked)DL_PACK_SEL.add(n);else DL_PACK_SEL.delete(n);
@@ -35112,19 +35130,17 @@ async function renderDeckList(){
       container.appendChild(item);
       continue;
     }
-    nm.appendChild(nmTxt);
     nm.addEventListener("click",()=>{
       const willOpen=!item.classList.contains("open");
-      // 📂 一度に1つだけ開く：他の開いているデッキは閉じる（一覧が伸びて探しづらくなるのを防止）
+      // 📂 一度に1つだけ開く：一覧が伸びて探しづらくなるのを防ぐ
       if(willOpen){
         $("dlBody").querySelectorAll(".dl-item.open").forEach(it=>{
-          if(it!==item){it.classList.remove("open");const t=it.querySelector(".dl-name span");if(t&&t.textContent)t.textContent=t.textContent.replace(/^▾ /,"▸ ");}
+          if(it!==item){it.classList.remove("open");const t=it.querySelector(".dpName");if(t&&t.textContent)t.textContent=t.textContent.replace(/^▾ /,"▸ ");}
         });
       }
       item.classList.toggle("open");
-      nmTxt.textContent=(item.classList.contains("open")?"▾ ":"▸ ")+label;
-      // 開いたデッキのヘッダーが画面上部に来るようスクロール（カードリストがすぐ見える）
-      if(item.classList.contains("open"))setTimeout(()=>{try{item.scrollIntoView({block:"start",behavior:"smooth"});}catch(e){item.scrollIntoView();}},30);
+      nmTxt.textContent=(item.classList.contains("open")?"▾ ":"▸ ")+dispN;
+      if(item.classList.contains("open"))setTimeout(()=>{try{if(item.scrollIntoView)item.scrollIntoView({block:"start",behavior:"smooth"});}catch(e){}},30);
     });
     const grid=document.createElement("div");grid.className="dl-grid";
     const addCards=list=>{for(const e of list){
@@ -35159,15 +35175,9 @@ async function renderDeckList(){
     const bCover=actBtn("🖼 表紙",()=>pickDeckCover(n,()=>renderDeckList()),"",true);
     // 🎛 よく使う3つ（自分で使用／相手で使用／編成）だけ出して、残りは「⋯ その他」に畳む。
     //    ボタンが9個並ぶとデッキ名より目立ってしまうため。
+    // 🎛 よく使う3つを上の行に、残りは下の行に分ける（展開した時だけ出るので畳まない）
     const more=document.createElement("div");
     more.className="row dl-more";
-    more.style.display="none";
-    const bMore=actBtn("⋯ その他",()=>{
-      const willOpen=more.style.display==="none";
-      more.style.display=willOpen?"":"none";
-      bMore.textContent=willOpen?"✕ 閉じる":"⋯ その他";
-    },"",true);
-    row.appendChild(bMore);
     more.appendChild(bCover);
     more.appendChild(actBtn("📁移動",async ()=>{
       const base=n.includes("/")?n.slice(n.indexOf("/")+1):n;
@@ -35220,7 +35230,9 @@ async function renderDeckList(){
       toast(`「${n}」を削除しました`);
       renderDeckList();
     },"warn",true));
-    item.appendChild(nm);item.appendChild(grid);item.appendChild(row);item.appendChild(more);
+    const openBox=document.createElement("div");openBox.className="dl-open";
+    openBox.appendChild(grid);openBox.appendChild(row);openBox.appendChild(more);
+    item.appendChild(nm);item.appendChild(openBox);
     container.appendChild(item);
   }
   }
