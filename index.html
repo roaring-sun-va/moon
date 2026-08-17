@@ -805,6 +805,10 @@ body.shake{animation:bodyShake .4s ease-out}
 #bFolds>details{flex:0 0 auto;margin:2px 0!important}
 #bFolds>details[open]{flex:1 0 100%}
 #bFolds>details>summary{white-space:nowrap}
+#bFilterBox[open]{padding:8px 10px 10px;border:1px solid var(--line);border-radius:10px;background:#101725}
+#bFilterBox[open]>summary{margin-bottom:8px}
+#bFilterBox[open]>.row{margin:8px 0 0!important;gap:8px!important;align-items:center}
+#bTypeFilter{min-height:34px}
 /* 📏 デッキ編成：カードを小さく並べた時の詰めた表示 */
 #bGrid.bg-small .vcard .vname{font-size:8px;line-height:1.15;-webkit-line-clamp:2;margin-top:1px}
 #bGrid.bg-small .vcard .cnt{font-size:10px;padding:0 3px;min-width:14px}
@@ -1553,7 +1557,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="hint" style="margin:4px 0 0">タップで＋1（⌘/Ctrl＋タップで−1）。上限（4枚／超GR2枚）に達した状態でタップすると「制限なしカード」として5枚以上も指定できます。ゲーム外タブはタップで枚数を直接入力。特殊カード（禁断など）はテキスト欄に直接入力してください。</div>
     </details>
     <details id="bFilterBox" style="margin:2px 0">
-      <summary id="bFilterSum" style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">🔎 絞り込み（タイプ・文明・採用中）</summary>
+      <summary id="bFilterSum" style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">🔎 絞り込み（タイプ・文明・コスト・採用中）</summary>
     <div class="row">
       <select id="bTypeFilter" style="width:auto;flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px;font-size:12px">
         <option value="">全タイプ</option>
@@ -1580,6 +1584,8 @@ body.shake{animation:bodyShake .4s ease-out}
       </select>
     </div>
     <div class="row" id="bCivBar" style="gap:5px;flex-wrap:wrap;margin-top:-4px"></div>
+    <div class="row" id="bCostBar" style="gap:5px;flex-wrap:wrap;margin-top:-4px"></div>
+    <div class="row" id="bOptionBar" style="gap:5px;flex-wrap:wrap;margin-top:-4px"></div>
     </details>
     <details id="bSummaryBox" style="margin:2px 0">
       <summary style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">📊 内訳（文明・種類・防御）</summary>
@@ -2130,6 +2136,8 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="pw">パワー＋n</option>
           <option value="break">ブレイク数＋n</option>
         </select>
+        <label title="指定したシールドがある間だけブロッカーを得ます（不滅の精霊パーフェクト・ギャラクシー型）"><input type="checkbox" id="fxSForceBlocker"> シールド・フォース有効中はブロッカー</label>
+        <label title="シールド・フォースの効果を、このクリーチャーだけでなく自分のクリーチャー全体に与えます（叡智のW インビンシブル・ギャラクシー型）"><input type="checkbox" id="fxSForceAll"> S・フォースの効果を味方全体へ</label>
         <input type="number" id="fxSForceN" style="width:80px" placeholder="n" min="0">
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span style="font-size:12px;font-weight:700">条件付き常在</span>
@@ -3952,7 +3960,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.20";
+const APP_VER="v13.23";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4058,6 +4066,20 @@ let CUR_ATTACKER=null;   // 現在攻撃中のクリーチャーID（allyAtkのa
 let HILITE_ID=null;      // 一時ハイライト表示するカードID（メテオバーンでどのカードか強調する等）
 let LAST_ARRIVED=null; // 直近にバトルゾーンへ出たカード（allyEnter誘発の対象判定に使う）
 /* 🛡 シールド・フォース／シールド・プラスの盾指定（到着時共通・markArriveから全経路で呼ばれる） */
+/* 🛡✨ 「シールド・フォースの効果を自分のクリーチャー全体に与える」型の付与元を探す。
+   登録の「S・フォースの効果を味方全体へ」（sforceAll）が入っていて、指定した盾が生きている間だけ働く。 */
+function sforceAllSrc(pi,kind){
+  try{
+    for(const b of zonesOf(pi).battle){
+      const rb=getReg(b);
+      if(!rb||!rb.sforceAll||!b.sfActive)continue;
+      if(kind&&rb.sforceFx!==kind)continue;
+      if(isSealed(b)||isIgnored(b,pi))continue;
+      return b;
+    }
+  }catch(e){}
+  return null;
+}
 function askShieldForcePlus(pTo,c,reg){
   if(reg.sforce&&!c.sfActive){
     (async()=>{
@@ -4068,6 +4090,7 @@ function askShieldForcePlus(pTo,c,reg){
       if(j===null)return;
       Z2.shield[j].sfMark=faceNameOf(c);
       Z2.shield[j].sfBy=c.id;
+      Z2.shield[j].mark=false;
       c.sfActive=true;
       toast(`🛡 シールド・フォース：盾${j+1}を指定（この盾がある間、能力有効${reg.sforceFx?`：${{noLeave:"⚓離れない",noDestroy:"🪨破壊されない"}[reg.sforceFx]}`:""}）`);
       renderAll();
@@ -4100,6 +4123,8 @@ function cantLeaveBattle(pi,c,quiet){
   if(c.buff&&c.buff.noLeave){if(!quiet)toast(`⚓ ${faceNameOf(c)} はこのターン離れない！`);return true;}
   if(!IGN&&r&&r.cstCond&&r.cstFx==="noLeave"&&zoneCondOk(r.cstCond,pi,c)){if(!quiet)toast(`✨ 条件常在（${r.cstCond}）：${faceNameOf(c)} は離れない！`);return true;}
   if(!IGN&&c.sfActive&&r&&r.sforceFx==="noLeave"){if(!quiet)toast(`⚓✨ シールド・フォース有効中：${faceNameOf(c)} は離れない！`);return true;}
+  // 🛡✨ シールド・フォースの効果を「自分のクリーチャー全体」に配る型（叡智のW インビンシブル・ギャラクシー）
+  if(!IGN){const src=sforceAllSrc(pi,"noLeave");if(src){if(!quiet)toast(`⚓✨ シールド・フォース（${faceNameOf(src)}）：${faceNameOf(c)} は離れない！`);return true;}}
   if(!IGN&&r&&r.gimmick==="complex"&&(c.under?c.under.length:0)<(r.complexArc?7:8)){if(!quiet)toast(`⬛ ${faceNameOf(c)} は離れない！（下が${r.complexArc?6:7}枚以下）`);return true;}
   const _stayBuff=!!(c.buff&&c.buff.stayIfPow);
   const _stayReg=!!(!IGN&&r&&r.cstFx==="stayPow"&&(!r.cstCond||zoneCondOk(r.cstCond,pi,c)));
@@ -4511,6 +4536,29 @@ function applyManaTapIn(pTo,c){
     toast(`⚙ 常在効果：マナはタップして置かれる（${faceNameOf(c)}）`);
     return true;
   }catch(e){return false;}
+}
+/* 🧹 バトルゾーンの外にあるカードに一時的な付与（パワー修正・フリーズ等）が残っていたら消す。
+   カードに登録した効果が直接ゾーンを動かす経路は moveCardX を通らないため、そこで掃除が漏れる。
+   HADESの「そのターン−9000」を受けたクリーチャーが手札やマナに戻り、出し直すと−9000のまま
+   出てきてパワー0で破壊されていたのがこれ。moveCardX 側の掃除と二重の守りにする。 */
+function fixStrayBuff(){
+  try{
+    if(!S||!S.players)return;
+    for(const pi of [0,1]){
+      const Z=zonesOf(pi);
+      if(!Z)continue;
+      for(const zk of ["hand","mana","grave","shield","deck","hyper","exile"]){
+        const arr=Z[zk];
+        if(!Array.isArray(arr)||!arr.length)continue;
+        for(const c of arr){
+          if(!c)continue;
+          if(c.buff){c.buff=null;}
+          if(c.frozen)c.frozen=false;
+          if(c.jd)c.jd=false;
+        }
+      }
+    }
+  }catch(e){}
 }
 function fixPsyStray(){
   try{
@@ -5008,7 +5056,7 @@ function momoUntouchable(x){
     try{
       const own=[0,1].find(p=>zonesOf(p)&&zonesOf(p).battle&&zonesOf(p).battle.includes(x));
       const words=String(r.noChooseIfAlly).split(/[／\/、,]/).map(s=>s.trim()).filter(Boolean);
-      if(own!=null&&zonesOf(own).battle.some(a=>a!==x&&!isSealed(a)&&words.some(w=>{const ra=getReg(a);return ra&&raceMatch(ra,w);})))return true;
+      if(own!=null&&zonesOf(own).battle.some(a=>a!==x&&!isSealed(a)&&words.some(w=>{const ra=getReg(a);return ra&&(raceMatch(ra,w)||lockFilterOk(w,ra,a));})))return true;
     }catch(e){}
   }
   // 🔮 相手の呪文の効果で選ぼうとしている時だけ選べない
@@ -7680,7 +7728,7 @@ function runWatchFx(pi,type,trigCard){
   // ☄ 「このクリーチャーが〜」型（自身限定）の誘発は、盤面全体を走査すると
   //    他のクリーチャーが離れた時にも反応してしまう。誘発元が渡されていればその1枚だけを対象にする。
   //    （離れ終わって盤面にいなくても、誘発は離れた時点で確定しているので解決する）
-  const SELF_ONLY_EV=new Set(["selfLeave"]);
+  const SELF_ONLY_EV=new Set(["selfLeave","selfBlock"]);
   const _scan=(SELF_ONLY_EV.has(type)&&trigCard)?[trigCard]
     :((S.gameMode!=="tcg")?[...zonesOf(pi).battle].reverse():zonesOf(pi).battle);
   for(const c of _scan){
@@ -9088,7 +9136,10 @@ const FX_TYPES=[
   ["gachinkoWinToHand","🎲 ガチンコ・ジャッジを行い、勝ったらこの呪文を墓地に置くかわりに手札に戻す（ガチンコ・ルーレット型）"],
   ["foeDeckRecruitByFoe","🚪 自分の山札を見て、条件に合うクリーチャーを『相手に』1体選ばせてバトルゾーンに出す→シャッフル（ミラクルとミステリーの扉型／条件欄で対象指定）"],
   ["handManaRecruit","✋🔷 自分の手札またはマナゾーンから条件に合うクリーチャーをn体選び、バトルゾーンに出す（神聖麒 シューゲイザー型／条件欄＝例：コスト5以下／進化以外）"],
-  ["killThenRecruit","💀 自分のクリーチャーをn体まで破壊し、破壊した数だけ自分の山札または手札から条件に合うクリーチャーを出す→山札をシャッフル（神聖斬 アシッド型／条件欄＝例：コスト8以下／無色。破壊対象を絞るには条件欄に「破壊:タップ中」を先頭に付ける）"],
+  ["killThenRecruit","💀 自分のクリーチャーをn体まで破壊し、破壊した数だけ自分の山札または手札から条件に合うクリーチャーを出す→山札をシャッフル（神聖斬 アシッド型／条件欄＝例：コスト7以下／無色。破壊対象を絞るには条件欄に「破壊:タップ中」を先頭に付ける）"],
+  ["deckToGravePick","🪦 自分の山札を見て、条件に合うカードをn枚選び墓地に置く→山札をシャッフル（邪眼皇ロマノフI世型／条件欄＝例：闇）"],
+  ["graveCastBottom","🔮 自分の墓地から条件に合う呪文を1枚、コストを支払わずに唱える。唱えた後、山札の一番下に置く（邪眼皇ロマノフI世型／条件欄＝例：闇／コスト6以下）"],
+  ["handesPerShield","🗑 自分のシールド1枚につき、相手の手札をランダムにn枚捨てさせる（ソウル・アドバンテージ型／通常n=1）"],
   ["tapToggle","⤵🔄 クリーチャーをn体まで選び、アンタップしていればタップ、タップしていればアンタップする（両者どちらでも・逆転王女プリン型）"],
   ["selfToShield","🛡 この呪文（またはこのカード）自身を裏向きのシールドにする（スローリー・チェーン型）"],
   ["grantTurnAll","✨ そのターン、自分のクリーチャーすべてに能力を与える（条件欄に「スレイヤー」「スピードアタッカー」「破壊時マナ」「ブロッカー」「パワー+3000」などを「／」区切りで・鎧亜の咆哮キリュー・ジルヴェス型）"],
@@ -9097,7 +9148,7 @@ const FX_TYPES=[
   ["foeMaxCostDiscardRevive","🗑 相手の手札から最もコストの大きいカード1枚を捨てさせ、自分の墓地からそのコスト以下のクリーチャー1枚を出してもよい（雷獣ヴォルグ・ティーガー型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["turnEndUntapAll","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn"]);
+const FX_NO_N=new Set(["turnEndUntapAll","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","graveCastBottom"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
@@ -9291,7 +9342,7 @@ function allyGrant(pi,key,exceptId,selfId){
 }
 function dddCivOk(r,Zm){
   const cm={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature","ゼロ":"zero"};
-  const has=cv=>Zm.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);});
+  const has=cv=>Zm.some(m=>manaHasCiv(m,cv));
   if(r.dddCiv==="txt"||r.dddCivTxt){
     const civs=String(r.dddCivTxt||"").split(/[／\/、,]/).map(t=>cm[t.trim()]).filter(Boolean);
     if(civs.length)return civs.every(has);
@@ -9302,6 +9353,14 @@ function dddCivOk(r,Zm){
 }
 /* 🎨 支払う面の必要文明を出す。ツインパクトの下面を選んで払う時は下面の文明を見る。
    ゼロ文明は「文明を持たない」ため要求に数えない（ゼニス・オラクリオン）。 */
+/* 💎 マナ1枚が持つ文明を返す。**裏向きのマナ（水晶チャージャー型）は無色として扱う**ので空にする。 */
+function manaCivsOf(m){
+  if(!m)return [];
+  if(m.faceup===false)return [];      // 裏向き＝無色
+  const rm=getReg(m);
+  return (rm&&Array.isArray(rm.civs))?rm.civs:[];
+}
+function manaHasCiv(m,cv){return manaCivsOf(m).includes(cv);}
 function payCivNeed(r,c,paySide){
   if(!r)return [];
   const twin=!!(r.twin||r.ctype==="twinpact");
@@ -9313,8 +9372,8 @@ function payCivNeed(r,c,paySide){
    効果未登録のマナは文明が分からないので数えられない → その枚数も返して案内に出す。 */
 function payCivCheck(pi,need){
   const un=zonesOf(pi).mana.filter(m=>!m.tapped);
-  const has=cv=>un.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);});
-  const unreg=un.filter(m=>{const rm=getReg(m);return !rm||!rm.civs||!rm.civs.length;}).length;
+  const has=cv=>un.some(m=>manaHasCiv(m,cv));
+  const unreg=un.filter(m=>m.faceup!==false&&(()=>{const rm=getReg(m);return !rm||!rm.civs||!rm.civs.length;})()).length;
   return {need,missing:(need||[]).filter(cv=>!has(cv)),unreg,untapped:un.length};
 }
 /* 💞 シンパシーの登録文字列を読む。「墓地:クリーチャー」のゾーン指定に加えて
@@ -9824,8 +9883,8 @@ async function autoTapCost(pi,c){
   const restMana=()=>Z.mana.filter(m=>!m.tapped&&!payPick.includes(m));
   for(const cv of payCivs){
     if(payPick.length>=payN)break;
-    if(payPick.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}))continue;
-    const hit=restMana().find(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);});
+    if(payPick.some(m=>manaHasCiv(m,cv)))continue;
+    const hit=restMana().find(m=>manaHasCiv(m,cv));
     if(hit)payPick.push(hit);
   }
   for(const m of restMana()){if(payPick.length>=payN)break;payPick.push(m);}
@@ -10142,6 +10201,16 @@ async function destroyCreature(pi,c,opts){
     if(!IGN&&!byZeroPow&&c.sfActive&&rCX&&rCX.sforceFx==="noDestroy"){
       toast(`🪨✨ シールド・フォース有効中：${faceNameOf(c)} は破壊されない！`);
       return;
+    }
+    if(!IGN&&!c.sfActive&&sforceAllSrc(pi,"noLeave")){
+      const _src=sforceAllSrc(pi,"noLeave");
+      toast(`⚓✨ シールド・フォース（${faceNameOf(_src)}）：${faceNameOf(c)} は離れない！`);
+      return true;
+    }
+    if(!IGN&&!c.sfActive&&sforceAllSrc(pi,"noDestroy")){
+      const _src=sforceAllSrc(pi,"noDestroy");
+      toast(`🪨✨ シールド・フォース（${faceNameOf(_src)}）：${faceNameOf(c)} は破壊されない！`);
+      return true;
     }
     if(!IGN&&c.sfActive&&rCX&&rCX.sforceFx==="noLeave"){
       toast(`⚓✨ シールド・フォース有効中：${faceNameOf(c)} は離れない！（パーフェクト・ギャラクシー型）`);
@@ -10601,7 +10670,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
 const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
-  "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck"]);
+  "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
    個々の効果に手を入れず、効果を1件処理し終えたタイミングで印だけ付いている盾を拾って刻む。 */
 function stampShieldSrc(label){
@@ -11496,6 +11565,39 @@ async function runFxList(pi,list,srcCard,inPump){
       LAST_ARRIVED=cc;emitEvent(pi,"summon");enqueueFx(pi,cc);
       await waitFxIdle(inPump);
       renderAll();
+    }else if(f.t==="deckToGravePick"){
+      // 🪦 山札から条件に合うカードを選んで墓地へ（ロマノフI世型）
+      const filt=String(f.cond||"").trim();let moved=0;
+      for(let i=0;i<n;i++){
+        const pool=Z.deck.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x));});
+        if(!pool.length){if(!moved)toast(`🪦 山札に該当カードがありません${filt?`（${filt}）`:""}`);break;}
+        const j=await pickCard(`🪦 山札から墓地に置くカードを選択（${i+1}/${n}枚目${filt?`・${filt}`:""}）`,pool,{hint:"タップで選択"});
+        if(j===null)break;
+        const di=Z.deck.findIndex(x=>x.id===pool[j].id);if(di<0)continue;
+        if(!moved)snap();const cc=Z.deck.splice(di,1)[0];cc.faceup=true;cc.tapped=false;Z.grave.push(cc);moved++;
+        toast(`🪦 ${faceNameOf(cc)} を山札から墓地へ`);await fireToGrave(pi,cc,"deck");
+      }
+      shuffle(Z.deck);if(moved)toast("🔀 山札をシャッフル");sfx("grave");renderAll();
+    }else if(f.t==="graveCastBottom"){
+      // 🔮 墓地の条件付き呪文を無償詠唱し、解決後は山札の下へ（ロマノフI世型）
+      const filt=String(f.cond||"").trim();
+      const pool=Z.grave.filter(x=>{const rx=getReg(x);return rx&&(rx.ctype==="spell"||rx.twin||rx.ctype==="twinpact")&&(!filt||lockFilterOk(filt,rx,x,null,"spell"));});
+      if(!pool.length){toast(`🔮 墓地に唱えられる呪文がありません${filt?`（${filt}）`:""}`);continue;}
+      const j=await pickCard(`🔮 墓地から唱える呪文を選択${filt?`（${filt}）`:""}`,pool,{hint:"タップで選択／キャンセルで唱えない"});
+      if(j===null)continue;
+      const chosen=pool[j],gi=Z.grave.findIndex(x=>x.id===chosen.id);if(gi<0)continue;snap();Z.grave.splice(gi,1);
+      chosen.faceup=true;chosen.tapped=false;chosen._resolveToBottom=true;
+      {const rr=getReg(chosen);if(rr&&rr.twin)chosen.face=1;}
+      Z.resolve.push(chosen);emitEvent(pi,"spell",chosen);scheduleAutoResolve(pi,chosen);enqueueFx(pi,chosen);
+      toast(`🔮 ${faceNameOf(chosen)} を墓地からコストを支払わず唱えた（解決後は山札の下）`);renderAll();
+    }else if(f.t==="handesPerShield"){
+      // 🗑 自分の盾枚数×nのランダムハンデス（ソウル・アドバンテージ型）
+      if(!S.vs){toast("（ソロのためハンデスはスキップ）");continue;}
+      {const hb=handesBlockedBy(op);if(hb){toast(`🛡 ${faceNameOf(hb)}：手札は相手の効果によって捨てられない！`);continue;}}
+      const want=Math.max(0,Z.shield.length*Math.max(1,n)),drop=[];if(want)snap();
+      for(let i=0;i<want&&OZ.hand.length;i++){const cc=OZ.hand.splice(randInt(OZ.hand.length),1)[0];cc.faceup=true;OZ.grave.push(cc);drop.push(cc);bumpEv("handes",pi);afterHandDiscard(op,cc);}
+      if(drop.length){sfx("grave");toast(`🗑 シールド${Z.shield.length}枚 → 相手の手札をランダムに${drop.length}枚捨てた`);}
+      else toast("🗑 相手の手札がありません");renderAll();
     }else if(f.t==="handManaRecruit"){
       // ✋🔷 手札またはマナゾーンから条件に合うクリーチャーを出す（神聖麒 シューゲイザー型）
       const filt=String(f.cond||"").trim();
@@ -16602,7 +16704,7 @@ async function offerKirifudash(pi){
       const untapped=Z.mana.filter(m=>!m.tapped);
       const pickM=[];
       for(const cv of needCivs){
-        const m2=untapped.find(x=>!pickM.includes(x)&&(()=>{const rm=getReg(x);return rm&&rm.civs&&rm.civs.includes(cv);})());
+        const m2=untapped.find(x=>!pickM.includes(x)&&manaHasCiv(x,cv));
         if(m2)pickM.push(m2);
         else toast(`⚠ ${Object.keys(civMapK).find(k=>civMapK[k]===cv)||cv}のアンタップマナが見つかりません（登録の文明で判定・手動で調整可）`);
       }
@@ -16624,6 +16726,10 @@ async function offerKirifudash(pi){
 function resolveOut(Z,o){
   o.faceup=true;o.tapped=false;
   const rg=getReg(o);
+  if(o._resolveToBottom){
+    delete o._resolveToBottom;o.faceup=false;o.seen=false;o.sideways=false;o.rot=0;Z.deck.push(o);
+    return true;
+  }
   if(rg&&rg.charger){
     if(rg.crystalCharger){o.faceup=false;o.seen=false;}
     Z.mana.push(o);return true;
@@ -16668,9 +16774,10 @@ async function scheduleAutoResolve(pi,c){
       &&!($("breakOlay")&&$("breakOlay").classList.contains("open"))
       &&!($("sheet")&&$("sheet").classList.contains("open"))){
       Z.resolve.splice(ix,1);
+      const toBottom=!!c._resolveToBottom;
       const toMana=resolveOut(Z,c);       // 墓地へ（チャージャーはマナ）＋虚無月誘発はresolveOut内
       sfx("grave");
-      toast(toMana?`⚡チャージャー：${faceNameOf(c)} はマナゾーンへ`:`${faceNameOf(c)} の解決が終了（墓地へ）`);
+      toast(toBottom?`${faceNameOf(c)} の解決が終了（山札の下へ）`:toMana?`⚡チャージャー：${faceNameOf(c)} はマナゾーンへ`:`${faceNameOf(c)} の解決が終了（墓地へ）`);
       renderAll();
       return;
     }
@@ -17758,7 +17865,7 @@ async function offerOniEnd(){
       if(!w)return true;
       const need=[...w.matchAll(/光|水|闇|火|自然|ゼロ|無色/g)].map(m=>CIVW[m[0]]);
       if(!need.length)return true;
-      return need.every(cv=>Z.mana.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}));
+      return need.every(cv=>Z.mana.some(m=>manaHasCiv(m,cv)));
     });
     for(const cc of cands){
       const r=getReg(cc);
@@ -19066,6 +19173,7 @@ async function execAttack(pi,id,tg){
   const isBlk=b=>{
     const rb=getReg(b);
     if(rb&&rb.blocker)return true;
+    if(rb&&rb.sforceBlocker&&b.sfActive&&!isSealed(b)&&!isIgnored(b,op))return true;
     if(b.buff&&b.buff.blocker)return true;
     if(gearBlockerOn(b))return true; // ⚙ クロスギアの「ブロッカー」付与
     if(auraBlockerOn(b))return true; // 🛡 常在：味方への「ブロッカー」付与
@@ -19116,6 +19224,8 @@ async function execAttack(pi,id,tg){
       if(typeof mdEv==="function")mdEv("block",op,faceNameOf(defender),{vs:faceNameOf(c)}); // 📊 ブロックの判断を記録
       toast(`⚔ ブロック：《${faceNameOf(defender)}》が《${faceNameOf(c)}》の攻撃をブロック`);
       renderAll();
+      // ⚡ ブロックしたクリーチャー側の誘発（叡智のW インビンシブル・ギャラクシー型）
+      try{await runWatchFx(op,"selfBlock",defender);}catch(e){}
     }else if(typeof mdEv==="function")mdEv("noblock",op,"",{vs:faceNameOf(c)}); // 📊 ブロックしない判断も記録
   }
   if(defender){await doBattle(pi,c,op,defender);await atkEnd();clearPendingAtk();return;} // ⚡ ブロックされても攻撃は終わるので誘発する
@@ -19804,6 +19914,7 @@ const TRIG_EVS=[
   ["anyAtk","どちらのクリーチャーが攻撃する時でも（自分・相手の両方／「1️⃣各ターン1回」と合わせて「各ターン、初めてクリーチャーが攻撃する時」になります）"],
   ["selfAtkC","このクリーチャーがクリーチャーを攻撃する時"],
   ["selfAtkP","このクリーチャーがプレイヤー/盾を攻撃する時"],
+  ["selfBlock","このクリーチャーがブロックした時"],
   ["selfAtkEnd","このクリーチャーの攻撃の終わりに（条件式と組み合わせて「攻撃の後アンタップする」などに）"],
   ["atkC","相手がクリーチャーを攻撃した時"],
   ["atkP","相手がプレイヤーを攻撃した時"],
@@ -20994,6 +21105,8 @@ function renderFxEditor(){
   $("fxGaiash").checked=!!FXEDIT.gaiash;
   $("fxSForce").checked=!!FXEDIT.sforce;
   $("fxSForceFx").value=FXEDIT.sforceFx||"";
+  {const e=$("fxSForceBlocker");if(e)e.checked=!!FXEDIT.sforceBlocker;}
+  {const e=$("fxSForceAll");if(e)e.checked=!!FXEDIT.sforceAll;}
   $("fxSForceN").value=FXEDIT.sforceN||"";
   $("fxCStCond").value=FXEDIT.cstCond||"";
   $("fxCStFx").value=FXEDIT.cstFx||"";
@@ -23142,6 +23255,8 @@ function openFxEditor(key){
     gaiash:cur?!!cur.gaiash:false,
     sforce:cur?!!cur.sforce:false,
     sforceFx:cur&&cur.sforceFx||"",
+    sforceBlocker:cur?!!cur.sforceBlocker:false,
+    sforceAll:cur?!!cur.sforceAll:false,
     sforceN:cur&&cur.sforceN||0,
     cstCond:cur&&cur.cstCond||"",
     cstFx:cur&&cur.cstFx||"",
@@ -23627,6 +23742,8 @@ $("fxSave").addEventListener("click",async ()=>{
     gaiash:$("fxGaiash").checked,
     sforce:$("fxSForce").checked,
     sforceFx:$("fxSForceFx").value||"",
+    sforceBlocker:$("fxSForceBlocker")?$("fxSForceBlocker").checked:false,
+    sforceAll:$("fxSForceAll")?$("fxSForceAll").checked:false,
     sforceN:+$("fxSForceN").value||0,
     cstCond:$("fxCStCond").value.trim(),
     cstFx:$("fxCStFx").value||"",
@@ -24167,7 +24284,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.noLose)attrs.push(v.noLoseCond?`ゲームに負けない（条件：${v.noLoseCond}）`:"ゲームに負けない");
     if(v.soulshift)attrs.push("ソウルシフト");
     if(v.gaiash)attrs.push("相手ターン終了時に出せる");
-    if(v.sforce)attrs.push("シールド・フォース"+(v.sforceFx?`（${{noLeave:"離れない",noDestroy:"破壊されない"}[v.sforceFx]}）`:""));
+    if(v.sforce)attrs.push("シールド・フォース"+(v.sforceFx||v.sforceBlocker?`（${[v.sforceFx?({noLeave:"離れない",noDestroy:"破壊されない",pw:"パワー修正",break:"ブレイク数修正"}[v.sforceFx]):"",v.sforceBlocker?"ブロッカー":""].filter(Boolean).join("・")}）`:""));
     if(v.cstCond)attrs.push(`条件常在：${v.cstCond}→${{noLeave:"離れない",noDestroy:"破壊されない",stayPow:"パワー0超でとどまる",sa:"SA",unblock:"ブロックされない",blocker:"ブロッカー",slayer:"スレイヤー"}[v.cstFx]||"表示"}`);
     else if(v.cstFx==="stayPow")attrs.push("⚓常在：離れる時パワー0超ならとどまる");
     if(v.splus)attrs.push(["","シールド・プラス","スーパー・S・プラス","ウルトラ・S・プラス"][v.splus]||`S・プラス${v.splus}`);
@@ -25034,6 +25151,8 @@ function applyEnterReplacement(pTo,c,mode){
     if(!filt)return true;
     const toksR=String(filt).split(/[／\/、,]/).map(x=>x.trim()).filter(Boolean);
     return toksR.some(tk=>{
+      const mNot=tk.match(/^(光|水|闇|火|自然|ゼロ)(?:文明)?以外$/);
+      if(mNot){const cv=civMapR[mNot[1]];return !(rIn&&rIn.civs&&rIn.civs.includes(cv));}
       const mRc=tk.match(/^種族[:：](.+)$/); // 🧬 種族のみで判定（名前は見ない）
       if(mRc)return !!(rIn&&raceMatch(rIn,mRc[1]));
       if(tk==="多色")return rIn&&rIn.civs&&rIn.civs.length>=2;
@@ -25596,6 +25715,10 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     {
       const rCX2=getReg(c);
       const _stayBuff=!!(c.buff&&c.buff.stayIfPow);
+      if(!isIgnored(c,pFrom)&&!c.sfActive){
+        const _sfa=sforceAllSrc(pFrom,"noLeave");
+        if(_sfa){toast(`⚓✨ シールド・フォース（${faceNameOf(_sfa)}）：${faceNameOf(c)} は離れない！`);return true;}
+      }
       const _stayReg=!!(rCX2&&rCX2.cstFx==="stayPow"&&!isIgnored(c,pFrom)&&(!rCX2.cstCond||zoneCondOk(rCX2.cstCond,pFrom,c)));
       if(S.expert&&(_stayBuff||_stayReg)){
         const pw=(typeof powNow==="function")?powNow(c):null;
@@ -26635,6 +26758,17 @@ function cardEl(pi,zone,c){
   const el=document.createElement("div");
   el.className="card";
   if(HILITE_ID&&c.id===HILITE_ID){el.style.outline="4px solid #ffcf3a";el.style.outlineOffset="1px";el.style.boxShadow="0 0 18px 5px rgba(255,207,58,.8)";el.style.zIndex="30";}
+  // 🛡✨ シールド・フォースで指定されている盾は水色の枠で示す（オレンジは他の印で使っている）
+  if(zone==="shield"&&c.sfMark){
+    el.style.outline="3px solid #38bdf8";
+    el.style.outlineOffset="1px";
+    el.style.boxShadow="0 0 12px 2px rgba(56,189,248,.7)";
+    el.title=`🛡✨ シールド・フォース：${c.sfMark} が指定している盾`;
+    const tg=document.createElement("span");
+    tg.style.cssText="position:absolute;top:1px;left:1px;background:#0b3b52;color:#7dd3fc;font-size:9px;font-weight:900;padding:0 4px;border-radius:5px;z-index:7;border:1px solid #38bdf8;pointer-events:none";
+    tg.textContent="🛡✨";
+    el.appendChild(tg);
+  }
   const showBLab=!(zone==="battle"&&S.battleLabels===false); // バトルのラベル/タグ表示
   const showBBtn=!(zone==="battle"&&S.battleBtns===false);    // バトルの操作ボタン表示
   let hidden=(S.vs&&S.hideOpp&&pi!==(S.seat|0)&&zone==="hand");
@@ -27259,6 +27393,8 @@ function renderPlayer(pi){
     const bparts=[];
     if(faceUp)bparts.push(`表${faceUp}`);
     if(seenCnt)bparts.push(`👁${seenCnt}`);
+    // 🛡✨ シールド・フォースで指定されている盾があることを示す（何番目かは「盾を確認」で分かる）
+    {const sfN=Z.shield.filter(s=>s.sfMark).length;if(sfN)bparts.push(`🛡✨${sfN}`);}
     const sp=pileEl({n:Z.shield.length,label:"盾",dz:"shield",cls:"shieldpile",
       img:topImg,
       badge:bparts.length?bparts.join(" "):null,
@@ -27295,6 +27431,17 @@ function renderPlayer(pi){
         shown++;
         const el=vCardEl(sh.name,{idx:i+1});
         if(sh.mark)el.style.outline="2px solid #ff9f43";
+        // 🛡✨ シールド・フォースで指定されている盾は水色で示す（オレンジは他の印で使っている）
+        if(sh.sfMark){
+          el.style.outline="3px solid #38bdf8";
+          el.style.boxShadow="0 0 12px rgba(56,189,248,.65)";
+          el.style.position="relative";
+          const tg=document.createElement("span");
+          tg.style.cssText="position:absolute;top:2px;left:2px;background:#0b3b52;color:#7dd3fc;font-size:10px;font-weight:900;padding:1px 5px;border-radius:5px;z-index:6;border:1px solid #38bdf8";
+          tg.textContent="🛡✨ S・フォース";
+          tg.title=`${sh.sfMark} が指定している盾`;
+          el.appendChild(tg);
+        }
         if(sh.under&&sh.under.length){
           const st=document.createElement("span");
           st.style.cssText="position:absolute;bottom:2px;right:2px;background:#333;color:#fff;font-size:10px;padding:1px 5px;border-radius:5px;z-index:5";
@@ -27564,6 +27711,7 @@ function renderAllNow(){
   checkMugetsu(false);
   checkGraveAwaken();   // 🔄 自分の墓地にカードが置かれた時の覚醒／進化
   fixPsyStray();        // 🌌 サイキック／ドラグハートが超次元ゾーン以外に紛れていたら戻す
+  fixStrayBuff();       // 🧹 バトルゾーンの外に残った一時的な付与を消す
   // 🌟 モモキングダム✕型：含まれるカードの枚数を見張り、「ちょうど6枚になった」瞬間に −99999 を発動する。
   //    増えて6枚になった時だけでなく、7枚以上から減って6枚になった時（メテオバーン・退化など）も対象。
   if(S.expert){
@@ -29140,7 +29288,7 @@ function setGhostSeat(pi,on){
 }
 function ghostCivOk(r,untapped){
   const civs=(r.civs||[]).filter(cv=>cv&&cv!=="zero");
-  return civs.every(cv=>untapped.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}));
+  return civs.every(cv=>untapped.some(m=>manaHasCiv(m,cv)));
 }
 function ghostPlayableReg(r){
   return !!(r&&isCreatureReg(r)&&!isEvoReg(r)&&!r.twin&&r.ctype!=="twinpact"&&r.cost!=null);
@@ -29175,7 +29323,7 @@ function ghostPickCharge(Z){
     if(playable&&(cost===manaN+1||cost===manaN+2))sc-=25;
     if(Z.hand.some((o,j)=>j!==i&&o.name===cc.name))sc+=25;
     const civs=((r&&r.civs)||[]).filter(cv=>cv!=="zero");
-    if(civs.length&&civs.some(cv=>!Z.mana.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);})))sc+=10;
+    if(civs.length&&civs.some(cv=>!Z.mana.some(m=>manaHasCiv(m,cv))))sc+=10;
     if(playable)sc+=Math.min(cost,12);
     // 📊 学習データ：人間がこの札をマナに置く比率を反映（±35点・序盤/終盤の時期別があれば優先）
     const cr=(typeof mdChargeRatio==="function")?mdChargeRatio(cc.name,S.turn):null;
@@ -29270,8 +29418,8 @@ function ghostPayManaN(Z,cost,civs){
   const rest=()=>Z.mana.filter(m=>!m.tapped&&!pick.includes(m));
   for(const cv of need){
     if(pick.length>=cost)break;
-    if(pick.some(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(cv);}))continue; // 既に確保済みの文明
-    const m=rest().find(m2=>{const rm=getReg(m2);return rm&&rm.civs&&rm.civs.includes(cv);});
+    if(pick.some(m=>manaHasCiv(m,cv)))continue; // 既に確保済みの文明
+    const m=rest().find(m2=>manaHasCiv(m2,cv));
     if(m)pick.push(m);
   }
   for(const m of rest()){if(pick.length>=cost)break;pick.push(m);}
@@ -36168,8 +36316,16 @@ function bRender(){
   };
   const counts=B.counts[B.mode];
   const onlyPicked=!!B.onlyPicked; // ✅ いま入れているカードだけ表示
+  const costSel=B.costSel||(B.costSel=new Set());
+  const costOk=(k)=>{
+    if(!costSel.size)return true;
+    const r=FXDB.get(k);const vals=[];
+    if(r&&r.cost!=null&&!isNaN(+r.cost))vals.push(+r.cost);
+    if(r&&r.cost2!=null&&!isNaN(+r.cost2))vals.push(+r.cost2); // ツインパクトは上下どちらでも一致
+    return vals.some(n=>[...costSel].some(t=>t===8?n>=8:n===t));
+  };
   const keys=Array.from(dispName.keys())
-    .filter(k=>(!q||k.includes(q))&&typeMatch(k,tf)&&civOk(k)&&twinOk(k)&&(!onlyPicked||(counts.get(k)||0)>0))
+    .filter(k=>(!q||k.includes(q))&&typeMatch(k,tf)&&civOk(k)&&twinOk(k)&&costOk(k)&&(!onlyPicked||(counts.get(k)||0)>0))
     .sort((a,b)=>{
       if(onlyPicked){ // 採用中だけの時はコスト順→名前順で、デッキの形が分かりやすいように
         const ra=FXDB.get(a),rb=FXDB.get(b);
@@ -36282,7 +36438,7 @@ function bSetMode(m){
 $("btnBuilder").addEventListener("click",()=>{
   if(!dispName.size){toast("先に画像を登録してください");return;}
   bSeed();bSetMode("main");
-  bBuildCivBar();bFitBuilderUI();$("builderOlay").classList.add("open");
+  bBuildCivBar();bBuildCostBar();bFitBuilderUI();$("builderOlay").classList.add("open");
 });
 $("bTabMain").addEventListener("click",()=>bSetMode("main"));
 $("bTabGR").addEventListener("click",()=>bSetMode("gr"));
@@ -36304,6 +36460,7 @@ function bUpdateFilterSum(){
   if(B.civMulti)parts.push("多色");
   if(B.twin==="only")parts.push("ツインパクトのみ");
   else if(B.twin==="none")parts.push("✕ツインパクト");
+  if(B.costSel&&B.costSel.size)parts.push("コスト"+[...B.costSel].sort((a,b)=>a-b).map(n=>n===8?"8+":n).join("・"));
   if(B.onlyPicked)parts.push("採用中だけ");
   {const q=document.getElementById("bSearch");if(q&&q.value.trim())parts.push(`「${q.value.trim()}」`);}
   const box2=document.getElementById("bFilterBox");
@@ -36324,6 +36481,7 @@ function bApplyCols(){
  window.addEventListener("resize",()=>{clearTimeout(_bcRz);_bcRz=setTimeout(()=>{try{bApplyCols();}catch(e){}},150);});}
 function bBuildCivBar(){
   const bar=$("bCivBar");if(!bar||bar.dataset.built)return;bar.dataset.built="1";
+  const optBar=$("bOptionBar")||bar;
   const CV=[["light","光","#ffe082"],["water","水","#7fd7ff"],["dark","闇","#c58cff"],["fire","火","#ff8a80"],["nature","自然","#a5e88a"],["zero","ゼロ","#cfd8dc"]];
   B.civSel=B.civSel||new Set();B.civEx=B.civEx||new Set();B.civMulti=false;B.twin=B.twin||"";
   // 文明ボタンはタップするたび「無指定 → 含める → 含めない」の3状態を切り替える
@@ -36360,7 +36518,7 @@ function bBuildCivBar(){
   tw.style.cssText="font-size:12px;padding:4px 11px;border:1px solid #7fd7ff;border-radius:14px;background:transparent;color:#7fd7ff;cursor:pointer;font-weight:700";
   tw._paint=twPaint;
   tw.onclick=()=>{B.twin=B.twin==="" ? "only" : (B.twin==="only"?"none":"");twPaint();bRender();};
-  twPaint();bar.appendChild(tw);
+  twPaint();optBar.appendChild(tw);
   // ✅ いまデッキに入れているカードだけを表示する（枚数の増減はそのまま行える）
   const pk=document.createElement("button");pk.type="button";pk.id="bOnlyPicked";
   pk.title="いまこのタブ（メイン/超GR/超次元/ゲーム外）に入れているカードだけを表示します。タップで枚数の増減もそのままできます";
@@ -36375,7 +36533,7 @@ function bBuildCivBar(){
   pk.style.cssText="font-size:12px;padding:4px 11px;border:1px solid #ffd166;border-radius:14px;background:transparent;color:#ffd166;cursor:pointer;font-weight:700";
   pk._paint=pkPaint;
   pk.onclick=()=>{B.onlyPicked=!B.onlyPicked;pkPaint();bRender();};
-  pkPaint();bar.appendChild(pk);
+  pkPaint();optBar.appendChild(pk);
   // 🔢 一覧を横に何枚並べるか（カードの大きさが変わる。0＝自動）
   {
     const cw=document.createElement("label");
@@ -36396,15 +36554,29 @@ function bBuildCivBar(){
     cw.appendChild(document.createTextNode("横"));
     cw.appendChild(cs);
     cw.appendChild(document.createTextNode("枚"));
-    bar.appendChild(cw);
+    optBar.appendChild(cw);
   }
   const cl=document.createElement("button");cl.type="button";cl.textContent="フィルタクリア";cl.className="btn small ghost";cl.style.cssText="font-size:11px;padding:3px 9px";
   cl.onclick=()=>{
     B.civSel.clear();B.civEx.clear();B.civMulti=false;B.twin="";B.onlyPicked=false;
+    if(B.costSel)B.costSel.clear();
     mb.style.background="transparent";mb.style.color="#f6a";
     [...bar.querySelectorAll("button")].forEach(x=>{if(x._paint)x._paint();});
+    {const cb=document.getElementById("bCostBar");if(cb)[...cb.querySelectorAll("button")].forEach(x=>{if(x._paint)x._paint();});}
     bRender();
-  };bar.appendChild(cl);
+  };optBar.appendChild(cl);
+}
+/* 💠 デッキ編成のコスト帯フィルタ。カード選択一覧と同じく複数選択、8は8以上。 */
+function bBuildCostBar(){
+  const bar=$("bCostBar");if(!bar||bar.dataset.built)return;bar.dataset.built="1";
+  B.costSel=B.costSel||new Set();
+  const lb=document.createElement("span");lb.textContent="コスト";lb.style.cssText="font-size:11px;color:#8a93a8;font-weight:700";bar.appendChild(lb);
+  for(const n of [1,2,3,4,5,6,7,8]){
+    const b=document.createElement("button");b.type="button";b.title=n===8?"コスト8以上":`コスト${n}`;
+    const paint=()=>{const on=B.costSel.has(n);b.textContent=n===8?"8+":String(n);b.style.background=on?"#67e8f9":"transparent";b.style.color=on?"#0b0f1a":"#67e8f9";};
+    b.style.cssText="font-size:12px;min-width:28px;padding:3px 7px;border:1px solid #67e8f9;border-radius:13px;background:transparent;color:#67e8f9;cursor:pointer;font-weight:700";
+    b._paint=paint;b.onclick=()=>{if(B.costSel.has(n))B.costSel.delete(n);else B.costSel.add(n);paint();bRender();};paint();bar.appendChild(b);
+  }
 }
 /* 📋 デッキリストが「スクロールなしで全体が見える」ようにカードの大きさを自動調整する。
    セクション見出しと集計ぶんの高さを引いた残りに、全カードが収まる列数を探す。 */
@@ -36761,7 +36933,7 @@ function bFitBuilderUI(){
   bUpdateFilterSum();
 }
 function reopenBuilder(){
-  bBuildCivBar();bFitBuilderUI();
+  bBuildCivBar();bBuildCostBar();bFitBuilderUI();
   $("builderOlay").classList.add("open");
   bRender();
 }
