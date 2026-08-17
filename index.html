@@ -1553,7 +1553,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="hint" style="margin:4px 0 0">タップで＋1（⌘/Ctrl＋タップで−1）。上限（4枚／超GR2枚）に達した状態でタップすると「制限なしカード」として5枚以上も指定できます。ゲーム外タブはタップで枚数を直接入力。特殊カード（禁断など）はテキスト欄に直接入力してください。</div>
     </details>
     <details id="bFilterBox" style="margin:2px 0">
-      <summary id="bFilterSum" style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">🔎 絞り込み（タイプ・文明・採用中）</summary>
+      <summary id="bFilterSum" style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">🔎 絞り込み（タイプ・文明・コスト・採用中）</summary>
     <div class="row">
       <select id="bTypeFilter" style="width:auto;flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px;font-size:12px">
         <option value="">全タイプ</option>
@@ -1580,6 +1580,7 @@ body.shake{animation:bodyShake .4s ease-out}
       </select>
     </div>
     <div class="row" id="bCivBar" style="gap:5px;flex-wrap:wrap;margin-top:-4px"></div>
+    <div class="row" id="bCostBar" style="gap:5px;flex-wrap:wrap;margin-top:-4px"></div>
     </details>
     <details id="bSummaryBox" style="margin:2px 0">
       <summary style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">📊 内訳（文明・種類・防御）</summary>
@@ -3952,7 +3953,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.20";
+const APP_VER="v13.21";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36168,8 +36169,16 @@ function bRender(){
   };
   const counts=B.counts[B.mode];
   const onlyPicked=!!B.onlyPicked; // ✅ いま入れているカードだけ表示
+  const costSel=B.costSel||(B.costSel=new Set());
+  const costOk=(k)=>{
+    if(!costSel.size)return true;
+    const r=FXDB.get(k);const vals=[];
+    if(r&&r.cost!=null&&!isNaN(+r.cost))vals.push(+r.cost);
+    if(r&&r.cost2!=null&&!isNaN(+r.cost2))vals.push(+r.cost2); // ツインパクトは上下どちらでも一致
+    return vals.some(n=>[...costSel].some(t=>t===8?n>=8:n===t));
+  };
   const keys=Array.from(dispName.keys())
-    .filter(k=>(!q||k.includes(q))&&typeMatch(k,tf)&&civOk(k)&&twinOk(k)&&(!onlyPicked||(counts.get(k)||0)>0))
+    .filter(k=>(!q||k.includes(q))&&typeMatch(k,tf)&&civOk(k)&&twinOk(k)&&costOk(k)&&(!onlyPicked||(counts.get(k)||0)>0))
     .sort((a,b)=>{
       if(onlyPicked){ // 採用中だけの時はコスト順→名前順で、デッキの形が分かりやすいように
         const ra=FXDB.get(a),rb=FXDB.get(b);
@@ -36282,7 +36291,7 @@ function bSetMode(m){
 $("btnBuilder").addEventListener("click",()=>{
   if(!dispName.size){toast("先に画像を登録してください");return;}
   bSeed();bSetMode("main");
-  bBuildCivBar();bFitBuilderUI();$("builderOlay").classList.add("open");
+  bBuildCivBar();bBuildCostBar();bFitBuilderUI();$("builderOlay").classList.add("open");
 });
 $("bTabMain").addEventListener("click",()=>bSetMode("main"));
 $("bTabGR").addEventListener("click",()=>bSetMode("gr"));
@@ -36304,6 +36313,7 @@ function bUpdateFilterSum(){
   if(B.civMulti)parts.push("多色");
   if(B.twin==="only")parts.push("ツインパクトのみ");
   else if(B.twin==="none")parts.push("✕ツインパクト");
+  if(B.costSel&&B.costSel.size)parts.push("コスト"+[...B.costSel].sort((a,b)=>a-b).map(n=>n===8?"8+":n).join("・"));
   if(B.onlyPicked)parts.push("採用中だけ");
   {const q=document.getElementById("bSearch");if(q&&q.value.trim())parts.push(`「${q.value.trim()}」`);}
   const box2=document.getElementById("bFilterBox");
@@ -36401,10 +36411,24 @@ function bBuildCivBar(){
   const cl=document.createElement("button");cl.type="button";cl.textContent="フィルタクリア";cl.className="btn small ghost";cl.style.cssText="font-size:11px;padding:3px 9px";
   cl.onclick=()=>{
     B.civSel.clear();B.civEx.clear();B.civMulti=false;B.twin="";B.onlyPicked=false;
+    if(B.costSel)B.costSel.clear();
     mb.style.background="transparent";mb.style.color="#f6a";
     [...bar.querySelectorAll("button")].forEach(x=>{if(x._paint)x._paint();});
+    {const cb=document.getElementById("bCostBar");if(cb)[...cb.querySelectorAll("button")].forEach(x=>{if(x._paint)x._paint();});}
     bRender();
   };bar.appendChild(cl);
+}
+/* 💠 デッキ編成のコスト帯フィルタ。カード選択一覧と同じく複数選択、8は8以上。 */
+function bBuildCostBar(){
+  const bar=$("bCostBar");if(!bar||bar.dataset.built)return;bar.dataset.built="1";
+  B.costSel=B.costSel||new Set();
+  const lb=document.createElement("span");lb.textContent="コスト";lb.style.cssText="font-size:11px;color:#8a93a8;font-weight:700";bar.appendChild(lb);
+  for(const n of [1,2,3,4,5,6,7,8]){
+    const b=document.createElement("button");b.type="button";b.title=n===8?"コスト8以上":`コスト${n}`;
+    const paint=()=>{const on=B.costSel.has(n);b.textContent=n===8?"8+":String(n);b.style.background=on?"#67e8f9":"transparent";b.style.color=on?"#0b0f1a":"#67e8f9";};
+    b.style.cssText="font-size:12px;min-width:28px;padding:3px 7px;border:1px solid #67e8f9;border-radius:13px;background:transparent;color:#67e8f9;cursor:pointer;font-weight:700";
+    b._paint=paint;b.onclick=()=>{if(B.costSel.has(n))B.costSel.delete(n);else B.costSel.add(n);paint();bRender();};paint();bar.appendChild(b);
+  }
 }
 /* 📋 デッキリストが「スクロールなしで全体が見える」ようにカードの大きさを自動調整する。
    セクション見出しと集計ぶんの高さを引いた残りに、全カードが収まる列数を探す。 */
@@ -36761,7 +36785,7 @@ function bFitBuilderUI(){
   bUpdateFilterSum();
 }
 function reopenBuilder(){
-  bBuildCivBar();bFitBuilderUI();
+  bBuildCivBar();bBuildCostBar();bFitBuilderUI();
   $("builderOlay").classList.add("open");
   bRender();
 }
