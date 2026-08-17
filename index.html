@@ -3853,7 +3853,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.1";
+const APP_VER="v13.2";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -14166,6 +14166,10 @@ async function runFxList(pi,list,srcCard,inPump){
       // 🛡 自分の山札の上からn枚を裏向きでシールドゾーンに加える（シールド追加）
       //    デュエプレ10枚上限：11枚目以降は墓地へ（枚数条件が書かれていない無条件追加のルール）
       if(f.shieldMax>0&&Z.shield.length>f.shieldMax){toast(`🛡 自分のシールドが${f.shieldMax}枚以下でないため発動しません（現在${Z.shield.length}枚）`);continue;}
+      // 🛡 条件欄にも「シールド<=2」のように書けるようにする（盾≤の欄に気づかず条件欄に書いた時の取りこぼし対策）
+      if(f.cond&&String(f.cond).trim()&&!zoneCondOk(f.cond,pi,srcCard)){
+        toast(`🛡 条件「${f.cond}」を満たさないため、シールドを追加しません`);continue;
+      }
       let add=0,toGrave=0;
       for(let i=0;i<n&&Z.deck.length;i++){
         const cc=Z.deck.shift();cc.tapped=false;cc.sideways=false;
