@@ -3878,7 +3878,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.4";
+const APP_VER="v13.5";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4928,6 +4928,15 @@ let FX_SPELL_COST=null;
 let FX_FROM_CRE=false;
 function momoUntouchable(x){
   const r=getReg(x);
+  // 🛡 条件付きアンタッチャブル：自分の他の指定種族がいる間、相手に選ばれない
+  //    （エモーショナル・ハードコア型）。攻撃・ブロックの対象にはできる。
+  if(r&&r.noChooseIfAlly){
+    try{
+      const own=[0,1].find(p=>zonesOf(p)&&zonesOf(p).battle&&zonesOf(p).battle.includes(x));
+      const words=String(r.noChooseIfAlly).split(/[／\/、,]/).map(s=>s.trim()).filter(Boolean);
+      if(own!=null&&zonesOf(own).battle.some(a=>a!==x&&!isSealed(a)&&words.some(w=>{const ra=getReg(a);return ra&&raceMatch(ra,w);})))return true;
+    }catch(e){}
+  }
   // 🔮 相手の呪文の効果で選ぼうとしている時だけ選べない
   //    コスト条件（例「4以下」）が入っていれば、その条件に合う呪文の時だけ選べない（ドキンダムX型）
   if(r&&r.noChooseSpell&&FX_FROM_SPELL){
@@ -8763,6 +8772,7 @@ const FX_TYPES=[
   ["draw","n枚ドロー"],
   ["drawFoe","🃏 相手はカードをn枚引く（ViVy-R型・「各プレイヤーはn枚引く」は自分のドロー行→この行の順で登録すると解決プレイヤー先行の処理順になる）"],
   ["oriJudge","⚖ 各プレイヤーは、自身の最大マナ以上のコストを持つクリーチャーをすべて、ランダムな順番で自身の山札の一番下に置く（オリオティス・ジャッジ型・デュエプレ版＝「以上」。条件欄に「より大きい」でTCG版の判定に）"],
+  ["foeElemDeckBottomOverMana","⚖ 相手のマナゾーンのカード枚数より大きいコストを持つ相手のエレメントを1つ選び、山札の下へ（ジャッジ・水晶チャージャー型）"],
   ["tapAllOp","相手のクリーチャーをすべてタップ（スパーク型）（すでにタップしているクリーチャーも対象／条件欄に「フリーズ」でアンタップしない）"],
   ["tapOpN","相手のクリーチャーをn体まで選んでタップ（「〜体までタップ」型）（すでにタップしているクリーチャーも選べます／条件欄に「フリーズ」と書くと、選んだクリーチャーは次のターンのはじめにアンタップしません）"],
   ["tapAnyN","⤵ クリーチャーをn体まで選んでタップ（両者どちらのクリーチャーでも対象・神光のカルマ ウイ型）（自分/相手どちらでも・すでにタップしているクリーチャーも選べます／条件欄に「フリーズ」でアンタップしない）"],
@@ -8788,6 +8798,7 @@ const FX_TYPES=[
   ["destroyThis","💀 このクリーチャー自身を破壊する（黒神龍クランキーヴィーン型・すでに離れていたら何もしない）"],
   ["extraTurnSelf","⏭ このターンの後に、自分のターンを追加する（勝利龍装 クラッシュ\"覇道\" 型）"],
   ["trigPowDown","⬇ そのターン、誘発のきっかけになったクリーチャー1体のパワーを−n×1000（「相手のクリーチャーがバトルゾーンに出た時」と組み合わせて「そのクリーチャーのパワーを−n」に・HADES型のメテオバーン）"],
+  ["trigCantAtk","⛔ そのターン、誘発のきっかけになったクリーチャー1体は攻撃できない（相手のクリーチャーが出た時・カルマ コットン型）"],
   ["foePowDownAll","⬇ そのターン、条件に合う相手クリーチャーすべてのパワーを−n×1000（ターン終了時まで・条件欄で対象指定・空欄＝全部・HADES型）"],
   ["foePowDownPick","⬇ 相手クリーチャー1体を選び、そのターン、パワーを−n×1000（ターン終了時まで・パワー0以下で破壊・メテオバーン等の対象指定に）"],
   ["foePowDownPer","⬇ 相手クリーチャー1体を選び、〔ゾーン:対象〕の枚数×n×1000だけそのターンパワーマイナス（条件欄に「墓地:クリーチャー」等・墓地の数だけ−1000型／オブザ08号型）"],
@@ -13314,6 +13325,22 @@ async function runFxList(pi,list,srcCard,inPump){
       logOnly(`⏭ 追加ターン：${S.players[pi].label}（残り${S.extra[pi]}）`);
       try{fxShare("extra","エクストラターン！",`${S.players[pi].label}`,true,srcCard?srcCard.name:"",pi);}catch(e){}
       renderAll();
+    }else if(f.t==="foeElemDeckBottomOverMana"){
+      if(!S.vs){toast("（ソロのため相手エレメントの選択はスキップ）");continue;}
+      const manaN=zonesOf(op).mana.length; // 裏向きの水晶マナも「カード1枚」と数える
+      const pool=zonesOf(op).battle.filter(x=>{
+        if(isSealed(x))return false;
+        const rx=getReg(x);
+        if(!rx||rx.cost==null||isNaN(+rx.cost)||+rx.cost<=manaN)return false;
+        return !((rx.noChoose||momoUntouchable(x))&&!isIgnored(x,op));
+      });
+      if(!pool.length){toast(`⚖ 相手のマナ${manaN}枚より大きいコストの選べるエレメントはいない`);continue;}
+      const j=await pickCard(`山札の下に置く相手のエレメントを1つ選ぶ（相手マナ：${manaN}枚）`,pool);
+      if(j==null)continue;
+      const tgt=pool[j];
+      await moveCardX(op,"battle",tgt.id,op,"deckBottom");
+      toast(`⚖ ${faceNameOf(tgt)} を山札の一番下に置いた`);
+      sfx("move");renderAll();
     }else if(f.t==="trigPowDown"){
       // ⬇ そのターン、誘発のきっかけになったクリーチャー1体のパワーを−n×1000
       //    （FX_TRIG＝「相手のクリーチャーが出た時」なら、その出たクリーチャー）
@@ -13325,6 +13352,13 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("ok");renderAll();
       toast(`⬇ ${faceNameOf(tgT)} のパワー−${amtT}（ターン終了時まで）`);
       await checkZeroPower(); // 💥 パワー0以下は破壊
+    }else if(f.t==="trigCantAtk"){
+      if(!FX_TRIG){toast("⛔ きっかけになったクリーチャーが分からないためスキップしました");continue;}
+      const tgA=[0,1].map(pp=>zonesOf(pp).battle.find(x=>x.id===FX_TRIG.id)).find(Boolean);
+      if(!tgA){toast(`⛔ ${faceNameOf(FX_TRIG)} はもうバトルゾーンにいません`);continue;}
+      tgA.buff=tgA.buff||{};tgA.buff.cantAtk=true;markBuffTurn(tgA,["cantAtk"]);
+      sfx("ok");renderAll();
+      toast(`⛔ ${faceNameOf(tgA)} はこのターン攻撃できない`);
     }else if(f.t==="foePowDownAll"){
       // ⬇ そのターン、条件(f.cond)に合う相手クリーチャーすべてのパワーを−n×1000（ターン終了時まで）
       const filt=String(f.cond||"").trim();
@@ -16356,7 +16390,10 @@ async function offerKirifudash(pi){
 function resolveOut(Z,o){
   o.faceup=true;o.tapped=false;
   const rg=getReg(o);
-  if(rg&&rg.charger){Z.mana.push(o);return true;}
+  if(rg&&rg.charger){
+    if(rg.crystalCharger){o.faceup=false;o.seen=false;}
+    Z.mana.push(o);return true;
+  }
   // 🔀 「この呪文を唱えた後、墓地に置くかわりに山札に加えてシャッフルする」（革命の防壁型・v10.34）
   if(rg&&rg.castToDeck){
     o.faceup=false;o.seen=false;o.sideways=false;o.rot=0;
@@ -17523,7 +17560,7 @@ async function startAttack(pi,id){
   if(isSealed(c)){toast(`🔒 ${c.name} は封印されている！（クリーチャーとして扱われず、攻撃できません）`);return;}
   if(S.expert){
     const rA=getReg(c);
-    if(rA&&rA.cantAtk&&!isIgnored(c,pi)){toast(`⛔ ${faceNameOf(c)} は攻撃できない`);return;}
+    if(((rA&&rA.cantAtk&&!isIgnored(c,pi))||(c.buff&&c.buff.cantAtk))){toast(`⛔ ${faceNameOf(c)} は攻撃できない`);return;}
     // 🌟 モモキングダム✕型：含まれるカードが6枚未満なら攻撃できない
     if(rA&&rA.momoKingX&&!isIgnored(c,pi)&&stackCountOf(c)<6){toast(`⛔ ${faceNameOf(c)} は含まれるカードが6枚未満なので攻撃できない（現在${stackCountOf(c)}枚）`);return;}
     // ⛔ 条件付き攻撃不可：条件式を満たしていない間は攻撃できない（例：墓地:ドラゴン>=5）
@@ -23112,6 +23149,7 @@ $("fxCancel").addEventListener("click",fxBackToSettings);
 $("fxSave").addEventListener("click",async ()=>{
   const p=$("fxPower").value.trim();
   FXDB.set(FXEDIT.key,{
+    ...(FXDB.get(FXEDIT.key)||{}), // UI未対応の新しい汎用属性も編集保存で消さない
     twin:FXEDIT.twin,faces:[FXEDIT.faces[0],FXEDIT.faces[1]],
     twinTop:(document.getElementById("fxTwinTop")?$("fxTwinTop").value:(FXEDIT&&FXEDIT.twinTop))||"creature",
     power:p===""?null:+p,
@@ -25220,8 +25258,10 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     if(rg.faces){for(const f of rg.faces)if(f&&f.charger)return true;}
     return false;
   })()){
+    const rgCh=getReg(c);
+    if(rgCh&&rgCh.crystalCharger){c.faceup=false;c.seen=false;}
     placeCard(Z,"mana",c);
-    toast(`⚡チャージャー：${faceNameOf(c)} はマナゾーンへ`);
+    toast(`${rgCh&&rgCh.crystalCharger?"💎水晶チャージャー":"⚡チャージャー"}：${faceNameOf(c)} はマナゾーンへ`);
     sfx("move");
   }
   else if((toZone==="shield"||toZone==="shieldUp")&&(()=>{const rg=getReg(c);return rg&&rg.ctype==="gcastle";})()){
