@@ -3853,7 +3853,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.0";
+const APP_VER="v13.1";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4276,6 +4276,51 @@ function markArrive(c,opt){
   }catch(e){}
 }
 function getReg(c){return FXDB.get(faceKeyOf(c))||FXDB.get(normName(c.name))||null;}
+/* 🌌 サイキック・クリーチャーとドラグハートは、超次元ゾーンとバトルゾーン以外には置けない。
+   カードに登録した効果で直接ゾーンを動かした場合（手札に戻す・シールド送り等）に
+   そのまま残ってしまうことがあるので、描画のたびに拾って超次元ゾーンへ戻す。 */
+/* ⚙ 相手の「マナはタップして置かれる」常在（停滞の影タイム・トリッパー型）。
+   moveCard を通らないマナブースト（山札から直接マナへ）でも必ずここを通すこと。 */
+function applyManaTapIn(pTo,c){
+  try{
+    if(!S.expert||!c||c.tapped)return false;
+    const foeM=pTo===0?1:0;
+    const on=zonesOf(foeM).battle.some(b=>{
+      const rb=getReg(b);
+      return rb&&rb.stManaTap&&!isSealed(b)&&!isIgnored(b,foeM);
+    });
+    if(!on)return false;
+    c.tapped=true;
+    toast(`⚙ 常在効果：マナはタップして置かれる（${faceNameOf(c)}）`);
+    return true;
+  }catch(e){return false;}
+}
+function fixPsyStray(){
+  try{
+    if(!S||!S.players)return;
+    for(const pi of [0,1]){
+      const Z=zonesOf(pi);
+      if(!Z||!Z.hyper)continue;
+      for(const zk of ["hand","mana","grave","shield","deck"]){
+        const arr=Z[zk];
+        if(!Array.isArray(arr)||!arr.length)continue;
+        for(let i=arr.length-1;i>=0;i--){
+          const c=arr[i];
+          if(!c)continue;
+          const r=getReg(c);
+          const isP=!!(c.isPsy||(r&&(r.ctype==="psychic"||r.ctype==="psyevo"||r.ctype==="dragheart")));
+          if(!isP)continue;
+          arr.splice(i,1);
+          c.face=0;c.rot=0;c.tapped=false;c.faceup=true;c.isPsy=false;c.buff=null;
+          if(c.under&&c.under.length){const kids=c.under.splice(0);kids.forEach(u=>{u.tapped=false;u.faceup=true;Z.grave.push(u);});}
+          Z.hyper.push(c);
+          toast(`🌌 ${faceNameOf(c)} は超次元ゾーンへ戻りました`);
+          logOnly(`🌌 ${S.players[pi].label} の《${faceNameOf(c)}》を${zk==="hand"?"手札":zk==="mana"?"マナ":zk==="grave"?"墓地":zk==="shield"?"シールド":"山札"}から超次元ゾーンへ戻した`);
+        }
+      }
+    }
+  }catch(e){}
+}
 /* 🌌 自分のサイキック・クリーチャーが出た時／覚醒した時に、超次元ゾーンから出せるカード
    （超時空ストームG・XX 型）。超次元ゾーンにあるカードは誘発の走査に載らないので、ここで別に見る。 */
 let HYPER_CALL_BUSY=false;
@@ -5289,6 +5334,7 @@ const FX_STYLE={
   direct:{bd:"#ef4444",fg:"#fca5a5",bg:"rgba(44,6,6,.96)",ic:"💥",se:"direct"},
   danger:{bd:"#fb923c",fg:"#fdba74",bg:"rgba(40,20,4,.95)",ic:"⚠",se:"danger"},
   win:   {bd:"#fbbf24",fg:"#fde68a",bg:"rgba(30,22,4,.97)",ic:"🏆",se:"win"},
+  turn:  {bd:"#60a5fa",fg:"#bfdbfe",bg:"rgba(6,16,36,.96)",ic:"🔔",se:"ok"},
   destroy:{bd:"#ef4444",fg:"#fca5a5",bg:"rgba(38,6,6,.95)",ic:"💀",se:"grave"},
   hand:  {bd:"#c084fc",fg:"#e9d5ff",bg:"rgba(26,10,38,.95)",ic:"🗑",se:"grave"},
   mana:  {bd:"#34d399",fg:"#a7f3d0",bg:"rgba(4,30,22,.95)",ic:"💎",se:"move"},
@@ -5346,7 +5392,7 @@ const FX_ACT_BANNER={
 /* ✨ 演出の量。人によってはうるさく感じるので選べるようにする。
    なし＝出さない／少なめ＝山場だけ／ふつう＝＋攻撃とブレイク／多め＝＋召喚と呪文 */
 const FX_LEVELS={off:0,low:1,mid:2,high:3};
-const FX_MIN_LV={trig:1,direct:1,win:1,danger:1,kw:1,awake:1,evo:1,
+const FX_MIN_LV={trig:1,direct:1,win:1,danger:1,kw:1,awake:1,evo:1,turn:1,
   kindan:1,declare:1,judge:1,extra:1,seal:1,gr:2,gear:2,manual:3,
   destroy:2,revive:2,brk:2,attack:2,
   hand:2,mana:3,draw:3,bounce:2,lock:2,
@@ -5640,6 +5686,11 @@ function olBlockToast(inViewer){
 function olAllowedTarget(t){
   if(!t||!t.closest)return true;
   if(t.closest("#logDock,#logFab,#chatDock,#chatFab,#olBar,#peekChip"))return true;
+  // 🏆 勝敗の結果画面は必ず閉じられるようにする（塞ぐと画面が固まったように見える）
+  if(t.closest("#resultOlay"))return true;
+  // 🧩 効果登録・カード一覧を開いている間は、その中から開く検索や選択の一覧も操作できるようにする
+  //    （盤面には触れないので、相手のターン中でも直してよい）
+  if(document.querySelector("#fxOlay.open,#regOlay.open")&&t.closest("#viewerOlay,#fxOlay,#regOlay,#askOlay,#sheet"))return true;
   // 👁 マナ・墓地・シールド・超次元などの「山」は、相手のターン中でも中身を確認できるように通す
   if(t.closest(".ol-viewable"))return true;
   // 一覧パネル（マナ/墓地/山札/シールドのビューア）は「見るだけ」なら通す。
@@ -6884,6 +6935,11 @@ async function finishNextTurn(cur){
     if(S.who===0)S.turn++;
   }else S.turn++;
   const pi=S.vs?S.who:0;
+  // 🔔 「◯◯のターン！」のパネル。処理は待たせない（表示するだけ）
+  try{
+    const _tn=S.players[pi].label;
+    fxBanner("turn",`${_tn} のターン！`,`ターン ${S.turn}${extra?"（追加ターン）":""}`,true,"",pi);
+  }catch(e){}
   // 📡 ターンが移ったことだけ先に相手へ知らせる。
   //    このあとのターン開始処理は時間がかかるので、待たせると相手の画面は
   //    「まだ自分のターンではない」ままになり、両方とも操作できないように見えてしまう。
@@ -8549,12 +8605,16 @@ function openEffects(){
 
 /* ================= EX：効果の自動処理 ================= */
 /* 多色カードのマナタップイン（設定ONかつ登録文明が2以上ならタップして置く）。trueならタップした */
-function manaTapIn(c){
+function manaTapIn(c,pi){
+  let out=false;
   if(S.tapMultiMana){
     const rgm=getReg(c);
-    if(rgm&&rgm.civs&&rgm.civs.length>=2){c.tapped=true;return true;}
+    if(rgm&&rgm.civs&&rgm.civs.length>=2){c.tapped=true;out=true;}
   }
-  return false;
+  // ⚙ 相手の「マナはタップして置かれる」常在（停滞の影タイム・トリッパー型）。
+  //    山札からのブーストでもここを通るように、pi を渡して判定する。
+  if(pi!=null&&applyManaTapIn(pi,c))out=true;
+  return out;
 }
 const FX_TYPES=[
   ["draw","n枚ドロー"],
@@ -8581,6 +8641,9 @@ const FX_TYPES=[
   ["tempBlockerAll","🛡 自分の〔対象〕すべてに「ブロッカー」を与える（次の自分のターン開始時まで・条件欄で対象指定、空欄＝全員）"],
   ["selfToZone","↪ このクリーチャー自身を〔ゾーン〕に置く（条件欄：マナ／手札／墓地／山札の下／シールド。ターン終了時誘発と組み合わせて）"],
   ["tempPowSelf1k","💪 そのターン、このクリーチャー自身のパワーを＋n×1000（ターン終了時まで・誘発と組み合わせて）"],
+  ["peekShieldDeckBottom","🛡📚 相手（またはいずれか）のシールドを1つ見る→山札の一番下に置かせてもよい。そうした場合、そのプレイヤーは山札の上から1枚目をシールド化（ガチャンコ ミニロボ3号型）"],
+  ["destroyThis","💀 このクリーチャー自身を破壊する（黒神龍クランキーヴィーン型・すでに離れていたら何もしない）"],
+  ["extraTurnSelf","⏭ このターンの後に、自分のターンを追加する（勝利龍装 クラッシュ\"覇道\" 型）"],
   ["trigPowDown","⬇ そのターン、誘発のきっかけになったクリーチャー1体のパワーを−n×1000（「相手のクリーチャーがバトルゾーンに出た時」と組み合わせて「そのクリーチャーのパワーを−n」に・HADES型のメテオバーン）"],
   ["foePowDownAll","⬇ そのターン、条件に合う相手クリーチャーすべてのパワーを−n×1000（ターン終了時まで・条件欄で対象指定・空欄＝全部・HADES型）"],
   ["foePowDownPick","⬇ 相手クリーチャー1体を選び、そのターン、パワーを−n×1000（ターン終了時まで・パワー0以下で破壊・メテオバーン等の対象指定に）"],
@@ -10477,7 +10540,7 @@ async function runFxList(pi,list,srcCard,inPump){
       if(ov)toast(`✋ ${ov}枚は手札上限のため墓地へ（ドローしたことにならない）`);
     }else if(f.t==="charge"){
       let cc=0,tp=[];
-      for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;if(manaTapIn(c))tp.push(faceNameOf(c));Z.mana.push(c);markArrive(c);cc++;}
+      for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;if(manaTapIn(c,pi))tp.push(faceNameOf(c));Z.mana.push(c);markArrive(c);cc++;}
       bumpEv("manaAccel",pi,cc);
       if(tp.length)toast(`多色：${tp.join("、")} はタップしてマナゾーンへ`);
       if(cc>0){const nm=Z.mana.slice(-cc).map(faceNameOf).join("、");toast(`💎 マナ加速：${nm} をマナゾーンへ`);}
@@ -10721,6 +10784,9 @@ async function runFxList(pi,list,srcCard,inPump){
       const okFilt=!filt||(rt&&lockFilterOk(filt,rt,top));
       toast(`🎰 山札の上から《${faceNameOf(top)}》を表向きにした`);
       logOnly(`🎰 ${S.players[pi].label}：山札をシャッフルし《${faceNameOf(top)}》を公開`);
+      // 🎰 めくれたカードを画像つきで大きく出す（相手の端末にも送る）
+      try{fxShare("trig","めくれた！",`${S.players[pi].label}：${faceNameOf(top)}`,true,top.name,pi);}catch(e){}
+      await new Promise(r=>setTimeout(r,700));
       const drop=()=>{const ri=Z.reveal.findIndex(x=>x.id===top.id);if(ri>=0)Z.reveal.splice(ri,1);};
       if(!okFilt||(!isCre&&!isSpl)){
         drop();top.faceup=true;Z.hand.push(top);
@@ -11968,7 +12034,8 @@ async function runFxList(pi,list,srcCard,inPump){
         renderAll();
       }
       sfx("grave");
-    }else if(f.t==="peekShieldGrave"){
+    }else if(f.t==="peekShieldGrave"||f.t==="peekShieldDeckBottom"){
+      const _toBtm=(f.t==="peekShieldDeckBottom");   // 🛡 ガチャンコ ミニロボ3号型：墓地ではなく山札の一番下へ
       // 👀🛡 堕呪 ウキドゥ型（v10.43）：いずれかのプレイヤーのシールドを1つ見る。それを墓地に置いてもよい。
       //    そうした場合、そのプレイヤーは自身の山札の上から1枚目をシールド化する（裏向き）。
       //    ポイント：「そうした場合」＝墓地に置いた時だけ補充が起きる。見ただけ／置かなかった時は
@@ -11998,8 +12065,8 @@ async function runFxList(pi,list,srcCard,inPump){
         await pickCard(`👀 ${S.players[tp].label} の盾${j+1}を見た`,[sh],{hint:"タップして次へ　／　このあと墓地に置くかどうかを選びます"});
         logOnly(`👀 ${S.players[pi].label}：${S.players[tp].label} の盾${j+1}を見た → 《${faceNameOf(sh)}》`);
         // ④ 墓地に置くかどうか（任意）
-        const jg=await askChoice(`🛡 ${S.players[tp].label} の盾${j+1}：《${faceNameOf(sh)}》\n墓地に置きますか？`,
-          ["墓地に置く（→ そのプレイヤーは山札の上から1枚をシールド化）","置かない（シールドはそのまま・補充もなし）"]);
+        const jg=await askChoice(`🛡 ${S.players[tp].label} の盾${j+1}：《${faceNameOf(sh)}》\n${_toBtm?"山札の一番下に置きますか？":"墓地に置きますか？"}`,
+          [`${_toBtm?"山札の一番下に置く":"墓地に置く"}（→ そのプレイヤーは山札の上から1枚をシールド化）`,"置かない（シールドはそのまま・補充もなし）"]);
         if(jg!==0){
           toast(`👀 見ただけで、シールドは動かさなかった（補充なし）`);
           logOnly(`👀 ${S.players[pi].label}：盾を墓地に置かなかったため、シールド化は行われない`);
@@ -12009,11 +12076,11 @@ async function runFxList(pi,list,srcCard,inPump){
         const shx=ZT.shield.splice(j,1)[0];
         const kids=shx.under?shx.under.splice(0):[];
         shx.faceup=true;shx.tapped=false;shx.mark=false;shx.sideways=false;
-        ZT.grave.push(shx);
+        if(_toBtm){shx.faceup=false;ZT.deck.push(shx);}else ZT.grave.push(shx);
         kids.forEach(u=>{u.faceup=true;u.tapped=false;ZT.grave.push(u);});
         if(kids.length)toast(`盾の下の${kids.length}枚（要塞化の城など）は墓地へ`);
-        toast(`🛡→🪦 ${S.players[tp].label} の盾${j+1}《${faceNameOf(shx)}》を墓地へ（ブレイクではないのでS・トリガーなし）`);
-        logOnly(`🛡→🪦 ${S.players[pi].label}：${S.players[tp].label} のシールド《${faceNameOf(shx)}》を墓地に置いた`);
+        toast(`🛡→${_toBtm?"📚":"🪦"} ${S.players[tp].label} の盾${j+1}《${faceNameOf(shx)}》を${_toBtm?"山札の一番下へ":"墓地へ"}（ブレイクではないのでS・トリガーなし）`);
+        logOnly(`🛡→${_toBtm?"📚":"🪦"} ${S.players[pi].label}：${S.players[tp].label} のシールド《${faceNameOf(shx)}》を${_toBtm?"山札の一番下に":"墓地に"}置いた`);
         sfx("grave");
         if(S.expert)runWatchFx(tp,"shieldLeave");
         renderAll();
@@ -12076,7 +12143,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const kids=sh.under?sh.under.splice(0):[];
         sh.faceup=true;sh.tapped=false;sh.mark=false;sh.sideways=false;
         if(dest==="mana"){
-          if(manaTapIn(sh))toast(`多色：${faceNameOf(sh)} はタップしてマナへ`);
+          if(manaTapIn(sh,pi))toast(`多色：${faceNameOf(sh)} はタップしてマナへ`);
           Z.mana.push(sh);
         }else Z[dest].push(sh);
         kids.forEach(u=>{u.faceup=true;u.tapped=false;Z.grave.push(u);});
@@ -12428,6 +12495,7 @@ async function runFxList(pi,list,srcCard,inPump){
       let boosted=0;
       for(let i=0;i<moved&&Z.deck.length;i++){
         const c=Z.deck.shift();c.faceup=true;c.sideways=false;
+        manaTapIn(c,pi);
         Z.mana.push(c);markArrive(c);boosted++;
       }
       bumpEv("manaAccel",pi,boosted);
@@ -13088,6 +13156,21 @@ async function runFxList(pi,list,srcCard,inPump){
           await checkZeroPower(); // 💥 パワー0以下は破壊
         }
       }
+    }else if(f.t==="destroyThis"){
+      // 💀 このクリーチャー自身を破壊する
+      const meD=srcCard&&zonesOf(pi).battle.find(x=>x.id===srcCard.id);
+      if(!meD){toast("💀 対象のクリーチャーはもうバトルゾーンにいません");continue;}
+      toast(`💀 ${faceNameOf(meD)} を破壊します`);
+      await destroyCreature(pi,meD);
+      await drainToGrave();
+      renderAll();
+    }else if(f.t==="extraTurnSelf"){
+      // ⏭ このターンの後に自分のターンを追加する
+      S.extra[pi]=(S.extra[pi]|0)+Math.max(1,n|0);
+      toast(`⏭ ${S.players[pi].label} は追加ターンを得た（残り${S.extra[pi]}）`);
+      logOnly(`⏭ 追加ターン：${S.players[pi].label}（残り${S.extra[pi]}）`);
+      try{fxShare("extra","エクストラターン！",`${S.players[pi].label}`,true,srcCard?srcCard.name:"",pi);}catch(e){}
+      renderAll();
     }else if(f.t==="trigPowDown"){
       // ⬇ そのターン、誘発のきっかけになったクリーチャー1体のパワーを−n×1000
       //    （FX_TRIG＝「相手のクリーチャーが出た時」なら、その出たクリーチャー）
@@ -25473,11 +25556,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   }
   if(S.expert&&toZone==="mana"){
     runWatchFx(pTo,"manaCharge");
-    const foeM=pTo===0?1:0;
-    if(zonesOf(foeM).battle.some(b=>{const rb=getReg(b);return rb&&rb.stManaTap;})){
-      c.tapped=true;
-      toast(`⚙ 常在効果：マナはタップして置かれる`);
-    }
+    applyManaTapIn(pTo,c);
   }
   // 📊 対戦データ：手札からのマナチャージを記録（v10.46・効果による移動もここを通るが人間の判断として近似）
   if(fromZone==="hand"&&toZone==="mana"&&pFrom===pTo&&typeof mdEv==="function")mdEv("charge",pTo,faceNameOf(c),{m:zonesOf(pTo).mana.length});
@@ -27099,6 +27178,7 @@ function renderAllNow(){
   checkLibWin();
   checkMugetsu(false);
   checkGraveAwaken();   // 🔄 自分の墓地にカードが置かれた時の覚醒／進化
+  fixPsyStray();        // 🌌 サイキック／ドラグハートが超次元ゾーン以外に紛れていたら戻す
   // 🌟 モモキングダム✕型：含まれるカードの枚数を見張り、「ちょうど6枚になった」瞬間に −99999 を発動する。
   //    増えて6枚になった時だけでなく、7枚以上から減って6枚になった時（メテオバーン・退化など）も対象。
   if(S.expert){
@@ -31713,7 +31793,7 @@ function openDeckMenu(pi){
     closeSheet();renderAll();openRevealPanel(pi,"reveal");
   },"",true));
   box.appendChild(actBtn("上を1枚 墓地へ",()=>{if(Z.deck.length){snap();const c=Z.deck.shift();c.faceup=true;Z.grave.push(c);logOnly(`🪦 ${S.players[pi].label}：山札の上1枚を墓地へ → ${cn(c)}`);sfx("grave");renderAll();}closeSheet();}));
-  box.appendChild(actBtn("上を1枚 マナへ",()=>{if(Z.deck.length){snap();const c=Z.deck.shift();c.faceup=true;Z.mana.push(c);logOnly(`💎 ${S.players[pi].label}：山札の上1枚をマナへ → ${cn(c)}`);renderAll();}closeSheet();}));
+  box.appendChild(actBtn("上を1枚 マナへ",()=>{if(Z.deck.length){snap();const c=Z.deck.shift();c.faceup=true;manaTapIn(c,pi);Z.mana.push(c);logOnly(`💎 ${S.players[pi].label}：山札の上1枚をマナへ → ${cn(c)}`);renderAll();}closeSheet();}));
   box.appendChild(actBtn("上を1枚 シールドへ（裏）",()=>{if(!shieldCapOk(Z)){toast("🛡 シールド上限（10枚）：追加できません");return;}if(Z.deck.length){snap();const c=Z.deck.shift();c.faceup=false;if(S.turn>0){c.mark=true;c._addedBy="手動（山札から）";c._addedTurn=S.turn|0;}Z.shield.push(c);logOnly(`🛡 ${S.players[pi].label}：山札の上1枚を裏向きのシールドに追加`);renderAll();}closeSheet();}));
   box.appendChild(actBtn("上を1枚 シールドへ（表向き）",async ()=>{
     if(!Z.deck.length){toast("山札がありません");return;}
@@ -32470,7 +32550,7 @@ function renderManaViewer(pi){
   mkb("全T",()=>{snap();Z.mana.forEach(c=>c.tapped=true);sfx("move");renderAll();renderManaViewer(pi);});
   mkb("全U",()=>{snap();Z.mana.forEach(c=>c.tapped=false);sfx("move");renderAll();renderManaViewer(pi);});
   mkb(S.noUntapMana?"自動U:OFF":"自動U:ON",()=>{S.noUntapMana=!S.noUntapMana;if(db)idbPut("misc","noUntapMana",S.noUntapMana);toast(S.noUntapMana?"ターン開始時のマナ自動アンタップ：OFF":"ターン開始時のマナ自動アンタップ：ON");renderAll();renderManaViewer(pi);});
-  mkb("山上→マナ",()=>{if(!Z.deck.length){toast("山札がありません");return;}snap();const c=Z.deck.shift();c.faceup=true;c.sideways=false;const tp=manaTapIn(c);Z.mana.push(c);markArrive(c);sfx("move");renderAll();renderManaViewer(pi);toast(tp?`マナチャージ（多色・タップイン）：${c.name}`:`マナチャージ：${c.name}`);});
+  mkb("山上→マナ",()=>{if(!Z.deck.length){toast("山札がありません");return;}snap();const c=Z.deck.shift();c.faceup=true;c.sideways=false;const tp=manaTapIn(c,pi);Z.mana.push(c);markArrive(c);sfx("move");renderAll();renderManaViewer(pi);toast(tp?`マナチャージ（多色・タップイン）：${c.name}`:`マナチャージ：${c.name}`);});
   // ☑ マナパネルの中でも1枚ずつ選べるように、パネル専用の複数選択トグルを置く
   mkb(S.multi?"☑複数選択:ON":"☑複数選択",()=>{
     S.multi=!S.multi;
