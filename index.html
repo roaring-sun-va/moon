@@ -2244,6 +2244,7 @@ body.shake{animation:bodyShake .4s ease-out}
         </div>
         <label title="自分のサイキック・クリーチャーがバトルゾーンに出た時、または覚醒した時、このカードを超次元ゾーンから出してもよい（超時空ストームG・XX 型）。超次元ゾーンに置いておくカードに入れてください"><input type="checkbox" id="fxHyperCallOnPsy"> 🌌 自分のサイキックが出た時・覚醒した時、超次元から出せる</label>
         <label title="このカードは、多面登録の2面目（裏面）としても手札から召喚できます（大獄の封殺ディアス Z 型）。表の面に入れてください"><input type="checkbox" id="fxCastAsBack"> 🃏 手札から裏面としても召喚できる</label>
+        <label title="自分のクリーチャーに「スレイヤー」を与えます（熊田すず型）。「このカード自身は含まない」「付与の対象条件」は上のパワー付与の欄と共通です"><input type="checkbox" id="fxStAuraSlayer"> 🗡 常在：味方に「スレイヤー」を与える</label>
         <label title="自分のクリーチャーに「ブロッカー」を与えます（滝川るる＆ラフルル型）。「このカード自身は含まない」「付与の対象条件」は上のパワー付与の欄と共通です"><input type="checkbox" id="fxStAuraBlocker"> 🛡 常在：味方に「ブロッカー」を与える</label>
         <label title="バトル中、自分のハンター1体につきパワー+1000（自身がハンターなら自身も数えます）。バトルの時だけで、除去のパワー参照には効きません"><input type="checkbox" id="fxHunting"> 🏹 ハンティング</label>
         <label style="display:flex;align-items:center;gap:4px" title="J・O・E N：召喚する時、コストをN少なくしてもよい。そうした場合、このターンの終わりに山札の一番下に置き、カードを1枚引きます。0＝なし">🃏 J・O・E
@@ -3960,7 +3961,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.24";
+const APP_VER="v13.27";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6459,6 +6460,41 @@ async function loadDeckOrder(){
 async function saveDeckMeta(){try{if(db)await idbPut("misc","deckMeta",DECK_META);}catch(e){}}
 async function saveDeckOrder(){try{if(db)await idbPut("misc","deckOrder",DECK_ORDER);}catch(e){}}
 async function saveDeckSort(v){DECK_SORT=v;try{if(db)await idbPut("misc","deckSort",v);}catch(e){}}
+/* 🗂 バックアップから並び順を取り込む（端末間の引っ越し用）。
+   この端末にしか無いデッキは消さない。読んだ順を前に、残りは後ろにつなぐ。
+   古いバックアップ（v5以前）には入っていないので、その時は何もしない。 */
+async function mergeDeckOrder(data){
+  if(!data)return false;
+  const hasMeta=data.deckMeta&&typeof data.deckMeta==="object";
+  const hasOrder=Array.isArray(data.deckOrder);
+  const hasSort=typeof data.deckSort==="string"&&["name","created","used","manual"].includes(data.deckSort);
+  if(!hasMeta&&!hasOrder&&!hasSort)return false;
+  await loadDeckOrder();
+  if(hasMeta){
+    for(const [n,v] of Object.entries(data.deckMeta)){
+      if(!v||typeof v!=="object")continue;
+      const cur=DECK_META[n]||(DECK_META[n]={});
+      // 登録した時刻は古いほう、最後に使った時刻は新しいほうを残す
+      if(Number.isFinite(+v.c)&&+v.c>0)cur.c=cur.c?Math.min(cur.c,+v.c):+v.c;
+      if(Number.isFinite(+v.u)&&+v.u>0)cur.u=cur.u?Math.max(cur.u,+v.u):+v.u;
+    }
+    await saveDeckMeta();
+  }
+  if(hasOrder){
+    const seen=new Set();
+    const next=[];
+    for(const n of data.deckOrder){
+      if(typeof n!=="string"||seen.has(n))continue;
+      seen.add(n);next.push(n);
+    }
+    for(const n of DECK_ORDER)if(typeof n==="string"&&!seen.has(n)){seen.add(n);next.push(n);}
+    for(const n of await deckNames())if(!seen.has(n)){seen.add(n);next.push(n);}
+    DECK_ORDER=next;
+    await saveDeckOrder();
+  }
+  if(hasSort)await saveDeckSort(data.deckSort);
+  return true;
+}
 function markDeckCreated(name){
   if(!DECK_META[name])DECK_META[name]={};
   if(!DECK_META[name].c)DECK_META[name].c=Date.now();
@@ -7249,6 +7285,12 @@ async function runTurnEndTriggers(cur2){
    runTurnEndTriggers の完了後にのみ呼ばれる。 */
 async function finishNextTurn(cur){
   // 🌑 絶・無月の門はnextTurn冒頭のゲートで処理済み（ここでは何もしない）
+  // ☠ ボルバルザーク型：予約した追加ターンが終わった時点で敗北する。
+  if(S.extraLoseActive&&S.extraLoseActive[cur]>0){
+    S.extraLoseActive[cur]--;
+    if(typeof canLoseNow==="function"&&!canLoseNow(cur))toast(`⚠ ${S.players[cur].label}の追加ターン終了時敗北は「負けない」効果で防がれた`);
+    else{await declareWin(cur?0:1,`無双竜機ボルバルザーク型：${S.players[cur].label}は追加ターンの終わりにゲームに負けた`);return;}
+  }
   for(const P of S.players)P.zones.battle.forEach(c=>{
     if(c.buff&&c.buff._n&&c.buff._n.length){
       // 次の自分のターン開始まで持続する付与のみ残す（他の一過性バフは解除）
@@ -7271,7 +7313,7 @@ async function finishNextTurn(cur){
     }
   }catch(e){}
   let extra=false;
-  if(S.extra[cur]>0){S.extra[cur]--;extra=true;S.turn++;}
+  if(S.extra[cur]>0){S.extra[cur]--;extra=true;S.turn++;if(S.extraLose&&S.extraLose[cur]>0){S.extraLose[cur]--;S.extraLoseActive=S.extraLoseActive||{};S.extraLoseActive[cur]=(S.extraLoseActive[cur]|0)+1;}}
   else if(S.vs){
     S.who=S.who?0:1;
     if(S.who===0)S.turn++;
@@ -8990,6 +9032,14 @@ const FX_TYPES=[
   ["dSwitchOff","🅳 このカードのDスイッチを戻す（元の向きへ）"],
   ["destroyThis","💀 このクリーチャー自身を破壊する（黒神龍クランキーヴィーン型・すでに離れていたら何もしない）"],
   ["extraTurnSelf","⏭ このターンの後に、自分のターンを追加する（勝利龍装 クラッシュ\"覇道\" 型）"],
+  ["extraTurnLose","⏭☠ このターンの後に自分のターンを追加し、その追加ターンの終わりにゲームに負ける（ボルバルザーク型）"],
+  ["drawUpTo","🃏 カードをn枚まで引く（0枚も選択可）"],
+  ["destroyAllOtherExactPower","💥 このクリーチャー以外の、パワーnのクリーチャーをすべて破壊する（ボルバルザーク型）"],
+  ["mDeckEvo3","🃏 Mデッキ進化：山札の上から3枚を公開し、クリーチャー1枚を進化元にして残りを墓地へ。いなければこのクリーチャーを手札へ（M・ロマノフ型）"],
+  ["manaCastSpell","🔮 自分のマナゾーンから条件に合う呪文1枚を、コストを支払わずに唱えてもよい（条件欄で文明/コスト指定）"],
+  ["deckAnyToGrave","🗑 自分または相手の山札を見てカード1枚を持ち主の墓地に置き、その山札をシャッフル（ロスト・チャージャー型）"],
+  ["motherEarth","🌍 いずれかのクリーチャー1体を持ち主のマナへ。そうしたら、そのマナからマナ枚数以下の進化でないクリーチャー1体を出す（母なる大地型）"],
+  ["motherMonsho","🌍 文明を1つ選び、その文明の自分のクリーチャー1体をマナへ。そうしたら、同じ文明でマナ枚数以下のクリーチャー1体をマナから出す（母なる紋章型）"],
   ["trigPowDown","⬇ そのターン、誘発のきっかけになったクリーチャー1体のパワーを−n×1000（「相手のクリーチャーがバトルゾーンに出た時」と組み合わせて「そのクリーチャーのパワーを−n」に・HADES型のメテオバーン）"],
   ["trigCantAtk","⛔ そのターン、誘発のきっかけになったクリーチャー1体は攻撃できない（相手のクリーチャーが出た時・カルマ コットン型）"],
   ["foePowDownAll","⬇ そのターン、条件に合う相手クリーチャーすべてのパワーを−n×1000（ターン終了時まで・条件欄で対象指定・空欄＝全部・HADES型）"],
@@ -10670,7 +10720,8 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
 const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
-  "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom"]);
+  "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
+  "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
    個々の効果に手を入れず、効果を1件処理し終えたタイミングで印だけ付いている盾を拾って刻む。 */
 function stampShieldSrc(label){
@@ -10918,6 +10969,14 @@ async function runFxList(pi,list,srcCard,inPump){
       const ef=(typeof EFFECTS!=="undefined")&&EFFECTS.find(e=>e.name===nm);
       if(ef){toast(`⚡特殊効果：${nm}`);const _fp=FX_PI;FX_PI=pi;SP_COND=String(f.cond||"").trim();try{await ef.run();}finally{FX_PI=_fp;SP_COND="";}}
       renderAll();continue;
+    }
+    if(f.t==="drawUpTo"){
+      const dn=await askNumber(`何枚引きますか？（0～${n}枚）`,n,n);
+      if(dn===null||dn<=0){toast("（ドローしない）");renderAll();continue;}
+      let dc=0,ov=0;for(let i=0;i<dn&&Z.deck.length;i++){const c2=Z.deck.shift();c2.faceup=true;c2.sideways=false;if(toHand(Z,c2)){markArrive(c2);dc++;}else ov++;}
+      if(dc>0)bumpEv("draws",pi,dc);
+      sfx("draw");if(dc>0||S.gameMode==="tcg")emitEvent(pi,"draw");
+      toast(`🃏 ${dc}枚引いた${ov?`（${ov}枚は手札上限で墓地へ）`:""}`);renderAll();continue;
     }
     if(f.t==="drawAsk"){
       // 🃏 実行時に枚数を入力してドロー（エレメントの枚数分など・0でスキップ）
@@ -14050,6 +14109,57 @@ async function runFxList(pi,list,srcCard,inPump){
         await processBroken(pi,stack,"👁 見たシールドをブレイク（S・トリガー使用可）");
         renderAll();
       }
+    }else if(f.t==="extraTurnLose"){
+      S.extra[pi]=(S.extra[pi]|0)+Math.max(1,n|0);
+      S.extraLose=S.extraLose||{};
+      S.extraLose[pi]=(S.extraLose[pi]|0)+Math.max(1,n|0);
+      toast(`⏭☠ ${S.players[pi].label} は追加ターンを得た（その追加ターン終了時に敗北）`);
+      logOnly(`⏭☠ 追加ターン＋終了時敗北：${S.players[pi].label}`);
+      renderAll();
+    }else if(f.t==="destroyAllOtherExactPower"){
+      const hits=[];
+      for(const sp of (S.vs?[pi,op]:[pi]))for(const x of zonesOf(sp).battle){
+        if(srcCard&&x.id===srcCard.id)continue;
+        const rx=getReg(x);if(rx&&isCreatureReg(rx)&&(await effPower(x,false,false))===n)hits.push({sp,x});
+      }
+      if(!hits.length)toast(`💥 このクリーチャー以外にパワー${n}のクリーチャーはいない`);
+      else{snap();for(const h of hits)if(zonesOf(h.sp).battle.some(x=>x.id===h.x.id))await destroyWithReplace(h.sp,h.x);sfx("grave");renderAll();toast(`💥 パワー${n}の他のクリーチャー${hits.length}体を破壊`);}
+    }else if(f.t==="mDeckEvo3"){
+      const host=srcCard&&Z.battle.find(x=>x.id===srcCard.id);
+      if(!host){toast("🃏 Mデッキ進化：このクリーチャーが場にいません");continue;}
+      snap();const rev=[];for(let i=0;i<3&&Z.deck.length;i++){const x=Z.deck.shift();x.faceup=true;rev.push(x);}
+      toast(`🃏 Mデッキ進化で公開：${rev.map(faceNameOf).join("、")}`);logOnly(`🃏 ${S.players[pi].label}：Mデッキ進化で ${cnList(rev)} を公開`);
+      const pool=rev.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
+      if(!pool.length){for(const x of rev){x.tapped=false;Z.grave.push(x);}const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const me=Z.battle.splice(bi,1)[0];leaveBattleCleanup(Z,me,"hand");me.faceup=true;me.tapped=false;Z.hand.push(me);}toast("🃏 クリーチャーがないためMデッキ進化失敗：公開分を墓地、本体を手札へ");renderAll();continue;}
+      const j=pool.length===1?0:await pickCard("🃏 Mデッキ進化の進化元を1枚選択",pool);
+      const base=pool[j===null?0:j];for(const x of rev)if(x.id!==base.id){x.tapped=false;Z.grave.push(x);}
+      host.under=host.under||[];host.under.push(base);host.sick=false;host.neoEvo=true;sfx("evo");renderAll();toast(`🃏 Mデッキ進化：《${faceNameOf(base)}》の上に重ねた`);
+    }else if(f.t==="deckAnyToGrave"){
+      let tp=pi;if(S.vs){const q=await askChoice("🗑 どちらの山札から墓地に置きますか？",[`自分（${S.players[pi].label}）`,`相手（${S.players[op].label}）`]);if(q===null)continue;tp=q===1?op:pi;}
+      const TZ=zonesOf(tp);if(!TZ.deck.length){toast("山札がありません");continue;}
+      const j=await pickCard(`🗑 ${S.players[tp].label}の山札から墓地に置くカードを選択`,TZ.deck,{hint:"山札全体を確認中／タップで選択"});if(j===null)continue;
+      snap();const cc=TZ.deck.splice(j,1)[0];cc.faceup=true;cc.tapped=false;TZ.grave.push(cc);shuffle(TZ.deck);logPriv(pi,`🗑 ${S.players[tp].label}の山札から《${faceNameOf(cc)}》を墓地へ→シャッフル`,`${S.players[tp].label}の山札から1枚を墓地へ→シャッフル`);sfx("grave");renderAll();
+    }else if(f.t==="manaCastSpell"){
+      const filt=String(f.cond||"").trim();
+      // 「火または闇／コスト6以下」は、文明部分だけOR、コスト部分は共通のANDとして扱う。
+      const fd=/火(?:または|｜|か)闇|闇(?:または|｜|か)火/.test(filt);
+      const rest=fd?filt.replace(/火(?:または|｜|か)闇|闇(?:または|｜|か)火/g,"").replace(/^[／\/]+|[／\/]+$/g,""):filt;
+      const pool=Z.mana.filter(x=>{const rx=getReg(x);return rx&&(rx.ctype==="spell"||rx.twin||rx.ctype==="twinpact")&&(!fd||(rx.civs||[]).some(cv=>cv==="fire"||cv==="dark"))&&(!rest||lockFilterOk(rest,rx,x,null,"spell"));});
+      if(!pool.length){toast(`マナに条件に合う呪文がありません${filt?`（${filt}）`:""}`);continue;}
+      const j=await pickCard("🔮 マナゾーンからコストを支払わず唱える呪文を選択",pool,{hint:"キャンセルで唱えない"});if(j===null)continue;
+      const sel=pool[j],mi=Z.mana.findIndex(x=>x.id===sel.id);if(mi<0)continue;snap();Z.mana.splice(mi,1);sel.faceup=true;sel.tapped=false;{const rr=getReg(sel);if(rr&&rr.twin)sel.face=1;}Z.resolve.push(sel);emitEvent(pi,"spell",sel);enqueueFx(pi,sel);sfx("ok");renderAll();await waitFxIdle(inPump);
+    }else if(f.t==="motherEarth"||f.t==="motherMonsho"){
+      let tp=pi,chosenCiv="";
+      if(f.t==="motherMonsho"){
+        const keys=["light","water","dark","fire","nature"],labs=["光","水","闇","火","自然"];const q=await askChoice("🌍 文明を1つ選ぶ",labs);if(q===null)continue;chosenCiv=keys[q];
+      }else if(S.vs){const q=await askChoice("🌍 どちらのクリーチャーをマナに置きますか？",["自分","相手"]);if(q===null)continue;tp=q===1?op:pi;}
+      const TZ=zonesOf(tp);let bp=TZ.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!chosenCiv||(rx.civs||[]).includes(chosenCiv));});
+      if(!bp.length){toast("🌍 対象のクリーチャーがいません");continue;}const bj=await pickCard("🌍 マナゾーンに置くクリーチャーを選択",bp);if(bj===null)continue;
+      const tgt=bp[bj];if(!await ask(`🌍 《${faceNameOf(tgt)}》を持ち主のマナゾーンに置きますか？`))continue;
+      await moveCardX(tp,"battle",tgt.id,tp,"mana");renderAll();
+      const manaN=TZ.mana.length;const mp=TZ.mana.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&!isEvoReg(rx)&&+rx.cost<=manaN&&(!chosenCiv||(rx.civs||[]).includes(chosenCiv));});
+      if(!mp.length){toast(`🌍 マナ${manaN}枚以下の対象クリーチャーがいません`);continue;}const mj=await pickCard(`🌍 マナから出すクリーチャーを選択（コスト${manaN}以下）`,mp);if(mj===null)continue;
+      const out=mp[mj],mi=TZ.mana.findIndex(x=>x.id===out.id);if(mi<0)continue;TZ.mana.splice(mi,1);out.faceup=true;out.tapped=false;out.sick=!(getReg(out)&&getReg(out).sa);if(!battleEntryOk(tp,out)){TZ.mana.push(out);toast("出せないためマナに戻しました");continue;}TZ.battle.push(out);out._viaCheat=true;markArrive(out);emitEvent(tp,"summon");enqueueFx(tp,out);sfx("move");renderAll();await waitFxIdle(inPump);
     }else if(f.t==="deckEvo"){
       // 🂠 デッキ進化（ボルドギ型）：山上1枚を表向き→条件に合えば出して（CIP先行発動）このクリーチャーを上に重ねる
       const filt=String(f.cond||"進化以外／クリーチャー").trim();
@@ -16784,7 +16894,23 @@ async function scheduleAutoResolve(pi,c){
     await new Promise(r2=>setTimeout(r2,300)); // 上に別カードがある間は待つ（入れ子処理中）
   }
 }
-function hasSlayer(c){const r=getReg(c);return !!((r&&r.slayer)||(c.buff&&c.buff.slayer)||(c.hyper&&r&&(r.hmSlayer||r.hmSL))||gearSlayerOn(c));}
+/* 🗡 常在：自分のクリーチャーに「スレイヤー」を与える（熊田すず型）。
+   「このカード自身は含まない」「付与の対象条件」はパワー付与の欄と共通（stAuraOthers / stAuraFilt）。 */
+function auraSlayerOn(c){
+  try{
+    const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
+    if(own==null)return false;
+    const rC=getReg(c);
+    return zonesOf(own).battle.some(b=>{
+      const rb=getReg(b);
+      if(!rb||!rb.stAuraSlayer)return false;
+      if(isSealed(b)||isIgnored(b,own))return false;
+      if(rb.stAuraOthers&&b.id===c.id)return false;
+      return !rb.stAuraFilt||(rC&&lockFilterOk(rb.stAuraFilt,rC,c));
+    });
+  }catch(e){return false;}
+}
+function hasSlayer(c){const r=getReg(c);return !!((r&&r.slayer)||(c.buff&&c.buff.slayer)||(c.hyper&&r&&(r.hmSlayer||r.hmSL))||gearSlayerOn(c)||auraSlayerOn(c));}
 /* 🥏 バトル肩代わり：指定種族の味方がバトルする時、タップせずに別のクリーチャーがかわりにバトルできる。
    ガードマン（味方が攻撃された時にタップして身代わり）とは異なり、タップしない・攻撃/被攻撃どちらのバトルにも働く。 */
 async function battleSubPick(pp,battler){
@@ -21019,6 +21145,7 @@ function renderFxEditor(){
   {const e=$("fxLinkBreakHyper");if(e)e.value=FXEDIT.linkBreakHyper||"";}
   {const e=$("fxHunting");if(e)e.checked=!!FXEDIT.hunting;}
   {const e=$("fxStAuraBlocker");if(e)e.checked=!!FXEDIT.stAuraBlocker;}
+  {const e=$("fxStAuraSlayer");if(e)e.checked=!!FXEDIT.stAuraSlayer;}
   {const e=$("fxHyperCallOnPsy");if(e)e.checked=!!FXEDIT.hyperCallOnPsy;}
   {const e=$("fxCastAsBack");if(e)e.checked=!!FXEDIT.castAsBack;}
   {const e=$("fxJoe");if(e)e.value=FXEDIT.joe||"";}
@@ -22978,7 +23105,7 @@ function fxKeyLabel(k){
     flipAsNew:"裏返ったら新しいクリーチャー扱い",leaveFlipBack:"解除（離れる時に前の面へ）",
     neverLeave:"バトルゾーンを離れない",linkBreakOnLeave:"リンク解除（離れる時）",linkBreakHyper:"リンク解除で超次元へ戻すカード",
     brkPsyOut:"ブレイク盾を墓地に置いて超次元から出す",brkPsyOutFilt:"超次元から出す条件",
-    hunting:"ハンティング",joe:"J・O・E",stAuraBlocker:"常在ブロッカー付与",hyperCallOnPsy:"サイキック登場・覚醒で超次元から出せる",castAsBack:"手札から裏面としても召喚できる",noChooseSpellCost:"選ばれない呪文のコスト条件",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
+    hunting:"ハンティング",joe:"J・O・E",stAuraBlocker:"常在ブロッカー付与",stAuraSlayer:"常在スレイヤー付与",hyperCallOnPsy:"サイキック登場・覚醒で超次元から出せる",castAsBack:"手札から裏面としても召喚できる",noChooseSpellCost:"選ばれない呪文のコスト条件",flipSealWho:"裏返った時の封印",flipSealN:"裏返った時の封印の数",
     cstPow:"条件付きパワー強化",cstPowCond:"条件付きパワーの条件",
     firstRed:"各ターン最初の召喚軽減",firstRedF:"軽減の対象",
     cantAtkCond:"攻撃に必要な条件",stSickAll:"出たターン攻撃不可の除外対象",
@@ -23277,6 +23404,7 @@ function openFxEditor(key){
     linkBreakHyper:cur&&cur.linkBreakHyper||"",
     hunting:cur?!!cur.hunting:false,
     stAuraBlocker:cur?!!cur.stAuraBlocker:false,
+    stAuraSlayer:cur?!!cur.stAuraSlayer:false,
     hyperCallOnPsy:cur?!!cur.hyperCallOnPsy:false,
     castAsBack:cur?!!cur.castAsBack:false,
     joe:cur&&(+cur.joe||0)||0,
@@ -23655,6 +23783,7 @@ $("fxSave").addEventListener("click",async ()=>{
     linkBreakHyper:$("fxLinkBreakHyper")?$("fxLinkBreakHyper").value.trim():"",
     hunting:$("fxHunting")?$("fxHunting").checked:false,
     stAuraBlocker:$("fxStAuraBlocker")?$("fxStAuraBlocker").checked:false,
+    stAuraSlayer:$("fxStAuraSlayer")?$("fxStAuraSlayer").checked:false,
     hyperCallOnPsy:$("fxHyperCallOnPsy")?$("fxHyperCallOnPsy").checked:false,
     castAsBack:$("fxCastAsBack")?$("fxCastAsBack").checked:false,
     joe:$("fxJoe")?(Math.abs(+$("fxJoe").value)||0):0,
@@ -24303,6 +24432,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.linkBreakHyper)attrs.push(`超次元へ戻す：${v.linkBreakHyper}`);
     if(v.hunting)attrs.push("🏹 ハンティング");
     if(v.stAuraBlocker)attrs.push("🛡 味方にブロッカー付与");
+    if(v.stAuraSlayer)attrs.push("🗡 味方にスレイヤー付与");
     if(v.hyperCallOnPsy)attrs.push("🌌 サイキック登場・覚醒で超次元から出せる");
     if(v.castAsBack)attrs.push("🃏 手札から裏面としても召喚できる");
     if(v.joe)attrs.push(`🃏 J・O・E${v.joe}`);
@@ -28011,7 +28141,7 @@ function setupConn(conn){
             let i=2;while(exist.includes(`${nm} ${i}`))i++;
             nm=`${nm} ${i}`;
           }
-          await saveDeck(nm,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],null);
+          await saveDeck(nm,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover||null);
           sfx("ok");
           toast(`🃏 デッキ「${nm}」を保存しました\n「🃏 デッキ」→「📋 デッキ一覧」から使えます`);
           logOnly(`🃏 ${from} からデッキ「${nm}」を受信して保存`);
@@ -30073,7 +30203,8 @@ $("olFxShare").addEventListener("click",async ()=>{
     if(!d){toast("デッキが見つかりません");return;}
     const names=[...d.main,...(d.gr||[]),...(d.hy||[]),...(d.sp||[]),...(d.ex||[])].map(e=>e.name);
     keys=fxShareKeys("deck",names);label=`デッキ「${n}」で使うカード`;
-    _sendDeckObj={name:n,deck:{main:d.main,gr:d.gr||[],hy:d.hy||[],sp:d.sp||[],ex:d.ex||[]}};
+    // 🖼 表紙（cover）も一緒に送る。相手の端末でも同じ絵が出る
+    _sendDeckObj={name:n,deck:{main:d.main,gr:d.gr||[],hy:d.hy||[],sp:d.sp||[],ex:d.ex||[],cover:d.cover||null}};
   }else{keys=fxShareKeys("recent");label="最近2週間の更新分";}
   if(!keys.length){toast("送る対象のカード登録がありません");return;}
   if(!await ask(`📤 カード登録 ${keys.length}件を送信します（${label}）\nよろしいですか？`))return;
@@ -30096,6 +30227,8 @@ $("olFxShare").addEventListener("click",async ()=>{
       if(imgURL.has(k))imgKeys.push(k);
       const l=LINKS.get(k);if(l)for(const f of l)if(imgURL.has(f))imgKeys.push(f);
     }
+    // 🖼 表紙のカードに効果登録が無いと keys に入らないので、ここで足す
+    if(_sendDeckObj&&_sendDeckObj.deck&&_sendDeckObj.deck.cover&&imgURL.has(_sendDeckObj.deck.cover))imgKeys.push(_sendDeckObj.deck.cover);
     const nImg=new Set(imgKeys).size;
     if(nImg){
       const yes=await ask(`🖼 画像も送りますか？（${nImg}枚）\n1枚ずつ縮小して送るため、枚数が多いと数分かかります。\n途中で対戦を始めたり画面を閉じたりしないでください。`);
@@ -35238,13 +35371,16 @@ $("btnExport").addEventListener("click",async ()=>{
     return;
   }
   const withImg=await ask("カード画像もファイルに含めますか？\nOK＝含める（ファイル大）／キャンセル＝設定のみ（軽量）");
+  await loadDeckOrder();   // 🗂 並び順（deckMeta / deckOrder / deckSort）も一緒に持っていく
   const data={
-    v:5, exported:new Date().toISOString(),
+    v:6, exported:new Date().toISOString(),
     decks:{}, cardFx:Object.fromEntries(FXDB), faceLinks:Object.fromEntries(LINKS),
     nameMap:Object.fromEntries(dispName),
     sleeve:S.sleeve, sound:S.sound, expert:S.expert,
+    deckMeta:DECK_META, deckOrder:DECK_ORDER, deckSort:DECK_SORT,
     images:{},
   };
+  // 🖼 デッキ本体をそのまま入れる（表紙 cover と超次元 ex を含む）
   for(const n of await deckNames())data.decks[n]=await getDeck(n);
   if(withImg){
     toast("画像を変換中…少しお待ちください");
@@ -35373,7 +35509,10 @@ $("importInput").addEventListener("change",async e=>{
     }
     if(!data||!data.decks){toast("バックアップファイルではありません");return;}
     if(!await ask("このファイルの内容を読み込みます。\n同名のデッキ・登録は上書きされます。よろしいですか？"))return;
-    for(const [n,d] of Object.entries(data.decks||{}))await saveDeck(n,d.main||[],d.gr||[],d.hy||[],d.sp||[]);
+    // 🖼 表紙（cover）と超次元（ex）を落とさない。古いバックアップ（v5以前）には無いので null になるだけ
+    for(const [n,d] of Object.entries(data.decks||{}))await saveDeck(n,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover||null);
+    // 🗂 並び順を引き継ぐ。こちらにしか無いデッキは消さず、読んだ順のあとろに残す
+    await mergeDeckOrder(data);
     if(data.cardFx){FXDB.clear();for(const [k,v] of Object.entries(data.cardFx))FXDB.set(k,v);await persistFx();}
     if(data.faceLinks){LINKS.clear();for(const [k,v] of Object.entries(data.faceLinks))LINKS.set(k,v);await persistLinks();}
     if(data.nameMap){for(const [k,v] of Object.entries(data.nameMap))dispName.set(k,v);await persistNames();}
