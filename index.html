@@ -2090,6 +2090,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <label><input type="checkbox" id="fxLastBurst"> ラストバースト（破壊時に呪文側を唱えられる）</label>
         <label><input type="checkbox" id="fxMegaLB"> メガ・ラストバースト（離れた時に呪文側）</label>
+        <label title="このクリーチャーが攻撃する時、このカードの呪文側を、バトルゾーンに置いたままコストを支払わずに唱えてもよい（ツインパクト専用・邪幽 ジャヴェール型）"><input type="checkbox" id="fxSmashBurst"> 💥 スマッシュ・バースト（攻撃する時に呪文側・場に残る）</label>
         <label><input type="checkbox" id="fxOniTime"> 鬼タイム（両者の盾合計6枚以下で有効）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="◀鬼エンド▶ クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいて、自分のマナゾーンに指定の文明がすべてあれば、このカードを手札からコストを支払わずに出せる（一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）"><input type="checkbox" id="fxOniEnd"> 👹 鬼エンド（攻撃時・盾0のプレイヤーがいれば手札からコストなしで出す）／必要文明<input type="text" id="fxOniEndCiv" placeholder="例：火闇自然（空欄＝文明条件なし）" style="width:180px"></label>
         <label><input type="checkbox" id="fxAbyss"> アビスラッシュ（墓地から召喚・SA・ターン終わりに山下へ）</label>
@@ -3961,7 +3962,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.27";
+const APP_VER="v13.28";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7812,15 +7813,15 @@ function runWatchFx(pi,type,trigCard){
         }
         // 自分のクリーチャーが出た時／呪文を唱えた時：条件欄は「出たカード/唱えた呪文」の対象条件として判定
         // （<=/>=/以上/以下 を含む式はゾーン条件式として従来どおり判定）
-        if((type==="allyEnter"||type==="allySpell"||type==="spell")&&trigCard){
+        if((type==="allyEnter"||type==="allyLeave"||type==="allySpell"||type==="spell")&&trigCard){
           let cnd=String(w.cond||"").trim();
           // 「他の〜」＝このカード自身が出た時は発動しない（allyEnterのみ意味を持つ）
           if(/^他の/.test(cnd)){
-            if(type==="allyEnter"&&trigCard.id===c.id)return;
+            if((type==="allyEnter"||type==="allyLeave")&&trigCard.id===c.id)return;
             cnd=cnd.replace(/^他の/,"").trim();
           }
           if(cnd){
-            const evLb=type==="allyEnter"?"出た時":"呪文を唱えた時";
+            const evLb=type==="allyEnter"?"出た時":type==="allyLeave"?"離れた時":"呪文を唱えた時";
             // 🔬 自分自身が出た時に条件で不発になった場合は、原因をトーストで知らせる（サイレント不発の防止）
             const _diag=(why)=>{if(type==="allyEnter"&&trigCard.id===c.id)toast(`💡 ${faceNameOf(c)} の「${evLb}」誘発は不発：条件「${cnd}」${why}。自身にも反応させるには条件欄を見直してください（種族の登録漏れ等）`);};
             // ＆区切りで「対象条件＆ゾーン条件式」を併用可（例：ブロッカー＆手札<=9）。ゾーン式はゾーン名で始まる項・ターン項
@@ -9073,6 +9074,7 @@ const FX_TYPES=[
   ["look","山上n枚を見る（非公開）"],
   ["handes","相手の手札をランダムにn枚捨てさせる（条件欄で対象を絞れる：呪文/クリーチャー/種族等＝デュエプレ版デクロワゾー・ジェニー型・ピーピングなし）"],
   ["peepDiscard","相手の手札を見てn枚選んで捨てさせる（ピーピングハンデス：ジェニー型／条件欄で対象を絞るとヤミノカムスター型：呪文のみ等）"],
+  ["foeSelfDiscard","🗑 相手は自身の手札をn枚選び、捨てる（選ぶのは相手・公開しない／条件欄で対象を絞れる）"],
   ["peepShield","相手の手札を見てn枚選び、裏向きの新しいシールドに（パクリオ型）"],
   ["selfShieldMove","自分のシールドをn枚、墓地/マナ/手札へ（行き先は実行時選択：ジャドク丸型／条件欄に「手札」「マナ」「墓地」と書くと行き先を固定・シールドを選んで手札に戻すコダマンマ型に使える）"],
   ["selfDiscard","自分の手札からn枚選んで捨てる（バレッドゥ型：捨て終わるまで解決が完了しない）"],
@@ -10361,6 +10363,7 @@ async function destroyCreature(pi,c,opts){
   noteLeftThisTurn(pi,c);
   try{kindanLoseCheck(pi,c);}catch(e){}   // ☠ ドキンダムX型の強制敗北
   if(S.expert)runWatchFx(pi,"selfLeave",c);
+  if(S.expert)runWatchFx(pi,"allyLeave",c);   // 🕳 自分のクリーチャーが離れた時（盤面に残っている味方が見る）
   qqqxLeaveShuffle(pi,c);
   if(c.gear&&c.gear.length){
     // ⚙ クロス先が破壊された時、そのギアのコントローラー（＝クロス先の持ち主 pi）がn枚引く（秘福 サスペンス・ブーツ型）
@@ -12418,6 +12421,7 @@ async function runFxList(pi,list,srcCard,inPump){
           PZ.battle.splice(biOJ,1);
           hc._leaveUnder=(hc.under&&hc.under.length)||0;
           if(S.expert)runWatchFx(p,"selfLeave",hc); // ☄ 離れた時（ミルザム型）誘発
+          if(S.expert)runWatchFx(p,"allyLeave",hc);  // 🕳 自分のクリーチャーが離れた時
           if(hc.gear&&hc.gear.length){const gs=hc.gear.splice(0);gs.forEach(g=>gearOut(PZ,g));}
           if(hc.seals&&hc.seals.length){const sl=hc.seals.splice(0);sl.forEach(x2=>{x2.faceup=true;PZ.grave.push(x2);});}
           const sendBottomOJ=x=>{
@@ -12476,6 +12480,34 @@ async function runFxList(pi,list,srcCard,inPump){
         afterHandDiscard(op,c);
       }
       sfx("grave");
+    }else if(f.t==="foeSelfDiscard"){
+      // 🗑 「相手は自身の手札をn枚選び、捨てる」（選ぶのは相手。ピーピングではないので手札全体を見た扱いにはしない）
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      {
+        const hb=handesBlockedBy(op);
+        if(hb){toast(`🛡 ${faceNameOf(hb)}：手札は相手の効果によって捨てられない！`);continue;}
+      }
+      const dFilt=String(f.cond||"").trim();
+      for(let i=0;i<n;i++){
+        if(!OZ.hand.length){toast(`${S.players[op].label}の手札がありません`);break;}
+        let pool=OZ.hand,poolIdx=null;
+        if(dFilt){
+          poolIdx=[];
+          OZ.hand.forEach((hc,ix)=>{const rx=getReg(hc);if(rx&&lockFilterOk(dFilt,rx,hc))poolIdx.push(ix);});
+          if(!poolIdx.length){toast(`🗑 条件（${dFilt}）に合う手札がありません（不発）`);break;}
+          pool=poolIdx.map(ix=>OZ.hand[ix]);
+        }
+        const j=await pickCard(`🗑 ${S.players[op].label}（相手自身）が自分の手札から捨てるカードを選ぶ（${i+1}/${n}枚目）${dFilt?`／条件：${dFilt}`:""}`,pool,
+          {hint:"選ぶのは手札の持ち主です（キャンセルで終了）"});
+        if(j===null)break;
+        const realIx=poolIdx?poolIdx[j]:j;
+        const cD=OZ.hand.splice(realIx,1)[0];
+        cD.faceup=true;cD.tapped=false;OZ.grave.push(cD);
+        bumpEv("handes",pi);
+        toast(`🗑 ${S.players[op].label} は ${cD.name} を捨てた`);
+        afterHandDiscard(op,cD);
+        sfx("grave");renderAll();
+      }
     }else if(f.t==="peepDiscard"){
       // 👁 ピーピングハンデス：相手の手札を見てn枚選んで捨てさせる（解体人形ジェニー型）
       if(!S.vs){toast("（ソロのためピーピングハンデスはスキップ）");continue;}
@@ -18703,6 +18735,33 @@ async function execAttack(pi,id,tg){
       }
     }
   }
+  // 💥 スマッシュ・バースト：このクリーチャーが攻撃する時、このカードの呪文側を
+  //    バトルゾーンに置いたままコストを支払わずに唱えてもよい。
+  //    カードは移動しないので、呪文面（faces[1]）をその場で実行する。
+  if(S.expert&&!c._smashDone){
+    const rSB=getReg(c);
+    const sbFx=(rSB&&rSB.smashBurst&&(rSB.twin||rSB.ctype==="twinpact"))?faceFx(rSB,1):[];
+    if(sbFx.length){
+      c._smashDone=true;
+      const kSp=(LINKS.get(normName(c.name))||[])[1];
+      const spName=(kSp&&dispName.get(kSp))||"呪文側";
+      const go=await ask(`💥 スマッシュ・バースト（${faceNameOf(c)}）\n呪文側「${spName}」をコストを支払わずに唱えますか？\n（このクリーチャーはバトルゾーンに残ります）`);
+      if(go){
+        snap();
+        toast(`💥 スマッシュ・バースト：${spName} を唱える（場に残る）`);
+        logOnly(`💥 ${S.players[pi].label}：${faceNameOf(c)} のスマッシュ・バーストで《${spName}》を唱えた`);
+        // 唱えている間だけ呼文面にして、効果側に「呪文として唱えている」と伝える
+        const _f0=c.face|0;
+        c.face=1;
+        try{
+          emitEvent(pi,"spell",c);          // ⚡ 呪文を唱えた時の誘発（公式FAQ：これは呪文を唱えている扱い）
+          await runFxList(pi,sbFx,c);
+        }finally{ c.face=_f0; }
+        renderAll();
+        if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
+      }
+    }
+  }
   // 🔗 超魂X：攻撃時、下の超魂Xカードの能力を上のクリーチャーで処理できるパネルを出す
   if(S.expert&&!c._sxAtkDone){
     const sxs=soulXUnder(c);
@@ -20056,6 +20115,7 @@ const TRIG_EVS=[
   ["shieldLeave","自分のシールドが離れた時（オシオキムーン）"],
   ["myDestroyed","自分のクリーチャーが破壊された時"],
   ["allyEnter","自分のクリーチャーがバトルゾーンに出た時（条件欄に種族などの対象条件・自身が出た時も含む）"],
+  ["allyLeave","🕳 自分のクリーチャーがバトルゾーンを離れた時（条件欄に種族などの対象条件・「他の」で自身を除外／邪幽 ジャヴェール型）"],
   ["allyEvo","自分の他のクリーチャーが進化した時（光神龍チェンクン型）"],
   ["oppSummon","相手のクリーチャーがバトルゾーンに出た時"],
   ["oppSummonTapped","相手のクリーチャーが出た時（このクリーチャーがタップ中のみ・カツドン型）"],
@@ -21193,6 +21253,7 @@ function renderFxEditor(){
   $("fxSoulX").checked=!!FXEDIT.soulX;
   $("fxLastBurst").checked=!!FXEDIT.lastburst;
   $("fxMegaLB").checked=!!FXEDIT.megaLB;
+  $("fxSmashBurst").checked=!!FXEDIT.smashBurst;
   $("fxOniTime").checked=!!FXEDIT.oniTime;
   {const e=$("fxOniEnd");if(e)e.checked=!!FXEDIT.oniEnd;}
   {const e=$("fxOniEndCiv");if(e)e.value=FXEDIT.oniEndCiv||"";}
@@ -23343,6 +23404,7 @@ function openFxEditor(key){
     soulX:cur?!!cur.soulX:false,
     lastburst:cur?!!cur.lastburst:false,
     megaLB:cur?!!cur.megaLB:false,
+    smashBurst:cur?!!cur.smashBurst:false,
     oniTime:cur?!!cur.oniTime:false,
     oniEnd:cur?!!cur.oniEnd:false,
     oniEndCiv:cur&&cur.oniEndCiv||"",
@@ -23832,6 +23894,7 @@ $("fxSave").addEventListener("click",async ()=>{
     soulX:$("fxSoulX").checked,
     lastburst:$("fxLastBurst").checked,
     megaLB:$("fxMegaLB").checked,
+    smashBurst:$("fxSmashBurst").checked,
     oniTime:$("fxOniTime").checked,
     oniEnd:$("fxOniEnd")?$("fxOniEnd").checked:false,
     oniEndCiv:$("fxOniEndCiv")?$("fxOniEndCiv").value.trim():"",
@@ -24382,6 +24445,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.soulX)attrs.push("超魂X");
     if(v.lastburst)attrs.push("ラストバースト");
     if(v.megaLB)attrs.push("メガLB");
+    if(v.smashBurst)attrs.push("スマッシュ・バースト");
     if(v.oniTime)attrs.push("鬼タイム");
     if(v.oniEnd)attrs.push(`鬼エンド${v.oniEndCiv?`[${v.oniEndCiv}]`:""}`);
     if(v.abyss)attrs.push("アビスラッシュ");
@@ -25871,6 +25935,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     noteLeftThisTurn(pFrom,c);
     try{kindanLoseCheck(pFrom,c);}catch(e){}   // ☠ ドキンダムX型の強制敗北
     if(S.expert&&!c._skipDestroy)runWatchFx(pFrom,"selfLeave",c);
+    if(S.expert&&!c._skipDestroy)runWatchFx(pFrom,"allyLeave",c);  // 🕳 自分のクリーチャーが離れた時
   }
   if(fromZone==="battle"&&toZone!=="battle"){
     const ZF=zonesOf(pFrom);
@@ -36358,6 +36423,32 @@ function bSeed(){
   for(const e of parseList($("hyText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.hy.set(k,Math.min(e.count,4));}
   for(const e of parseList($("exText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.ex.set(k,e.count);}
 }
+/* 🔎 ゾーンの中で条件に合うカードの枚数を数える。
+   zoneCondOk の「マナ:アビス>=3」と「マナすべてアビス」の両方がこれを使う（判定を二重に書かない）。 */
+function zoneFiltCount(arrs,filt){
+  if(!arrs)return 0;
+  if(!filt)return arrs.length;
+  const civMap={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature"};
+  const toks=String(filt).split(/[／\/]/).map(s=>s.trim()).filter(Boolean);
+  return arrs.filter(x=>{
+    const r=getReg(x);
+    return toks.some(tk=>{
+      if(tk==="多色")return r&&r.civs&&r.civs.length>=2;
+      if(tk==="呪文")return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"); // ツインパクトは呪文としても数える（呪文貯蔵型・デュエプレ準拠）
+      if(tk==="クリーチャー")return r&&r.ctype!=="spell";
+      if(tk==="ツインパクト")return r&&(r.twin||r.ctype==="twinpact");
+      if(tk==="ブロッカー")return !!((r&&r.blocker)||(x.buff&&x.buff.blocker)||gearBlockerOn(x)||auraBlockerOn(x));
+      if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(x)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」
+      if(tk==="クロスギア")return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));
+      if(tk==="無色"||tk==="ゼロ文明")return !!(r&&(!r.civs||!r.civs.length||(r.civs.length===1&&r.civs[0]==="zero")));
+      if(tk==="サイキック")return !!((r&&(r.ctype==="psychic"||r.ctype==="psyevo"))||(x&&x.isPsy));
+      if(civMap[tk])return r&&r.civs&&r.civs.includes(civMap[tk]);
+      // 🔎 パワー/コストなどの細かい絞り込みは共通のフィルタ判定に任せる（「パワー6000以上」等）
+      if(/^(?:パワー|コスト)\d+(?:以上|以下)$/.test(tk))return typeof lockFilterOk==="function"&&lockFilterOk(tk,r,x);
+      return (r&&raceMatch(r,tk))||String(x.name||"").includes(tk);
+    });
+  }).length;
+}
 function zoneCondOk(expr,pi,selfCard){
   try{
     const op2=pi===0?1:0, Z=zonesOf(pi), OZ=zonesOf(op2);
@@ -36414,6 +36505,18 @@ function zoneCondOk(expr,pi,selfCard){
       if(t==="自分ターン"||t==="自分のターン")return S.who===pi;
       {const mAC=t.match(/^((?:相手)?(?:マナ|墓地|手札|盾|バトル|山札))?[:：]?全文明$/);
        if(mAC)return allCivOk(mAC[1]||"マナ");}
+      // 💯 「マナすべてアビス」：そのゾーンのカードが全部条件に合う（空のゾーンは不成立）。
+      //    書き方：マナすべてアビス／マナ:すべてアビス／相手バトルすべてブロッカー など
+      {const mAll=t.match(/^((?:相手|自分の?)?(?:マナ|墓地|手札|盾|シールド|バトル|山札))[:：]?(?:すべて|全て|全部)[:：]?(.+)$/);
+       if(mAll){
+         const opp2=/^相手/.test(mAll[1]);
+         const key2=mAll[1].replace(/^相手/,"").replace(/^自分の?/,"").replace(/^シールド$/,"盾");
+         const arrAll={"マナ":"mana","墓地":"grave","手札":"hand","盾":"shield","バトル":"battle","山札":"deck"}[key2];
+         if(!arrAll)return false;
+         const src2=(opp2?OZ:Z)[arrAll]||[];
+         if(!src2.length)return false;   // 1枚も無ければ「すべて」とは言わない
+         return zoneFiltCount(src2,mAll[2].trim())===src2.length;
+       }}
       // 🕐 そのターンに攻撃した回数（例：攻撃回数自分=3）
       {const mA=t.match(/^攻撃回数(自分|相手)(>=|<=|=)(\d+)$/);
        if(mA){
@@ -36452,30 +36555,7 @@ function zoneCondOk(expr,pi,selfCard){
       // 「盾最少」＝両者のうち盾が少ない方の枚数（鬼エンド＝盾最少=0 の判定に使う）
       const arrs={"マナ":Z.mana,"墓地":Z.grave,"相手墓地":OZ.grave,"墓地合計":[...Z.grave,...OZ.grave],"盾":Z.shield,"相手盾":OZ.shield,"盾合計":[...Z.shield,...OZ.shield],"盾最少":(Z.shield.length<=OZ.shield.length?Z.shield:OZ.shield),"バトル":Z.battle,"バトル他":Z.battle.filter(x=>!(selfCard&&x.id===selfCard.id)),"バトル合計":[...Z.battle,...OZ.battle],"バトルマナ":[...Z.battle,...Z.mana],"相手バトル":OZ.battle,"手札":Z.hand,"相手手札":OZ.hand,"山札":Z.deck}[zn];
       if(!arrs)return false;
-      let cnt;
-      if(!filt)cnt=arrs.length;
-      else{
-        const civMap={"光":"light","水":"water","闇":"dark","火":"fire","自然":"nature"};
-        const toks=filt.split(/[／\/]/).map(s=>s.trim()).filter(Boolean);
-        cnt=arrs.filter(x=>{
-          const r=getReg(x);
-          return toks.some(tk=>{
-            if(tk==="多色")return r&&r.civs&&r.civs.length>=2;
-            if(tk==="呪文")return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"); // ツインパクトは呪文としても数える（呪文貯蔵型・デュエプレ準拠）
-            if(tk==="クリーチャー")return r&&r.ctype!=="spell";
-            if(tk==="ツインパクト")return r&&(r.twin||r.ctype==="twinpact");
-            if(tk==="ブロッカー")return !!((r&&r.blocker)||(x.buff&&x.buff.blocker)||gearBlockerOn(x)||auraBlockerOn(x));
-            if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(x)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」・通常召喚状態や手札では「進化以外」（ヘブンズ・ゲート／爆進ダブル両対応）
-            if(tk==="クロスギア")return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));
-            if(tk==="無色"||tk==="ゼロ文明")return !!(r&&(!r.civs||!r.civs.length||(r.civs.length===1&&r.civs[0]==="zero")));
-            if(tk==="サイキック")return !!((r&&(r.ctype==="psychic"||r.ctype==="psyevo"))||(x&&x.isPsy));
-            if(civMap[tk])return r&&r.civs&&r.civs.includes(civMap[tk]);
-            // 🔎 パワー/コストなどの細かい絞り込みは共通のフィルタ判定に任せる（「パワー6000以上」等）
-            if(/^(?:パワー|コスト)\d+(?:以上|以下)$/.test(tk))return typeof lockFilterOk==="function"&&lockFilterOk(tk,r,x);
-            return (r&&raceMatch(r,tk))||String(x.name||"").includes(tk);
-          });
-        }).length;
-      }
+      const cnt=(!filt)?arrs.length:zoneFiltCount(arrs,filt);
       if(opr==="<="||opr==="≦")return cnt<=n;
       if(opr==="="||opr==="＝")return cnt===n;
       return cnt>=n;
