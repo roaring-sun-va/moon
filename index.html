@@ -3960,7 +3960,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.25";
+const APP_VER="v13.24";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7249,12 +7249,6 @@ async function runTurnEndTriggers(cur2){
    runTurnEndTriggers の完了後にのみ呼ばれる。 */
 async function finishNextTurn(cur){
   // 🌑 絶・無月の門はnextTurn冒頭のゲートで処理済み（ここでは何もしない）
-  // ☠ ボルバルザーク型：予約した追加ターンが終わった時点で敗北する。
-  if(S.extraLoseActive&&S.extraLoseActive[cur]>0){
-    S.extraLoseActive[cur]--;
-    if(typeof canLoseNow==="function"&&!canLoseNow(cur))toast(`⚠ ${S.players[cur].label}の追加ターン終了時敗北は「負けない」効果で防がれた`);
-    else{await declareWin(cur?0:1,`無双竜機ボルバルザーク型：${S.players[cur].label}は追加ターンの終わりにゲームに負けた`);return;}
-  }
   for(const P of S.players)P.zones.battle.forEach(c=>{
     if(c.buff&&c.buff._n&&c.buff._n.length){
       // 次の自分のターン開始まで持続する付与のみ残す（他の一過性バフは解除）
@@ -7277,7 +7271,7 @@ async function finishNextTurn(cur){
     }
   }catch(e){}
   let extra=false;
-  if(S.extra[cur]>0){S.extra[cur]--;extra=true;S.turn++;if(S.extraLose&&S.extraLose[cur]>0){S.extraLose[cur]--;S.extraLoseActive=S.extraLoseActive||{};S.extraLoseActive[cur]=(S.extraLoseActive[cur]|0)+1;}}
+  if(S.extra[cur]>0){S.extra[cur]--;extra=true;S.turn++;}
   else if(S.vs){
     S.who=S.who?0:1;
     if(S.who===0)S.turn++;
@@ -8996,14 +8990,6 @@ const FX_TYPES=[
   ["dSwitchOff","🅳 このカードのDスイッチを戻す（元の向きへ）"],
   ["destroyThis","💀 このクリーチャー自身を破壊する（黒神龍クランキーヴィーン型・すでに離れていたら何もしない）"],
   ["extraTurnSelf","⏭ このターンの後に、自分のターンを追加する（勝利龍装 クラッシュ\"覇道\" 型）"],
-  ["extraTurnLose","⏭☠ このターンの後に自分のターンを追加し、その追加ターンの終わりにゲームに負ける（ボルバルザーク型）"],
-  ["drawUpTo","🃏 カードをn枚まで引く（0枚も選択可）"],
-  ["destroyAllOtherExactPower","💥 このクリーチャー以外の、パワーnのクリーチャーをすべて破壊する（ボルバルザーク型）"],
-  ["mDeckEvo3","🃏 Mデッキ進化：山札の上から3枚を公開し、クリーチャー1枚を進化元にして残りを墓地へ。いなければこのクリーチャーを手札へ（M・ロマノフ型）"],
-  ["manaCastSpell","🔮 自分のマナゾーンから条件に合う呪文1枚を、コストを支払わずに唱えてもよい（条件欄で文明/コスト指定）"],
-  ["deckAnyToGrave","🗑 自分または相手の山札を見てカード1枚を持ち主の墓地に置き、その山札をシャッフル（ロスト・チャージャー型）"],
-  ["motherEarth","🌍 いずれかのクリーチャー1体を持ち主のマナへ。そうしたら、そのマナからマナ枚数以下の進化でないクリーチャー1体を出す（母なる大地型）"],
-  ["motherMonsho","🌍 文明を1つ選び、その文明の自分のクリーチャー1体をマナへ。そうしたら、同じ文明でマナ枚数以下のクリーチャー1体をマナから出す（母なる紋章型）"],
   ["trigPowDown","⬇ そのターン、誘発のきっかけになったクリーチャー1体のパワーを−n×1000（「相手のクリーチャーがバトルゾーンに出た時」と組み合わせて「そのクリーチャーのパワーを−n」に・HADES型のメテオバーン）"],
   ["trigCantAtk","⛔ そのターン、誘発のきっかけになったクリーチャー1体は攻撃できない（相手のクリーチャーが出た時・カルマ コットン型）"],
   ["foePowDownAll","⬇ そのターン、条件に合う相手クリーチャーすべてのパワーを−n×1000（ターン終了時まで・条件欄で対象指定・空欄＝全部・HADES型）"],
@@ -10684,8 +10670,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
 const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
-  "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
-  "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho"]);
+  "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
    個々の効果に手を入れず、効果を1件処理し終えたタイミングで印だけ付いている盾を拾って刻む。 */
 function stampShieldSrc(label){
@@ -10933,14 +10918,6 @@ async function runFxList(pi,list,srcCard,inPump){
       const ef=(typeof EFFECTS!=="undefined")&&EFFECTS.find(e=>e.name===nm);
       if(ef){toast(`⚡特殊効果：${nm}`);const _fp=FX_PI;FX_PI=pi;SP_COND=String(f.cond||"").trim();try{await ef.run();}finally{FX_PI=_fp;SP_COND="";}}
       renderAll();continue;
-    }
-    if(f.t==="drawUpTo"){
-      const dn=await askNumber(`何枚引きますか？（0～${n}枚）`,n,n);
-      if(dn===null||dn<=0){toast("（ドローしない）");renderAll();continue;}
-      let dc=0,ov=0;for(let i=0;i<dn&&Z.deck.length;i++){const c2=Z.deck.shift();c2.faceup=true;c2.sideways=false;if(toHand(Z,c2)){markArrive(c2);dc++;}else ov++;}
-      if(dc>0)bumpEv("draws",pi,dc);
-      sfx("draw");if(dc>0||S.gameMode==="tcg")emitEvent(pi,"draw");
-      toast(`🃏 ${dc}枚引いた${ov?`（${ov}枚は手札上限で墓地へ）`:""}`);renderAll();continue;
     }
     if(f.t==="drawAsk"){
       // 🃏 実行時に枚数を入力してドロー（エレメントの枚数分など・0でスキップ）
@@ -14073,57 +14050,6 @@ async function runFxList(pi,list,srcCard,inPump){
         await processBroken(pi,stack,"👁 見たシールドをブレイク（S・トリガー使用可）");
         renderAll();
       }
-    }else if(f.t==="extraTurnLose"){
-      S.extra[pi]=(S.extra[pi]|0)+Math.max(1,n|0);
-      S.extraLose=S.extraLose||{};
-      S.extraLose[pi]=(S.extraLose[pi]|0)+Math.max(1,n|0);
-      toast(`⏭☠ ${S.players[pi].label} は追加ターンを得た（その追加ターン終了時に敗北）`);
-      logOnly(`⏭☠ 追加ターン＋終了時敗北：${S.players[pi].label}`);
-      renderAll();
-    }else if(f.t==="destroyAllOtherExactPower"){
-      const hits=[];
-      for(const sp of (S.vs?[pi,op]:[pi]))for(const x of zonesOf(sp).battle){
-        if(srcCard&&x.id===srcCard.id)continue;
-        const rx=getReg(x);if(rx&&isCreatureReg(rx)&&(await effPower(x,false,false))===n)hits.push({sp,x});
-      }
-      if(!hits.length)toast(`💥 このクリーチャー以外にパワー${n}のクリーチャーはいない`);
-      else{snap();for(const h of hits)if(zonesOf(h.sp).battle.some(x=>x.id===h.x.id))await destroyWithReplace(h.sp,h.x);sfx("grave");renderAll();toast(`💥 パワー${n}の他のクリーチャー${hits.length}体を破壊`);}
-    }else if(f.t==="mDeckEvo3"){
-      const host=srcCard&&Z.battle.find(x=>x.id===srcCard.id);
-      if(!host){toast("🃏 Mデッキ進化：このクリーチャーが場にいません");continue;}
-      snap();const rev=[];for(let i=0;i<3&&Z.deck.length;i++){const x=Z.deck.shift();x.faceup=true;rev.push(x);}
-      toast(`🃏 Mデッキ進化で公開：${rev.map(faceNameOf).join("、")}`);logOnly(`🃏 ${S.players[pi].label}：Mデッキ進化で ${cnList(rev)} を公開`);
-      const pool=rev.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
-      if(!pool.length){for(const x of rev){x.tapped=false;Z.grave.push(x);}const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const me=Z.battle.splice(bi,1)[0];leaveBattleCleanup(Z,me,"hand");me.faceup=true;me.tapped=false;Z.hand.push(me);}toast("🃏 クリーチャーがないためMデッキ進化失敗：公開分を墓地、本体を手札へ");renderAll();continue;}
-      const j=pool.length===1?0:await pickCard("🃏 Mデッキ進化の進化元を1枚選択",pool);
-      const base=pool[j===null?0:j];for(const x of rev)if(x.id!==base.id){x.tapped=false;Z.grave.push(x);}
-      host.under=host.under||[];host.under.push(base);host.sick=false;host.neoEvo=true;sfx("evo");renderAll();toast(`🃏 Mデッキ進化：《${faceNameOf(base)}》の上に重ねた`);
-    }else if(f.t==="deckAnyToGrave"){
-      let tp=pi;if(S.vs){const q=await askChoice("🗑 どちらの山札から墓地に置きますか？",[`自分（${S.players[pi].label}）`,`相手（${S.players[op].label}）`]);if(q===null)continue;tp=q===1?op:pi;}
-      const TZ=zonesOf(tp);if(!TZ.deck.length){toast("山札がありません");continue;}
-      const j=await pickCard(`🗑 ${S.players[tp].label}の山札から墓地に置くカードを選択`,TZ.deck,{hint:"山札全体を確認中／タップで選択"});if(j===null)continue;
-      snap();const cc=TZ.deck.splice(j,1)[0];cc.faceup=true;cc.tapped=false;TZ.grave.push(cc);shuffle(TZ.deck);logPriv(pi,`🗑 ${S.players[tp].label}の山札から《${faceNameOf(cc)}》を墓地へ→シャッフル`,`${S.players[tp].label}の山札から1枚を墓地へ→シャッフル`);sfx("grave");renderAll();
-    }else if(f.t==="manaCastSpell"){
-      const filt=String(f.cond||"").trim();
-      // 「火または闇／コスト6以下」は、文明部分だけOR、コスト部分は共通のANDとして扱う。
-      const fd=/火(?:または|｜|か)闇|闇(?:または|｜|か)火/.test(filt);
-      const rest=fd?filt.replace(/火(?:または|｜|か)闇|闇(?:または|｜|か)火/g,"").replace(/^[／\/]+|[／\/]+$/g,""):filt;
-      const pool=Z.mana.filter(x=>{const rx=getReg(x);return rx&&(rx.ctype==="spell"||rx.twin||rx.ctype==="twinpact")&&(!fd||(rx.civs||[]).some(cv=>cv==="fire"||cv==="dark"))&&(!rest||lockFilterOk(rest,rx,x,null,"spell"));});
-      if(!pool.length){toast(`マナに条件に合う呪文がありません${filt?`（${filt}）`:""}`);continue;}
-      const j=await pickCard("🔮 マナゾーンからコストを支払わず唱える呪文を選択",pool,{hint:"キャンセルで唱えない"});if(j===null)continue;
-      const sel=pool[j],mi=Z.mana.findIndex(x=>x.id===sel.id);if(mi<0)continue;snap();Z.mana.splice(mi,1);sel.faceup=true;sel.tapped=false;{const rr=getReg(sel);if(rr&&rr.twin)sel.face=1;}Z.resolve.push(sel);emitEvent(pi,"spell",sel);enqueueFx(pi,sel);sfx("ok");renderAll();await waitFxIdle(inPump);
-    }else if(f.t==="motherEarth"||f.t==="motherMonsho"){
-      let tp=pi,chosenCiv="";
-      if(f.t==="motherMonsho"){
-        const keys=["light","water","dark","fire","nature"],labs=["光","水","闇","火","自然"];const q=await askChoice("🌍 文明を1つ選ぶ",labs);if(q===null)continue;chosenCiv=keys[q];
-      }else if(S.vs){const q=await askChoice("🌍 どちらのクリーチャーをマナに置きますか？",["自分","相手"]);if(q===null)continue;tp=q===1?op:pi;}
-      const TZ=zonesOf(tp);let bp=TZ.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!chosenCiv||(rx.civs||[]).includes(chosenCiv));});
-      if(!bp.length){toast("🌍 対象のクリーチャーがいません");continue;}const bj=await pickCard("🌍 マナゾーンに置くクリーチャーを選択",bp);if(bj===null)continue;
-      const tgt=bp[bj];if(!await ask(`🌍 《${faceNameOf(tgt)}》を持ち主のマナゾーンに置きますか？`))continue;
-      await moveCardX(tp,"battle",tgt.id,tp,"mana");renderAll();
-      const manaN=TZ.mana.length;const mp=TZ.mana.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&!isEvoReg(rx)&&+rx.cost<=manaN&&(!chosenCiv||(rx.civs||[]).includes(chosenCiv));});
-      if(!mp.length){toast(`🌍 マナ${manaN}枚以下の対象クリーチャーがいません`);continue;}const mj=await pickCard(`🌍 マナから出すクリーチャーを選択（コスト${manaN}以下）`,mp);if(mj===null)continue;
-      const out=mp[mj],mi=TZ.mana.findIndex(x=>x.id===out.id);if(mi<0)continue;TZ.mana.splice(mi,1);out.faceup=true;out.tapped=false;out.sick=!(getReg(out)&&getReg(out).sa);if(!battleEntryOk(tp,out)){TZ.mana.push(out);toast("出せないためマナに戻しました");continue;}TZ.battle.push(out);out._viaCheat=true;markArrive(out);emitEvent(tp,"summon");enqueueFx(tp,out);sfx("move");renderAll();await waitFxIdle(inPump);
     }else if(f.t==="deckEvo"){
       // 🂠 デッキ進化（ボルドギ型）：山上1枚を表向き→条件に合えば出して（CIP先行発動）このクリーチャーを上に重ねる
       const filt=String(f.cond||"進化以外／クリーチャー").trim();
