@@ -3962,7 +3962,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.28";
+const APP_VER="v13.29";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10721,7 +10721,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🔧 条件欄を「対象の絞り込み／書式」として使う効果の一覧。
    これらの効果ではcondをゾーン条件式（マナ>=3など）として判定してはいけない。
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
-const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
+const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
   "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho"]);
@@ -34471,7 +34471,7 @@ async function openDeckPick(selId,title){
         b2.addEventListener("click",e=>{e.stopPropagation();e.preventDefault();fn();});
         tools.appendChild(b2);
       };
-      mkTool("📋","中身を見る（このデッキのカード一覧）",()=>openDeckViewer(dk.name));
+      mkTool("📋","中身を見る（このデッキのカード一覧）",()=>openDeckListViewer(dk.name));
       mkTool("🧩","編成する（このデッキを編集画面で開く）",()=>editDeckByName(dk.name));
       mkTool("🖼","表紙を変える（一覧に出す絵を選ぶ）",()=>pickDeckCover(dk.name,()=>openDeckPick(DP_TARGET,$("dpTitle").textContent)));
       el.appendChild(tools);
@@ -35047,7 +35047,10 @@ $("btnLoadDeck").addEventListener("click",async ()=>{
 });
 /* 🖼 デッキの中身を大きな一覧で見る。デッキ作成画面の「見る」と、
    対戦開始のデッキ一覧の「📋 中身」の両方から呼ぶ。 */
-async function openDeckViewer(name){
+/* 📋 デッキ一覧から「中身を見る」。
+   ❗ 対戦中の山札を見る `openDeckViewer(pi)` と名前がかぶっていたため改名した。
+   （同名の関数はあとから定義したほうで上書きされるので、山札を見るボタンがこちらに入っていた） */
+async function openDeckListViewer(name){
   if(!name){toast("デッキを選択してください");return;}
   const d=await getDeck(name);if(!d){toast("デッキが見つかりません");return;}
   const ol=document.createElement("div");
@@ -35247,7 +35250,7 @@ async function openDeckViewer(name){
   ol.appendChild(cl);
   document.body.appendChild(ol);
 }
-$("btnViewDeck").addEventListener("click",()=>openDeckViewer($("deckSelect").value));
+$("btnViewDeck").addEventListener("click",()=>openDeckListViewer($("deckSelect").value));
 $("btnDeleteDeck").addEventListener("click",async ()=>{
   const name=$("deckSelect").value;
   if(!name){toast("削除するデッキをプルダウンで選択してください");return;}
