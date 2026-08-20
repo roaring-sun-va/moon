@@ -3974,7 +3974,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.35";
+const APP_VER="v13.36";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10130,7 +10130,8 @@ async function destroyCreature(pi,c,opts){
         snap();
         const was=faceNameOf(c);
         const parts=c.under.splice(0);
-        parts.forEach(b2=>{b2.tapped=false;b2.buff=null;b2.mark=false;b2.sideways=false;});
+        const _tp=!!c.tapped;
+        parts.forEach(b2=>{b2.tapped=_tp;b2.buff=null;b2.mark=false;b2.sideways=false;});
         c.gl=false;
         const spl=linkBreakSplit(pi,rZ,parts);
         arrL.splice(iL,1,...spl.stay);
@@ -25897,10 +25898,11 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if(fromZone==="battle"&&toZone!=="battle"&&f.card.gl&&Array.isArray(f.card.under)&&f.card.under.length){
     const glParts=f.card.under.splice(0);
     const glName=faceNameOf(f.card);
+    const glTapped=!!f.card.tapped;   // ⤵ リンク前の状態ではなく、**今のタップ状態**を引き継ぐ
     f.card.gl=false;
     f.arr.splice(f.idx,1);
     for(const pt of glParts){
-      pt.tapped=false;pt.buff=null;pt.mark=false;pt.sideways=false;pt.rot=0;pt.seals=[];pt.faceup=true;
+      pt.tapped=glTapped;pt.buff=null;pt.mark=false;pt.sideways=false;pt.rot=0;pt.seals=[];pt.faceup=true;
       zonesOf(pFrom).battle.push(pt);
       moveCardX(pFrom,"battle",pt.id,pTo,toZone,skipRep);
     }
@@ -26136,17 +26138,23 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
           }
           return true;
         };
+        // 単体でいるカードを優先し、同名が重なる相手は選ばない。
+        // （ヘヴィ・デス・メタルがいても、2体目のゴッドを新しく作れる）
         for(const nm of names){
-          const hit=ZB7.find(x=>x.id!==c.id&&!holders.some(h=>h.id===x.id)&&(
-            normName(faceNameOf(x))===normName(nm)||
-            (x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
-          ));
-          if(hit)holders.push(hit);
+          const cand=[
+            ZB7.find(x=>x.id!==c.id&&!holders.some(h=>h.id===x.id)&&!x.gl&&normName(faceNameOf(x))===normName(nm)),
+            ZB7.find(x=>x.id!==c.id&&!holders.some(h=>h.id===x.id)&&x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
+          ];
+          for(const hit of cand){
+            if(!hit)continue;
+            if(!_dupOk([c,...linkExpand([...holders,hit])]))continue;
+            holders.push(hit);break;
+          }
         }
         if(!holders.length)return;
         const parts=[c,...linkExpand(holders)];
         if(parts.length<2)return;
-        if(!_dupOk(parts))return;   // 🚫 同名が重なる組み合わせは案内しない
+        if(!_dupOk(parts))return;
         const yes=await ask(`🔗 G・リンク！\n${parts.map(x=>faceNameOf(x)).join("＋")} でリンクできます。リンクしますか？`);
         if(!yes)return;
         snap();
@@ -27259,6 +27267,7 @@ function cardEl(pi,zone,c){
   if(_glParts){
     // 本物のゴッド・リンクと同じく、枚数分だけ横に広げる
     el.style.setProperty("width",`calc(var(--card-w) * ${_glParts.length})`,"important");
+    el.style.setProperty("min-width",`calc(var(--card-w) * ${_glParts.length})`,"important");
     el.style.setProperty("height","var(--card-h)","important");
     el.style.setProperty("aspect-ratio","auto","important");
     el.style.setProperty("max-width","none","important");
@@ -27274,7 +27283,7 @@ function cardEl(pi,zone,c){
       if(u){
         const im=document.createElement("img");
         im.src=u;im.alt="";im.draggable=false;
-        im.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 22%;display:block";
+        im.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;display:block";
         cell.appendChild(im);
       }else{
         const np=document.createElement("div");
@@ -27603,7 +27612,8 @@ function cardEl(pi,zone,c){
         if(i<0)return;
         snap();
         const parts=c.under.splice(0);
-        parts.forEach(b=>{b.tapped=false;});
+        const _tp=!!c.tapped;
+        parts.forEach(b=>{b.tapped=_tp;});   // ⤵ 今のタップ状態を引き継ぐ
         arr.splice(i,1,...parts);
         sfx("move");renderAll();
         toast(`🔗 リンク解除：${parts.map(x=>faceNameOf(x)).join("、")}`);
@@ -31747,15 +31757,20 @@ function openCardSheet(ctx){
     const _namesL=String(_rgL.psyLink||"").split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
     const _ZL=zonesOf(ctx.p).battle;
     const _hitsL=[];
+    const _dupChk=(list)=>{const seen=new Set();for(const x of list){const k=normName(faceNameOf(x));if(seen.has(k))return false;seen.add(k);}return true;};
     for(const nm of _namesL){
-      const hit=_ZL.find(x=>x.id!==c.id&&!_hitsL.some(h=>h.id===x.id)&&(
-        normName(faceNameOf(x))===normName(nm)||
-        (x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
-      ));
-      if(hit)_hitsL.push(hit);
+      const cand=[
+        _ZL.find(x=>x.id!==c.id&&!_hitsL.some(h=>h.id===x.id)&&!x.gl&&normName(faceNameOf(x))===normName(nm)),
+        _ZL.find(x=>x.id!==c.id&&!_hitsL.some(h=>h.id===x.id)&&x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
+      ];
+      for(const hit of cand){
+        if(!hit)continue;
+        if(!_dupChk([c,...linkExpand([..._hitsL,hit])]))continue;
+        _hitsL.push(hit);break;
+      }
     }
     const _partsL=[c,...linkExpand(_hitsL)];
-    const _dupL=(()=>{const seen=new Set();for(const x of _partsL){const k=normName(faceNameOf(x));if(seen.has(k))return true;seen.add(k);}return false;})();
+    const _dupL=!_dupChk(_partsL);
     if(_hitsL.length&&!_dupL){
       const _nmL=resolveLinkName(_partsL)||_rgL.psyLinkTo||_partsL.map(x=>faceNameOf(x)).join("／");
       box.appendChild(actBtn(`🔗 G・リンク（${_partsL.map(x=>faceNameOf(x)).join("＋")} → ${_nmL}）`,()=>{
@@ -31790,7 +31805,8 @@ function openCardSheet(ctx){
       const i=arr.findIndex(x=>x.id===c.id);
       if(i<0)return;
       const parts=c.under.splice(0);
-      parts.forEach(b=>{b.tapped=false;});
+      const _tp=!!c.tapped;
+      parts.forEach(b=>{b.tapped=_tp;});   // ⤵ 今のタップ状態を引き継ぐ
       arr.splice(i,1,...parts);
       sfx("move");closeSel();renderAll();
       toast(`リンク解除：${parts.map(x=>faceNameOf(x)).join("、")}`);
