@@ -3963,7 +3963,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.30";
+const APP_VER="v13.31";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7815,7 +7815,7 @@ function runWatchFx(pi,type,trigCard){
         }
         // 自分のクリーチャーが出た時／呪文を唱えた時：条件欄は「出たカード/唱えた呪文」の対象条件として判定
         // （<=/>=/以上/以下 を含む式はゾーン条件式として従来どおり判定）
-        if((type==="allyEnter"||type==="allyLeave"||type==="allySpell"||type==="spell")&&trigCard){
+        if((type==="allyEnter"||type==="allyLeave"||type==="allyNinja"||type==="allySpell"||type==="spell")&&trigCard){
           let cnd=String(w.cond||"").trim();
           // 「他の〜」＝このカード自身が出た時は発動しない（allyEnterのみ意味を持つ）
           if(/^他の/.test(cnd)){
@@ -7823,7 +7823,7 @@ function runWatchFx(pi,type,trigCard){
             cnd=cnd.replace(/^他の/,"").trim();
           }
           if(cnd){
-            const evLb=type==="allyEnter"?"出た時":type==="allyLeave"?"離れた時":"呪文を唱えた時";
+            const evLb=type==="allyEnter"?"出た時":type==="allyLeave"?"離れた時":type==="allyNinja"?"ニンジャ・ストライクで出た時":"呪文を唱えた時";
             // 🔬 自分自身が出た時に条件で不発になった場合は、原因をトーストで知らせる（サイレント不発の防止）
             const _diag=(why)=>{if(type==="allyEnter"&&trigCard.id===c.id)toast(`💡 ${faceNameOf(c)} の「${evLb}」誘発は不発：条件「${cnd}」${why}。自身にも反応させるには条件欄を見直してください（種族の登録漏れ等）`);};
             // ＆区切りで「対象条件＆ゾーン条件式」を併用可（例：ブロッカー＆手札<=9）。ゾーン式はゾーン名で始まる項・ターン項
@@ -10892,6 +10892,10 @@ async function runFxList(pi,list,srcCard,inPump){
         srcCard._wasSummon=await ask(`《${faceNameOf(srcCard)}》は【召喚】によって出ましたか？\n（「召喚時のみ」の効果があります。踏み倒し・進化などで出した場合は「いいえ」）`);
       }
       if(!srcCard._wasSummon){toast(`（召喚以外で出たため「召喚時のみ」の効果はスキップ）`);continue;}
+    }
+    // 😈 「マッドネスで出た時のみ」の効果（斬隠蒼頭龍バイケン型：「そうした場合、〜してもよい」）
+    if(f.madOnly&&srcCard&&!srcCard._viaMadness){
+      toast(`（マッドネスで出た時だけの効果なのでスキップ）`);continue;
     }
     // 🌟 [S]効果（スーパー・S・トリガーのボーナス）：自分の盾が1枚以上ある＝SSTボーナス無効の時は自動スキップ
     if(f.sstOnly&&Z.shield.length>0){
@@ -19344,6 +19348,7 @@ async function execAttack(pi,id,tg){
       toast(`🥷${cand[j].ura?"裏 裏ニンジャ・ストライク":" ニンジャ・ストライク"}！ ${faceNameOf(h)}`);
       fxKeyword(op,cand[j].ura?"裏ニンジャ・ストライク！":"ニンジャ・ストライク！",h.name,"迎撃");
       h._nsThisTurn=true;   // 🥷 ターンの終わりに山札の一番下へ戻す印
+      if(S.expert)runWatchFx(op,"allyNinja",h);   // 🥷 「自分のシノビのNSを使った時」の誘発
       await waitFxIdle();
       renderAll();
       // 🥷 出た時の効果（ブロッカー付与など）まで終わったら、そのまま攻撃の処理を続けられるようにする。
@@ -20056,6 +20061,24 @@ function fxRowEl(faceIdx,i){
   scb.onchange=()=>{f.sumOnly=scb.checked;};
   sumL.appendChild(scb);
   sumL.appendChild(document.createTextNode("召喚時のみ"));
+  // 🔟 ゲーム中1回だけ（次元の嵐 スコーラー型）
+  const g1La=document.createElement("label");
+  g1La.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  g1La.title="この効果はゲーム中1回しか発動しない";
+  const g1cba=document.createElement("input");
+  g1cba.type="checkbox";g1cba.checked=!!f.once1G;
+  g1cba.onchange=()=>{f.once1G=g1cba.checked;};
+  g1La.appendChild(g1cba);
+  g1La.appendChild(document.createTextNode("🔟ゲーム中1回"));
+  // 😈 マッドネスで出た時のみ
+  const madL=document.createElement("label");
+  madL.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  madL.title="この効果はマッドネスでバトルゾーンに出た時だけ発動（バイケン型の「そうした場合」）";
+  const mcb=document.createElement("input");
+  mcb.type="checkbox";mcb.checked=!!f.madOnly;
+  mcb.onchange=()=>{f.madOnly=mcb.checked;};
+  madL.appendChild(mcb);
+  madL.appendChild(document.createTextNode("😈マッドネス時のみ"));
   // 🌟 [S]効果（スーパー・S・トリガーのボーナス）：自分の盾が1枚以上ある時は自動スキップ
   const sstL=document.createElement("label");
   sstL.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
@@ -20121,7 +20144,7 @@ function fxRowEl(faceIdx,i){
   const top=document.createElement("div");top.className="fxr-top";
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(shb);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
-  bot.appendChild(sumL);bot.appendChild(sstL);bot.appendChild(optL);
+  bot.appendChild(sumL);bot.appendChild(g1La);bot.appendChild(madL);bot.appendChild(sstL);bot.appendChild(optL);
   bot.appendChild(obL);bot.appendChild(pbL);bot.appendChild(skL);bot.appendChild(fxHenreiEl(f));
   cnd.classList.add("fxr-cond-input");
   const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
@@ -20172,6 +20195,7 @@ const TRIG_EVS=[
   ["shieldLeave","自分のシールドが離れた時（オシオキムーン）"],
   ["myDestroyed","自分のクリーチャーが破壊された時"],
   ["allyEnter","自分のクリーチャーがバトルゾーンに出た時（条件欄に種族などの対象条件・自身が出た時も含む）"],
+  ["allyNinja","🥷 自分のクリーチャーが「ニンジャ・ストライク」で出た時（条件欄で種族などの対象条件／斬隠蒼頭龍バイケン型）"],
   ["allyLeave","🕳 自分のクリーチャーがバトルゾーンを離れた時（条件欄に種族などの対象条件・「他の」で自身を除外／邪幽 ジャヴェール型）"],
   ["allyEvo","自分の他のクリーチャーが進化した時（光神龍チェンクン型）"],
   ["oppSummon","相手のクリーチャーがバトルゾーンに出た時"],
