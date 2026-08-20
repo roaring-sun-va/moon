@@ -1899,6 +1899,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <span style="font-size:12px;font-weight:700">破壊置換：</span>
         <label><input type="checkbox" id="fxEscape"> エスケープ</label>
         <label title="離れる時、かわりに手札に戻る"><input type="checkbox" id="fxEtOmega"> エターナルΩ（離れるかわりに手札へ）</label>
+        <label title="相手のターン中にこのクリーチャーが破壊される時、かわりに手札に戻す（超宮城 コーラリアン型）"><input type="checkbox" id="fxEscapeFoeTurn"> ✋ 相手のターン中の破壊は、かわりに手札へ</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="離れる時、パワーが0より大きければ、かわりに自分の他の〔対象〕のうちコスト最小の1体をランダムに破壊して場に残る（クローネ型）"><span style="font-size:12px;font-weight:700">🎲 離場身代わり／対象</span><input type="text" id="fxLeaveSacF" list="raceList" placeholder="例：オラクル（空欄＝無効）" style="width:170px"></label>
         <label><input type="checkbox" id="fxTrueEscape"> 真・エスケープ（盾なしでも手札へ戻る）</label>
         <label><input type="checkbox" id="fxRepShield"> 離れるかわりに表向きの盾カードを1枚墓地へ（サッヴァーク型）</label>
@@ -3962,7 +3963,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.29";
+const APP_VER="v13.30";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6147,7 +6148,7 @@ function chatToggle(open){
   if(willOpen){CHAT_UNREAD=0;chatRenderFab();chatRender();}
 }
 const SCORE=[0,0];
-function serializeState(){return JSON.stringify({t:S.turn,w:S.who,z:S.players.map(p=>p.zones),ec:ENTERED_CNT,pt:S.pturn,wo:S._watchOnce||{},fs:S.firstSumUsed||{},su:S.sumTurn||{},nl:S.noLoseCnt||{}});}
+function serializeState(){return JSON.stringify({t:S.turn,w:S.who,z:S.players.map(p=>p.zones),ec:ENTERED_CNT,pt:S.pturn,wo:S._watchOnce||{},fs:S.firstSumUsed||{},su:S.sumTurn||{},nl:S.noLoseCnt||{},g1:S._once1G||{}});}
 function snap(){
   const s=serializeState();
   if(HIST.length&&HIST[HIST.length-1]===s)return;
@@ -6165,6 +6166,7 @@ function restoreState(st){
   if(st.ec!=null)ENTERED_CNT=st.ec|0;
   if(st.pt!=null)S.pturn=st.pt|0;
   if(st.wo)S._watchOnce=st.wo; // 1手戻る：各ターン1回の使用権も戻す
+  if(st.g1)S._once1G=st.g1;   // 🔟 ゲーム中1回の使用済みも戻す
   if(st.fs)S.firstSumUsed=st.fs; // 召喚コスト軽減の使用状況も戻す
   if(st.su)S.sumTurn=st.su;       // 💠 このターンの召喚記録も戻す
   if(st.nl)S.noLoseCnt=st.nl;
@@ -6638,7 +6640,7 @@ function startGame(picks){
   MOVE_TAP_CHAIN=Promise.resolve();
   FX_HOLD=false;GAME_PAUSE=false;LABY_RUN=false;ALLY_WAIT=0;try{ORI_QUEUE.length=0;TOGRAVE_PENDING.length=0;TRIG_PENDING.length=0;}catch(e){}{const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
   MUGETSU_BUSY=false;MUGETSU_TE_DONE=false;MUGETSU_ASKED={};MUGETSU_PENDING=new Set();MUGETSU_THIS_TRIG=new Set();
-  S._watchOnce={};S.pendingAtk=null;MOVE_BLOCKED=false;
+  S._watchOnce={};S._once1G={};S.pendingAtk=null;MOVE_BLOCKED=false;
   try{$("fxBanner").classList.remove("show");}catch(e){}
   if(!S.players[0].mainList.length){openDeckPanel();toast("先にデッキを登録してください");return;}
   snap();
@@ -9056,6 +9058,7 @@ const FX_TYPES=[
   ["handShield","🛡 自分の手札からn枚まで選んで裏向きにシールド化（キャンセルで打ち切り）"],
   ["foeToShield","🛡 相手のクリーチャーをn体、裏向きの新しいシールドにする（条件欄でコスト等指定・爆進オリジナル・チューニング型）"],
   ["deckCastSpell","🔮 山札の上からn枚を見て、条件に合う呪文1枚をコストを支払わず唱えてよい→残りをランダムに山札の下（トユケテラス型・条件欄で文明/コスト指定）"],
+  ["deckTopToHand","👀 山札の上からn枚を見て、その中の条件に合うカード1枚を公開して手札に加えてもよい→残りをランダムな順番で山札の一番下（未来設計図型・条件欄で対象を指定）"],
   ["graveToDeckAll","🔀 自分の墓地のカードをすべて山札に加えてシャッフル"],
   ["foeGraveTopCostToDeck","🔀 相手の墓地から、コストの大きい順にn枚を山札に戻してシャッフル（同じコストが複数あればランダムに選ぶ・条件欄で対象を絞れる・ゼーハー型）"],
   ["suspenseReveal","🃏 相手のシールドn枚と手札n枚をランダムに公開→その中の呪文を好きな数コストを支払わず唱える→公開カードはすべて墓地へ（サスペンス型）"],
@@ -10721,7 +10724,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🔧 条件欄を「対象の絞り込み／書式」として使う効果の一覧。
    これらの効果ではcondをゾーン条件式（マナ>=3など）として判定してはいけない。
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
-const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
+const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
   "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho"]);
@@ -10894,6 +10897,16 @@ async function runFxList(pi,list,srcCard,inPump){
     if(f.sstOnly&&Z.shield.length>0){
       toast(`🌟 [S]効果はスキップ（スーパー・S・トリガーのボーナスは自分のシールドが0枚でトリガーした時のみ）`);
       continue;
+    }
+    // 🔟 ゲーム中1回：使ったらこのゲーム中は二度と発動しない（カード名＋効果の種類で数える）
+    if(f.once1G){
+      S._once1G=S._once1G||{};
+      const g1key=`${pi}:${srcCard?normName(srcCard.name):"-"}:${f.t}`;
+      if(S._once1G[g1key]){
+        toast(`🔟 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}この効果はゲーム中1回だけ（使用済み）`);
+        continue;
+      }
+      S._once1G[g1key]=true;
     }
     // ❓ 任意効果（〜してもよい）：実行前に確認。いいえでこの効果だけスキップ
     if(f.opt){
@@ -13102,6 +13115,33 @@ async function runFxList(pi,list,srcCard,inPump){
       if(ret){sfx("move");toast(`↩ ${filt?filt+"を":"自分のクリーチャーを"}${ret}体 手札に戻した`);}
       else toast(`↩ 戻す対象なし${filt?`（${filt}）`:""}`);
       renderAll();
+    }else if(f.t==="deckTopToHand"){
+      // 👀 山札の上からn枚を見て、1枚を公開して手札へ（任意）。残りはランダムな順番で山札の一番下へ。
+      const filtTH=String(f.cond||"").trim();
+      const lookTH=Z.deck.splice(0,n);
+      if(!lookTH.length){toast("山札がありません");}
+      else{
+        const poolTH=lookTH.filter(x=>{const rx=getReg(x);return rx&&(!filtTH||lockFilterOk(filtTH,rx,x));});
+        toast(`👀 山上${lookTH.length}枚を見た（該当${poolTH.length}枚${filtTH?`・${filtTH}`:""}）`);
+        logOnly(`👀 ${S.players[pi].label}：山札の上${lookTH.length}枚を見た → ${cnList(lookTH)}`);
+        if(poolTH.length){
+          const j=await pickCard(`👀 手札に加える1枚を選択${filtTH?`（${filtTH}）`:""}`,poolTH,
+            {hint:"タップで選択　／　✕ で「加えない」"});
+          if(j!==null&&j<poolTH.length){
+            const selTH=poolTH[j];
+            const li=lookTH.findIndex(x=>x.id===selTH.id);
+            if(li>=0)lookTH.splice(li,1);
+            selTH.faceup=true;selTH.seen=false;
+            if(typeof toHand==="function")toHand(Z,selTH);else Z.hand.push(selTH);
+            toast(`👀 ${faceNameOf(selTH)} を公開して手札に加えた`);
+            logOnly(`👀 ${S.players[pi].label}：${faceNameOf(selTH)} を手札に加えた`);
+          }
+        }
+        {const ordered=await orderForDeckBottom(lookTH.slice(),"残り",pi);
+         lookTH.length=0;
+         ordered.forEach(x=>{x.faceup=false;x.seen=false;Z.deck.push(x);});}
+        sfx("move");renderAll();await waitFxIdle(inPump);
+      }
     }else if(f.t==="deckCastSpell"){
       // 🔮 山札の上からn枚を見て、条件に合う呪文1枚をコストを支払わず唱えてよい。残りをランダムな順番で山札の下へ。
       const filt=String(f.cond||"").trim();
@@ -16558,6 +16598,9 @@ async function destroyWithReplace(pi,c){
     if((r.starEvo||["starevo","charismaevo","smaxevo","onismaxevo"].includes(r.ctype))&&c.under&&c.under.length)
       opts.push(["starTop","⭐ スター進化（自身のみ離れ、下は重なったまま場に残る）",1]);
     if((r.gneo||r.ctype==="gneo"||r.ctype==="gneodream")&&c.under&&c.under.length)opts.push(["gneoBottom","🔄 G・NEO進化（一番下が離れ、上のカードは場に残る）",1]);
+    // ✋ 相手のターン中の破壊だけ、かわりに手札へ（超宮城 コーラリアン型）
+    if(r.escapeFoeTurn&&(S.who|0)!==(pi|0)&&!isIgnored(c,pi))
+      opts.push(["toHandFoeTurn","✋ 相手のターン中の破壊：かわりに手札に戻す",1]);
     if(r.shieldGo)opts.push(["sgo","🏰 シールド・ゴー（墓地の代わりに表向きの盾になる）",1]);
     if(r.leaveSacF){
       // 🎲 身代わりプール：バトルゾーンのエレメント全般が対象（クリーチャー限定を廃止・v10.27）。
@@ -16637,6 +16680,20 @@ async function destroyWithReplace(pi,c){
           }
           toast(`🛡 真・エスケープ！ シールドを${take}枚手札に加え、${faceNameOf(c)} は場に残った`);
           sfx("flip");renderAll();return true;
+        }else if(kind==="toHandFoeTurn"){
+          // ✋ 破壊のかわりに手札へ（相手のターン中のみ）
+          snap();
+          const arrTH=Z.battle;
+          const iTH=arrTH.findIndex(x=>x.id===c.id);
+          if(iTH>=0){
+            leaveBattleCleanup(Z,c,"hand");
+            arrTH.splice(iTH,1);
+            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.faceup=true;c.mark=false;
+            if(typeof toHand==="function")toHand(Z,c);else Z.hand.push(c);
+          }
+          toast(`✋ ${faceNameOf(c)} は破壊されるかわりに手札に戻った（相手のターン中）`);
+          logOnly(`✋ 破壊置換：${faceNameOf(c)} を手札に戻した`);
+          sfx("move");renderAll();return true;
         }else if(kind==="starTop"){
           snap();
           const arr=Z.battle;
@@ -20177,6 +20234,15 @@ function fxTrigRowEl(i){
   ocb.onchange=()=>{f.once=ocb.checked;};
   onceL.appendChild(ocb);
   onceL.appendChild(document.createTextNode("1️⃣各ターン1回"));
+  // 🔟 ゲーム中1回だけ（次元の嵐 スコーラー型）
+  const g1L=document.createElement("label");
+  g1L.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  g1L.title="この効果はゲーム中1回しか発動しない";
+  const g1cb=document.createElement("input");
+  g1cb.type="checkbox";g1cb.checked=!!f.once1G;
+  g1cb.onchange=()=>{f.once1G=g1cb.checked;};
+  g1L.appendChild(g1cb);
+  g1L.appendChild(document.createTextNode("🔟ゲーム中1回"));
   // ❓ 任意効果（〜してもよい）：誘発時に「行いますか？」の確認を出す
   const optLw=document.createElement("label");
   optLw.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
@@ -20224,7 +20290,7 @@ function fxTrigRowEl(i){
   const top=document.createElement("div");top.className="fxr-top";
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(ev);top.appendChild(evb);top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
-  bot.appendChild(hld);bot.appendChild(onceL);bot.appendChild(optLw);bot.appendChild(pbLw);bot.appendChild(skLw);bot.appendChild(fxHenreiEl(f));
+  bot.appendChild(hld);bot.appendChild(onceL);bot.appendChild(g1L);bot.appendChild(optLw);bot.appendChild(pbLw);bot.appendChild(skLw);bot.appendChild(fxHenreiEl(f));
   const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
   bot.appendChild(condWrap);
   row.appendChild(top);row.appendChild(bot);
@@ -21379,6 +21445,7 @@ function renderFxEditor(){
   for(let i=0;i<5;i++)$("fxRace"+(i+1)).value=(FXEDIT.races&&FXEDIT.races[i])||"";
   {const rb=document.getElementById("fxRacesB");if(rb)rb.value=(FXEDIT.races2||[]).join("／");}
   $("fxShieldGo").checked=!!FXEDIT.shieldGo;
+  $("fxEscapeFoeTurn").checked=!!FXEDIT.escapeFoeTurn;
   $("fxSeiba").checked=!!FXEDIT.seiba;
   $("fxSeibaF").value=FXEDIT.seibaF||"";
   const tl=$("fxTrigList");tl.innerHTML="";
@@ -23568,6 +23635,7 @@ function openFxEditor(key){
     races:cur&&cur.races||["","","","",""],
     races2:cur&&cur.races2||[],
     shieldGo:cur?!!cur.shieldGo:false,
+    escapeFoeTurn:cur?!!cur.escapeFoeTurn:false,
     seiba:cur?!!cur.seiba:false,
     seibaF:cur&&cur.seibaF||"",
     watchFx:cur&&cur.watchFx?cur.watchFx.map(x=>({...x})):[],
@@ -24020,6 +24088,7 @@ $("fxSave").addEventListener("click",async ()=>{
     races:[1,2,3,4,5].map(i=>$("fxRace"+i).value.trim()).filter(x=>x).concat(["","","","",""]).slice(0,5),
     races2:(()=>{const e=document.getElementById("fxRacesB");if(!e)return (FXEDIT&&FXEDIT.races2)||[];return e.value.split(/[／\/、,]/).map(s=>s.trim()).filter(Boolean);})(),
     shieldGo:$("fxShieldGo").checked,
+    escapeFoeTurn:$("fxEscapeFoeTurn").checked,
     seiba:$("fxSeiba").checked,
     seibaF:$("fxSeibaF").value.trim(),
     watchFx:FXEDIT.watchFx,
@@ -24570,6 +24639,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.loseRepTop)attrs.push(`敗北置換：手札から${v.loseRepTopF||"1体"}${v.loseRepTopC?`(コスト${v.loseRepTopC}以下)`:""}を上に置く`);
     if(v.gneo)attrs.push("G・NEO進化");
     if(v.shieldGo)attrs.push("シールド・ゴー");
+    if(v.escapeFoeTurn)attrs.push("相手ターン破壊→手札");
     if(v.seiba)attrs.push(v.seibaF?`セイバー：${v.seibaF}`:"セイバー");
     if(v.watchFx&&v.watchFx.length)attrs.push(`誘発処理${v.watchFx.length}`);
     if(v.modeN)attrs.push(`選択効果${v.modeN}回`);
@@ -36506,6 +36576,18 @@ function zoneCondOk(expr,pi,selfCard){
     return terms.every(t=>{
       if(t==="相手ターン"||t==="相手のターン")return S.who!==pi;
       if(t==="自分ターン"||t==="自分のターン")return S.who===pi;
+      // 🔮 「今ターン命文>=3」：このターンに唱えた命文の枚数（G・ゼロの自動判定用）
+      {const mST=t.match(/^(相手)?(?:の)?(?:今|この)ターン呪文\s*(<=|>=|<|>|=|＝)?\s*(\d+)$/);
+       if(mST){
+         const who=mST[1]?(1-pi):pi;
+         const cntST=(S.spellTurn&&S.spellTurn[who])|0;
+         const op=mST[2]||">=",num=+mST[3];
+         if(op===">=")return cntST>=num;
+         if(op==="<=")return cntST<=num;
+         if(op===">")return cntST>num;
+         if(op==="<")return cntST<num;
+         return cntST===num;
+       }}
       {const mAC=t.match(/^((?:相手)?(?:マナ|墓地|手札|盾|バトル|山札))?[:：]?全文明$/);
        if(mAC)return allCivOk(mAC[1]||"マナ");}
       // 💯 「マナすべてアビス」：そのゾーンのカードが全部条件に合う（空のゾーンは不成立）。
