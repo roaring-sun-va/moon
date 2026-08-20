@@ -3974,7 +3974,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.34";
+const APP_VER="v13.35";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -25353,7 +25353,7 @@ function openLinkProgress(pi,id){
       members.forEach(b=>{b.tapped=false;});
       Z.battle.push(nc);
       window.__glJoinId=nc.id;
-      try{fxKeyword(pi,"G・リンク！",nm2,members.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
+      try{fxKeyword(pi,"G・リンク！",(imgURL.get(normName(nm2))?nm2:faceNameOf(members[0])),members.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
       markArrive(nc);
       nc.sick=_wasSick;   // 🔗 リンクしただけでは召喚酔いにならない
       emitEvent(pi,"summon");
@@ -25892,6 +25892,23 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     toast(`🏰 G城：《${faceNameOf(f.card)}》は表向きのシールドゾーンを離れるかわりに墓地へ`);
     toZone="grave";pTo=pFrom;
   }
+  // 🔗 G・リンク中のカードがバトルゾーンを離れる時は、**合体後の架空のカードではなく
+  //    元のカードそれぞれ**を行き先へ送る。（手札に戻すと架空のカードが増えていた）
+  if(fromZone==="battle"&&toZone!=="battle"&&f.card.gl&&Array.isArray(f.card.under)&&f.card.under.length){
+    const glParts=f.card.under.splice(0);
+    const glName=faceNameOf(f.card);
+    f.card.gl=false;
+    f.arr.splice(f.idx,1);
+    for(const pt of glParts){
+      pt.tapped=false;pt.buff=null;pt.mark=false;pt.sideways=false;pt.rot=0;pt.seals=[];pt.faceup=true;
+      zonesOf(pFrom).battle.push(pt);
+      moveCardX(pFrom,"battle",pt.id,pTo,toZone,skipRep);
+    }
+    toast(`🔗 リンク解除：${glName} は ${glParts.length}枚のカードとして移動`);
+    logOnly(`🔗 リンク解除：《${glName}》→ ${glParts.map(x=>faceNameOf(x)).join("＋")}（${toZone}）`);
+    renderAll();
+    return;
+  }
   if((fromZone==="battle"||fromZone==="shield")&&(toZone==="grave"||toZone==="exile"))dissolveGhost(id,fromZone==="shield"?"break":"lose");
   f.arr.splice(f.idx,1);
   const c=f.card,Z=zonesOf(pTo);
@@ -26109,6 +26126,16 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         // 🔗 相手は、場にそのままいる場合と、**すでにリンクしたカードの中にいる場合**がある。
         //    （ヘヴィ・メタルにデスを足して 3体にする）
         const holders=[];
+        // 🚫 同じ名前のカードがすでにリンクにいる場合は、もうリンクできない（4枚目のメタルが入ってしまった）
+        const _dupOk=(list)=>{
+          const seen=new Set();
+          for(const x of list){
+            const k=normName(faceNameOf(x));
+            if(seen.has(k))return false;
+            seen.add(k);
+          }
+          return true;
+        };
         for(const nm of names){
           const hit=ZB7.find(x=>x.id!==c.id&&!holders.some(h=>h.id===x.id)&&(
             normName(faceNameOf(x))===normName(nm)||
@@ -26119,6 +26146,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         if(!holders.length)return;
         const parts=[c,...linkExpand(holders)];
         if(parts.length<2)return;
+        if(!_dupOk(parts))return;   // 🚫 同名が重なる組み合わせは案内しない
         const yes=await ask(`🔗 G・リンク！\n${parts.map(x=>faceNameOf(x)).join("＋")} でリンクできます。リンクしますか？`);
         if(!yes)return;
         snap();
@@ -26136,7 +26164,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         const _wasSick=parts.some(x=>x.sick);
         ZB7.push(nc);
         window.__glJoinId=nc.id;
-        try{fxKeyword(pTo,"G・リンク！",nm2,parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
+        try{fxKeyword(pTo,"G・リンク！",(imgURL.get(normName(nm2))?nm2:faceNameOf(parts[0])),parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
         markArrive(nc);
         nc.sick=_wasSick;   // 🔗 リンクは「新しく出た」のではない
         emitEvent(pTo,"summon");
@@ -31713,6 +31741,49 @@ function openCardSheet(ctx){
       rerender();
     },"primary"));
   }
+  // 🔗 G・リンクを手動で行う。相手が場にいればこのボタンから合体できる
+  if(ctx.zone==="battle"&&(()=>{const rg=getReg(c);return !!(rg&&rg.psyLink);})()){
+    const _rgL=getReg(c);
+    const _namesL=String(_rgL.psyLink||"").split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
+    const _ZL=zonesOf(ctx.p).battle;
+    const _hitsL=[];
+    for(const nm of _namesL){
+      const hit=_ZL.find(x=>x.id!==c.id&&!_hitsL.some(h=>h.id===x.id)&&(
+        normName(faceNameOf(x))===normName(nm)||
+        (x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
+      ));
+      if(hit)_hitsL.push(hit);
+    }
+    const _partsL=[c,...linkExpand(_hitsL)];
+    const _dupL=(()=>{const seen=new Set();for(const x of _partsL){const k=normName(faceNameOf(x));if(seen.has(k))return true;seen.add(k);}return false;})();
+    if(_hitsL.length&&!_dupL){
+      const _nmL=resolveLinkName(_partsL)||_rgL.psyLinkTo||_partsL.map(x=>faceNameOf(x)).join("／");
+      box.appendChild(actBtn(`🔗 G・リンク（${_partsL.map(x=>faceNameOf(x)).join("＋")} → ${_nmL}）`,()=>{
+        snap();
+        for(const x of [c,..._hitsL]){
+          const i2=_ZL.findIndex(y=>y.id===x.id);
+          if(i2>=0)_ZL.splice(i2,1);
+        }
+        const _sickL=_partsL.some(x=>x.sick);
+        const nc=makeCard(_nmL);
+        nc.gl=true;nc.under=_partsL;
+        _partsL.forEach(b2=>{b2.tapped=false;});
+        _ZL.push(nc);
+        window.__glJoinId=nc.id;
+        try{fxKeyword(ctx.p,"G・リンク！",(imgURL.get(normName(_nmL))?_nmL:faceNameOf(_partsL[0])),_partsL.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
+        markArrive(nc);
+        nc.sick=_sickL;
+        emitEvent(ctx.p,"summon");
+        enqueueFx(ctx.p,nc);
+        sfx("ok");closeSel();renderAll();
+        toast(`🔗 G・リンク！ ${_nmL}（${_partsL.length}枚合体）`);
+      },"primary",true));
+    }else if(!_hitsL.length){
+      box.appendChild(actBtn(`🔗 G・リンク（相手が場にいません：${_namesL.join("／")}）`,()=>{
+        toast(`🔗 リンクの相手：${_namesL.join("／")} がバトルゾーンに必要です`);
+      },"ghost",true));
+    }
+  }
   if(c.gl&&ctx.zone==="battle"){
     box.appendChild(actBtn("🔗 リンク解除（元のカードに戻す）",()=>{
       const arr=zonesOf(ctx.p).battle;
@@ -32776,7 +32847,7 @@ function openMultiSheet(){
       parts.forEach(b=>{b.tapped=false;});
       zonesOf(p0).battle.push(nc);
       window.__glJoinId=nc.id;
-      try{fxKeyword(p0,"G・リンク！",nm,parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
+      try{fxKeyword(p0,"G・リンク！",(imgURL.get(normName(nm))?nm:faceNameOf(parts[0])),parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
       markArrive(nc);
       nc.sick=_wasSick;   // 🔗 リンクしただけでは召喚酔いにならない
       endMulti();closeSheet();
