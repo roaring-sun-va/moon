@@ -3974,7 +3974,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.40";
+const APP_VER="v13.41";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10536,10 +10536,10 @@ async function runModeChoice(pi,reg,c,inPump,faceUsed,force){
     }
     toast(`✅ 発動条件（${reg.modeCond}）達成 → 選択効果を発動`);
   }
-  // 1️⃣ 各ターン1回：このターン既に使っていればスキップ（このカードのIDで管理）
+  // 1️⃣ 各ターン1回：通常はカードID単位。modeOnceNameなら同名カード全体で共有（ゾルザーク型）。
   if(reg.modeOnce){
     S._watchOnce=S._watchOnce||{};
-    const mk=`${c.id}:modeChoice`;
+    const mk=reg.modeOnceName?`name:${pi}:${normName(c.name)}:modeChoice`:`${c.id}:modeChoice`;
     if(S._watchOnce[mk]===`${S.turn}:${S.who}`){toast("⏸ この選択効果は各ターン1回のみ（このターンは使用済み）");return;}
     S._watchOnce[mk]=`${S.turn}:${S.who}`;
   }
@@ -15611,6 +15611,9 @@ function afterHandDiscard(owner,c){
   const rG=getReg(c);
   if(rG&&rG.watchFx&&rG.watchFx.some(w=>w.ev==="toGrave")&&!(rM&&rM.madness)){ // toGraveBattleは手札からでは発動しない
     queueToGrave(owner,c,"hand"); // 手札から捨てられた＝「どこからでも」の方だけ発動
+    // 盤面の手動「ランダムハンデス」ボタンは効果キューの外から呼ばれる。
+    // 予約だけして排出を始めないと、次に別の効果が動くまで墓地誘発が止まったままになる。
+    if(!fxRunning)Promise.resolve().then(()=>drainToGrave()).catch(e=>console.warn("toGrave drain",e));
   }
 }
 function isSealed(c){return !!(c&&c.seals&&c.seals.length);}
@@ -30353,7 +30356,7 @@ function fxShareKeys(scope,deckNames){
   if(scope==="self")return all.filter(k=>((FXDB.get(k)||{})._src)==="self");
   if(scope==="recent"){
     const th=Date.now()-14*86400000;
-    return all.filter(k=>((FXDB.get(k)||{})._v|0)>=th);
+    return all.filter(k=>(Number((FXDB.get(k)||{})._v)||0)>=th);
   }
   return all;
 }
@@ -30398,7 +30401,7 @@ function showFxDiffPanel(){
     if(!cur)return "new";
     const a1=_strip(cur),b1=_strip(items[k]);
     if(a1&&a1===b1)return "same";
-    const iv=(items[k]||{})._v|0, cv=cur._v|0;
+    const iv=Number((items[k]||{})._v)||0, cv=Number(cur._v)||0;
     if(iv>cv)return "newer";
     if(iv<cv)return "old";
     return "unknown";
@@ -30490,7 +30493,7 @@ function showFxDiffPanel(){
       if(!v||typeof v!=="object")continue; // 受信データは形を確認してから入れる
       let reg;
       try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
-      reg._v=(v._v|0)||Date.now();
+      reg._v=Number(v._v)||Date.now();
       reg._src="shared:"+(FX_INBOX.from||"共有");
       FXDB.set(k,reg);
       if(!dispName.has(k))dispName.set(k,FX_INBOX.names[k]||k); // 名前を入れないとカード一覧に出ない
@@ -30672,13 +30675,17 @@ async function fxMergeIncoming(pack,from,opts={}){
   for(const [k,v] of Object.entries(cardFx)){
     if(typeof k!=="string"||!k||!v||typeof v!=="object"||Array.isArray(v))continue; // もらったデータは形を確認してから入れる
     const cur=FXDB.get(k);
-    const inV=(v._v|0);
-    const curV=cur?(cur._v|0):0;
+    // _v は Date.now() の13桁。ビット演算 |0 を使うと32bitへ切り詰められ、
+    // 新しい訂正パックを古いと誤判定して取り込まないことがある。
+    const inV=Number(v._v)||0;
+    const curV=cur?(Number(cur._v)||0):0;
     // 古い共有パックには _v が無いものがある。内容が違うのに「時刻0＝古い」として黙って捨てると、
     // 画像だけ入り効果が更新されないため、内容差分も判定する。自分で編集した登録は必ず確認画面へ。
     const stripMeta=o=>{try{const z=JSON.parse(JSON.stringify(o||{}));delete z._v;delete z._src;return JSON.stringify(z);}catch(e){return "";}};
     const differs=!!cur&&stripMeta(cur)!==stripMeta(v);
-    if(cur&&cur._src==="self"){if(differs&&(inV===0||inV>curV))held[k]=v;continue;}
+    // 自分で編集した登録は時刻の新旧にかかわらず差分画面へ出す。
+    // これにより、誤登録を後から訂正したパックも利用者が明示的に採用できる。
+    if(cur&&cur._src==="self"){if(differs)held[k]=v;continue;}
     if(cur&&!differs)continue;
     if(cur&&inV>0&&inV<=curV)continue;
     let reg;try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
