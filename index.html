@@ -3974,7 +3974,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.37";
+const APP_VER="v13.40";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9070,6 +9070,9 @@ const FX_TYPES=[
   ["foeToShield","🛡 相手のクリーチャーをn体、裏向きの新しいシールドにする（条件欄でコスト等指定・爆進オリジナル・チューニング型）"],
   ["deckCastSpell","🔮 山札の上からn枚を見て、条件に合う呪文1枚をコストを支払わず唱えてよい→残りをランダムに山札の下（トユケテラス型・条件欄で文明/コスト指定）"],
   ["deckTopToHand","👀 山札の上からn枚を見て、その中の条件に合うカード1枚を公開して手札に加えてもよい→残りをランダムな順番で山札の一番下（未来設計図型・条件欄で対象を指定）"],
+  ["deckTopSplitSHM","🌸 山札の上からn枚を見て、1枚をシールド化→1枚を手札→残りをマナへ（超開花妖精アジサイ！型）"],
+  ["exileRecruitPerZone","🌺 自分の指定ゾーンの〔対象〕n枚につき、ゲーム外から指定カード1枚を出す（条件欄：ゾーン:対象→出すカード名。例「マナ:スノーフェアリー→超開花妖精ハイドロジア」）"],
+  ["exileRecruitPerBattle","🌺【旧互換】自分のバトルゾーンの〔対象〕n枚につき、ゲーム外から指定カード1枚を出す"],
   ["graveToDeckAll","🔀 自分の墓地のカードをすべて山札に加えてシャッフル"],
   ["foeGraveTopCostToDeck","🔀 相手の墓地から、コストの大きい順にn枚を山札に戻してシャッフル（同じコストが複数あればランダムに選ぶ・条件欄で対象を絞れる・ゼーハー型）"],
   ["suspenseReveal","🃏 相手のシールドn枚と手札n枚をランダムに公開→その中の呪文を好きな数コストを支払わず唱える→公開カードはすべて墓地へ（サスペンス型）"],
@@ -10738,8 +10741,8 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🔧 条件欄を「対象の絞り込み／書式」として使う効果の一覧。
    これらの効果ではcondをゾーン条件式（マナ>=3など）として判定してはいけない。
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
-const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
-  "elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
+const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
+  "exileRecruitPerZone","elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
   "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
@@ -13190,6 +13193,66 @@ async function runFxList(pi,list,srcCard,inPump){
          lookTH.length=0;
          ordered.forEach(x=>{x.faceup=false;x.seen=false;Z.deck.push(x);});}
         sfx("move");renderAll();await waitFxIdle(inPump);
+      }
+    }else if(f.t==="deckTopSplitSHM"){
+      // 🌸 山上n枚から、1枚を盾→1枚を手札→残りをマナ（超開花妖精アジサイ！型）。
+      const look=Z.deck.splice(0,n);
+      if(!look.length){toast("山札がありません");}
+      else{
+        look.forEach(x=>{x.faceup=true;x.seen=true;});
+        logOnly(`👀 ${S.players[pi].label}：山札の上${look.length}枚を見た → ${cnList(look)}`);
+        renderAll();
+        if(look.length&&shieldCapOk(Z)){
+          const j=await pickCard("🌸 シールド化する1枚を選択",look,{hint:"タップで選択（裏向きの新しいシールドになります）"});
+          if(j!==null&&j<look.length){
+            const sc=look.splice(j,1)[0];sc.faceup=false;sc.seen=false;sc.tapped=false;sc.mark=true;Z.shield.push(sc);
+            toast("🛡 選んだ1枚をシールド化");
+          }
+        }else if(look.length){toast("🛡 シールド上限のためシールド化できません");}
+        if(look.length){
+          const j=await pickCard("🌸 手札に加える1枚を選択",look,{hint:"タップで選択"});
+          if(j!==null&&j<look.length){
+            const hc=look.splice(j,1)[0];hc.faceup=true;hc.seen=false;hc.tapped=false;
+            if(typeof toHand==="function")toHand(Z,hc);else Z.hand.push(hc);
+            toast(`✋ ${faceNameOf(hc)} を手札に加えた`);
+          }
+        }
+        const manaNames=[];
+        for(const mc of look.splice(0)){
+          mc.faceup=true;mc.seen=false;mc.sideways=false;
+          manaTapIn(mc,pi);Z.mana.push(mc);markArrive(mc);manaNames.push(faceNameOf(mc));
+        }
+        if(manaNames.length){bumpEv("manaAccel",pi,manaNames.length);toast(`💎 残りをマナへ：${manaNames.join("、")}`);}
+        sfx("move");renderAll();
+      }
+    }else if(f.t==="exileRecruitPerZone"||f.t==="exileRecruitPerBattle"){
+      // 🌺 指定ゾーンの対象n枚につき、ゲーム外ゾーンから指定名を1枚出す。
+      const spec=String(f.cond||"");
+      const ar=spec.split(/→|->/),left=(ar[0]||"").trim(),recruitName=(ar.slice(1).join("→")||"").trim();
+      const legacy=f.t==="exileRecruitPerBattle";
+      const zm=legacy?["","バトル",left]:left.match(/^(マナ|墓地|手札|バトル|シールド|盾|山札)\s*[:：](.+)$/);
+      const zoneKey=legacy?"battle":(zm&&({"マナ":"mana","墓地":"grave","手札":"hand","バトル":"battle","シールド":"shield","盾":"shield","山札":"deck"}[zm[1]])),countFilt=zm?zm[2].trim():"";
+      if(!zoneKey||!countFilt||!recruitName){toast("🌺 条件欄を『ゾーン:数える対象→出すカード名』で登録してください");}
+      else{
+        const cnt=zoneFiltCount(Z[zoneKey],countFilt);
+        const unit=Math.max(1,n||1), want=Math.floor(cnt/unit);
+        if(want<=0){toast(`🌺 ${zm[1]}の${countFilt}は${cnt}枚：${unit}枚未満なのでゲーム外から出しません`);}
+        else{
+          const put=[];
+          for(let i=0;i<want;i++){
+            if(battleSlotFull(pi)){toast("🟥 バトルゾーン7面のため、これ以上出せません");break;}
+            const ei=Z.exile.findIndex(x=>normName(faceNameOf(x))===normName(recruitName));
+            if(ei<0){toast(`🌺 ゲーム外に《${recruitName}》がありません（必要${want}枚）`);break;}
+            const cc=Z.exile[ei];
+            if(!battleEntryOk(pi,cc)){toast(`⛔ 《${recruitName}》はバトルゾーンに出せません`);break;}
+            Z.exile.splice(ei,1);cc.faceup=true;cc.tapped=false;cc._viaCheat=true;Z.battle.push(cc);markArrive(cc);put.push(cc);
+          }
+          if(put.length){
+            toast(`🌺 ${zm[1]}の${countFilt}${cnt}枚につき、ゲーム外から《${recruitName}》を${put.length}体出した`);renderAll();
+            for(const cc of put){LAST_ARRIVED=cc;emitEvent(pi,"summon",cc);enqueueFx(pi,cc);}
+            await waitFxIdle(inPump);
+          }
+        }
       }
     }else if(f.t==="deckCastSpell"){
       // 🔮 山札の上からn枚を見て、条件に合う呪文1枚をコストを支払わず唱えてよい。残りをランダムな順番で山札の下へ。
