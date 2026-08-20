@@ -3974,7 +3974,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.33";
+const APP_VER="v13.34";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -25334,15 +25334,17 @@ function openLinkProgress(pi,id){
     const _onN=parts.filter(x=>x.on).length;
     mk(`🔗 リンク合体！（${_onN+1}体）`,()=>{
       snap();
-      const members=[c,...parts.filter(x=>x.on).map(x=>x.ref)];
-      for(const x of members){
+      const holders=[c,...parts.filter(x=>x.on).map(x=>x.ref)];
+      for(const x of holders){
         const i2=Z.battle.findIndex(y=>y.id===x.id);
         if(i2>=0)Z.battle.splice(i2,1);
       }
+      const members=linkExpand(holders);   // 🔗 すでにリンクしているカードはほどいて数える
+      const _wasSick=members.some(x=>x.sick);
       // ⚙ 合体前のクリーチャーにクロスしていたギアは、合体後のクリーチャーへ引き継ぐ（場から消さない）
       const gAll=[];
       for(const x of members){if(x.gear&&x.gear.length)gAll.push(...x.gear.splice(0));}
-      const nm2=psyLinkNameFor(reg,members.slice(1).map(x=>faceNameOf(x)))||(reg.psyLinkTo)||members.map(x=>faceNameOf(x)).join("／");
+      const nm2=resolveLinkName(members)||psyLinkNameFor(reg,members.slice(1).map(x=>faceNameOf(x)))||(reg.psyLinkTo)||members.map(x=>faceNameOf(x)).join("／");
       const nc=makeCard(nm2);
       nc.gl=true;
       nc.under=members;
@@ -25353,6 +25355,7 @@ function openLinkProgress(pi,id){
       window.__glJoinId=nc.id;
       try{fxKeyword(pi,"G・リンク！",nm2,members.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
       markArrive(nc);
+      nc.sick=_wasSick;   // 🔗 リンクしただけでは召喚酔いにならない
       emitEvent(pi,"summon");
       enqueueFx(pi,nc);
       sfx("ok");
@@ -26103,33 +26106,43 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         const ZB7=zonesOf(pTo).battle;
         if(!ZB7.find(x=>x.id===c.id))return;
         const names=reg.psyLink.split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
-        const parts=[c];
+        // 🔗 相手は、場にそのままいる場合と、**すでにリンクしたカードの中にいる場合**がある。
+        //    （ヘヴィ・メタルにデスを足して 3体にする）
+        const holders=[];
         for(const nm of names){
-          const hit=ZB7.find(x=>!parts.includes(x)&&normName(faceNameOf(x))===normName(nm));
-          if(hit)parts.push(hit);   // 🔗 全員揃わなくても、いる分だけでリンクできる（ゴッドは2体リンクもある）
+          const hit=ZB7.find(x=>x.id!==c.id&&!holders.some(h=>h.id===x.id)&&(
+            normName(faceNameOf(x))===normName(nm)||
+            (x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
+          ));
+          if(hit)holders.push(hit);
         }
+        if(!holders.length)return;
+        const parts=[c,...linkExpand(holders)];
         if(parts.length<2)return;
         const yes=await ask(`🔗 G・リンク！\n${parts.map(x=>faceNameOf(x)).join("＋")} でリンクできます。リンクしますか？`);
         if(!yes)return;
         snap();
-        for(const x of parts){
+        for(const x of [c,...holders]){
           const i2=ZB7.findIndex(y=>y.id===x.id);
           if(i2>=0)ZB7.splice(i2,1);
         }
-        const nm2=psyLinkNameFor(reg,parts.slice(1).map(x=>faceNameOf(x)))||reg.psyLinkTo||parts.map(x=>faceNameOf(x)).join("／");
+        const nm2=resolveLinkName(parts)||psyLinkNameFor(reg,parts.slice(1).map(x=>faceNameOf(x)))||reg.psyLinkTo||parts.map(x=>faceNameOf(x)).join("／");
         const nc=makeCard(nm2);
         nc.gl=true;
         nc.under=parts;
         nc.rot=reg.psyLinkW?((pTo===S.seat)?270:90):0;
         parts.forEach(b=>{b.tapped=false;});
+        // 🔗 リンクしただけでは召喚酔いにならない（元から酔っていた分だけ引き継ぐ）
+        const _wasSick=parts.some(x=>x.sick);
         ZB7.push(nc);
         window.__glJoinId=nc.id;
         try{fxKeyword(pTo,"G・リンク！",nm2,parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
         markArrive(nc);
+        nc.sick=_wasSick;   // 🔗 リンクは「新しく出た」のではない
         emitEvent(pTo,"summon");
         enqueueFx(pTo,nc);
         sfx("ok");renderAll();
-        toast(`🔗 覚醒リンク！ ${nm2}（${parts.length}枚合体・メニューから解除可）`);
+        toast(`🔗 G・リンク！ ${nm2}（${parts.length}枚合体・メニューから解除可）`);
       })();
     }
     if(S.expert&&reg&&reg.ignore==="name"&&!c.ignoreName){
@@ -27069,6 +27082,26 @@ async function crossGearTo(pi,id,opt){
 /* 🔗 リンクした相手の顔ぶれから、合体後のカード名を決める。
    登録欄 `psyLinkMap` の書式：「相手名＋相手名＝合体後の名前」を「／」または改行で並べる。
    例：龍神メタル＝ヘヴィ・メタル／龍神メタル＋破壊神デス＝ヘヴィ・デス・メタル */
+/* 🔗 すでにリンクしているカードは、中身（元のカード）にほどいてから数える。
+   これで「ヘヴィ・メタルにデスを足して3体にする」ができる。 */
+function linkExpand(cards){
+  const out=[];
+  for(const x of (cards||[])){
+    if(x&&x.gl&&Array.isArray(x.under)&&x.under.length)out.push(...x.under);
+    else if(x)out.push(x);
+  }
+  return out;
+}
+/* 🔗 顔ぶれ全体から合体後の名前を探す。どのパーツの表から見てもよい。 */
+function resolveLinkName(members){
+  for(const m of members){
+    const r=getReg(m);
+    if(!r||!r.psyLinkMap)continue;
+    const nm=psyLinkNameFor(r,members.filter(x=>x.id!==m.id).map(x=>faceNameOf(x)));
+    if(nm)return nm;
+  }
+  return null;
+}
 function psyLinkNameFor(reg,partnerNames){
   const want=partnerNames.map(x=>normName(x)).sort().join("|");
   const mp=String((reg&&reg.psyLinkMap)||"").trim();
@@ -32709,21 +32742,33 @@ function openMultiSheet(){
   if(S.msel.length>=2&&S.msel.every(x=>x.zone==="battle")&&S.msel.every(x=>x.p===S.msel[0].p)){
     box.appendChild(actBtn("🔗 リンク合体（ゴッド/サイキックリンク）",async ()=>{
       const p0=S.msel[0].p;
-      let key=null;
-      if(dispName.size){
-        closeSheet();
-        key=await pickImage("合体後のカードを選ぶ","例：死海龍 ガロウズ・デビル・ドラゴン（キャンセルすると名前を手入力）");
+      // 🔗 選んだカードの顔ぶれから合体後の名前が分かるなら、聞かずにそれを使う
+      let nm=null;
+      {
+        const pre=[];
+        for(const x of S.msel){const f=findCard(x.p,"battle",x.id);if(f)pre.push(f.card);}
+        const auto=resolveLinkName(linkExpand(pre));
+        if(auto)nm=auto;
       }
-      let nm=key?(dispName.get(key)||key):await askText("合体後のカード名を入力","");
+      if(!nm){
+        let key=null;
+        if(dispName.size){
+          closeSheet();
+          key=await pickImage("合体後のカードを選ぶ","例：死海龍 ガロウズ・デビル・ドラゴン（キャンセルすると名前を手入力）");
+        }
+        nm=key?(dispName.get(key)||key):await askText("合体後のカード名を入力","");
+      }
       if(!nm)return;
       const wide=await ask("合体後のカードを横向き（ワイド表示）で置きますか？\n※サイキックリンク等の縦長カードは「キャンセル」＝縦のまま");
       snap();
-      const parts=[];
+      const holders=[];
       for(const x of S.msel){
         const f=findCard(x.p,"battle",x.id);
-        if(f){f.arr.splice(f.idx,1);parts.push(f.card);}
+        if(f){f.arr.splice(f.idx,1);holders.push(f.card);}
       }
-      if(!parts.length)return;
+      if(!holders.length)return;
+      const parts=linkExpand(holders);   // 🔗 すでにリンクしているカードはほどいて数える
+      const _wasSick=parts.some(x=>x.sick);
       const nc=makeCard(nm);
       nc.gl=true;
       nc.under=parts;
@@ -32733,6 +32778,7 @@ function openMultiSheet(){
       window.__glJoinId=nc.id;
       try{fxKeyword(p0,"G・リンク！",nm,parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
       markArrive(nc);
+      nc.sick=_wasSick;   // 🔗 リンクしただけでは召喚酔いにならない
       endMulti();closeSheet();
       sfx("ok");renderAll();
       toast(`🔗 リンク！ ${nm}（${parts.length}枚合体・カードメニューから解除できます）`);
