@@ -1862,6 +1862,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <label><input type="checkbox" id="fxNoBlock"> ブロックされない</label>
         <label><input type="checkbox" id="fxNoAtked"> 攻撃されない</label>
+        <label title="指定値よりパワーが小さい相手クリーチャーは、自分（プレイヤー／シールド）を攻撃できない。場のクリーチャーへの攻撃は可能（0＝無効）">相手のパワー＜<input type="number" id="fxFoeCantAtkPByPowLT" min="0" step="1000" value="0" style="width:82px"> は自分を攻撃不可</label>
         <label><input type="checkbox" id="fxNoChoose"> 選ばれない（アンタッチャブル）</label>
         <label title="「相手の呪文によって、相手がクリーチャーを選ぶ時、このクリーチャーは選べない」型（墓守の鐘ベルリンなど）。呪文以外の効果では普通に選ばれます"><input type="checkbox" id="fxNoChooseSpell"> 相手の呪文でだけ選ばれない</label>
         <input type="text" id="fxNoChooseSpellCost" placeholder="↑ 呪文のコスト条件（例：4以下・空欄＝すべての呪文／伝説の禁断 ドキンダムX 型）" style="flex:1;min-width:200px">
@@ -2012,6 +2013,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxHEnergy"> ハイパーエナジー（自分のクリーチャーをタップして1体につきコスト2軽減）</label>
         <input type="text" id="fxHyperNote" placeholder="HM時の能力メモ（自動化できない分）" style="flex:1;min-width:120px">
         <span style="font-size:12px;font-weight:700">HM時パワー</span>
+        <label>自分ターン中、破壊合計 <input type="number" id="fxHandDestroyN" min="0" max="20" value="0" style="width:4.5em"> 体以上になった破壊時、手札から出す（同名T1）</label>
         <input type="number" id="fxHmPow" style="width:96px" placeholder="上書き値">
         <label><input type="checkbox" id="fxHmSA"> HM時SA</label>
         <label><input type="checkbox" id="fxHmBlocker"> HM時ブロッカー</label>
@@ -3974,7 +3976,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.41";
+const APP_VER="v13.43";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9210,7 +9212,7 @@ const FX_TYPES=[
   ["graveCastBottom","🔮 自分の墓地から条件に合う呪文を1枚、コストを支払わずに唱える。唱えた後、山札の一番下に置く（邪眼皇ロマノフI世型／条件欄＝例：闇／コスト6以下）"],
   ["handesPerShield","🗑 自分のシールド1枚につき、相手の手札をランダムにn枚捨てさせる（ソウル・アドバンテージ型／通常n=1）"],
   ["chargeTapManaCount","🌱 解決時の自分のマナ枚数と同じ枚数を、山札の上からタップしてマナに置く（ドルツヴァイ型）"],
-  ["manaAllCreatureBattleNoEnterFx","🌏 各プレイヤーはマナのクリーチャーをすべて出す（それらが出ることによって起こる効果は無視・轟破天九十九語型）"],
+  ["manaAllCreatureBattleNoEnterFx","🌏 自分はマナから好きな数→相手は非進化/非NEOをランダムに上限まで出す（登場で起こる効果・ルールは無視／デュエプレ轟破天型）"],
   ["tapToggle","⤵🔄 クリーチャーをn体まで選び、アンタップしていればタップ、タップしていればアンタップする（両者どちらでも・逆転王女プリン型）"],
   ["selfToShield","🛡 この呪文（またはこのカード）自身を裏向きのシールドにする（スローリー・チェーン型）"],
   ["grantTurnAll","✨ そのターン、自分のクリーチャーすべてに能力を与える（条件欄に「スレイヤー」「スピードアタッカー」「破壊時マナ」「ブロッカー」「パワー+3000」などを「／」区切りで・鎧亜の咆哮キリュー・ジルヴェス型）"],
@@ -10113,6 +10115,31 @@ function scheduleZeroPower(){
     try{checkZeroPower();}catch(e){console.warn("zeroPow",e);}
   },140);
 }
+/* 💀 実際に破壊されて場を離れた枚数を数え、条件を満たすカードを手札から出す。 */
+function noteDestroyedForHandTrigger(){
+  if(!S.expert||!S.vs)return;
+  const turnKey=`${S.turn}:${S.who}`;
+  if(!S._turnDestroyed||S._turnDestroyed.key!==turnKey)S._turnDestroyed={key:turnKey,n:0};
+  S._turnDestroyed.n++;
+  const owner=S.who|0, Z=zonesOf(owner);
+  S._nameOnce=S._nameOnce||{};
+  const cand=Z.hand.find(h=>{
+    const rh=getReg(h), need=rh?(+rh.handDestroyN||0):0;
+    return need&&S._turnDestroyed.n>=need&&S._nameOnce[`handDestroy:${owner}:${normName(h.name)}`]!==turnKey;
+  });
+  if(!cand)return;
+  const onceKey=`handDestroy:${owner}:${normName(cand.name)}`;
+  S._nameOnce[onceKey]=turnKey;
+  enqueueWatchJob(async()=>{
+    const i=Z.hand.findIndex(x=>x.id===cand.id);
+    if(i<0)return;
+    snap();Z.hand.splice(i,1);cand.faceup=true;cand.tapped=false;
+    if(!enterBattleOrGrave(owner,cand)){renderAll();return;}
+    markArrive(cand);emitEvent(owner,"summon");enqueueFx(owner,cand);
+    toast(`💀 破壊合計${S._turnDestroyed.n}体：${faceNameOf(cand)} を手札から出した（同名各ターン1回）`);
+    renderAll();
+  });
+}
 async function destroyCreature(pi,c,opts){
   const Z=zonesOf(pi);
   const i=Z.battle.findIndex(x=>x.id===c.id);
@@ -10377,6 +10404,7 @@ async function destroyCreature(pi,c,opts){
     }
   }
   Z.battle.splice(i,1);
+  noteDestroyedForHandTrigger();
   // ☄ 破壊は「バトルゾーンを離れる」に含まれる：selfLeave（離れた時）誘発をここで一度だけ発火（ミルザム型・ヴィーナス型メテオバーン）
   //    ※下敷き枚数を退避してから発火（この後グレイブ等へ散るため）
   c._leaveUnder=(c.under&&c.under.length)||0;
@@ -11915,27 +11943,38 @@ async function runFxList(pi,list,srcCard,inPump){
       if(cn>0)toast(`🌱 マナ${want}枚 → 山札の上から${cn}枚をタップしてマナゾーンへ`);
       else toast("🌱 山札がありません");
     }else if(f.t==="manaAllCreatureBattleNoEnterFx"){
-      // 🌏 各プレイヤーのマナのクリーチャーをすべて出す。
-      // 「出ることによって起こる効果は無視」のため markArrive/emitEvent/enqueueFx は通さない。
-      const sides=S.vs?[pi,op]:[pi];
-      const targets=new Map(sides.map(sp=>[sp,zonesOf(sp).mana.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);}).map(x=>x.id)]));
-      let total=0;snap();
-      for(const sp of sides){
-        const TZ=zonesOf(sp);
-        for(const id of targets.get(sp)||[]){
-          const mi=TZ.mana.findIndex(x=>x.id===id);if(mi<0)continue;
-          const cc=TZ.mana[mi];
-          if(battleSlotFull(sp)){toast(`🟥 ${S.players[sp].label}：バトルゾーン上限のため《${faceNameOf(cc)}》はマナに残る`);continue;}
-          if(!battleEntryOk(sp,cc)){toast(`⛔ ${faceNameOf(cc)} は出せないためマナに残る`);continue;}
-          TZ.mana.splice(mi,1);
-          cc.faceup=true;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;cc._viaCheat=false;
-          const rc=getReg(cc);cc.sick=!(rc&&rc.sa);cc.bornTurn=S.turn;
-          TZ.battle.push(cc);total++;
-          logOnly(`🌏 ${S.players[sp].label}：《${faceNameOf(cc)}》をマナから出した（出た時の効果は無視）`);
+      // 🌏 デュエプレ版《轟破天九十九語》。着地前の置換・出せない条件は適用する一方、
+      // 登場イベント・封印外し・「出た時／出した時」は起こさない。着地後の常在能力等は有効。
+      const putIgnoringEnter=async(sp,id)=>{
+        const TZ=zonesOf(sp),mi=TZ.mana.findIndex(x=>x.id===id);if(mi<0)return false;
+        const cc=TZ.mana[mi];
+        if(battleSlotFull(sp))return false;
+        if(!battleEntryOk(sp,cc)){toast(`⛔ ${faceNameOf(cc)} は出せないためマナに残る`);return false;}
+        TZ.mana.splice(mi,1);
+        cc.faceup=true;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;cc._viaCheat=false;
+        const rc=getReg(cc);cc.sick=!(rc&&rc.sa);cc.bornTurn=S.turn;
+        TZ.battle.push(cc);
+        logOnly(`🌏 ${S.players[sp].label}：《${faceNameOf(cc)}》をマナから出した（登場で起こる効果・ルールは無視）`);
+        return true;
+      };
+      snap();let mine=0,foe=0;
+      const myPool=Z.mana.filter(x=>{const r=getReg(x);return r&&isCreatureReg(r);}).map(x=>x.id),chosen=[];
+      while(myPool.length&&chosen.length<Math.max(0,7-Z.battle.length)){
+        const labels=myPool.map(id=>{const c=Z.mana.find(x=>x.id===id);return `《${faceNameOf(c)}》を出す`;});labels.push("✅ 選択終了");
+        const j=await askChoice(`🌏 自分のマナから出すクリーチャーを好きな数選択（${chosen.length}体選択済み）`,labels);
+        if(j===null||j===myPool.length)break;
+        chosen.push(myPool.splice(j,1)[0]);
+      }
+      for(const id of chosen)if(await putIgnoringEnter(pi,id))mine++;
+      if(S.vs){
+        const OZ=zonesOf(op),pool=OZ.mana.filter(x=>{const r=getReg(x);return r&&isCreatureReg(r)&&!evoKindOf(r)&&!isNeoReg(r);}).map(x=>x.id);
+        while(pool.length&&!battleSlotFull(op)){
+          const k=Math.floor(Math.random()*pool.length),id=pool.splice(k,1)[0];
+          if(await putIgnoringEnter(op,id))foe++;
         }
       }
       sfx("move");renderAll();
-      toast(`🌏 両プレイヤーのマナからクリーチャーを${total}体出した（登場で起こる効果は無視）`);
+      toast(`🌏 マナから自分${mine}体／相手${foe}体を出した（登場で起こる効果・ルールは無視）`);
     }else if(f.t==="mill"){
       const dropped=[];const _milled=[];
       for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;dropped.push(`《${faceNameOf(c)}》`);if(!graveShuffleRepApply(c,pi)){Z.grave.push(c);_milled.push(c);}}
@@ -18272,6 +18311,7 @@ async function startAttack(pi,id){
   }
   const op=pi===0?1:0, OZ=zonesOf(op);
   const reg=getReg(c);
+  const attackerPower=await effPower(c,true,false);
   const atkAll=!!(reg&&(reg.atkUn||reg.machf))||!!(c.buff&&c.buff.attackUntapped);
   const targets=[];
   if(S.noAtkTurn&&S.noAtkTurn.on&&S.noAtkTurn.key===`${S.turn}`){
@@ -18293,8 +18333,12 @@ async function startAttack(pi,id){
     if(gearProtectsFrom(t,c))return;      // ⚙ クロスギアによる「攻撃されない」（ノーブル・エンフォーサー型）
     if(t.tapped||atkAll)targets.push({kind:"creature",cid:t.id,label:`⚔ ${faceNameOf(t)}${t.tapped?"（タップ中）":"（アンタップ）"}`});
   });
-  if(OZ.shield.length)targets.push({kind:"shield",label:`🛡 相手プレイヤーを攻撃（シールド残り${OZ.shield.length}枚 → ブレイク）`});
-  else targets.push({kind:"direct",label:"💥 ダイレクトアタック！"});
+  const playerAtkLocked=OZ.battle.some(t=>{const tr=getReg(t);return tr&&+tr.foeCantAtkPByPowLT>0&&attackerPower<+tr.foeCantAtkPByPowLT&&!isSealed(t)&&!isIgnored(t,op);});
+  if(!playerAtkLocked){
+    if(OZ.shield.length)targets.push({kind:"shield",label:`🛡 相手プレイヤーを攻撃（シールド残り${OZ.shield.length}枚 → ブレイク）`});
+    else targets.push({kind:"direct",label:"💥 ダイレクトアタック！"});
+  }
+  if(!targets.length){toast("⛔ 攻撃できる対象がありません");renderAll();return;}
   closeSheet();
   const pick=await askChoice(`《${faceNameOf(c)}》の攻撃対象を選択`,targets.map(t=>t.label));
   if(pick===null){renderAll();return;}
@@ -21276,6 +21320,7 @@ function renderFxEditor(){
   $("fxMachF").checked=!!FXEDIT.machf;
   $("fxNoBlock").checked=!!FXEDIT.noBlock;
   $("fxNoAtked").checked=!!FXEDIT.noAtked;
+  {const e=$("fxFoeCantAtkPByPowLT");if(e)e.value=+FXEDIT.foeCantAtkPByPowLT||0;}
   $("fxNoChoose").checked=!!FXEDIT.noChoose;
   $("fxGS").checked=!!FXEDIT.gs;
   $("fxCharger").checked=!!FXEDIT.charger;
@@ -21367,6 +21412,7 @@ function renderFxEditor(){
   $("fxSA").checked=!!FXEDIT.sa;
   $("fxGraveShuffleRep").checked=!!FXEDIT.graveShuffleRep;
   $("fxHEnergy").checked=!!FXEDIT.henergy;
+  {const e=$("fxHandDestroyN");if(e)e.value=String(FXEDIT.handDestroyN||0);}
   $("fxMach").checked=!!FXEDIT.mach;
   $("fxZRush").checked=!!FXEDIT.zrush;
   $("fxHyperNote").value=FXEDIT.hyperNote||"";
@@ -23928,6 +23974,7 @@ $("fxSave").addEventListener("click",async ()=>{
     machf:$("fxMachF").checked,
     noBlock:$("fxNoBlock").checked,
     noAtked:$("fxNoAtked").checked,
+    foeCantAtkPByPowLT:+($("fxFoeCantAtkPByPowLT")?$("fxFoeCantAtkPByPowLT").value:0)||0,
     noChoose:$("fxNoChoose").checked,
     gs:$("fxGS").checked,
     charger:$("fxCharger").checked,
@@ -24011,6 +24058,7 @@ $("fxSave").addEventListener("click",async ()=>{
     sa:$("fxSA").checked,
     graveShuffleRep:$("fxGraveShuffleRep").checked,
     henergy:$("fxHEnergy").checked,
+    handDestroyN:$("fxHandDestroyN")?(parseInt($("fxHandDestroyN").value,10)||0):0,
     mach:$("fxMach").checked,
     zrush:$("fxZRush").checked,
     hyperNote:$("fxHyperNote").value.trim(),
@@ -24578,6 +24626,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.machf)attrs.push("マッハファイター");
     if(v.noBlock)attrs.push("ブロックされない");
     if(v.noAtked)attrs.push("攻撃されない");
+    if(v.foeCantAtkPByPowLT)attrs.push(`相手のパワー${v.foeCantAtkPByPowLT}未満は自分を攻撃不可`);
     if(v.noChoose)attrs.push("選ばれない");
     if(v.noChooseIfAlly)attrs.push(`🛡 他の${v.noChooseIfAlly}がいれば選ばれない`);
     if(v.gs)attrs.push("Gストライク");
