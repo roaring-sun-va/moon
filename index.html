@@ -3963,7 +3963,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.31";
+const APP_VER="v13.32";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -27043,6 +27043,26 @@ async function crossGearTo(pi,id,opt){
   toast(`⚙ クロス！ ${faceNameOf(c)} → ${faceNameOf(host)}${xc?`（クロスコスト${xc}）`:""}`);
   return true;
 }
+/* 🔗 G・リンクの並び順を決める。
+   合体後のカード名を「・」で区切り、その順に元のカードを並べる。
+   例：《ヘヴィ・デス・メタル》→ 龍神ヘヴィ、破壊神デス、龍神メタルの順。
+   名前に出てこないパーツは、選んだ順のまま後ろへ。 */
+function glOrderParts(c){
+  const parts=(c.under||[]).slice();
+  if(parts.length<2)return parts;
+  const segs=String(c.name||"").split(/[・＋+\/／]/).map(x=>x.trim()).filter(Boolean);
+  if(segs.length<2)return parts;
+  const out=[],rest=parts.slice();
+  for(const sg of segs){
+    let hit=rest.findIndex(x=>{
+      const nm=String(faceNameOf(x)||"");
+      return nm.includes(sg)||sg.includes(nm.replace(/^[龍神破壊神]+/,""));
+    });
+    if(hit<0)hit=rest.findIndex(x=>String(faceNameOf(x)||"").replace(/[\s　]/g,"").includes(sg.replace(/[\s　]/g,"")));
+    if(hit>=0)out.push(rest.splice(hit,1)[0]);
+  }
+  return out.concat(rest);
+}
 function cardEl(pi,zone,c){
   const el=document.createElement("div");
   el.className="card";
@@ -27131,9 +27151,40 @@ function cardEl(pi,zone,c){
       if(c.under[i9].faceup){topOver=c.under[i9];break;}
     }
   }
+  // 🔗 G・リンク中は、合体後の1枚絵ではなく**元のカードを横に並べて**見せる。
+  //    並び順は合体後のカード名（例：ヘヴィ・デス・メタル）を「・」で区切った順。
+  //    名前で割り当てられない分は選んだ順のまま後ろに並べる。
+  const _glParts=(showFace&&zone==="battle"&&c.gl&&Array.isArray(c.under)&&c.under.length>=2)?glOrderParts(c):null;
+  if(_glParts){
+    // 本物のゴッド・リンクと同じく、枚数分だけ横に広げる
+    el.style.width=`calc(var(--card-w) * ${_glParts.length})`;
+    el.style.flex="0 0 auto";
+    const wrap=document.createElement("div");
+    wrap.className="glStrip";
+    wrap.style.cssText="position:absolute;inset:0;display:flex;align-items:stretch;justify-content:center;gap:0;overflow:hidden;border-radius:inherit";
+    for(const pt of _glParts){
+      const cell=document.createElement("div");
+      cell.style.cssText="flex:1 1 0;min-width:0;position:relative;overflow:hidden";
+      const u=imgURL.get(faceKeyOf(pt));
+      if(u){
+        const im=document.createElement("img");
+        im.src=u;im.alt="";im.draggable=false;
+        im.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block";
+        cell.appendChild(im);
+      }else{
+        const np=document.createElement("div");
+        np.style.cssText="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#cbd5e1;background:#0f172a;text-align:center;padding:2px;line-height:1.15";
+        np.textContent=faceNameOf(pt);
+        cell.appendChild(np);
+      }
+      wrap.appendChild(cell);
+    }
+    el.appendChild(wrap);
+  }else{
   const url=showFace?imgURL.get(faceKeyOf(c)):(topOver?imgURL.get(faceKeyOf(topOver)):backURL(pi));
   if(url){const im=document.createElement("img");im.src=url;im.alt="";im.draggable=false;if(!showFace&&!topOver&&pi!==S.seat)im.style.transform="rotate(180deg)";el.appendChild(im);}
   else{const np=document.createElement("div");np.className="nameplate";np.textContent=showFace?faceNameOf(c):(topOver?topOver.name:(zone==="shield"?"盾":"?"));el.appendChild(np);}
+  }
   if(c.rot){
     el.style.transform=`rotate(${c.rot}deg)${c.tapped?" scale(.9)":""}`;
     if(c.rot%180===90&&zone==="battle"){
