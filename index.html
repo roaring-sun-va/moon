@@ -165,6 +165,16 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   touch-action:none;
 }
 .card img{width:100%;height:100%;object-fit:cover;object-position:50% 22%;display:block;pointer-events:none;-webkit-user-drag:none;user-select:none}
+/* 🔗 G・リンク中：元のカードを枚数分横に並べる（1枚の大きさは変えない） */
+.card.glCard{border-color:#fbbf24;box-shadow:0 0 10px 2px rgba(251,191,36,.45)}
+.card.glCard .glStrip>div+div{border-left:1px solid rgba(251,191,36,.55)}
+@keyframes glJoin{
+  0%{transform:scale(.86);filter:brightness(2.2) saturate(1.4);box-shadow:0 0 0 0 rgba(251,191,36,.9)}
+  35%{transform:scale(1.06);filter:brightness(1.5)}
+  70%{transform:scale(.99);box-shadow:0 0 26px 10px rgba(251,191,36,.75)}
+  100%{transform:scale(1);filter:none;box-shadow:0 0 10px 2px rgba(251,191,36,.45)}
+}
+.card.gl-join{animation:glJoin .85s ease-out}
 @media (max-width:640px){.pw-badge{display:none}}
 /* 📱 画面が狭い時、カードの隅に出す小さな札を控えめにする（カードが隠れて見えなくなるのを防ぐ） */
 @media (max-width:760px){
@@ -2098,7 +2108,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxYobinion"> ヨビニオン（召喚時、山上からコストの小さいクリーチャーが出るまでめくって出す）</label>
         <label title="このクリーチャーがタップしていれば、相手が自分のターン中にクリーチャーを召喚するか呪文を唱えた時、そのターンの残りが飛ぶ（禁断機関 ViVy-R型）。「〜した時」の誘発なので、実行した瞬間にタップしていれば誘発が確定し、そのあとデーモン・ハンド等でこのクリーチャーが除去されてもターンは飛びます"><input type="checkbox" id="fxEndTurnOppPlay"> ⏭ タップ中なら、相手がクリーチャー召喚／呪文を唱えた時に相手のターンを終わらせる（ViVy-R型）</label>
         <label><input type="checkbox" id="fxJD"> ジャストダイバー（出た時にアナウンスのみ・付与はメニューから手動）</label>
-        <input type="text" id="fxPsyLink" placeholder="覚醒/ゴッド・リンク相手（カード名を「／」区切り・全員揃うと確認）" style="flex:1;min-width:200px">
+        <input type="text" id="fxPsyLink" placeholder="覚醒/ゴッド・リンク相手（カード名を「／」区切り・1体でも揃えば確認）" style="flex:1;min-width:200px">
+        <input type="text" id="fxPsyLinkMap" placeholder="合体後の名前の表：龍神メタル＝ヘヴィ・メタル／龍神メタル＋破壊神デス＝ヘヴィ・デス・メタル" title="リンクした相手の顔ぶれごとに、合体後のカード名を指定します。並び順はこの名前を「・」で区切った順になります" style="flex:1;min-width:220px">
         <input type="text" id="fxPsyLinkTo" placeholder="リンク後のカード名（空欄＝名前連結）" style="flex:1;min-width:170px">
         <label><input type="checkbox" id="fxPsyLinkW"> リンク後は横向き</label>
         <label><input type="checkbox" id="fxBAD"> B・A・D（コスト2軽減で召喚できる。そうしたらターンの終わりに破壊）</label>
@@ -3963,7 +3974,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.32";
+const APP_VER="v13.33";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -21364,6 +21375,7 @@ function renderFxEditor(){
   $("fxJD").checked=!!FXEDIT.jdiver;
   $("fxPsyLink").value=FXEDIT.psyLink||"";
   $("fxPsyLinkTo").value=FXEDIT.psyLinkTo||"";
+  $("fxPsyLinkMap").value=FXEDIT.psyLinkMap||"";
   $("fxPsyLinkW").checked=!!FXEDIT.psyLinkW;
   $("fxTaunt").value=FXEDIT.taunt||"";
   $("fxSTWhen").value=FXEDIT.stWhen||"";
@@ -23516,6 +23528,7 @@ function openFxEditor(key){
     jdiver:cur?!!cur.jdiver:false,
     psyLink:cur&&cur.psyLink||"",
     psyLinkTo:cur&&cur.psyLinkTo||"",
+    psyLinkMap:cur&&cur.psyLinkMap||"",
     psyLinkW:cur?!!cur.psyLinkW:false,
     taunt:cur&&cur.taunt||"",
     stWhen:cur&&cur.stWhen||"",
@@ -24007,6 +24020,7 @@ $("fxSave").addEventListener("click",async ()=>{
     jdiver:$("fxJD").checked,
     psyLink:$("fxPsyLink").value.trim(),
     psyLinkTo:$("fxPsyLinkTo").value.trim(),
+    psyLinkMap:$("fxPsyLinkMap").value.trim(),
     psyLinkW:$("fxPsyLinkW").checked,
     taunt:$("fxTaunt").value||"",
     stWhen:$("fxSTWhen").value||"",
@@ -25316,10 +25330,11 @@ function openLinkProgress(pi,id){
       toast(`💀 卍誕！ ${faceNameOf(c)}`);
     },true);
   }
-  if(mode==="psy"&&parts.length&&parts.every(x=>x.on)){
-    mk("🔗 リンク合体！",()=>{
+  if(mode==="psy"&&parts.some(x=>x.on)){
+    const _onN=parts.filter(x=>x.on).length;
+    mk(`🔗 リンク合体！（${_onN+1}体）`,()=>{
       snap();
-      const members=[c,...parts.map(x=>x.ref)];
+      const members=[c,...parts.filter(x=>x.on).map(x=>x.ref)];
       for(const x of members){
         const i2=Z.battle.findIndex(y=>y.id===x.id);
         if(i2>=0)Z.battle.splice(i2,1);
@@ -25327,7 +25342,7 @@ function openLinkProgress(pi,id){
       // ⚙ 合体前のクリーチャーにクロスしていたギアは、合体後のクリーチャーへ引き継ぐ（場から消さない）
       const gAll=[];
       for(const x of members){if(x.gear&&x.gear.length)gAll.push(...x.gear.splice(0));}
-      const nm2=(reg.psyLinkTo)||members.map(x=>faceNameOf(x)).join("／");
+      const nm2=psyLinkNameFor(reg,members.slice(1).map(x=>faceNameOf(x)))||(reg.psyLinkTo)||members.map(x=>faceNameOf(x)).join("／");
       const nc=makeCard(nm2);
       nc.gl=true;
       nc.under=members;
@@ -25335,6 +25350,8 @@ function openLinkProgress(pi,id){
       nc.rot=reg.psyLinkW?((pi===S.seat)?270:90):0;
       members.forEach(b=>{b.tapped=false;});
       Z.battle.push(nc);
+      window.__glJoinId=nc.id;
+      try{fxKeyword(pi,"G・リンク！",nm2,members.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
       markArrive(nc);
       emitEvent(pi,"summon");
       enqueueFx(pi,nc);
@@ -26089,23 +26106,25 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         const parts=[c];
         for(const nm of names){
           const hit=ZB7.find(x=>!parts.includes(x)&&normName(faceNameOf(x))===normName(nm));
-          if(!hit)return;
-          parts.push(hit);
+          if(hit)parts.push(hit);   // 🔗 全員揃わなくても、いる分だけでリンクできる（ゴッドは2体リンクもある）
         }
-        const yes=await ask(`🔗 覚醒リンク！\n${parts.map(x=>faceNameOf(x)).join("＋")} が揃いました。リンクしますか？`);
+        if(parts.length<2)return;
+        const yes=await ask(`🔗 G・リンク！\n${parts.map(x=>faceNameOf(x)).join("＋")} でリンクできます。リンクしますか？`);
         if(!yes)return;
         snap();
         for(const x of parts){
           const i2=ZB7.findIndex(y=>y.id===x.id);
           if(i2>=0)ZB7.splice(i2,1);
         }
-        const nm2=reg.psyLinkTo||parts.map(x=>faceNameOf(x)).join("／");
+        const nm2=psyLinkNameFor(reg,parts.slice(1).map(x=>faceNameOf(x)))||reg.psyLinkTo||parts.map(x=>faceNameOf(x)).join("／");
         const nc=makeCard(nm2);
         nc.gl=true;
         nc.under=parts;
         nc.rot=reg.psyLinkW?((pTo===S.seat)?270:90):0;
         parts.forEach(b=>{b.tapped=false;});
         ZB7.push(nc);
+        window.__glJoinId=nc.id;
+        try{fxKeyword(pTo,"G・リンク！",nm2,parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
         markArrive(nc);
         emitEvent(pTo,"summon");
         enqueueFx(pTo,nc);
@@ -27047,6 +27066,23 @@ async function crossGearTo(pi,id,opt){
    合体後のカード名を「・」で区切り、その順に元のカードを並べる。
    例：《ヘヴィ・デス・メタル》→ 龍神ヘヴィ、破壊神デス、龍神メタルの順。
    名前に出てこないパーツは、選んだ順のまま後ろへ。 */
+/* 🔗 リンクした相手の顔ぶれから、合体後のカード名を決める。
+   登録欄 `psyLinkMap` の書式：「相手名＋相手名＝合体後の名前」を「／」または改行で並べる。
+   例：龍神メタル＝ヘヴィ・メタル／龍神メタル＋破壊神デス＝ヘヴィ・デス・メタル */
+function psyLinkNameFor(reg,partnerNames){
+  const want=partnerNames.map(x=>normName(x)).sort().join("|");
+  const mp=String((reg&&reg.psyLinkMap)||"").trim();
+  if(mp){
+    for(const line of mp.split(/[\n／\/]/)){
+      const t=line.trim();
+      if(!t||!t.includes("="))continue;
+      const [lhs,rhs]=t.split("=");
+      const key=lhs.split(/[＋+、,]/).map(x=>normName(x.trim())).filter(Boolean).sort().join("|");
+      if(key===want&&rhs.trim())return rhs.trim();
+    }
+  }
+  return null;
+}
 function glOrderParts(c){
   const parts=(c.under||[]).slice();
   if(parts.length<2)return parts;
@@ -27155,10 +27191,18 @@ function cardEl(pi,zone,c){
   //    並び順は合体後のカード名（例：ヘヴィ・デス・メタル）を「・」で区切った順。
   //    名前で割り当てられない分は選んだ順のまま後ろに並べる。
   const _glParts=(showFace&&zone==="battle"&&c.gl&&Array.isArray(c.under)&&c.under.length>=2)?glOrderParts(c):null;
+  if(_glParts&&window.__glJoinId===c.id&&S.anim!==false){
+    el.classList.add("gl-join");
+    setTimeout(()=>{if(window.__glJoinId===c.id)window.__glJoinId=null;},900);
+  }
   if(_glParts){
     // 本物のゴッド・リンクと同じく、枚数分だけ横に広げる
-    el.style.width=`calc(var(--card-w) * ${_glParts.length})`;
-    el.style.flex="0 0 auto";
+    el.style.setProperty("width",`calc(var(--card-w) * ${_glParts.length})`,"important");
+    el.style.setProperty("height","var(--card-h)","important");
+    el.style.setProperty("aspect-ratio","auto","important");
+    el.style.setProperty("max-width","none","important");
+    el.style.setProperty("flex","0 0 auto","important");
+    el.classList.add("glCard");
     const wrap=document.createElement("div");
     wrap.className="glStrip";
     wrap.style.cssText="position:absolute;inset:0;display:flex;align-items:stretch;justify-content:center;gap:0;overflow:hidden;border-radius:inherit";
@@ -27169,7 +27213,7 @@ function cardEl(pi,zone,c){
       if(u){
         const im=document.createElement("img");
         im.src=u;im.alt="";im.draggable=false;
-        im.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block";
+        im.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 22%;display:block";
         cell.appendChild(im);
       }else{
         const np=document.createElement("div");
@@ -32686,6 +32730,8 @@ function openMultiSheet(){
       nc.rot=wide?90:0;
       parts.forEach(b=>{b.tapped=false;});
       zonesOf(p0).battle.push(nc);
+      window.__glJoinId=nc.id;
+      try{fxKeyword(p0,"G・リンク！",nm,parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
       markArrive(nc);
       endMulti();closeSheet();
       sfx("ok");renderAll();
@@ -36801,8 +36847,17 @@ function bRender(){
     if(r&&r.cost2!=null&&!isNaN(+r.cost2))vals.push(+r.cost2); // ツインパクトは上下どちらでも一致
     return vals.some(n=>[...costSel].some(t=>t===8?n>=8:n===t));
   };
+  // 🧬 種族で絞る（選んだ種族のいずれかを持つカード／OR）
+  const raceSel=B.raceSel||(B.raceSel=new Set());
+  const raceOk=(k)=>{
+    if(!raceSel.size)return true;
+    const r=FXDB.get(k);
+    const rs=(r&&r.races)||[];
+    if(!rs.length)return false;
+    return [...raceSel].some(t=>rs.some(x=>String(x).includes(t)));
+  };
   const keys=Array.from(dispName.keys())
-    .filter(k=>(!q||k.includes(q))&&typeMatch(k,tf)&&civOk(k)&&twinOk(k)&&costOk(k)&&(!onlyPicked||(counts.get(k)||0)>0))
+    .filter(k=>(!q||k.includes(q))&&typeMatch(k,tf)&&civOk(k)&&twinOk(k)&&costOk(k)&&raceOk(k)&&(!onlyPicked||(counts.get(k)||0)>0))
     .sort((a,b)=>{
       if(onlyPicked){ // 採用中だけの時はコスト順→名前順で、デッキの形が分かりやすいように
         const ra=FXDB.get(a),rb=FXDB.get(b);
@@ -37033,9 +37088,45 @@ function bBuildCivBar(){
     cw.appendChild(document.createTextNode("枚"));
     optBar.appendChild(cw);
   }
+  // 🧬 種族で絞る。登録されているカードの種族を集めて、多い順に選ばせる
+  {
+    const rb=document.createElement("button");rb.type="button";rb.id="bRaceBtn";
+    rb.title="種族で絞り込む（複数選べます／いずれかを持つカード）";
+    const rbPaint=()=>{
+      const n=(B.raceSel&&B.raceSel.size)||0;
+      rb.textContent=n?`🧬 種族（${n}）`:"🧬 種族";
+      rb.style.background=n?"#86efac":"transparent";
+      rb.style.color=n?"#0b0f1a":"#86efac";
+    };
+    rb.style.cssText="font-size:12px;padding:4px 11px;border:1px solid #86efac;border-radius:14px;background:transparent;color:#86efac;cursor:pointer;font-weight:700";
+    rb._paint=rbPaint;
+    rb.onclick=async()=>{
+      const cnt=new Map();
+      for(const k of dispName.keys()){
+        const r=FXDB.get(k);
+        for(const x of ((r&&r.races)||[])){
+          const t=String(x).trim();
+          if(t)cnt.set(t,(cnt.get(t)||0)+1);
+        }
+      }
+      if(!cnt.size){toast("種族が登録されているカードがありません");return;}
+      B.raceSel=B.raceSel||new Set();
+      const list=[...cnt.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"ja"));
+      const pairs=list.map(([t,n])=>[t,`${B.raceSel.has(t)?"✔ ":""}${t}（${n}枚）`,n]);
+      pairs.push(["__clear__","✖ 種族の絞り込みを解除",0]);
+      const v=await pickFromList(`🧬 種族で絞る（タップで切替・検索可）　いま：${B.raceSel.size?[...B.raceSel].join("、"):"なし"}`,pairs,null);
+      if(v==null)return;
+      if(v==="__clear__")B.raceSel.clear();
+      else if(B.raceSel.has(v))B.raceSel.delete(v);
+      else B.raceSel.add(v);
+      rbPaint();bRender();
+    };
+    rbPaint();optBar.appendChild(rb);
+  }
   const cl=document.createElement("button");cl.type="button";cl.textContent="フィルタクリア";cl.className="btn small ghost";cl.style.cssText="font-size:11px;padding:3px 9px";
   cl.onclick=()=>{
     B.civSel.clear();B.civEx.clear();B.civMulti=false;B.twin="";B.onlyPicked=false;
+    if(B.raceSel)B.raceSel.clear();
     if(B.costSel)B.costSel.clear();
     mb.style.background="transparent";mb.style.color="#f6a";
     [...bar.querySelectorAll("button")].forEach(x=>{if(x._paint)x._paint();});
