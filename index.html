@@ -3974,7 +3974,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.36";
+const APP_VER="v13.37";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9206,6 +9206,8 @@ const FX_TYPES=[
   ["deckToGravePick","🪦 自分の山札を見て、条件に合うカードをn枚選び墓地に置く→山札をシャッフル（邪眼皇ロマノフI世型／条件欄＝例：闇）"],
   ["graveCastBottom","🔮 自分の墓地から条件に合う呪文を1枚、コストを支払わずに唱える。唱えた後、山札の一番下に置く（邪眼皇ロマノフI世型／条件欄＝例：闇／コスト6以下）"],
   ["handesPerShield","🗑 自分のシールド1枚につき、相手の手札をランダムにn枚捨てさせる（ソウル・アドバンテージ型／通常n=1）"],
+  ["chargeTapManaCount","🌱 解決時の自分のマナ枚数と同じ枚数を、山札の上からタップしてマナに置く（ドルツヴァイ型）"],
+  ["manaAllCreatureBattleNoEnterFx","🌏 各プレイヤーはマナのクリーチャーをすべて出す（それらが出ることによって起こる効果は無視・轟破天九十九語型）"],
   ["tapToggle","⤵🔄 クリーチャーをn体まで選び、アンタップしていればタップ、タップしていればアンタップする（両者どちらでも・逆転王女プリン型）"],
   ["selfToShield","🛡 この呪文（またはこのカード）自身を裏向きのシールドにする（スローリー・チェーン型）"],
   ["grantTurnAll","✨ そのターン、自分のクリーチャーすべてに能力を与える（条件欄に「スレイヤー」「スピードアタッカー」「破壊時マナ」「ブロッカー」「パワー+3000」などを「／」区切りで・鎧亜の咆哮キリュー・ジルヴェス型）"],
@@ -9214,7 +9216,7 @@ const FX_TYPES=[
   ["foeMaxCostDiscardRevive","🗑 相手の手札から最もコストの大きいカード1枚を捨てさせ、自分の墓地からそのコスト以下のクリーチャー1枚を出してもよい（雷獣ヴォルグ・ティーガー型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["turnEndUntapAll","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","graveCastBottom"]);
+const FX_NO_N=new Set(["turnEndUntapAll","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
@@ -11900,6 +11902,37 @@ async function runFxList(pi,list,srcCard,inPump){
       bumpEv("manaAccel",pi,cn);
       sfx("move");
       if(cn>0){const nm=Z.mana.slice(-cn).map(faceNameOf).join("、");toast(`💠 マナ加速（タップイン）：${nm} をタップしてマナゾーンへ`);}
+    }else if(f.t==="chargeTapManaCount"){
+      // 🌱 解決時の自分のマナ枚数と同じ枚数を、山札からタップしてマナへ（ドルツヴァイ型）。
+      const want=Z.mana.length;
+      let cn=0;
+      for(let i=0;i<want&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;c.tapped=true;Z.mana.push(c);markArrive(c);cn++;}
+      bumpEv("manaAccel",pi,cn);
+      sfx("move");renderAll();
+      if(cn>0)toast(`🌱 マナ${want}枚 → 山札の上から${cn}枚をタップしてマナゾーンへ`);
+      else toast("🌱 山札がありません");
+    }else if(f.t==="manaAllCreatureBattleNoEnterFx"){
+      // 🌏 各プレイヤーのマナのクリーチャーをすべて出す。
+      // 「出ることによって起こる効果は無視」のため markArrive/emitEvent/enqueueFx は通さない。
+      const sides=S.vs?[pi,op]:[pi];
+      const targets=new Map(sides.map(sp=>[sp,zonesOf(sp).mana.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);}).map(x=>x.id)]));
+      let total=0;snap();
+      for(const sp of sides){
+        const TZ=zonesOf(sp);
+        for(const id of targets.get(sp)||[]){
+          const mi=TZ.mana.findIndex(x=>x.id===id);if(mi<0)continue;
+          const cc=TZ.mana[mi];
+          if(battleSlotFull(sp)){toast(`🟥 ${S.players[sp].label}：バトルゾーン上限のため《${faceNameOf(cc)}》はマナに残る`);continue;}
+          if(!battleEntryOk(sp,cc)){toast(`⛔ ${faceNameOf(cc)} は出せないためマナに残る`);continue;}
+          TZ.mana.splice(mi,1);
+          cc.faceup=true;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;cc._viaCheat=false;
+          const rc=getReg(cc);cc.sick=!(rc&&rc.sa);cc.bornTurn=S.turn;
+          TZ.battle.push(cc);total++;
+          logOnly(`🌏 ${S.players[sp].label}：《${faceNameOf(cc)}》をマナから出した（出た時の効果は無視）`);
+        }
+      }
+      sfx("move");renderAll();
+      toast(`🌏 両プレイヤーのマナからクリーチャーを${total}体出した（登場で起こる効果は無視）`);
     }else if(f.t==="mill"){
       const dropped=[];const _milled=[];
       for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;dropped.push(`《${faceNameOf(c)}》`);if(!graveShuffleRepApply(c,pi)){Z.grave.push(c);_milled.push(c);}}
