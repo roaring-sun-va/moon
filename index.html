@@ -3987,7 +3987,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.45";
+const APP_VER="v13.46";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9148,7 +9148,6 @@ const FX_TYPES=[
   ["handManaCastSpell","🔮 自分の手札またはマナゾーンから条件に合う呪文を1枚、コストを支払わずに唱えてもよい（条件欄で名前/文明/コスト指定・デンジャデオン型）"],
   ["deckSearchTop","🔎 山札から条件に合うカードを探索し、1枚を公開して山札の一番上に置く（デュエプレ式・3種提示／条件欄で対象を指定・ハチマ型）"],
   ["foeShieldToMana","🛡→🌱 相手のシールドをn枚選んで、持ち主のマナゾーンに置く（ブレイクせず直接マナ）"],
-  ["foeAllShieldToMana","🛡→🌱 相手のシールドをすべて、持ち主のマナゾーンに置く（ブレイクせず直接マナ）"],
   ["diaBliz","🔷 マナから条件のカードをランダムに手札上限(10)まで戻す→戻した数だけ山札からマナ加速（自身と同名は除外・条件欄で種族等指定・ダイヤモンド・ブリザード型）"],
   ["battleAsk","相手のクリーチャーとバトルする（対象選択・確認つき）"],
   ["hold","⏸ 処理中にする（攻撃を保留して手動で解決。もう一度攻撃で続行）"],
@@ -9237,7 +9236,6 @@ const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:
 const FX_NO_N=new Set(["turnEndUntapAll","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
-FX_NO_N.add("foeAllShieldToMana");
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
   return list.map(f=>FX_LABEL[f.t].replace("n",f.n)).join(" → ");
@@ -13729,17 +13727,6 @@ async function runFxList(pi,list,srcCard,inPump){
         moved++;
       }
       if(moved){sfx("move");renderAll();toast(`🛡→🌱 相手のシールドを${moved}つマナゾーンに置いた（ブレイクではないのでS・トリガーは使えません）`);}
-    }else if(f.t==="foeAllShieldToMana"){
-      // 破天九語型：ブレイクせず、相手のシールドをすべて持ち主のマナへ置く。
-      const shields=OZ.shield.splice(0);
-      let moved=0;
-      for(const rm of shields){
-        if(rm.under&&rm.under.length)rm.under.splice(0).forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.mark=false;OZ.mana.push(u);moved++;});
-        rm.faceup=true;rm.tapped=false;rm.sideways=false;rm.mark=false;
-        OZ.mana.push(rm);moved++;
-      }
-      if(moved){sfx("move");renderAll();toast("🛡→🌱 相手のシールドをすべてマナゾーンに置いた（ブレイクではないのでS・トリガーは使えません）");}
-      else toast("相手のシールドがありません");
     }else if(f.t==="grantBlockerPick"){
       // 🛡 自分のクリーチャーを選んでブロッカーを与える（ハヤブサマル型）
       const filt=String(f.cond||"").trim();
@@ -30643,7 +30630,7 @@ function pickFxKeysPanel(){
     cnt.style.cssText="color:#fbbf24;font-size:13px;font-weight:800";
     ol.appendChild(cnt);
     const grid=document.createElement("div");
-    grid.style.cssText="flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;align-content:start";
+    grid.style.cssText="flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(140px,18vw,190px),1fr));grid-auto-rows:max-content;gap:10px;align-content:start";
     ol.appendChild(grid);
     const shown=()=>{
       const q=sIn.value.trim().toLowerCase();
@@ -30661,9 +30648,9 @@ function pickFxKeysPanel(){
         el.dataset.key=k;
         el.style.cssText=`position:relative;border:2px solid ${on?"#fbbf24":"#2a3346"};border-radius:10px;overflow:hidden;background:#0d1119;cursor:pointer;${on?"box-shadow:0 0 0 2px rgba(251,191,36,.35) inset":""}`;
         const art=document.createElement("div");
-        art.style.cssText="height:84px;background:#141a27;display:flex;align-items:center;justify-content:center;overflow:hidden";
+        art.style.cssText="width:100%;aspect-ratio:5/7;background:#141a27;display:flex;align-items:center;justify-content:center;overflow:hidden";
         const url=imgURL.get(k);
-        if(url){const im=document.createElement("img");im.src=url;im.style.cssText="width:100%;height:84px;object-fit:cover;object-position:center 22%";im.draggable=false;art.appendChild(im);}
+        if(url){const im=document.createElement("img");im.src=url;im.style.cssText="width:100%;height:100%;object-fit:contain;object-position:center";im.draggable=false;art.appendChild(im);}
         else{const t2=document.createElement("div");t2.style.cssText="font-size:11px;color:#6b7686;padding:0 6px;text-align:center";t2.textContent="画像なし";art.appendChild(t2);}
         el.appendChild(art);
         const nm=document.createElement("div");
