@@ -894,10 +894,11 @@ body.shake{animation:bodyShake .4s ease-out}
   transform:translateX(-50%) translateY(-90px);
   background:linear-gradient(180deg,var(--accent-2),var(--accent));color:#1a1405;
   font-weight:800;font-size:13px;padding:8px 16px;border-radius:20px;z-index:500;
-  transition:transform .2s ease;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);
+  transition:transform .2s ease,opacity .2s ease;pointer-events:auto;touch-action:none;cursor:pointer;user-select:none;box-shadow:0 4px 16px rgba(0,0,0,.45);
   max-width:90vw;text-align:center;
 }
 #toast.show{transform:translateX(-50%) translateY(0)}
+#toast.toast-drag{transition:none}
 
 /* v6 additions */
 .panelbox .fxrow select{width:auto;flex:1 1 auto;min-width:0;font-size:14px;padding:10px 8px}
@@ -1042,7 +1043,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <button class="btn small ghost bar-extra" id="btnLog">📜</button>
     <button class="btn small ghost bar-extra" id="btnStats" title="対戦戦績">📊</button>
     <button class="btn small bar-extra" id="btnFreePlay">踏倒:OFF</button>
-    <button class="btn small warn bar-extra" id="btnUnstick" title="🚑 処理リセット：効果処理が詰まって動かない時に、ロックと待ち状態を安全に解除します（盤面は変わりません）">🚑</button>
+    <button class="btn small warn" id="btnUnstick" title="🚑 処理リセット：効果処理が詰まって動かない時に、ロックと待ち状態を安全に解除します（盤面は変わりません）">🚑</button>
     <button class="btn" id="btnPause" title="処理中（誤操作防止ロック）">⏸ 処理中</button>
   </div>
   <button class="btn primary" id="btnNextTurn">次のターン ▶</button>
@@ -2301,6 +2302,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <input type="text" id="fxGearNoAtkedBy" placeholder="クロスしたクリーチャーが攻撃・ブロックされない相手（例：パワー2000以下）" title="このクロスギアをクロスしたクリーチャーは、条件に合うクリーチャーから攻撃もブロックもされません" style="flex:1;min-width:220px">
         </div>
         <label title="各プレイヤーは、自身の墓地にある呪文と同じ文明を持つ呪文を唱えられません（超電磁マクスウェル Z 型）"><input type="checkbox" id="fxStGraveCivSpellLock"> 🔒 自身の墓地の呪文と同じ文明の呪文を唱えられない（マクスウェル Z 型）</label>
+          <label title="このカードが場にある間、相手はD2/DG/通常/禁断/超フィールドを実行できません"><input type="checkbox" id="fxStLockField"> 相手はフィールドを実行できない</label>
           <input type="text" id="fxStLockSpellF" placeholder="対象条件（例：光以外／コスト5以下・「／」＝すべて満たす呪文のみ禁止・空欄＝全て）" style="flex:1;min-width:170px">
           <label><input type="checkbox" id="fxStLockCre"> 相手はクリーチャーを出せない</label>
           <label title="召喚だけを禁止し、踏み倒し（コストを支払わずに出す・侵略・チェンジ等）は許可する（クロス・NEX型）"><input type="checkbox" id="fxStLockCreSum"> 召喚のみ禁止（踏み倒しは可）</label>
@@ -2798,6 +2800,15 @@ function toast(m,kind,opt){
   // 🔒 opt.noLog＝自分の画面だけに出す（ログに積まない＝オンラインでも相手に送らない）。
   //    非公開の情報を含む案内は、別に logPriv で「相手向けの文」を添えて積む
   if(!(opt&&opt.noLog))logPush(m);
+}
+/* 📱 トーストはタップ、または上スワイプで即座に閉じる。ゲーム処理とログは消さない。 */
+{
+  const t=$("toast");let sy=0,dy=0,drag=false;
+  const dismiss=()=>{clearTimeout(t._tm);t.classList.remove("show","toast-drag");t.style.transform="";t.style.opacity="";};
+  t.addEventListener("pointerdown",e=>{sy=e.clientY;dy=0;drag=true;t.classList.add("toast-drag");try{t.setPointerCapture(e.pointerId);}catch(_){}});
+  t.addEventListener("pointermove",e=>{if(!drag)return;dy=e.clientY-sy;if(dy<0){t.style.transform=`translateX(-50%) translateY(${dy}px)`;t.style.opacity=String(Math.max(.2,1+dy/90));}});
+  t.addEventListener("pointerup",()=>{if(!drag)return;drag=false;if(dy<-28||Math.abs(dy)<8)dismiss();else{t.classList.remove("toast-drag");t.style.transform="";t.style.opacity="";}});
+  t.addEventListener("pointercancel",()=>{drag=false;t.classList.remove("toast-drag");t.style.transform="";t.style.opacity="";});
 }
 const ZLOG={hand:"手札",mana:"マナ",battle:"バトル",grave:"墓地",deck:"山札",shield:"盾",hyper:"超次元",gr:"超GR",exile:"ゲーム外",resolve:"解決中",deckTop:"山札の上",deckBottom:"山札の下",shieldUp:"盾(表)"};
 function logOnly(m){
@@ -3976,7 +3987,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.44";
+const APP_VER="v13.45";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9137,6 +9148,7 @@ const FX_TYPES=[
   ["handManaCastSpell","🔮 自分の手札またはマナゾーンから条件に合う呪文を1枚、コストを支払わずに唱えてもよい（条件欄で名前/文明/コスト指定・デンジャデオン型）"],
   ["deckSearchTop","🔎 山札から条件に合うカードを探索し、1枚を公開して山札の一番上に置く（デュエプレ式・3種提示／条件欄で対象を指定・ハチマ型）"],
   ["foeShieldToMana","🛡→🌱 相手のシールドをn枚選んで、持ち主のマナゾーンに置く（ブレイクせず直接マナ）"],
+  ["foeAllShieldToMana","🛡→🌱 相手のシールドをすべて、持ち主のマナゾーンに置く（ブレイクせず直接マナ）"],
   ["diaBliz","🔷 マナから条件のカードをランダムに手札上限(10)まで戻す→戻した数だけ山札からマナ加速（自身と同名は除外・条件欄で種族等指定・ダイヤモンド・ブリザード型）"],
   ["battleAsk","相手のクリーチャーとバトルする（対象選択・確認つき）"],
   ["hold","⏸ 処理中にする（攻撃を保留して手動で解決。もう一度攻撃で続行）"],
@@ -9225,6 +9237,7 @@ const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:
 const FX_NO_N=new Set(["turnEndUntapAll","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
+FX_NO_N.add("foeAllShieldToMana");
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
   return list.map(f=>FX_LABEL[f.t].replace("n",f.n)).join(" → ");
@@ -9271,6 +9284,7 @@ function cardInfoText(key){
   if(r.condGrantExpr&&(r.condGrantPA||r.condGrantBreaks))kw.push(`条件付き強化(${r.condGrantExpr})`);
   if(r.stLockCre)kw.push(`クリーチャー召喚ロック${r.stLockCreF?`(${r.stLockCreF})`:""}`);
   if(r.stLockSpell)kw.push(`呪文ロック${r.stLockSpellF?`(${r.stLockSpellF})`:""}`);
+  if(r.stLockField)kw.push("フィールド実行ロック");
   if(r.noLose)kw.push(`負けない${r.noLoseCond?`(${r.noLoseCond})`:""}`);
   if(r.revoN!=null&&r.revoN>=0)kw.push(`革命${r.revoN}`);
   if(kw.length)L.push(`能力：${kw.join("、")}`);
@@ -13715,6 +13729,17 @@ async function runFxList(pi,list,srcCard,inPump){
         moved++;
       }
       if(moved){sfx("move");renderAll();toast(`🛡→🌱 相手のシールドを${moved}つマナゾーンに置いた（ブレイクではないのでS・トリガーは使えません）`);}
+    }else if(f.t==="foeAllShieldToMana"){
+      // 破天九語型：ブレイクせず、相手のシールドをすべて持ち主のマナへ置く。
+      const shields=OZ.shield.splice(0);
+      let moved=0;
+      for(const rm of shields){
+        if(rm.under&&rm.under.length)rm.under.splice(0).forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.mark=false;OZ.mana.push(u);moved++;});
+        rm.faceup=true;rm.tapped=false;rm.sideways=false;rm.mark=false;
+        OZ.mana.push(rm);moved++;
+      }
+      if(moved){sfx("move");renderAll();toast("🛡→🌱 相手のシールドをすべてマナゾーンに置いた（ブレイクではないのでS・トリガーは使えません）");}
+      else toast("相手のシールドがありません");
     }else if(f.t==="grantBlockerPick"){
       // 🛡 自分のクリーチャーを選んでブロッカーを与える（ハヤブサマル型）
       const filt=String(f.cond||"").trim();
@@ -21451,6 +21476,7 @@ function renderFxEditor(){
   {const e=$("fxAltTapNeed");if(e)e.value=FXEDIT.altTapNeed||"";}
   $("fxAltCond").value=FXEDIT.altCond||"";
   $("fxStLockSpell").checked=!!FXEDIT.stLockSpell;
+  {const e=$("fxStLockField");if(e)e.checked=!!FXEDIT.stLockField;}
   {const e=$("fxStNoDeckPeek");if(e)e.checked=!!FXEDIT.stNoDeckPeek;}
   {const e=$("fxLoseIfNotBattle");if(e)e.checked=!!FXEDIT.loseIfNotBattle;}
   {const e=$("fxSealSelfOnFlip");if(e)e.value=FXEDIT.sealSelfOnFlip||"";}
@@ -23641,6 +23667,7 @@ function openFxEditor(key){
     altCostKill:cur?!!cur.altCostKill:false,
     altCond:cur&&cur.altCond||"",
     stLockSpell:cur?!!cur.stLockSpell:false,
+    stLockField:cur?!!cur.stLockField:false,
     stSpellPT:cur&&cur.stSpellPT||0,
     stCrePT:cur&&cur.stCrePT||0,
     stPlayPT:cur&&cur.stPlayPT||0,
@@ -24097,6 +24124,7 @@ $("fxSave").addEventListener("click",async ()=>{
     altCostKill:$("fxAltCostKill").checked,
     altCond:$("fxAltCond").value.trim(),
     stLockSpell:$("fxStLockSpell").checked,
+    stLockField:$("fxStLockField")?$("fxStLockField").checked:false,
     stNoDeckPeek:$("fxStNoDeckPeek")?$("fxStNoDeckPeek").checked:false,
     loseIfNotBattle:$("fxLoseIfNotBattle")?$("fxLoseIfNotBattle").checked:false,
     sealSelfOnFlip:$("fxSealSelfOnFlip")?(Math.abs(+$("fxSealSelfOnFlip").value)||0):0,
@@ -24698,6 +24726,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.galaxy)attrs.push(`ギャラクシールド${v.galaxy}`);
     if(v.altCost!=null)attrs.push(`代替コスト[${v.altCost}]${v.altCiv?`（文明：${v.altCiv}）`:""}${v.altCond?`（${v.altCond}）`:""}`);
     if(v.stLockSpell)attrs.push(`常在：相手は${v.stLockSpellF?v.stLockSpellF+"の":""}呪文を唱えられない`);
+    if(v.stLockField)attrs.push("常在：相手はフィールドを実行できない");
     if(v.stSpellPT>0)attrs.push(`常在：相手は各ターン${v.stSpellPT}回しか呪文を唱えられない`);
     if(v.stCrePT>0)attrs.push(`常在：相手は各ターン${v.stCrePT}体しかクリーチャーを出せない${v.stCrePTevo?"（進化時のみ）":""}`);
     if(v.stLockCre)attrs.push(`常在：相手は${v.stLockCreF?v.stLockCreF+"の":""}クリーチャーを出せない`);
@@ -25905,6 +25934,16 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   // 常在ロック／ターン限定ロック：クリーチャー（バトルゾーンに出す）
   if(S.expert&&!S.freePlay&&toZone==="battle"&&fromZone!=="battle"&&S.turn>0){
     const rQ=getReg(f.card);
+    const isField=!!(rQ&&(rQ.ctype==="d2"||rQ.ctype==="field"||["d2","dg","normal","kindan","cho"].includes(rQ.fieldKind)));
+    if(isField){
+      const lk=stLockerOf(pTo,"stLockField",null,rQ,f.card);
+      if(lk){
+        sfx("flip");
+        toast(`⛔ ロック：${faceNameOf(f.card)} は実行できない！（常在：${faceNameOf(lk)}）\n※例外的に通す場合は「踏倒:ON」で`);
+        try{fxShare("judge","フィールド実行ロック！",`${faceNameOf(lk)}　${faceNameOf(f.card)} を封じた`,true,lk.name,pFrom);}catch(e){}
+        MOVE_BLOCKED=true;return;
+      }
+    }
     // 効果未登録（rQ=null）も、バトルゾーンに出す以上クリーチャー扱いにしてロック対象とする
     const isCre=!rQ||["creature","dream","evo","neoevo","starevo","smaxevo","onismaxevo","gneo","neodream","gneodream","twinpact","lunatic","ultimate"].includes(rQ.ctype)||rQ.twin||!rQ.ctype;
     // 🟥 デュエプレ：クロスギア／タマシード／D2フィールドもバトルゾーンの7面に数える（設置時に上限判定）
@@ -28387,6 +28426,7 @@ function renderAllNow(){
           else parts.push(`⏸ ${faceNameOf(x)}：クリーチャー制限は進化状態のみ有効（現在は進化していないため無効）`);
         }
         if(rx.stLockSpell)parts.push(`🔒 ${faceNameOf(x)}：${S.players[foe].label}は呪文を唱えられない${rx.stLockSpellF?`（${rx.stLockSpellF}）`:""}`);
+        if(rx.stLockField)parts.push(`🔒 ${faceNameOf(x)}：${S.players[foe].label}はフィールドを実行できない`);
         if(rx.hmLockSpell&&x.hyper)parts.push(`🔒⚡ ${faceNameOf(x)}（HM）：${S.players[foe].label}は${rx.hmLockSpellF?rx.hmLockSpellF+"の":""}呪文を唱えられない`);
         if(rx.repIn)parts.push(`🔁 ${faceNameOf(x)}：置換ロック（${rx.repIn==="manaOverMax"?"最大マナ超→マナ":rx.repIn==="grave"?"→墓地":rx.repIn==="shield"?"→シールド":rx.repIn==="mana"?"→マナ":"→山下"}）`);
         if(rx.qqqx)parts.push(`🔀 ${faceNameOf(x)}：Q.Q.QX（${S.players[foe].label}は山札シャッフル/確認/公開不可）`);
