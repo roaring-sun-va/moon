@@ -4051,7 +4051,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.70";
+const APP_VER="v13.71";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36780,7 +36780,11 @@ async function readBackupZip(file){
   async function entryBlob(name,type="application/octet-stream"){
     const e=entries.get(name);if(!e)throw new Error(`${name} がありません`);if(e.method!==0)throw new Error("このZIPの圧縮方式には対応していません");
     const h=new DataView(await file.slice(e.local,e.local+30).arrayBuffer()),nl=h.getUint16(26,true),xl=h.getUint16(28,true),start=e.local+30+nl+xl;
-    return file.slice(start,start+e.size,type);
+    // iOSのホーム画面Webアプリでは、巨大ZIPのslice BlobをそのままIndexedDBへ
+    // 保存すると、各画像が元ZIP全体のBacking Storeを保持し、画像数ぶん容量が
+    // 増幅することがある。ArrayBufferへコピーして元ZIPとの参照を完全に切る。
+    const bytes=await file.slice(start,start+e.size).arrayBuffer();
+    return new Blob([bytes],{type});
   }
   const data=JSON.parse(await (await entryBlob("backup.json","application/json")).text());
   const manifest=JSON.parse(await (await entryBlob("manifest.json","application/json")).text());
