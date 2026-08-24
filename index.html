@@ -4040,7 +4040,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.65";
+const APP_VER="v13.67";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36699,18 +36699,43 @@ function zipDosTime(d=new Date()){
   return {time:((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&65535,
     date:((((d.getFullYear()-1980)&127)<<9)|((d.getMonth()+1)<<5)|d.getDate())&65535};
 }
-async function makeBackupZip(data,imageKeys){
-  const manifest={v:1,format:"dmrv-backup-zip",images:[]};
+async function backupImageForMode(blob,key,mode){
+  if(mode!=="transfer")return blob;
+  let bmp=null,url="";
+  try{
+    if(typeof createImageBitmap==="function")bmp=await createImageBitmap(blob);
+    else{
+      url=URL.createObjectURL(blob);
+      bmp=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=url;});
+    }
+    const art=String(key).startsWith("__art__"),maxW=art?2000:1200,maxH=art?2000:1800;
+    const w=bmp.width||bmp.naturalWidth,h=bmp.height||bmp.naturalHeight,scale=Math.min(1,maxW/w,maxH/h);
+    // すでにWebPかつ上限内なら再圧縮せず、そのまま保持する。
+    if(scale===1&&blob.type==="image/webp")return blob;
+    const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*scale));c.height=Math.max(1,Math.round(h*scale));
+    c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
+    const out=await new Promise(resolve=>c.toBlob(resolve,"image/webp",art?0.92:0.90));
+    return out||blob;
+  }catch(e){console.warn("backup image optimize",key,e);return blob;}
+  finally{try{if(bmp&&typeof bmp.close==="function")bmp.close();}catch(e){}if(url)URL.revokeObjectURL(url);}
+}
+async function makeBackupZip(data,imageKeys,mode="original"){
+  makeBackupZip._started=Date.now();
+  const manifest={v:1,format:"dmrv-backup-zip",profile:mode==="transfer"?"transfer-hq-webp-v1":"original",images:[]};
   const items=[];let imageBytes=0;
   for(let i=0;i<imageKeys.length;i++){
-    const key=imageKeys[i],blob=db?await idbGet("images",key):memImages.get(key);
+    const key=imageKeys[i],src=db?await idbGet("images",key):memImages.get(key);
+    const blob=src?await backupImageForMode(src,key,mode):null;
     if(!blob)continue;
     const file=`images/${String(i+1).padStart(6,"0")}.bin`;
     manifest.images.push({key,file,type:blob.type||"image/webp",size:blob.size});
     items.push({name:file,blob});imageBytes+=blob.size;
-    if((i+1)%50===0)toast(`バックアップ準備中… ${i+1}/${imageKeys.length}枚`);
+    if((i+1)%10===0||i+1===imageKeys.length){
+      backupProgress({title:mode==="transfer"?"高画質・軽量版へ変換中":"元画像を準備中",done:i+1,total:imageKeys.length,bytes:imageBytes,totalBytes:0,started:makeBackupZip._started});
+      await new Promise(requestAnimationFrame);
+    }
   }
-  data.v=7;data.backupFormat="zip";delete data.images;
+  data.v=7;data.backupFormat="zip";data.backupProfile=manifest.profile;delete data.images;
   items.unshift({name:"manifest.json",blob:new Blob([JSON.stringify(manifest)],{type:"application/json"})});
   items.unshift({name:"backup.json",blob:new Blob([JSON.stringify(data)],{type:"application/json"})});
   if(imageBytes>0xffffffff-20*1024*1024)throw new Error("画像容量が4GBを超えています。画像なしバックアップを使用してください");
@@ -36721,6 +36746,7 @@ async function makeBackupZip(data,imageKeys){
     parts.push(local,it.blob);
     central.push(new Blob([zipU32(0x02014b50),zipU16(20),zipU16(20),zipU16(0x800),zipU16(0),zipU16(dt.time),zipU16(dt.date),zipU32(crc),zipU32(size),zipU32(size),zipU16(name.length),zipU16(0),zipU16(0),zipU16(0),zipU16(0),zipU32(0),zipU32(offset),name]));
     offset+=local.size+size;
+    if((i+1)%25===0||i+1===items.length){backupProgress({title:"ZIPを書き出す準備中",done:i+1,total:items.length,bytes:Math.min(imageBytes,offset),totalBytes:imageBytes,started:makeBackupZip._started});await new Promise(requestAnimationFrame);}
   }
   const centralOffset=offset,centralSize=central.reduce((n,b)=>n+b.size,0),count=central.length;
   return new Blob([...parts,...central,zipU32(0x06054b50),zipU16(0),zipU16(0),zipU16(count),zipU16(count),zipU32(centralSize),zipU32(centralOffset),zipU16(0)],{type:"application/zip"});
@@ -36761,22 +36787,83 @@ function backupProgress(info){
   el.querySelector("[data-p-main]").textContent=`${info.done}/${info.total}枚（${pct.toFixed(1)}%）`;
   const sec=Math.max(.1,(Date.now()-info.started)/1000),mb=(info.bytes||0)/1048576,rate=mb/sec;
   const remain=rate>0&&info.totalBytes>info.bytes?Math.ceil((info.totalBytes-info.bytes)/1048576/rate):null;
-  el.querySelector("[data-p-sub]").textContent=`${mb.toFixed(1)} / ${(info.totalBytes/1048576).toFixed(1)} MB・経過 ${Math.floor(sec/60)}分${Math.floor(sec%60)}秒${remain!=null?`・残り目安 約${Math.floor(remain/60)}分${remain%60}秒`:""}\n画面を閉じず、そのままお待ちください。`;
+  const sizeText=info.totalBytes>0?`${mb.toFixed(1)} / ${(info.totalBytes/1048576).toFixed(1)} MB・`:info.bytes>0?`現在 ${mb.toFixed(1)} MB・`:"";
+  el.querySelector("[data-p-sub]").textContent=`${sizeText}経過 ${Math.floor(sec/60)}分${Math.floor(sec%60)}秒${remain!=null?`・残り目安 約${Math.floor(remain/60)}分${remain%60}秒`:""}\n画面を閉じず、そのままお待ちください。`;
+}
+function backupProgressError(message){
+  backupProgress({title:"バックアップの読み込みを中断しました",done:0,total:0,bytes:0,totalBytes:0,started:Date.now()});
+  const el=$("backupProgress");if(!el)return;
+  el.querySelector("[data-p-bar]").style.width="100%";
+  el.querySelector("[data-p-bar]").style.background="#e86b64";
+  el.querySelector("[data-p-main]").textContent=message;
+  el.querySelector("[data-p-sub]").textContent="同じZIPをもう一度選ぶと、保存済み画像を飛ばして続きから再開できます。読み込み中はこの画面を開いたままにしてください。";
+  const box=el.firstElementChild,btn=document.createElement("button");btn.className="btn";btn.textContent="閉じる";btn.style.marginTop="14px";
+  btn.onclick=()=>backupProgress(null);box.appendChild(btn);
+}
+function waitUntilVisible(){
+  if(document.visibilityState!=="hidden")return Promise.resolve();
+  return new Promise(resolve=>{const fn=()=>{if(document.visibilityState!=="hidden"){document.removeEventListener("visibilitychange",fn);resolve();}};document.addEventListener("visibilitychange",fn);});
+}
+function idbImageSizes(keys){
+  return new Promise(resolve=>{
+    const out=new Map();if(!db)return resolve(out);
+    try{
+      const tx=db.transaction("images","readonly"),st=tx.objectStore("images");
+      for(const k of keys){const q=st.get(k);q.onsuccess=()=>{if(q.result)out.set(k,q.result.size);};}
+      tx.oncomplete=()=>resolve(out);tx.onerror=tx.onabort=()=>resolve(out);
+    }catch(e){resolve(out);}
+  });
+}
+function idbPutImageRows(rows){
+  return new Promise((resolve,reject)=>{
+    if(!db){for(const r of rows)memImages.set(r.x.key,r.b);resolve(true);return;}
+    try{
+      const tx=db.transaction("images","readwrite"),st=tx.objectStore("images");
+      for(const r of rows)st.put(r.b,r.x.key);
+      tx.oncomplete=()=>resolve(true);
+      tx.onerror=tx.onabort=()=>reject(tx.error||new Error("Safariが画像保存を中断しました"));
+    }catch(e){reject(e);}
+  });
+}
+async function idbPutImageRowsAdaptive(rows){
+  await waitUntilVisible();
+  try{return await idbPutImageRows(rows);}
+  catch(first){
+    await waitUntilVisible();await new Promise(r=>setTimeout(r,500));
+    try{return await idbPutImageRows(rows);}
+    catch(second){
+      if(rows.length<=4)throw second;
+      const mid=Math.ceil(rows.length/2);
+      await idbPutImageRowsAdaptive(rows.slice(0,mid));
+      await idbPutImageRowsAdaptive(rows.slice(mid));
+      return true;
+    }
+  }
+}
+async function storageStatus(){
+  try{
+    if(!navigator.storage||!navigator.storage.estimate)return "";
+    const x=await navigator.storage.estimate(),mb=n=>Math.round((n||0)/1048576);
+    return `（このサイトの使用量 約${mb(x.usage)}MB／割当上限 約${mb(x.quota)}MB）`;
+  }catch(e){return "";}
 }
 async function restoreBackupZipImages(ctx){
   const list=ctx.manifest.images,totalBytes=list.reduce((n,x)=>n+(+x.size||0),0),started=Date.now();
-  let done=0,doneBytes=0;
-  backupProgress({done,total:list.length,bytes:0,totalBytes,started});
-  const batchSize=20;
-  for(let from=0;from<list.length;from+=batchSize){
-    const part=list.slice(from,from+batchSize);
+  backupProgress({title:"既存画像を確認中…",done:0,total:list.length,bytes:0,totalBytes,started});
+  const sizes=await idbImageSizes(list.map(x=>x.key));
+  const todo=list.filter(x=>sizes.get(x.key)!==+x.size),skipped=list.length-todo.length;
+  let done=skipped,doneBytes=list.filter(x=>sizes.get(x.key)===+x.size).reduce((n,x)=>n+(+x.size||0),0);
+  backupProgress({title:skipped?`保存済み${skipped}枚を飛ばして再開中`:"画像を保存中",done,total:list.length,bytes:doneBytes,totalBytes,started});
+  // 通常は24枚ずつ高速保存。Safariが拒否した時だけ自動的に12→6→3枚へ分割する。
+  const batchSize=24;
+  for(let from=0;from<todo.length;from+=batchSize){
+    await waitUntilVisible();
+    const part=todo.slice(from,from+batchSize);
     const rows=await Promise.all(part.map(async x=>({x,b:await ctx.entryBlob(x.file,x.type||"application/octet-stream")})));
-    if(db){
-      const ok=await idbTx("images",st=>{for(const r of rows)st.put(r.b,r.x.key);});
-      if(ok!==true)throw new Error("画像の保存に失敗しました。端末の空き容量を確認してください");
-    }else for(const r of rows)memImages.set(r.x.key,r.b);
+    try{await idbPutImageRowsAdaptive(rows);}
+    catch(lastErr){const e=new Error(`画像の保存に失敗しました${await storageStatus()}：${lastErr&&lastErr.message||"保存処理が中断されました"}`);e.backupImport=true;throw e;}
     for(const r of rows){imgURL.setBlob(r.x.key,r.b);done++;doneBytes+=r.b.size;}
-    backupProgress({done,total:list.length,bytes:doneBytes,totalBytes,started});
+    backupProgress({title:skipped?`保存済み${skipped}枚を飛ばして再開中`:"画像を保存中",done,total:list.length,bytes:doneBytes,totalBytes,started});
     await new Promise(requestAnimationFrame);
   }
   $("imgStatus").textContent=`登録済み画像：${imgURL.size} 枚`;
@@ -36811,7 +36898,16 @@ $("btnExport").addEventListener("click",async ()=>{
     showFxDiffPanel();
     return;
   }
-  const withImg=await ask("カード画像もファイルに含めますか？\nOK＝含める（ファイル大）／キャンセル＝設定のみ（軽量）");
+  const withImg=await ask("画像も含めて書き出しますか？\nOK＝画像あり（次に品質を選択）／キャンセル＝画像なし・最速");
+  let imageMode="none";
+  if(withImg){
+    const q=await askChoice("画像の保存方法を選んでください",[
+      "✨ 高画質・軽量（受け渡し推奨／最大1200×1800・WebP品質90）",
+      "🗄 元画像のまま（長期保管／大容量）"
+    ]);
+    if(q===null)return;
+    imageMode=q===0?"transfer":"original";
+  }
   await loadDeckOrder();   // 🗂 並び順（deckMeta / deckOrder / deckSort）も一緒に持っていく
   const data={
     v:6, exported:new Date().toISOString(),
@@ -36833,10 +36929,11 @@ $("btnExport").addEventListener("click",async ()=>{
   const day=new Date().toISOString().slice(0,10);
   if(withImg){
     const keys=db?await idbKeys("images"):Array.from(memImages.keys());
-    toast(`大容量対応ZIPを作成中… ${keys.length}枚`);
-    const blob=await makeBackupZip(data,keys);
-    downloadBlob(blob,`dmps-backup-${day}.dmrv.zip`);
-    toast(`書き出しました（画像${keys.length}枚・${Math.max(1,Math.round(blob.size/1024/1024))}MB）`);
+    let blob;
+    try{blob=await makeBackupZip(data,keys,imageMode);}finally{backupProgress(null);}
+    const label=imageMode==="transfer"?"transfer-HQ":"original";
+    downloadBlob(blob,`dmps-backup-${day}-${label}.dmrv.zip`);
+    toast(`書き出しました（${imageMode==="transfer"?"高画質・軽量":"元画像のまま"}／画像${keys.length}枚・${Math.max(1,Math.round(blob.size/1024/1024))}MB）`);
   }else{
     const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
     downloadBlob(blob,`dmps-backup-${day}.json`);
@@ -37032,7 +37129,8 @@ $("importInput").addEventListener("change",async e=>{
     toast("読み込み完了！デッキ一覧から使用するデッキを選んでください");
   }catch(err){
     backupProgress(null);
-    toast("読み込みに失敗しました："+err.message);
+    if(err&&err.backupImport)backupProgressError(err.message);
+    else toast("読み込みに失敗しました："+err.message);
   }
 });
 
