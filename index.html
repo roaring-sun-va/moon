@@ -3017,7 +3017,7 @@ function openDeckKnownInfo(){
         const k=known?logImgKey(faceNameOf(c)):null;
         if(k){
           const im=document.createElement("img");
-          im.src=imgURL.get(k);im.draggable=false;im.loading="lazy";
+          {const u=imgURL.get(k);im.dataset.imgKey=k;if(u)im.src=u;}im.draggable=false;im.loading="lazy";
           im.style.cssText="width:34px;flex:0 0 auto;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.5);cursor:zoom-in";
           im.addEventListener("click",()=>showBigCardImage(k,faceNameOf(c)));
           line.appendChild(im);
@@ -4005,7 +4005,7 @@ const imgURL=(()=>{
   const urls=new Map();  // キー→一時URL（求められた分だけ作る）
   const loading=new Set(),queue=[];let active=0,renderTimer=null;
   const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));urls.delete(k);}};
-  const redraw=()=>{if(renderTimer)return;renderTimer=setTimeout(()=>{renderTimer=null;try{renderAll();}catch(e){}},180);};
+  const redraw=()=>{if(renderTimer)return;renderTimer=setTimeout(()=>{renderTimer=null;try{renderAll();}catch(e){}try{refreshLazyImages();}catch(e){}},180);};
   const pump=()=>{
     while(active<12&&queue.length){
       const k=queue.shift();active++;
@@ -4058,7 +4058,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.72";
+const APP_VER="v13.73";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -31382,7 +31382,7 @@ function flyGhost(srcRect,c,dstSel){
     const key=(typeof faceKeyOf==="function")?faceKeyOf(c):null;
     const hidOwner=cardHiddenOwner(c);
     if(hidOwner<0&&c.faceup!==false&&key&&imgURL.has(key)){
-      const im=document.createElement("img");im.src=imgURL.get(key);g.appendChild(im);
+      const im=document.createElement("img");{const u=imgURL.get(key);im.dataset.imgKey=key;if(u)im.src=u;}g.appendChild(im);
     }else if(hidOwner>=0){
       const bu=(typeof backURL==="function")?backURL(hidOwner):null;
       if(bu){const im=document.createElement("img");im.src=bu;applySleevePosition(im,hidOwner);g.appendChild(im);}
@@ -34182,12 +34182,26 @@ $("stDegrade").addEventListener("click",async ()=>{
 });
 
 /* ================= viewers ================= */
+function imageKeyForName(name){
+  const nk=normName(name);
+  if(imgURL.has(nk))return nk;
+  for(const [k,dn] of dispName){if(imgURL.has(k)&&normName(dn||k)===nk)return k;}
+  return nk;
+}
+function refreshLazyImages(){
+  document.querySelectorAll("img[data-img-key]").forEach(im=>{
+    const u=imgURL.get(im.dataset.imgKey);
+    if(!u||im.src===u)return;
+    im.src=u;
+    const p=im.parentElement;if(p){const np=p.querySelector(".nameplate,.lazy-nameplate");if(np)np.remove();}
+  });
+}
 function vCardEl(name,opts={}){
   const el=document.createElement("div");el.className="vcard"+(opts.side?" side":"");
   const th=document.createElement("div");th.className="thumb";
-  const url=imgURL.get(normName(name));
-  if(url){const im=document.createElement("img");im.src=url;im.draggable=false;im.loading="lazy";im.decoding="async";th.appendChild(im);}
-  else{const np=document.createElement("div");np.className="nameplate";np.textContent=name;th.appendChild(np);}
+  const key=imageKeyForName(name),url=imgURL.get(key);
+  const im=document.createElement("img");im.dataset.imgKey=key;im.draggable=false;im.loading="lazy";im.decoding="async";if(url)im.src=url;th.appendChild(im);
+  if(!url){const np=document.createElement("div");np.className="nameplate";np.textContent=name;th.appendChild(np);}
   el.appendChild(th);
   if(opts.idx!=null){const x=document.createElement("span");x.className="idx";x.textContent=opts.idx;el.appendChild(x);}
   const cnt=document.createElement("span");cnt.className="cnt";cnt.textContent=opts.cnt||0;el.appendChild(cnt);
@@ -34891,7 +34905,7 @@ function openImageManager(){
       if(mgrSel.has(k))el.classList.add("picked");
       if(k==="__back__"){
         const th=el.querySelector(".thumb");th.innerHTML="";
-        const im=document.createElement("img");im.src=imgURL.get("__back__");im.draggable=false;
+        const im=document.createElement("img");{const u=imgURL.get("__back__");im.dataset.imgKey="__back__";if(u)im.src=u;}im.draggable=false;
         im.style.cssText="width:100%;height:100%;object-fit:cover";
         th.appendChild(im);
       }
@@ -35091,7 +35105,7 @@ function openSleevePicker(pi){
       const el=vCardEl(name);
       if(S.sleeve[pi]===k)el.classList.add("picked");
       const th=el.querySelector(".thumb");th.innerHTML="";
-      const im=document.createElement("img");im.src=imgURL.get(k);im.draggable=false;
+      const im=document.createElement("img");{const u=imgURL.get(k);im.dataset.imgKey=k;if(u)im.src=u;}im.draggable=false;
       im.dataset.sleevePreview="1";
       im.style.cssText="width:100%;height:100%;object-fit:cover";applySleevePosition(im,pi);
       th.appendChild(im);
@@ -35177,7 +35191,7 @@ function openMatPicker(pi){
       const el=vCardEl(name);
       if(S.matKey&&S.matKey[pi]===k)el.classList.add("picked");
       const th=el.querySelector(".thumb");th.innerHTML="";
-      const im=document.createElement("img");im.src=imgURL.get(k);im.draggable=false;
+      const im=document.createElement("img");{const u=imgURL.get(k);im.dataset.imgKey=k;if(u)im.src=u;}im.draggable=false;
       im.dataset.matPreview="1";
       im.style.cssText=`width:100%;height:100%;object-fit:${S.matFit||"cover"};object-position:${S.matPosX!=null?S.matPosX:50}% ${S.matPosY!=null?S.matPosY:50}%`;
       th.appendChild(im);
@@ -35267,7 +35281,7 @@ function openFxIconPicker(side,adjustOnly){
       const el=vCardEl(name);
       if(S.fxIconKey&&S.fxIconKey[side]===k)el.classList.add("picked");
       const th=el.querySelector(".thumb");th.innerHTML="";
-      const im=document.createElement("img");im.src=imgURL.get(k);im.draggable=false;
+      const im=document.createElement("img");{const u=imgURL.get(k);im.dataset.imgKey=k;if(u)im.src=u;}im.draggable=false;
       im.style.cssText="width:100%;height:100%;object-fit:cover";
       th.appendChild(im);
       el.addEventListener("click",async ()=>{
@@ -35328,7 +35342,7 @@ function openArtPicker(){
       if(q&&!k.includes(q))continue;
       const el=vCardEl(dispName.get(k)||k);
       const th=el.querySelector(".thumb");th.innerHTML="";
-      const im=document.createElement("img");im.src=imgURL.get(k);im.draggable=false;
+      const im=document.createElement("img");{const u=imgURL.get(k);im.dataset.imgKey=k;if(u)im.src=u;}im.draggable=false;
       im.style.cssText="width:100%;height:100%;object-fit:cover";
       th.appendChild(im);
       if(isArtKey(k)){
@@ -36472,14 +36486,15 @@ async function openDeckListViewer(name){
       for(const it of flat){
         const cell=document.createElement("div");
         cell.style.cssText="position:relative;min-width:0";
-        const u=imgURL.get(normName(it.name))||imgURL.get(it.name);
-        if(u){
-          const im=document.createElement("img");
-          im.src=u;im.draggable=false;
-          im.style.cssText="width:100%;border-radius:6px;display:block";
-          cell.appendChild(im);
-        }else{
+        const ik=imageKeyForName(it.name),u=imgURL.get(ik);
+        const im=document.createElement("img");
+        im.dataset.imgKey=ik;im.draggable=false;
+        im.style.cssText="width:100%;border-radius:6px;display:block";
+        if(u)im.src=u;
+        cell.appendChild(im);
+        if(!u){
           const ph=document.createElement("div");
+          ph.className="lazy-nameplate";
           ph.style.cssText="width:100%;aspect-ratio:63/88;border-radius:6px;background:#1a2233;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9aa4b2;padding:4px;text-align:center;word-break:break-word;overflow:hidden";
           ph.textContent=it.name;
           ph.title=it.name;
