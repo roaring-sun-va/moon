@@ -3961,7 +3961,7 @@ function emptyZones(){return {deck:[],hand:[],mana:[],battle:[],grave:[],shield:
 const S={
   vs:false, flip:false, hideOpp:true, who:0, turn:0, seat:0,
   expert:false, sound:true,
-  sleeve:[null,null], sleevePos:[50,50],
+  sleeve:[null,null], sleevePos:[50,50], matKey:[null,null],
   players:[
     {label:"P1", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
     {label:"P2", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
@@ -4016,7 +4016,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.56";
+const APP_VER="v13.57";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -34844,7 +34844,7 @@ function openSleevePicker(pi){
   if(!imgURL.size){toast("先に画像を登録してください");return;}
   $("deckOlay").classList.remove("open");
   $("vTitle").textContent=`${S.players[pi].label}のスリーブを選ぶ`;
-  $("vHint").textContent="タップした画像が山札・シールド・裏向きカードの絵柄になります。";
+  $("vHint").textContent="画像を選んだ後も画面は閉じません。上のスライダーで表示位置を確認しながら調整できます。";
   $("vOk").style.display="none";$("vStatus").textContent="";
   const search=$("vSearch");search.style.display="";search.value="";
   const g=$("vGrid");
@@ -34857,7 +34857,7 @@ function openSleevePicker(pi){
     if(!_st.nArt)_st.all=true;   // 専用の画像が無ければ全部出す
     g.appendChild(artPickBar(_st,render));
     const posBar=document.createElement("div");
-    posBar.style.cssText="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid #334155;border-radius:12px;background:#0f172a";
+    posBar.style.cssText="grid-column:1/-1;position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid #475569;border-radius:12px;background:#0f172af2;box-shadow:0 5px 14px #0009";
     const posLabel=document.createElement("b");
     posLabel.textContent=`🎯 画像の縦位置：${sleevePosY(pi)}%`;
     const posRange=document.createElement("input");
@@ -34879,6 +34879,7 @@ function openSleevePicker(pi){
       const name=k==="__back__"?"（登録済み裏面）":(dispName.get(k)||k);
       if(q&&!k.includes(q))continue;
       const el=vCardEl(name);
+      if(S.sleeve[pi]===k)el.classList.add("picked");
       const th=el.querySelector(".thumb");th.innerHTML="";
       const im=document.createElement("img");im.src=imgURL.get(k);im.draggable=false;
       im.dataset.sleevePreview="1";
@@ -34887,8 +34888,11 @@ function openSleevePicker(pi){
       el.addEventListener("click",async ()=>{
         S.sleeve[pi]=k;
         if(db)await idbPut("misc",`sleeve${pi}`,k);
-        closeViewer();renderAll();
-        toast(`${S.players[pi].label}のスリーブを設定しました`);
+        g.querySelectorAll(".vcard.picked").forEach(x=>x.classList.remove("picked"));
+        el.classList.add("picked");
+        $("vStatus").textContent=`選択中：${name}`;
+        renderAll();
+        toast(`${S.players[pi].label}のスリーブを設定しました（続けて位置調整できます）`);
       });
       g.appendChild(el);
     }
@@ -34902,7 +34906,7 @@ function openMatPicker(pi){
   const _st={all:false,nArt:0};
   $("deckOlay").classList.remove("open");
   $("vTitle").textContent=`${S.players[pi].label}のプレイマットを選ぶ`;
-  $("vHint").textContent="タップした画像が盤面の背景（うっすら表示）になります。相手側は180°回転して表示されます。";
+  $("vHint").textContent="画像を選んだ後、上の調整欄で表示方法と縦横位置を変更できます。「盤面を見る」で確認できます。";
   $("vOk").style.display="none";$("vStatus").textContent="";
   const search=$("vSearch");search.style.display="";search.value="";
   const g=$("vGrid");
@@ -34913,6 +34917,21 @@ function openMatPicker(pi){
     _st.nArt=_all.filter(isArtKey).length;
     if(!_st.nArt)_st.all=true;
     g.appendChild(artPickBar(_st,render));
+    const matBar=document.createElement("div");
+    matBar.style.cssText="grid-column:1/-1;position:sticky;top:0;z-index:20;display:grid;grid-template-columns:auto minmax(120px,1fr);gap:7px 10px;align-items:center;padding:10px 12px;border:1px solid #475569;border-radius:12px;background:#0f172af2;box-shadow:0 5px 14px #0009";
+    const fitLabel=document.createElement("b");fitLabel.textContent="🎯 表示方法";
+    const fit=document.createElement("select");
+    fit.innerHTML='<option value="cover">全体に敷き詰める</option><option value="contain">画像全体を収める</option><option value="auto">元の大きさ</option>';
+    fit.value=S.matFit||"cover";
+    const xLabel=document.createElement("b");xLabel.textContent=`↔ 横位置：${S.matPosX!=null?S.matPosX:50}%`;
+    const xRange=document.createElement("input");xRange.type="range";xRange.min="0";xRange.max="100";xRange.step="1";xRange.value=String(S.matPosX!=null?S.matPosX:50);
+    const yLabel=document.createElement("b");yLabel.textContent=`↕ 縦位置：${S.matPosY!=null?S.matPosY:50}%`;
+    const yRange=document.createElement("input");yRange.type="range";yRange.min="0";yRange.max="100";yRange.step="1";yRange.value=String(S.matPosY!=null?S.matPosY:50);
+    const preview=()=>g.querySelectorAll("img[data-mat-preview]").forEach(im=>{im.style.objectFit=S.matFit||"cover";im.style.objectPosition=`${S.matPosX!=null?S.matPosX:50}% ${S.matPosY!=null?S.matPosY:50}%`;});
+    fit.onchange=()=>{S.matFit=fit.value;preview();saveMatView();};
+    xRange.oninput=()=>{S.matPosX=+xRange.value;xLabel.textContent=`↔ 横位置：${xRange.value}%`;preview();saveMatView();};
+    yRange.oninput=()=>{S.matPosY=+yRange.value;yLabel.textContent=`↕ 縦位置：${yRange.value}%`;preview();saveMatView();};
+    matBar.append(fitLabel,fit,xLabel,xRange,yLabel,yRange);g.appendChild(matBar);
     const _ks=_all
       .filter(k=>_st.all||isArtKey(k))
       .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
@@ -34920,9 +34939,11 @@ function openMatPicker(pi){
       const name=k==="__back__"?"（登録済み裏面）":(dispName.get(k)||k);
       if(q&&!k.includes(q))continue;
       const el=vCardEl(name);
+      if(S.matKey&&S.matKey[pi]===k)el.classList.add("picked");
       const th=el.querySelector(".thumb");th.innerHTML="";
       const im=document.createElement("img");im.src=imgURL.get(k);im.draggable=false;
-      im.style.cssText="width:100%;height:100%;object-fit:cover";
+      im.dataset.matPreview="1";
+      im.style.cssText=`width:100%;height:100%;object-fit:${S.matFit||"cover"};object-position:${S.matPosX!=null?S.matPosX:50}% ${S.matPosY!=null?S.matPosY:50}%`;
       th.appendChild(im);
       el.addEventListener("click",async ()=>{
         const blob=db?await idbGet("images",k):memImages.get(k);
@@ -34931,8 +34952,13 @@ function openMatPicker(pi){
           if(db)await idbPut("images",mk,blob);else memImages.set(mk,blob);
           imgURL.setBlob(mk,blob);
         }
-        closeViewer();buildBoards();renderAll();
-        toast(`${S.players[pi].label}のプレイマットを設定しました`);
+        S.matKey=S.matKey||[null,null];S.matKey[pi]=k;
+        if(db)await idbPut("misc",`matKey${pi}`,k);
+        g.querySelectorAll(".vcard.picked").forEach(x=>x.classList.remove("picked"));
+        el.classList.add("picked");
+        $("vStatus").textContent=`選択中：${name}`;
+        buildBoards();renderAll();
+        toast(`${S.players[pi].label}のプレイマットを設定しました（続けて位置調整できます）`);
       });
       g.appendChild(el);
     }
@@ -35043,6 +35069,8 @@ $("btnMatReset").addEventListener("click",async ()=>{
     const mk="__mat"+pi+"__";
     if(db)await idbDel("images",mk);else memImages.delete(mk);
     imgURL.delete(mk);
+    if(S.matKey)S.matKey[pi]=null;
+    if(db)await idbDel("misc",`matKey${pi}`);
   }
   buildBoards();renderAll();
   toast("プレイマットを解除しました");
@@ -36352,7 +36380,9 @@ $("btnExport").addEventListener("click",async ()=>{
     v:6, exported:new Date().toISOString(),
     decks:{}, cardFx:Object.fromEntries(FXDB), faceLinks:Object.fromEntries(LINKS),
     nameMap:Object.fromEntries(dispName),
-    sleeve:S.sleeve, sleevePos:S.sleevePos, sound:S.sound, expert:S.expert,
+    sleeve:S.sleeve, sleevePos:S.sleevePos, matKey:S.matKey,
+    matFit:S.matFit||"cover", matPosX:S.matPosX!=null?S.matPosX:50, matPosY:S.matPosY!=null?S.matPosY:50,
+    sound:S.sound, expert:S.expert,
     deckMeta:DECK_META, deckOrder:DECK_ORDER, deckSort:DECK_SORT,
     artKeys:[...ART_KEYS],   // 🎴 スリーブ・プレマ用の印
     images:{},
@@ -36505,6 +36535,14 @@ $("importInput").addEventListener("change",async e=>{
       S.sleevePos=[0,1].map(pi=>{const n=Number(data.sleevePos[pi]);return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;});
       if(db){await idbPut("misc","sleevePos0",S.sleevePos[0]);await idbPut("misc","sleevePos1",S.sleevePos[1]);}
     }
+    if(Array.isArray(data.matKey)){
+      S.matKey=data.matKey.slice(0,2);
+      if(db){for(const pi of [0,1]){if(S.matKey[pi])await idbPut("misc",`matKey${pi}`,S.matKey[pi]);}}
+    }
+    if(data.matFit)S.matFit=data.matFit;
+    if(Number.isFinite(+data.matPosX))S.matPosX=+data.matPosX;
+    if(Number.isFinite(+data.matPosY))S.matPosY=+data.matPosY;
+    await saveMatView();
     if(data.images&&Object.keys(data.images).length){
       toast("画像を復元中…");
       for(const [k,durl] of Object.entries(data.images)){
@@ -38419,6 +38457,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   const hk=db?await idbGet("misc","hotkeys"):null;if(hk){try{S.hotkeys=JSON.parse(hk);}catch(e){}}
   const mx=db?await idbGet("misc","matPosX"):null;if(mx!=null&&mx!==undefined)S.matPosX=+mx;
   const my=db?await idbGet("misc","matPosY"):null;if(my!=null&&my!==undefined)S.matPosY=+my;
+  for(const pi of [0,1]){const mk=db?await idbGet("misc",`matKey${pi}`):null;if(mk)S.matKey[pi]=mk;}
   const an=db?await idbGet("misc","anim"):null;
   if(an!=null){S.anim=an;$("setAnim").checked=!!an;}
   const as2=db?await idbGet("misc","animSet"):null;
