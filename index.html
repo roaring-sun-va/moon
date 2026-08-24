@@ -1386,6 +1386,15 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row"><label><input type="checkbox" id="setSpellAuto" checked> 呪文は効果処理後に自動で墓地へ（解決中スタック方式。保持したいカードは登録の「🕐解決中に保持」）</label></div>
       <div class="row"><label><input type="checkbox" id="setTapMultiMana"> 多色カード（文明2つ以上を登録）はタップしてマナに置く</label></div>
       <div class="row"><label><input type="checkbox" id="setCivWarn" checked> マナに必要な文明が無いままプレイした時に警告のパネルを出す</label></div>
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700">🖼 画像の読み込み</span>
+        <select id="setImageLoadMode" style="flex:1">
+          <option value="auto">自動（PCは高速／iPhone・iPadは省メモリ）</option>
+          <option value="lazy">省メモリ（必要な画像だけ遅延読み込み）</option>
+          <option value="fast">高速表示（起動時に全画像を先読み）</option>
+        </select>
+      </div>
+      <div class="hint">変更は次回起動時から反映します。iPhoneで「高速表示」にすると画像数によってはSafariが再読み込みするため、通常は「自動」がおすすめです。</div>
     </section>
     <section>
       <h3>データの書き出し / 読み込み（端末間の引っ越し用）</h3>
@@ -2819,13 +2828,17 @@ function toastKind(m){
   return "good";
 }
 function toast(m,kind,opt){
-  const t=$("toast");t.textContent=m;
+  const t=$("toast"),now=Date.now(),wasShowing=t.classList.contains("show");
+  t.textContent=m;
   t.classList.remove("t-danger","t-info","t-buff");
   const k=kind||toastKind(m);
   if(k&&k!=="good")t.classList.add("t-"+k);
   t.classList.add("show");
+  // 同じ通知が短時間に何度も呼ばれても、タイマーを毎回延長して居座らせない。
+  if(!wasShowing)t._born=now;
   clearTimeout(t._tm);
-  t._tm=setTimeout(()=>t.classList.remove("show"),4200);
+  const left=Math.max(250,Math.min(4200,(t._born||now)+6500-now));
+  t._tm=setTimeout(()=>{t.classList.remove("show");t.style.transform="";t.style.opacity="";},left);
   // 🔒 opt.noLog＝自分の画面だけに出す（ログに積まない＝オンラインでも相手に送らない）。
   //    非公開の情報を含む案内は、別に logPriv で「相手向けの文」を添えて積む
   if(!(opt&&opt.noLog))logPush(m);
@@ -2838,6 +2851,8 @@ function toast(m,kind,opt){
   t.addEventListener("pointermove",e=>{if(!drag)return;dy=e.clientY-sy;if(dy<0){t.style.transform=`translateX(-50%) translateY(${dy}px)`;t.style.opacity=String(Math.max(.2,1+dy/90));}});
   t.addEventListener("pointerup",()=>{if(!drag)return;drag=false;if(dy<-28||Math.abs(dy)<8)dismiss();else{t.classList.remove("toast-drag");t.style.transform="";t.style.opacity="";}});
   t.addEventListener("pointercancel",()=>{drag=false;t.classList.remove("toast-drag");t.style.transform="";t.style.opacity="";});
+  // iOSでpointerupがスクロール判定に奪われる場合の予備。通常のタップでも必ず閉じる。
+  t.addEventListener("click",dismiss);
 }
 const ZLOG={hand:"手札",mana:"マナ",battle:"バトル",grave:"墓地",deck:"山札",shield:"盾",hyper:"超次元",gr:"超GR",exile:"ゲーム外",resolve:"解決中",deckTop:"山札の上",deckBottom:"山札の下",shieldUp:"盾(表)"};
 function logOnly(m){
@@ -3993,12 +4008,22 @@ const S={
   multi:false, sel:null, msel:[],
   extra:[0,0],
   gameMode:"dmps", autoTap:false, noUntapMana:false, tapMultiMana:true, civWarn:true,
+  imageLoadMode:"auto",
 };
 /* 🖼 登録画像の管理（Safariのメモリ対策）
    これまでは起動時に登録画像すべてぶんの一時URLを作っていたため、枚数が増えると
    「メモリの使用量が多すぎたため、このWebページが再読み込みされました」が出やすかった。
    → 画像データだけを持っておき、実際に表示を求められたキーの一時URLだけを作る。
    使い方は今までのMapと同じ（get/has/keys/size/delete/clear）。登録は setBlob（またはset）に画像データを渡す。 */
+function imageLoadingIsLazy(){
+  if(S.imageLoadMode==="lazy")return true;
+  if(S.imageLoadMode==="fast")return false;
+  const ua=navigator.userAgent||"",p=navigator.platform||"";
+  const ios=/iPhone|iPad|iPod/i.test(ua)||(p==="MacIntel"&&navigator.maxTouchPoints>1);
+  const mobile=/Android|Mobile/i.test(ua);
+  const lowMem=Number(navigator.deviceMemory||8)<=4;
+  return ios||mobile||lowMem;
+}
 const imgURL=(()=>{
   const known=new Set(); // IndexedDBに存在するキー。画像本体は必要になるまで読まない
   const blobs=new Map(); // キー→画像データ
@@ -4034,6 +4059,16 @@ const imgURL=(()=>{
     setBlob(k,b){known.add(k);drop(k);blobs.set(k,b);return api;},
     set(k,b){return api.setBlob(k,b);},
     getBlob(k){return blobs.get(k);},
+    preloadAll(){
+      if(!db)return Promise.resolve();
+      return new Promise(resolve=>{
+        try{
+          const req=db.transaction("images","readonly").objectStore("images").openCursor();
+          req.onsuccess=e=>{const c=e.target.result;if(c){if(known.has(c.key))blobs.set(c.key,c.value);c.continue();}else resolve();};
+          req.onerror=()=>resolve();
+        }catch(e){resolve();}
+      });
+    },
     delete(k){known.delete(k);loading.delete(k);drop(k);return blobs.delete(k);},
     clear(){known.clear();loading.clear();queue.length=0;urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();blobs.clear();},
     forEach(fn){blobs.forEach((b,k)=>fn(api.get(k),k));},
@@ -4058,7 +4093,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.73";
+const APP_VER="v13.74";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6464,6 +6499,7 @@ async function loadAllImages(){
     // 以前は全画像をここでメモリへ複製していた。大容量になるほど起動・復元が
     // 遅くなるため、まずキーだけ読み、画像本体は画面に必要になった時に読む。
     for(const k of await idbKeys("images"))imgURL.addKey(k);
+    if(!imageLoadingIsLazy())await imgURL.preloadAll();
   }else memImages.forEach((b,k)=>imgURL.setBlob(k,b));
   $("imgStatus").textContent=`登録済み画像：${imgURL.size} 枚`;
 }
@@ -36081,8 +36117,14 @@ function openSettings(){
   $("setNoUntapMana").checked=!!S.noUntapMana;
   $("setTapMultiMana").checked=!!S.tapMultiMana;
   {const e=$("setCivWarn");if(e)e.checked=(S.civWarn!==false);}
+  {const e=$("setImageLoadMode");if(e)e.value=S.imageLoadMode||"auto";}
   $("settingsOlay").classList.add("open");
 }
+$('setImageLoadMode').addEventListener("change",async ()=>{
+  S.imageLoadMode=$('setImageLoadMode').value||"auto";
+  if(db)await idbPut("misc","imageLoadMode",S.imageLoadMode);
+  toast("画像の読み込み設定を保存しました。次回起動時から反映します");
+});
 $("setTapMultiMana").addEventListener("change",async ()=>{
   S.tapMultiMana=$("setTapMultiMana").checked;
   if(db)await idbPut("misc","tapMultiMana",S.tapMultiMana);
@@ -39042,6 +39084,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
 }
 (async function init(){
   db=await openDB();
+  {const ilm=db?await idbGet("misc","imageLoadMode"):null;if(ilm)S.imageLoadMode=ilm;}
   const nm=db?await idbGet("misc","nameMap"):null;
   if(nm)for(const [k,v] of Object.entries(nm))dispName.set(k,v);
   await loadArtKeys();   // 🎴 スリーブ・プレマ用の印
