@@ -4040,7 +4040,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.67";
+const APP_VER="v13.68";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36703,11 +36703,10 @@ async function backupImageForMode(blob,key,mode){
   if(mode!=="transfer")return blob;
   let bmp=null,url="";
   try{
-    if(typeof createImageBitmap==="function")bmp=await createImageBitmap(blob);
-    else{
-      url=URL.createObjectURL(blob);
-      bmp=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=url;});
-    }
+    // SafariはcreateImageBitmapが存在してもIndexedDB由来Blobで失敗する場合がある。
+    // Blob URLを通常のImageで読む経路に統一する。
+    url=URL.createObjectURL(blob);
+    bmp=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error("画像を開けません"));im.src=url;});
     const art=String(key).startsWith("__art__"),maxW=art?2000:1200,maxH=art?2000:1800;
     const w=bmp.width||bmp.naturalWidth,h=bmp.height||bmp.naturalHeight,scale=Math.min(1,maxW/w,maxH/h);
     // すでにWebPかつ上限内なら再圧縮せず、そのまま保持する。
@@ -36715,8 +36714,9 @@ async function backupImageForMode(blob,key,mode){
     const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*scale));c.height=Math.max(1,Math.round(h*scale));
     c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
     const out=await new Promise(resolve=>c.toBlob(resolve,"image/webp",art?0.92:0.90));
-    return out||blob;
-  }catch(e){console.warn("backup image optimize",key,e);return blob;}
+    if(!out||out.type!=="image/webp")throw new Error("SafariがWebP変換に対応していません");
+    return out;
+  }catch(e){throw new Error(`高画質・軽量版の画像変換に失敗しました（${key}）：${e&&e.message||e}`);}
   finally{try{if(bmp&&typeof bmp.close==="function")bmp.close();}catch(e){}if(url)URL.revokeObjectURL(url);}
 }
 async function makeBackupZip(data,imageKeys,mode="original"){
@@ -36790,13 +36790,13 @@ function backupProgress(info){
   const sizeText=info.totalBytes>0?`${mb.toFixed(1)} / ${(info.totalBytes/1048576).toFixed(1)} MB・`:info.bytes>0?`現在 ${mb.toFixed(1)} MB・`:"";
   el.querySelector("[data-p-sub]").textContent=`${sizeText}経過 ${Math.floor(sec/60)}分${Math.floor(sec%60)}秒${remain!=null?`・残り目安 約${Math.floor(remain/60)}分${remain%60}秒`:""}\n画面を閉じず、そのままお待ちください。`;
 }
-function backupProgressError(message){
+function backupProgressError(message,detail){
   backupProgress({title:"バックアップの読み込みを中断しました",done:0,total:0,bytes:0,totalBytes:0,started:Date.now()});
   const el=$("backupProgress");if(!el)return;
   el.querySelector("[data-p-bar]").style.width="100%";
   el.querySelector("[data-p-bar]").style.background="#e86b64";
   el.querySelector("[data-p-main]").textContent=message;
-  el.querySelector("[data-p-sub]").textContent="同じZIPをもう一度選ぶと、保存済み画像を飛ばして続きから再開できます。読み込み中はこの画面を開いたままにしてください。";
+  el.querySelector("[data-p-sub]").textContent=detail||"同じZIPをもう一度選ぶと、保存済み画像を飛ばして続きから再開できます。読み込み中はこの画面を開いたままにしてください。";
   const box=el.firstElementChild,btn=document.createElement("button");btn.className="btn";btn.textContent="閉じる";btn.style.marginTop="14px";
   btn.onclick=()=>backupProgress(null);box.appendChild(btn);
 }
@@ -36804,15 +36804,24 @@ function waitUntilVisible(){
   if(document.visibilityState!=="hidden")return Promise.resolve();
   return new Promise(resolve=>{const fn=()=>{if(document.visibilityState!=="hidden"){document.removeEventListener("visibilitychange",fn);resolve();}};document.addEventListener("visibilitychange",fn);});
 }
-function idbImageSizes(keys){
-  return new Promise(resolve=>{
-    const out=new Map();if(!db)return resolve(out);
-    try{
-      const tx=db.transaction("images","readonly"),st=tx.objectStore("images");
-      for(const k of keys){const q=st.get(k);q.onsuccess=()=>{if(q.result)out.set(k,q.result.size);};}
-      tx.oncomplete=()=>resolve(out);tx.onerror=tx.onabort=()=>resolve(out);
-    }catch(e){resolve(out);}
-  });
+async function idbImageSizes(keys,onProgress){
+  const out=new Map();
+  if(!db){for(const k of keys){const b=memImages.get(k);if(b)out.set(k,b.size);}return out;}
+  if(!keys.length)return out;
+  const step=100;
+  for(let from=0;from<keys.length;from+=step){
+    const part=keys.slice(from,from+step);
+    await new Promise(resolve=>{
+      try{
+        const tx=db.transaction("images","readonly"),st=tx.objectStore("images");
+        for(const k of part){const q=st.get(k);q.onsuccess=()=>{if(q.result)out.set(k,q.result.size);};}
+        tx.oncomplete=()=>resolve();tx.onerror=tx.onabort=()=>resolve();
+      }catch(e){resolve();}
+    });
+    if(onProgress)onProgress(Math.min(keys.length,from+part.length),keys.length);
+    await new Promise(requestAnimationFrame);
+  }
+  return out;
 }
 function idbPutImageRows(rows){
   return new Promise((resolve,reject)=>{
@@ -36850,7 +36859,10 @@ async function storageStatus(){
 async function restoreBackupZipImages(ctx){
   const list=ctx.manifest.images,totalBytes=list.reduce((n,x)=>n+(+x.size||0),0),started=Date.now();
   backupProgress({title:"既存画像を確認中…",done:0,total:list.length,bytes:0,totalBytes,started});
-  const sizes=await idbImageSizes(list.map(x=>x.key));
+  const allKeys=db?await idbKeys("images"):Array.from(memImages.keys());
+  const existing=new Set(allKeys),checkKeys=list.map(x=>x.key).filter(k=>existing.has(k));
+  // 新規端末（既存0枚）では1129件の個別確認を行わず、すぐ保存へ進む。
+  const sizes=await idbImageSizes(checkKeys,(n,total)=>backupProgress({title:`保存済み画像を確認中… ${n}/${total}`,done:0,total:list.length,bytes:0,totalBytes,started}));
   const todo=list.filter(x=>sizes.get(x.key)!==+x.size),skipped=list.length-todo.length;
   let done=skipped,doneBytes=list.filter(x=>sizes.get(x.key)===+x.size).reduce((n,x)=>n+(+x.size||0),0);
   backupProgress({title:skipped?`保存済み${skipped}枚を飛ばして再開中`:"画像を保存中",done,total:list.length,bytes:doneBytes,totalBytes,started});
@@ -36930,7 +36942,9 @@ $("btnExport").addEventListener("click",async ()=>{
   if(withImg){
     const keys=db?await idbKeys("images"):Array.from(memImages.keys());
     let blob;
-    try{blob=await makeBackupZip(data,keys,imageMode);}finally{backupProgress(null);}
+    try{blob=await makeBackupZip(data,keys,imageMode);}
+    catch(err){backupProgress(null);backupProgressError(err&&err.message||String(err),"高画質・軽量版は作成されていません。元画像のまま版を選ぶか、別のブラウザで再試行してください。");return;}
+    finally{if(blob)backupProgress(null);}
     const label=imageMode==="transfer"?"transfer-HQ":"original";
     downloadBlob(blob,`dmps-backup-${day}-${label}.dmrv.zip`);
     toast(`書き出しました（${imageMode==="transfer"?"高画質・軽量":"元画像のまま"}／画像${keys.length}枚・${Math.max(1,Math.round(blob.size/1024/1024))}MB）`);
