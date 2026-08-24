@@ -4016,7 +4016,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.53";
+const APP_VER="v13.54";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -34813,6 +34813,22 @@ function openImageManager(){
 }
 
 /* ================= スリーブ ================= */
+/* 🎴 スリーブ／プレイマットの選択画面の頭に置く帯。
+   既定では専用の画像だけを出し、このボタンでカードの画像も出せる。 */
+function artPickBar(state,onToggle){
+  const bar=document.createElement("div");
+  bar.style.cssText="grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 6px";
+  const b=document.createElement("button");
+  b.type="button";b.className="btn small";
+  b.textContent=state.all?"🎴 スリーブ・プレマ用だけに戻す":"🗂 カードの画像からも選ぶ";
+  b.onclick=()=>{state.all=!state.all;onToggle();};
+  bar.appendChild(b);
+  const t=document.createElement("span");
+  t.style.cssText="font-size:11px;color:var(--muted)";
+  t.textContent=state.all?"すべての画像を表示中":`🎴 専用の画像：${state.nArt}枚`;
+  bar.appendChild(t);
+  return bar;
+}
 function openSleevePicker(pi){
   if(!imgURL.size){toast("先に画像を登録してください");return;}
   $("deckOlay").classList.remove("open");
@@ -34821,11 +34837,17 @@ function openSleevePicker(pi){
   $("vOk").style.display="none";$("vStatus").textContent="";
   const search=$("vSearch");search.style.display="";search.value="";
   const g=$("vGrid");
+  const _st={all:false,nArt:0};
   const render=()=>{
     g.innerHTML="";
     const q=normName(search.value);
-    // 🎴 スリーブ・プレマ用の印がある画像を先頭に並べる
-    const _ks=Array.from(imgURL.keys()).sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
+    const _all=Array.from(imgURL.keys()).filter(k=>!String(k).startsWith("__mat"));
+    _st.nArt=_all.filter(isArtKey).length;
+    if(!_st.nArt)_st.all=true;   // 専用の画像が無ければ全部出す
+    g.appendChild(artPickBar(_st,render));
+    const _ks=_all
+      .filter(k=>_st.all||isArtKey(k))
+      .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
     for(const k of _ks){
       const name=k==="__back__"?"（登録済み裏面）":(dispName.get(k)||k);
       if(q&&!k.includes(q))continue;
@@ -34849,6 +34871,7 @@ function openSleevePicker(pi){
 }
 function openMatPicker(pi){
   if(!imgURL.size){toast("先に画像を登録してください");return;}
+  const _st={all:false,nArt:0};
   $("deckOlay").classList.remove("open");
   $("vTitle").textContent=`${S.players[pi].label}のプレイマットを選ぶ`;
   $("vHint").textContent="タップした画像が盤面の背景（うっすら表示）になります。相手側は180°回転して表示されます。";
@@ -34858,9 +34881,14 @@ function openMatPicker(pi){
   const render=()=>{
     g.innerHTML="";
     const q=normName(search.value);
-    const _ks=Array.from(imgURL.keys()).sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
+    const _all=Array.from(imgURL.keys()).filter(k=>!String(k).startsWith("__mat"));
+    _st.nArt=_all.filter(isArtKey).length;
+    if(!_st.nArt)_st.all=true;
+    g.appendChild(artPickBar(_st,render));
+    const _ks=_all
+      .filter(k=>_st.all||isArtKey(k))
+      .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
     for(const k of _ks){
-      if(k.startsWith("__mat"))continue;
       const name=k==="__back__"?"（登録済み裏面）":(dispName.get(k)||k);
       if(q&&!k.includes(q))continue;
       const el=vCardEl(name);
@@ -34898,12 +34926,27 @@ function openArtPicker(){
   const render=()=>{
     g.innerHTML="";
     const q=normName(search.value);
-    const ks=Array.from(imgURL.keys())
+    const all=Array.from(imgURL.keys())
       .filter(k=>k!=="__back__"&&!String(k).startsWith("__mat"))
-      .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
-    let nArt=0;
-    for(const k of ks){
-      if(isArtKey(k))nArt++;
+      .sort((a,b)=>String(a).localeCompare(String(b),"ja"));
+    const arts=all.filter(isArtKey), cards=all.filter(k=>!isArtKey(k));
+    const nArt=arts.length;
+    // 🎴 上段にスリーブ・プレマ用、下段にカードの画像を分けて並べる
+    const head=(txt)=>{
+      const h=document.createElement("div");
+      h.style.cssText="grid-column:1/-1;font-size:12px;font-weight:900;color:#cbd3df;margin:6px 0 2px;"
+        +"border-bottom:1px solid #2a3550;padding-bottom:3px";
+      h.textContent=txt;
+      return h;
+    };
+    const ks=[];
+    if(arts.length){ks.push(["__head__","🎴 スリーブ・プレマ用（"+arts.length+"枚）"]);for(const k of arts)ks.push([k,null]);}
+    if(cards.length){ks.push(["__head__","🗂 カードの画像（"+cards.length+"枚）"]);for(const k of cards)ks.push([k,null]);}
+    for(const [k,htxt] of ks){
+      if(k==="__head__"){
+        if(!q)g.appendChild(head(htxt));
+        continue;
+      }
       if(q&&!k.includes(q))continue;
       const el=vCardEl(dispName.get(k)||k);
       const th=el.querySelector(".thumb");th.innerHTML="";
@@ -34928,7 +34971,7 @@ function openArtPicker(){
       });
       g.appendChild(el);
     }
-    $("vStatus").textContent=`🎴 印のある画像：${nArt}枚`;
+    $("vStatus").textContent=`🎴 スリーブ・プレマ用 ${nArt}枚 ／ カードの画像 ${all.length-nArt}枚`;
   };
   search.oninput=render;
   render();
