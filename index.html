@@ -1111,6 +1111,8 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row">
         <button class="btn small" id="btnPickImages">画像を登録</button>
         <button class="btn small" id="btnManageImages">🗂 画像を管理（改名/削除）</button>
+        <button class="btn small" id="btnArtImages" title="スリーブやプレイマットに使う画像を選びます。印を付けた画像はカードの一覧（デッキ編成・効果登録）に出なくなります">🎴 スリーブ・プレマ用の印</button>
+        <button class="btn small" id="btnSendArtImages" title="スリーブ・プレマ用の画像を、オンラインでつながっている相手に送ります">📤 相手に送る</button>
         <button class="btn small warn" id="btnClearImages">画像を全削除</button>
         <input type="file" id="imgInput" accept="image/*" multiple style="display:none">
       </div>
@@ -4012,7 +4014,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.50";
+const APP_VER="v13.52";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5831,7 +5833,34 @@ function fxBanner(kind,title,sub,big,cardName,side){
     row.appendChild(txt);
 
     // 🖼 カード画像（あれば右に添える）
-    if(cardName){
+    //    「A＋B＋C」と渡されたら、その枚数だけ**横につなげて**出す（G・リンク用・潰さない）
+    const _multi=String(cardName||"").split(/[＋+]/).map(x=>x.trim()).filter(Boolean);
+    if(cardName&&_multi.length>=2){
+      try{
+        const strip=document.createElement("div");
+        strip.style.cssText="position:relative;display:flex;align-items:stretch;gap:0;flex:0 0 auto;"
+          +`border-radius:6px;overflow:hidden;outline:2px solid ${st.bd};filter:drop-shadow(0 4px 14px ${st.bd}99)`;
+        for(const nm of _multi){
+          const cell=document.createElement("div");
+          cell.style.cssText=`width:${big?92:70}px;aspect-ratio:63/88;flex:0 0 auto;position:relative;background:#0f172a`;
+          const u=imgURL.get(normName(nm));
+          if(u){
+            const im=document.createElement("img");
+            im.src=u;im.alt="";im.draggable=false;
+            im.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block";
+            cell.appendChild(im);
+          }else{
+            const np=document.createElement("div");
+            np.style.cssText="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"
+              +"font-size:9px;font-weight:900;color:#cbd5e1;text-align:center;padding:2px;line-height:1.15";
+            np.textContent=nm;
+            cell.appendChild(np);
+          }
+          strip.appendChild(cell);
+        }
+        row.appendChild(strip);
+      }catch(e){}
+    }else if(cardName){
       try{
         const el=vCardEl(String(cardName));
         el.classList.add("revFxCard");
@@ -6446,6 +6475,25 @@ function pickOneImageFile(){
     inp.click();
   });
 }
+/* 🎴 スリーブ・プレイマット専用の画像を覚えておく。
+   ここに入っている画像は**カードの一覧には出さない**（デッキ編成・効果登録など）。
+   ファイル名が「スリーブ」「プレマ」「プレイマット」「背景」sleeve/mat で始まる場合は自動でこちらへ。 */
+let ART_KEYS=new Set();
+const ART_NAME_RE=/^(スリーブ|プレマ|プレイマット|背景|sleeve|mat|playmat)/i;
+function isArtKey(k){return ART_KEYS.has(String(k));}
+async function persistArtKeys(){
+  try{if(db)await idbPut("misc","artKeys",[...ART_KEYS]);}catch(e){}
+}
+async function loadArtKeys(){
+  try{
+    const v=db?await idbGet("misc","artKeys"):null;
+    if(Array.isArray(v))ART_KEYS=new Set(v);
+  }catch(e){}
+}
+async function setArtKey(k,on){
+  if(on)ART_KEYS.add(k);else ART_KEYS.delete(k);
+  await persistArtKeys();
+}
 async function registerImages(files){
   let n=0;
   for(const f of files){
@@ -6457,11 +6505,13 @@ async function registerImages(files){
     if(BACK_KEYS.has(key))key="__back__";
     if(db)await idbPut("images",key,f);else memImages.set(key,f);
     if(key!=="__back__")dispName.set(key,orig);
+    if(key!=="__back__"&&ART_NAME_RE.test(orig))ART_KEYS.add(key);   // 🎴 スリーブ・プレマ用として覚える
     if(key!=="__back__"&&!imgOrder.has(key))imgOrder.set(key,++imgSeq);
     n++;
   }
   await persistNames();
   await persistImgOrder();
+  await persistArtKeys();
   await loadAllImages();renderAll();
   if(n)toast(`${n} 枚の画像を登録しました`);
   else toast("画像を認識できませんでした（写真アプリからは一度「ファイルに保存」してから登録すると確実です）");
@@ -24614,7 +24664,7 @@ function pickImage(title,hint){
         g.appendChild(cbar);
       }
       const q=normName(search.value);
-      const keys=Array.from(dispName.keys()).sort((a,b)=>{
+      const keys=Array.from(dispName.keys()).filter(k=>!isArtKey(k)).sort((a,b)=>{
         if(pickSort==="added"){
           const oa=imgOrder.has(a)?imgOrder.get(a):Infinity, ob=imgOrder.has(b)?imgOrder.get(b):Infinity;
           if(oa!==ob)return oa-ob;
@@ -25678,7 +25728,7 @@ function openLinkProgress(pi,id){
       members.forEach(b=>{b.tapped=false;});
       Z.battle.push(nc);
       window.__glJoinId=nc.id;
-      try{fxKeyword(pi,"G・リンク！",(imgURL.get(normName(nm2))?nm2:faceNameOf(members[0])),members.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
+      try{fxKeyword(pi,"G・リンク！",glOrderNames(nm2,members),nm2);}catch(e){}
       markArrive(nc);
       nc.sick=_wasSick;   // 🔗 リンクしただけでは召喚酔いにならない
       emitEvent(pi,"summon");
@@ -26472,18 +26522,20 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
           }
           return true;
         };
-        // 単体でいるカードを優先し、同名が重なる相手は選ばない。
-        // （ヘヴィ・デス・メタルがいても、2体目のゴッドを新しく作れる）
+        // 候補は**全部**見る。単体を先に、次にリンク済み。
+        // （ヘヴィ・デス・メタルとヘヴィ・メタルが並んでいても、入れる側を見つけられる）
         for(const nm of names){
           const cand=[
-            ZB7.find(x=>x.id!==c.id&&!holders.some(h=>h.id===x.id)&&!x.gl&&normName(faceNameOf(x))===normName(nm)),
-            ZB7.find(x=>x.id!==c.id&&!holders.some(h=>h.id===x.id)&&x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
-          ];
-          for(const hit of cand){
-            if(!hit)continue;
-            if(!_dupOk([c,...linkExpand([...holders,hit])]))continue;
-            holders.push(hit);break;
-          }
+            ...ZB7.filter(x=>x.id!==c.id&&!holders.some(h=>h.id===x.id)&&!x.gl&&normName(faceNameOf(x))===normName(nm)),
+            ...ZB7.filter(x=>x.id!==c.id&&!holders.some(h=>h.id===x.id)&&x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
+          ].filter(hit=>_dupOk([c,...linkExpand([...holders,hit])]));
+          if(!cand.length)continue;
+          if(cand.length===1){holders.push(cand[0]);continue;}
+          // 🔗 同じ名前の相手が複数いる時は、どれにつなぐか選べる
+          const pk=await askChoice(`🔗 ${nm} はどれとリンクしますか？`,
+            [...cand.map(x=>x.gl?`🔗 ${faceNameOf(x)}（${(x.under||[]).map(u=>faceNameOf(u)).join("＋")}）`:`⚔ ${faceNameOf(x)}`),"✖ この相手とはリンクしない"]);
+          if(pk===null)return;
+          if(pk<cand.length)holders.push(cand[pk]);
         }
         if(!holders.length)return;
         const parts=[c,...linkExpand(holders)];
@@ -26506,7 +26558,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         const _wasSick=parts.some(x=>x.sick);
         ZB7.push(nc);
         window.__glJoinId=nc.id;
-        try{fxKeyword(pTo,"G・リンク！",(imgURL.get(normName(nm2))?nm2:faceNameOf(parts[0])),parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
+        try{fxKeyword(pTo,"G・リンク！",glOrderNames(nm2,parts),nm2);}catch(e){}
         markArrive(nc);
         nc.sick=_wasSick;   // 🔗 リンクは「新しく出た」のではない
         emitEvent(pTo,"summon");
@@ -27486,6 +27538,11 @@ function psyLinkNameFor(reg,partnerNames){
   }
   return null;
 }
+/* 🔗 演出用：合体後の名前の順に並べた「A＋B＋C」を作る。 */
+function glOrderNames(mergedName,parts){
+  const fake={name:mergedName,under:parts};
+  return glOrderParts(fake).map(x=>faceNameOf(x)).join("＋");
+}
 function glOrderParts(c){
   const parts=(c.under||[]).slice();
   if(parts.length<2)return parts;
@@ -27617,7 +27674,7 @@ function cardEl(pi,zone,c){
       if(u){
         const im=document.createElement("img");
         im.src=u;im.alt="";im.draggable=false;
-        im.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;display:block";
+        im.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block";
         cell.appendChild(im);
       }else{
         const np=document.createElement("div");
@@ -28844,6 +28901,17 @@ function setupConn(conn){
           renderAll();
         }catch(e){}
       }
+    }
+    else if(msg&&msg.t==="artKeys"){
+      // 🎴 受け取った画像のうち、スリーブ・プレマ用のものに印を付ける
+      (async()=>{
+        try{
+          let n=0;
+          for(const k of (msg.keys||[])){if(!ART_KEYS.has(k)){ART_KEYS.add(k);n++;}}
+          if(n){await persistArtKeys();renderAll();
+            toast(`🎴 受け取った画像${n}枚をスリーブ・プレマ用にしました`);}
+        }catch(e){}
+      })();
     }
     else if(msg&&msg.t==="mdata"){
       // 🔄 対戦データの受信（v10.48）。分割で届くので受信箱に貯め、最終チャンクで統合する
@@ -32098,16 +32166,15 @@ function openCardSheet(ctx){
     const _ZL=zonesOf(ctx.p).battle;
     const _hitsL=[];
     const _dupChk=(list)=>{const seen=new Set();for(const x of list){const k=normName(faceNameOf(x));if(seen.has(k))return false;seen.add(k);}return true;};
+    const _candsL=[];   // 🔗 名前ごとの候補（選べるように全部持つ）
     for(const nm of _namesL){
       const cand=[
-        _ZL.find(x=>x.id!==c.id&&!_hitsL.some(h=>h.id===x.id)&&!x.gl&&normName(faceNameOf(x))===normName(nm)),
-        _ZL.find(x=>x.id!==c.id&&!_hitsL.some(h=>h.id===x.id)&&x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
-      ];
-      for(const hit of cand){
-        if(!hit)continue;
-        if(!_dupChk([c,...linkExpand([..._hitsL,hit])]))continue;
-        _hitsL.push(hit);break;
-      }
+        ..._ZL.filter(x=>x.id!==c.id&&!_hitsL.some(h=>h.id===x.id)&&!x.gl&&normName(faceNameOf(x))===normName(nm)),
+        ..._ZL.filter(x=>x.id!==c.id&&!_hitsL.some(h=>h.id===x.id)&&x.gl&&Array.isArray(x.under)&&x.under.some(u=>normName(faceNameOf(u))===normName(nm)))
+      ].filter(hit=>_dupChk([c,...linkExpand([..._hitsL,hit])]));
+      if(!cand.length)continue;
+      _candsL.push([nm,cand]);
+      _hitsL.push(cand[0]);
     }
     const _partsL=[c,...linkExpand(_hitsL)];
     const _dupL=!_dupChk(_partsL);
@@ -32125,7 +32192,7 @@ function openCardSheet(ctx){
         _partsL.forEach(b2=>{b2.tapped=false;});
         _ZL.push(nc);
         window.__glJoinId=nc.id;
-        try{fxKeyword(ctx.p,"G・リンク！",(imgURL.get(normName(_nmL))?_nmL:faceNameOf(_partsL[0])),_partsL.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
+        try{fxKeyword(ctx.p,"G・リンク！",glOrderNames(_nmL,_partsL),_nmL);}catch(e){}
         markArrive(nc);
         nc.sick=_sickL;
         emitEvent(ctx.p,"summon");
@@ -32133,6 +32200,40 @@ function openCardSheet(ctx){
         sfx("ok");closeSel();renderAll();
         toast(`🔗 G・リンク！ ${_nmL}（${_partsL.length}枚合体）`);
       },"primary",true));
+      if(_candsL.some(([,cd])=>cd.length>=2)){
+        box.appendChild(actBtn("🔗 G・リンク（相手を選んで合体）",async()=>{
+          const chosen=[];
+          for(const [nm,cd] of _candsL){
+            const ok=cd.filter(hit=>_dupChk([c,...linkExpand([...chosen,hit])]));
+            if(!ok.length)continue;
+            const pk=(ok.length===1)?0:await askChoice(`🔗 ${nm} はどれとリンクしますか？`,
+              [...ok.map(x=>x.gl?`🔗 ${faceNameOf(x)}（${(x.under||[]).map(u=>faceNameOf(u)).join("＋")}）`:`⚔ ${faceNameOf(x)}`),"✖ この相手とはリンクしない"]);
+            if(pk===null)return;
+            if(pk<ok.length)chosen.push(ok[pk]);
+          }
+          if(!chosen.length){toast("🔗 相手を選ばなかったのでリンクしません");return;}
+          const parts2=[c,...linkExpand(chosen)];
+          const nm2b=resolveLinkName(parts2)||_rgL.psyLinkTo||parts2.map(x=>faceNameOf(x)).join("／");
+          snap();
+          for(const x of [c,...chosen]){
+            const i2=_ZL.findIndex(y=>y.id===x.id);
+            if(i2>=0)_ZL.splice(i2,1);
+          }
+          const _sick2=parts2.some(x=>x.sick);
+          const nc2=makeCard(nm2b);
+          nc2.gl=true;nc2.under=parts2;
+          parts2.forEach(b2=>{b2.tapped=false;});
+          _ZL.push(nc2);
+          window.__glJoinId=nc2.id;
+          try{fxKeyword(ctx.p,"G・リンク！",glOrderNames(nm2b,parts2),nm2b);}catch(e){}
+          markArrive(nc2);
+          nc2.sick=_sick2;
+          emitEvent(ctx.p,"summon");
+          enqueueFx(ctx.p,nc2);
+          sfx("ok");closeSel();renderAll();
+          toast(`🔗 G・リンク！ ${nm2b}（${parts2.length}枚合体）`);
+        },"",true));
+      }
     }else if(!_hitsL.length){
       box.appendChild(actBtn(`🔗 G・リンク（相手が場にいません：${_namesL.join("／")}）`,()=>{
         toast(`🔗 リンクの相手：${_namesL.join("／")} がバトルゾーンに必要です`);
@@ -33203,7 +33304,7 @@ function openMultiSheet(){
       parts.forEach(b=>{b.tapped=false;});
       zonesOf(p0).battle.push(nc);
       window.__glJoinId=nc.id;
-      try{fxKeyword(p0,"G・リンク！",(imgURL.get(normName(nm))?nm:faceNameOf(parts[0])),parts.map(x=>faceNameOf(x)).join("＋"));}catch(e){}
+      try{fxKeyword(p0,"G・リンク！",glOrderNames(nm,parts),nm);}catch(e){}
       markArrive(nc);
       nc.sick=_wasSick;   // 🔗 リンクしただけでは召喚酔いにならない
       endMulti();closeSheet();
@@ -34718,7 +34819,9 @@ function openSleevePicker(pi){
   const render=()=>{
     g.innerHTML="";
     const q=normName(search.value);
-    for(const k of Array.from(imgURL.keys()).sort()){
+    // 🎴 スリーブ・プレマ用の印がある画像を先頭に並べる
+    const _ks=Array.from(imgURL.keys()).sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
+    for(const k of _ks){
       const name=k==="__back__"?"（登録済み裏面）":(dispName.get(k)||k);
       if(q&&!k.includes(q))continue;
       const el=vCardEl(name);
@@ -34750,7 +34853,8 @@ function openMatPicker(pi){
   const render=()=>{
     g.innerHTML="";
     const q=normName(search.value);
-    for(const k of Array.from(imgURL.keys()).sort()){
+    const _ks=Array.from(imgURL.keys()).sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
+    for(const k of _ks){
       if(k.startsWith("__mat"))continue;
       const name=k==="__back__"?"（登録済み裏面）":(dispName.get(k)||k);
       if(q&&!k.includes(q))continue;
@@ -34776,6 +34880,60 @@ function openMatPicker(pi){
   render();
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
+/* 🎴 スリーブ・プレマ用の印を付け外しする画面。
+   印のある画像はカードの一覧（デッキ編成・効果登録の画像選択）に出ない。 */
+function openArtPicker(){
+  if(!imgURL.size){toast("先に画像を登録してください");return;}
+  $("deckOlay").classList.remove("open");
+  $("vTitle").textContent="🎴 スリーブ・プレマ用の印";
+  $("vHint").textContent="タップで印の付け外し。印のある画像はカードの一覧に出なくなります（スリーブ・プレイマットの選択には出ます）。";
+  $("vOk").style.display="none";$("vStatus").textContent="";
+  const search=$("vSearch");search.style.display="";search.value="";
+  const g=$("vGrid");
+  const render=()=>{
+    g.innerHTML="";
+    const q=normName(search.value);
+    const ks=Array.from(imgURL.keys())
+      .filter(k=>k!=="__back__"&&!String(k).startsWith("__mat"))
+      .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
+    let nArt=0;
+    for(const k of ks){
+      if(isArtKey(k))nArt++;
+      if(q&&!k.includes(q))continue;
+      const el=vCardEl(dispName.get(k)||k);
+      const th=el.querySelector(".thumb");th.innerHTML="";
+      const im=document.createElement("img");im.src=imgURL.get(k);im.draggable=false;
+      im.style.cssText="width:100%;height:100%;object-fit:cover";
+      th.appendChild(im);
+      if(isArtKey(k)){
+        el.style.outline="3px solid #86efac";
+        const bd=document.createElement("div");
+        bd.textContent="🎴";
+        bd.style.cssText="position:absolute;top:2px;left:2px;font-size:15px;filter:drop-shadow(0 1px 2px #000);z-index:3";
+        el.appendChild(bd);
+      }
+      el.addEventListener("click",async()=>{
+        await setArtKey(k,!isArtKey(k));
+        toast(isArtKey(k)?`🎴 ${dispName.get(k)||k} をスリーブ・プレマ用にしました`:`${dispName.get(k)||k} をカードの画像に戻しました`);
+        render();
+      });
+      g.appendChild(el);
+    }
+    $("vStatus").textContent=`🎴 印のある画像：${nArt}枚`;
+  };
+  search.oninput=render;
+  render();
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
+}
+$("btnArtImages").addEventListener("click",openArtPicker);
+$("btnSendArtImages").addEventListener("click",async()=>{
+  const ks=[...ART_KEYS].filter(k=>imgURL.has(k));
+  if(!ks.length){toast("🎴 印の付いた画像がありません");return;}
+  if(!ONLINE.conn||!ONLINE.conn.open){toast("⚠ まだ相手とつながっていません");return;}
+  if(!await ask(`📤 スリーブ・プレマ用の画像 ${ks.length}枚を相手に送りますか？`))return;
+  const n=await olSendImagesForKeys(ks);
+  if(n){try{ONLINE.conn.send({t:"artKeys",keys:ks});}catch(e){}}
+});
 $("btnMat0").addEventListener("click",()=>openMatPicker(0));
 $("btnMat1").addEventListener("click",()=>openMatPicker(1));
 async function saveMatView(){
@@ -36110,6 +36268,7 @@ $("btnExport").addEventListener("click",async ()=>{
     nameMap:Object.fromEntries(dispName),
     sleeve:S.sleeve, sound:S.sound, expert:S.expert,
     deckMeta:DECK_META, deckOrder:DECK_ORDER, deckSort:DECK_SORT,
+    artKeys:[...ART_KEYS],   // 🎴 スリーブ・プレマ用の印
     images:{},
   };
   // 🖼 デッキ本体をそのまま入れる（表紙 cover と超次元 ex を含む）
@@ -36245,6 +36404,10 @@ $("importInput").addEventListener("change",async e=>{
     for(const [n,d] of Object.entries(data.decks||{}))await saveDeck(n,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover||null);
     // 🗂 並び順を引き継ぐ。こちらにしか無いデッキは消さず、読んだ順のあとろに残す
     await mergeDeckOrder(data);
+    if(Array.isArray(data.artKeys)){
+      for(const k of data.artKeys)ART_KEYS.add(k);
+      await persistArtKeys();
+    }
     if(data.cardFx){FXDB.clear();for(const [k,v] of Object.entries(data.cardFx))FXDB.set(k,v);await persistFx();}
     if(data.faceLinks){LINKS.clear();for(const [k,v] of Object.entries(data.faceLinks))LINKS.set(k,v);await persistLinks();}
     if(data.nameMap){for(const [k,v] of Object.entries(data.nameMap))dispName.set(k,v);await persistNames();}
@@ -37330,6 +37493,7 @@ function bRender(){
     return [...raceSel].some(t=>rs.some(x=>String(x).includes(t)));
   };
   const keys=Array.from(dispName.keys())
+    .filter(k=>!isArtKey(k))   // 🎴 スリーブ・プレマ用の画像はカード一覧に出さない
     .filter(k=>(!q||k.includes(q))&&typeMatch(k,tf)&&civOk(k)&&twinOk(k)&&costOk(k)&&raceOk(k)&&(!onlyPicked||(counts.get(k)||0)>0))
     .sort((a,b)=>{
       if(onlyPicked){ // 採用中だけの時はコスト順→名前順で、デッキの形が分かりやすいように
@@ -38095,6 +38259,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   db=await openDB();
   const nm=db?await idbGet("misc","nameMap"):null;
   if(nm)for(const [k,v] of Object.entries(nm))dispName.set(k,v);
+  await loadArtKeys();   // 🎴 スリーブ・プレマ用の印
   const io=db?await idbGet("misc","imgOrder"):null;
   if(io&&io.map){for(const [k,v] of Object.entries(io.map))imgOrder.set(k,+v);imgSeq=+io.seq||0;}
   await loadAllImages();
