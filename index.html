@@ -4000,24 +4000,35 @@ const S={
    → 画像データだけを持っておき、実際に表示を求められたキーの一時URLだけを作る。
    使い方は今までのMapと同じ（get/has/keys/size/delete/clear）。登録は setBlob（またはset）に画像データを渡す。 */
 const imgURL=(()=>{
+  const known=new Set(); // IndexedDBに存在するキー。画像本体は必要になるまで読まない
   const blobs=new Map(); // キー→画像データ
   const urls=new Map();  // キー→一時URL（求められた分だけ作る）
+  const loading=new Set(),queue=[];let active=0,renderTimer=null;
   const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));urls.delete(k);}};
+  const redraw=()=>{if(renderTimer)return;renderTimer=setTimeout(()=>{renderTimer=null;try{renderAll();}catch(e){}},80);};
+  const pump=()=>{
+    while(active<6&&queue.length){
+      const k=queue.shift();active++;
+      idbGet("images",k).then(b=>{if(b&&known.has(k))blobs.set(k,b);}).finally(()=>{active--;loading.delete(k);redraw();pump();});
+    }
+  };
+  const request=k=>{if(!db||loading.has(k)||blobs.has(k)||!known.has(k))return;loading.add(k);queue.push(k);pump();};
   const api={
-    get size(){return blobs.size;},
-    has(k){return blobs.has(k);},
-    keys(){return blobs.keys();},
+    get size(){return known.size;},
+    has(k){return known.has(k);},
+    keys(){return known.keys();},
     get(k){
-      if(!blobs.has(k))return undefined;
+      if(!blobs.has(k)){request(k);return undefined;}
       let u=urls.get(k);
       if(!u){u=URL.createObjectURL(blobs.get(k));urls.set(k,u);}
       return u;
     },
-    setBlob(k,b){drop(k);blobs.set(k,b);return api;},
+    addKey(k){known.add(k);return api;},
+    setBlob(k,b){known.add(k);drop(k);blobs.set(k,b);return api;},
     set(k,b){return api.setBlob(k,b);},
     getBlob(k){return blobs.get(k);},
-    delete(k){drop(k);return blobs.delete(k);},
-    clear(){urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();blobs.clear();},
+    delete(k){known.delete(k);loading.delete(k);drop(k);return blobs.delete(k);},
+    clear(){known.clear();loading.clear();queue.length=0;urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();blobs.clear();},
     forEach(fn){blobs.forEach((b,k)=>fn(api.get(k),k));},
     liveCount(){return urls.size;}, // 実際に一時URLを作った枚数（メモリの目安）
   };
@@ -4040,7 +4051,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.69";
+const APP_VER="v13.70";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6443,10 +6454,9 @@ async function persistImgOrder(){if(db)await idbPut("misc","imgOrder",{seq:imgSe
 async function loadAllImages(){
   imgURL.clear();
   if(db){
-    for(const k of await idbKeys("images")){
-      const b=await idbGet("images",k);
-      if(b) imgURL.setBlob(k,b);
-    }
+    // 以前は全画像をここでメモリへ複製していた。大容量になるほど起動・復元が
+    // 遅くなるため、まずキーだけ読み、画像本体は画面に必要になった時に読む。
+    for(const k of await idbKeys("images"))imgURL.addKey(k);
   }else memImages.forEach((b,k)=>imgURL.setBlob(k,b));
   $("imgStatus").textContent=`登録済み画像：${imgURL.size} 枚`;
 }
@@ -34823,14 +34833,14 @@ function openImageManager(){
       zb.onclick=async()=>{
         const keys=Array.from(imgURL.keys());
         if(!keys.length){toast("登録画像がありません");return;}
-        let before=0;for(const k of keys){const b=imgURL.getBlob(k);if(b)before+=(b.size|0);}
+        let before=0;for(const k of keys){const b=db?await idbGet("images",k):imgURL.getBlob(k);if(b)before+=(b.size|0);}
         const j=await askChoice(`🗜 登録画像を小さく保存し直します\n${keys.length}枚・現在の合計サイズ 約${(before/1048576).toFixed(1)}MB\n\n表示に使う横幅の上限を選んでください（元より大きくはなりません）。\n※元の画質には戻せません。画像ファイルは手元に残しておいてください。`,
           ["高画質（横720px）","標準（横560px）※おすすめ","軽量（横420px）"]);
         if(j===null)return;
         const maxW=[720,560,420][j];
         let after=0,done=0,changed=0;
         for(const k of keys){
-          const b=imgURL.getBlob(k);
+          const b=db?await idbGet("images",k):imgURL.getBlob(k);
           if(!b){done++;continue;}
           const nb=await shrinkImageBlob(b,maxW,0.82);
           if(nb&&nb.size<b.size*0.95){
@@ -36723,10 +36733,12 @@ async function backupImageForMode(blob,key,mode){
   finally{try{if(bmp&&typeof bmp.close==="function")bmp.close();}catch(e){}if(url)URL.revokeObjectURL(url);}
 }
 async function makeBackupZip(data,imageKeys,mode="original"){
+  await backupWakeStart();
   makeBackupZip._started=Date.now();
   const manifest={v:1,format:"dmrv-backup-zip",profile:mode==="transfer"?"transfer-hq-auto-v2":"original",images:[]};
   const items=[];let imageBytes=0;
   for(let i=0;i<imageKeys.length;i++){
+    await waitUntilVisible();
     const key=imageKeys[i],src=db?await idbGet("images",key):memImages.get(key);
     const blob=src?await backupImageForMode(src,key,mode):null;
     if(!blob)continue;
@@ -36807,6 +36819,29 @@ function waitUntilVisible(){
   if(document.visibilityState!=="hidden")return Promise.resolve();
   return new Promise(resolve=>{const fn=()=>{if(document.visibilityState!=="hidden"){document.removeEventListener("visibilitychange",fn);resolve();}};document.addEventListener("visibilitychange",fn);});
 }
+const BACKUP_WAKE={active:false,lock:null,onVisibility:null};
+async function backupWakeAcquire(){
+  if(!BACKUP_WAKE.active||document.visibilityState==="hidden"||!navigator.wakeLock||!navigator.wakeLock.request)return;
+  try{
+    if(BACKUP_WAKE.lock&&!BACKUP_WAKE.lock.released)return;
+    BACKUP_WAKE.lock=await navigator.wakeLock.request("screen");
+    BACKUP_WAKE.lock.addEventListener("release",()=>{BACKUP_WAKE.lock=null;});
+  }catch(e){console.warn("wake lock",e);}
+}
+async function backupWakeStart(){
+  BACKUP_WAKE.active=true;
+  if(!BACKUP_WAKE.onVisibility){
+    BACKUP_WAKE.onVisibility=()=>{if(document.visibilityState!=="hidden")backupWakeAcquire();};
+    document.addEventListener("visibilitychange",BACKUP_WAKE.onVisibility);
+  }
+  await backupWakeAcquire();
+}
+async function backupWakeEnd(){
+  BACKUP_WAKE.active=false;
+  if(BACKUP_WAKE.onVisibility){document.removeEventListener("visibilitychange",BACKUP_WAKE.onVisibility);BACKUP_WAKE.onVisibility=null;}
+  const lock=BACKUP_WAKE.lock;BACKUP_WAKE.lock=null;
+  try{if(lock&&!lock.released)await lock.release();}catch(e){}
+}
 async function idbImageSizes(keys,onProgress){
   const out=new Map();
   if(!db){for(const k of keys){const b=memImages.get(k);if(b)out.set(k,b.size);}return out;}
@@ -36860,6 +36895,7 @@ async function storageStatus(){
   }catch(e){return "";}
 }
 async function restoreBackupZipImages(ctx){
+  await backupWakeStart();
   const list=ctx.manifest.images,totalBytes=list.reduce((n,x)=>n+(+x.size||0),0),started=Date.now();
   backupProgress({title:"既存画像を確認中…",done:0,total:list.length,bytes:0,totalBytes,started});
   const allKeys=db?await idbKeys("images"):Array.from(memImages.keys());
@@ -36869,20 +36905,23 @@ async function restoreBackupZipImages(ctx){
   const todo=list.filter(x=>sizes.get(x.key)!==+x.size),skipped=list.length-todo.length;
   let done=skipped,doneBytes=list.filter(x=>sizes.get(x.key)===+x.size).reduce((n,x)=>n+(+x.size||0),0);
   backupProgress({title:skipped?`保存済み${skipped}枚を飛ばして再開中`:"画像を保存中",done,total:list.length,bytes:doneBytes,totalBytes,started});
-  // 通常は24枚ずつ高速保存。Safariが拒否した時だけ自動的に12→6→3枚へ分割する。
-  const batchSize=24;
+  // 通常は64枚を1トランザクションでまとめて保存し、Safariが拒否した時だけ
+  // 32→16→8→4枚へ自動分割する。小分け固定より大容量時の待ち時間を抑える。
+  const batchSize=64;
   for(let from=0;from<todo.length;from+=batchSize){
     await waitUntilVisible();
     const part=todo.slice(from,from+batchSize);
     const rows=await Promise.all(part.map(async x=>({x,b:await ctx.entryBlob(x.file,x.type||"application/octet-stream")})));
     try{await idbPutImageRowsAdaptive(rows);}
     catch(lastErr){const e=new Error(`画像の保存に失敗しました${await storageStatus()}：${lastErr&&lastErr.message||"保存処理が中断されました"}`);e.backupImport=true;throw e;}
-    for(const r of rows){imgURL.setBlob(r.x.key,r.b);done++;doneBytes+=r.b.size;}
+    // 保存済みBlobをJSメモリへ二重保持しない。表示時にIndexedDBから遅延読込する。
+    for(const r of rows){imgURL.addKey(r.x.key);done++;doneBytes+=r.b.size;}
     backupProgress({title:skipped?`保存済み${skipped}枚を飛ばして再開中`:"画像を保存中",done,total:list.length,bytes:doneBytes,totalBytes,started});
     await new Promise(requestAnimationFrame);
   }
   $("imgStatus").textContent=`登録済み画像：${imgURL.size} 枚`;
   backupProgress(null);
+  await backupWakeEnd();
 }
 function downloadBlob(blob,name){
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),30000);
@@ -36947,7 +36986,7 @@ $("btnExport").addEventListener("click",async ()=>{
     let blob;
     try{blob=await makeBackupZip(data,keys,imageMode);}
     catch(err){backupProgress(null);backupProgressError(err&&err.message||String(err),"高画質・軽量版は作成されていません。元画像のまま版を選ぶか、別のブラウザで再試行してください。");return;}
-    finally{if(blob)backupProgress(null);}
+    finally{await backupWakeEnd();if(blob)backupProgress(null);}
     const label=imageMode==="transfer"?"transfer-HQ":"original";
     downloadBlob(blob,`dmps-backup-${day}-${label}.dmrv.zip`);
     toast(`書き出しました（${imageMode==="transfer"?"高画質・軽量":"元画像のまま"}／画像${keys.length}枚・${Math.max(1,Math.round(blob.size/1024/1024))}MB）`);
@@ -37145,6 +37184,7 @@ $("importInput").addEventListener("change",async e=>{
     sfx("ok");
     toast("読み込み完了！デッキ一覧から使用するデッキを選んでください");
   }catch(err){
+    await backupWakeEnd();
     backupProgress(null);
     if(err&&err.backupImport)backupProgressError(err.message);
     else toast("読み込みに失敗しました："+err.message);
