@@ -4016,7 +4016,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.54";
+const APP_VER="v13.55";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -30828,7 +30828,14 @@ function pickFxKeysPanel(){
     const keys=[...FXDB.keys()];
     if(!keys.length){toast("登録されているカードがありません");res(null);return;}
     const nameOf=k=>dispName.get(k)||k;
-    keys.sort((a,b)=>String(nameOf(a)).localeCompare(String(nameOf(b)),"ja"));
+    // ↕ 並び順：名前順（既定）／追加した順。カード選択の一覧と同じ仕組み。
+    let sortMode="name";
+    const addedNo=k=>(imgOrder.has(k)?imgOrder.get(k):Number.MAX_SAFE_INTEGER);
+    const sortKeys=()=>{
+      if(sortMode==="added")keys.sort((a,b)=>addedNo(a)-addedNo(b)||String(nameOf(a)).localeCompare(String(nameOf(b)),"ja"));
+      else keys.sort((a,b)=>String(nameOf(a)).localeCompare(String(nameOf(b)),"ja"));
+    };
+    sortKeys();
     const pick=new Set();
     const ol=document.createElement("div");
     ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:996;display:flex;flex-direction:column;padding:12px;gap:8px";
@@ -30847,6 +30854,13 @@ function pickFxKeysPanel(){
     sIn.style.cssText="flex:1 1 200px;background:#0d1119;color:#e6ecf7;border:1px solid #2a3346;border-radius:8px;padding:7px;font-size:13px";
     bar.appendChild(sIn);
     const mkb=(t,fn)=>{const b2=document.createElement("button");b2.className="btn small";b2.textContent=t;b2.addEventListener("click",fn);bar.appendChild(b2);return b2;};
+    const bSort=mkb("↕ 名前順（タップで追加した順へ）",()=>{
+      sortMode=(sortMode==="added"?"name":"added");
+      sortKeys();
+      bSort.textContent=(sortMode==="added")?"↕ 追加した順（タップで名前順へ）":"↕ 名前順（タップで追加した順へ）";
+      draw();
+    });
+    bSort.title="登録した順に並べ替えます（新しく入れたカードが後ろに来ます）";
     mkb("表示中をすべて選ぶ",()=>{shown().forEach(k=>pick.add(k));draw();});
     mkb("選択をすべて外す",()=>{pick.clear();draw();});
     ol.appendChild(bar);
