@@ -4040,7 +4040,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.64";
+const APP_VER="v13.65";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36746,14 +36746,41 @@ async function readBackupZip(file){
   if(manifest.format!=="dmrv-backup-zip"||!Array.isArray(manifest.images))throw new Error("DM Re:VaultのバックアップZIPではありません");
   return {data,manifest,entryBlob};
 }
-async function restoreBackupZipImages(ctx){
-  const list=ctx.manifest.images;
-  toast(`画像を復元中… 0/${list.length}枚`);
-  for(let i=0;i<list.length;i++){
-    const x=list[i],b=await ctx.entryBlob(x.file,x.type||"application/octet-stream");
-    if(db)await idbPut("images",x.key,b);else memImages.set(x.key,b);
-    if((i+1)%25===0||i+1===list.length)toast(`画像を復元中… ${i+1}/${list.length}枚`);
+function backupProgress(info){
+  let el=$("backupProgress");
+  if(!info){if(el)el.remove();return;}
+  if(!el){
+    el=document.createElement("div");el.id="backupProgress";
+    Object.assign(el.style,{position:"fixed",inset:"0",zIndex:"10050",background:"rgba(3,7,15,.82)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"});
+    el.innerHTML='<div style="width:min(520px,94vw);background:#121a2a;border:1px solid #40506f;border-radius:16px;padding:20px;box-shadow:0 16px 50px #000"><div data-p-title style="font-size:18px;font-weight:900;color:#fff;margin-bottom:10px"></div><div style="height:14px;background:#080c14;border-radius:99px;overflow:hidden;border:1px solid #33415c"><div data-p-bar style="height:100%;width:0;background:linear-gradient(90deg,#41c7e8,#ffd75a);transition:width .15s"></div></div><div data-p-main style="margin-top:10px;font-weight:800;color:#e9eefb"></div><div data-p-sub style="margin-top:6px;color:#9ba9c2;font-size:13px;line-height:1.5"></div></div>';
+    document.body.appendChild(el);
   }
+  const pct=info.total?Math.min(100,info.done/info.total*100):0;
+  el.querySelector("[data-p-title]").textContent=info.title||"大容量バックアップを読み込み中";
+  el.querySelector("[data-p-bar]").style.width=`${pct}%`;
+  el.querySelector("[data-p-main]").textContent=`${info.done}/${info.total}枚（${pct.toFixed(1)}%）`;
+  const sec=Math.max(.1,(Date.now()-info.started)/1000),mb=(info.bytes||0)/1048576,rate=mb/sec;
+  const remain=rate>0&&info.totalBytes>info.bytes?Math.ceil((info.totalBytes-info.bytes)/1048576/rate):null;
+  el.querySelector("[data-p-sub]").textContent=`${mb.toFixed(1)} / ${(info.totalBytes/1048576).toFixed(1)} MB・経過 ${Math.floor(sec/60)}分${Math.floor(sec%60)}秒${remain!=null?`・残り目安 約${Math.floor(remain/60)}分${remain%60}秒`:""}\n画面を閉じず、そのままお待ちください。`;
+}
+async function restoreBackupZipImages(ctx){
+  const list=ctx.manifest.images,totalBytes=list.reduce((n,x)=>n+(+x.size||0),0),started=Date.now();
+  let done=0,doneBytes=0;
+  backupProgress({done,total:list.length,bytes:0,totalBytes,started});
+  const batchSize=20;
+  for(let from=0;from<list.length;from+=batchSize){
+    const part=list.slice(from,from+batchSize);
+    const rows=await Promise.all(part.map(async x=>({x,b:await ctx.entryBlob(x.file,x.type||"application/octet-stream")})));
+    if(db){
+      const ok=await idbTx("images",st=>{for(const r of rows)st.put(r.b,r.x.key);});
+      if(ok!==true)throw new Error("画像の保存に失敗しました。端末の空き容量を確認してください");
+    }else for(const r of rows)memImages.set(r.x.key,r.b);
+    for(const r of rows){imgURL.setBlob(r.x.key,r.b);done++;doneBytes+=r.b.size;}
+    backupProgress({done,total:list.length,bytes:doneBytes,totalBytes,started});
+    await new Promise(requestAnimationFrame);
+  }
+  $("imgStatus").textContent=`登録済み画像：${imgURL.size} 枚`;
+  backupProgress(null);
 }
 function downloadBlob(blob,name){
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),30000);
@@ -36996,12 +37023,15 @@ $("importInput").addEventListener("change",async e=>{
         if(db)await idbPut("images",k,b);else memImages.set(k,b);
       }
     }
-    await loadAllImages();
+    // ZIPは復元しながらimgURLへ登録済み。ここで全画像をDBから再読込すると
+    // 500MB超をもう一周するため、旧JSONの時だけ従来処理を行う。
+    if(!zipCtx)await loadAllImages();
     await refreshDeckSelects();
     renderAll();
     sfx("ok");
     toast("読み込み完了！デッキ一覧から使用するデッキを選んでください");
   }catch(err){
+    backupProgress(null);
     toast("読み込みに失敗しました："+err.message);
   }
 });
