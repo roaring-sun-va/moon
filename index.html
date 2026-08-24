@@ -1135,6 +1135,10 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
       <div class="row" style="align-items:center;gap:8px">
         <span style="font-size:12px;font-weight:700">マット表示</span>
+        <select id="setMatWho" style="width:auto;flex:0 0 auto" title="どちらのプレイヤーのマットを調整するか">
+          <option value="0">P1</option>
+          <option value="1">P2</option>
+        </select>
         <select id="setMatFit" style="width:auto;flex:0 0 auto">
           <option value="cover">切れてもいいので全面（cover）</option>
           <option value="contain">全体を収める（contain）</option>
@@ -3961,7 +3965,9 @@ function emptyZones(){return {deck:[],hand:[],mana:[],battle:[],grave:[],shield:
 const S={
   vs:false, flip:false, hideOpp:true, who:0, turn:0, seat:0,
   expert:false, sound:true,
-  sleeve:[null,null], sleevePos:[50,50], matKey:[null,null],
+  sleeve:[null,null], sleevePos:[50,50], sleevePosX:[50,50], matKey:[null,null],
+  // 🖼 プレイマットの見せ方は**プレイヤーごと**に持つ
+  matFitP:["cover","cover"], matPosXP:[50,50], matPosYP:[50,50],
   players:[
     {label:"P1", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
     {label:"P2", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
@@ -4016,7 +4022,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.57";
+const APP_VER="v13.59";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6433,12 +6439,25 @@ function backURL(pi){
   const sk=S.sleeve[pi||0];
   return (sk&&imgURL.get(sk))||imgURL.get("__back__")||null;
 }
+function sleevePosX(pi){
+  const n=Number(S.sleevePosX&&S.sleevePosX[pi||0]);
+  return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;
+}
+function matFitOf(pi){return (S.matFitP&&S.matFitP[pi|0])||S.matFit||"cover";}
+function matXOf(pi){
+  const n=Number(S.matPosXP&&S.matPosXP[pi|0]);
+  return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;
+}
+function matYOf(pi){
+  const n=Number(S.matPosYP&&S.matPosYP[pi|0]);
+  return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;
+}
 function sleevePosY(pi){
   const n=Number(S.sleevePos&&S.sleevePos[pi||0]);
   return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;
 }
 function applySleevePosition(im,pi){
-  if(im)im.style.objectPosition=`50% ${sleevePosY(pi)}%`;
+  if(im)im.style.objectPosition=`${sleevePosX(pi)}% ${sleevePosY(pi)}%`;
   return im;
 }
 function faceKeyOf(c){
@@ -26523,7 +26542,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         const names=reg.psyLink.split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
         // 🔗 相手は、場にそのままいる場合と、**すでにリンクしたカードの中にいる場合**がある。
         //    （ヘヴィ・メタルにデスを足して 3体にする）
-        const holders=[];
+        let holders=[];
         // 🚫 同じ名前のカードがすでにリンクにいる場合は、もうリンクできない（4枚目のメタルが入ってしまった）
         const _dupOk=(list)=>{
           const seen=new Set();
@@ -26550,11 +26569,19 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
           if(pk<cand.length)holders.push(cand[pk]);
         }
         if(!holders.length)return;
+        // 🔗 相手が2体以上なら、全部つなぐか、1体だけとつなぐかを選べる
+        if(holders.length>=2){
+          const sel=await chooseLinkCombo(c,holders);
+          if(!sel||!sel.length)return;
+          holders=sel;
+        }
         const parts=[c,...linkExpand(holders)];
         if(parts.length<2)return;
         if(!_dupOk(parts))return;
-        const yes=await ask(`🔗 G・リンク！\n${parts.map(x=>faceNameOf(x)).join("＋")} でリンクできます。リンクしますか？`);
-        if(!yes)return;
+        if(holders.length<2){
+          const yes=await ask(`🔗 G・リンク！\n${parts.map(x=>faceNameOf(x)).join("＋")} でリンクできます。リンクしますか？`);
+          if(!yes)return;
+        }
         snap();
         for(const x of [c,...holders]){
           const i2=ZB7.findIndex(y=>y.id===x.id);
@@ -27275,8 +27302,8 @@ function buildBoards(){
         const mb=document.createElement("div");
         mb.className="matbg";
         mb.style.backgroundImage=`url(${imgURL.get(mk)})`;
-        mb.style.backgroundSize=S.matFit||"cover";
-        mb.style.backgroundPosition=`${S.matPosX!=null?S.matPosX:50}% ${S.matPosY!=null?S.matPosY:50}%`;
+        mb.style.backgroundSize=matFitOf(pi);
+        mb.style.backgroundPosition=`${matXOf(pi)}% ${matYOf(pi)}%`;
         pb.insertBefore(mb,pb.firstChild);
         pb.classList.add("hasmat");
       }
@@ -27508,6 +27535,26 @@ async function crossGearTo(pi,id,opt){
    例：龍神メタル＝ヘヴィ・メタル／龍神メタル＋破壊神デス＝ヘヴィ・デス・メタル */
 /* 🔗 すでにリンクしているカードは、中身（元のカード）にほどいてから数える。
    これで「ヘヴィ・メタルにデスを足して3体にする」ができる。 */
+/* 🔗 リンクの組み合わせを選ばせる。
+   相手が2体以上揃っている時、**全部つなぐだけでなく、1体だけとつなぐ選択も出す**。
+   （3体リンクが優先されて、ヘヴィ＋メタルのような2体リンクが作れなかった）
+   戻り値：選んだ相手の配列。やめた時は null。 */
+async function chooseLinkCombo(c,holders){
+  if(!holders||!holders.length)return null;
+  if(holders.length===1)return holders;
+  const label=x=>x.gl?`${faceNameOf(x)}（${(x.under||[]).map(u=>faceNameOf(u)).join("＋")}）`:faceNameOf(x);
+  const opts=[],vals=[];
+  opts.push(`🔗 全部：${[c,...holders].map(x=>label(x)).join("＋")}`);
+  vals.push(holders);
+  for(const h of holders){
+    opts.push(`⚔ ${faceNameOf(c)}＋${label(h)} だけ`);
+    vals.push([h]);
+  }
+  opts.push("✖ リンクしない");
+  const j=await askChoice(`🔗 G・リンク：どの組み合わせにしますか？`,opts);
+  if(j===null||j>=vals.length)return null;
+  return vals[j];
+}
 function linkExpand(cards){
   const out=[];
   for(const x of (cards||[])){
@@ -32216,6 +32263,32 @@ function openCardSheet(ctx){
         sfx("ok");closeSel();renderAll();
         toast(`🔗 G・リンク！ ${_nmL}（${_partsL.length}枚合体）`);
       },"primary",true));
+      if(_hitsL.length>=2){
+        box.appendChild(actBtn("🔗 G・リンク（組み合わせを選ぶ）",async()=>{
+          const sel=await chooseLinkCombo(c,_hitsL);
+          if(!sel||!sel.length){toast("🔗 リンクしませんでした");return;}
+          const parts3=[c,...linkExpand(sel)];
+          const nm3=resolveLinkName(parts3)||_rgL.psyLinkTo||parts3.map(x=>faceNameOf(x)).join("／");
+          snap();
+          for(const x of [c,...sel]){
+            const i2=_ZL.findIndex(y=>y.id===x.id);
+            if(i2>=0)_ZL.splice(i2,1);
+          }
+          const _sick3=parts3.some(x=>x.sick);
+          const nc3=makeCard(nm3);
+          nc3.gl=true;nc3.under=parts3;
+          parts3.forEach(b2=>{b2.tapped=false;});
+          _ZL.push(nc3);
+          window.__glJoinId=nc3.id;
+          try{fxKeyword(ctx.p,"G・リンク！",glOrderNames(nm3,parts3),nm3);}catch(e){}
+          markArrive(nc3);
+          nc3.sick=_sick3;
+          emitEvent(ctx.p,"summon");
+          enqueueFx(ctx.p,nc3);
+          sfx("ok");closeSel();renderAll();
+          toast(`🔗 G・リンク！ ${nm3}（${parts3.length}枚合体）`);
+        },"",true));
+      }
       if(_candsL.some(([,cd])=>cd.length>=2)){
         box.appendChild(actBtn("🔗 G・リンク（相手を選んで合体）",async()=>{
           const chosen=[];
@@ -34871,7 +34944,30 @@ function openSleevePicker(pi){
       g.querySelectorAll("img[data-sleeve-preview]").forEach(x=>applySleevePosition(x,pi));
     };
     posRange.onchange=async()=>{if(db)await idbPut("misc",`sleevePos${pi}`,S.sleevePos[pi]);renderAll();};
-    posBar.append(posLabel,posRange,posHelp);g.appendChild(posBar);
+    // ↔ 横位置（横長の絵を左右に寄せる）
+    const posLabelX=document.createElement("b");
+    posLabelX.textContent=`↔ 画像の横位置：${sleevePosX(pi)}%`;
+    const posRangeX=document.createElement("input");
+    posRangeX.type="range";posRangeX.min="0";posRangeX.max="100";posRangeX.step="1";posRangeX.value=String(sleevePosX(pi));
+    posRangeX.style.cssText="flex:1 1 220px;min-width:180px";
+    posRangeX.oninput=()=>{
+      S.sleevePosX[pi]=+posRangeX.value;posLabelX.textContent=`↔ 画像の横位置：${posRangeX.value}%`;
+      g.querySelectorAll("img[data-sleeve-preview]").forEach(x=>applySleevePosition(x,pi));
+    };
+    posRangeX.onchange=async()=>{if(db)await idbPut("misc",`sleevePosX${pi}`,S.sleevePosX[pi]);renderAll();};
+    const posReset=document.createElement("button");
+    posReset.type="button";posReset.className="btn small ghost";posReset.textContent="中央に戻す";
+    posReset.onclick=async()=>{
+      S.sleevePos[pi]=50;S.sleevePosX[pi]=50;
+      posRange.value="50";posRangeX.value="50";
+      posLabel.textContent="🎯 画像の縦位置：50%";
+      posLabelX.textContent="↔ 画像の横位置：50%";
+      g.querySelectorAll("img[data-sleeve-preview]").forEach(x=>applySleevePosition(x,pi));
+      if(db){await idbPut("misc",`sleevePos${pi}`,50);await idbPut("misc",`sleevePosX${pi}`,50);}
+      renderAll();
+    };
+    posHelp.textContent=`この調整は ${S.players[pi].label} だけに使われます`;
+    posBar.append(posLabel,posRange,posLabelX,posRangeX,posReset,posHelp);g.appendChild(posBar);
     const _ks=_all
       .filter(k=>_st.all||isArtKey(k))
       .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
@@ -34922,16 +35018,20 @@ function openMatPicker(pi){
     const fitLabel=document.createElement("b");fitLabel.textContent="🎯 表示方法";
     const fit=document.createElement("select");
     fit.innerHTML='<option value="cover">全体に敷き詰める</option><option value="contain">画像全体を収める</option><option value="auto">元の大きさ</option>';
-    fit.value=S.matFit||"cover";
-    const xLabel=document.createElement("b");xLabel.textContent=`↔ 横位置：${S.matPosX!=null?S.matPosX:50}%`;
-    const xRange=document.createElement("input");xRange.type="range";xRange.min="0";xRange.max="100";xRange.step="1";xRange.value=String(S.matPosX!=null?S.matPosX:50);
-    const yLabel=document.createElement("b");yLabel.textContent=`↕ 縦位置：${S.matPosY!=null?S.matPosY:50}%`;
-    const yRange=document.createElement("input");yRange.type="range";yRange.min="0";yRange.max="100";yRange.step="1";yRange.value=String(S.matPosY!=null?S.matPosY:50);
-    const preview=()=>g.querySelectorAll("img[data-mat-preview]").forEach(im=>{im.style.objectFit=S.matFit||"cover";im.style.objectPosition=`${S.matPosX!=null?S.matPosX:50}% ${S.matPosY!=null?S.matPosY:50}%`;});
-    fit.onchange=()=>{S.matFit=fit.value;preview();saveMatView();};
-    xRange.oninput=()=>{S.matPosX=+xRange.value;xLabel.textContent=`↔ 横位置：${xRange.value}%`;preview();saveMatView();};
-    yRange.oninput=()=>{S.matPosY=+yRange.value;yLabel.textContent=`↕ 縦位置：${yRange.value}%`;preview();saveMatView();};
-    matBar.append(fitLabel,fit,xLabel,xRange,yLabel,yRange);g.appendChild(matBar);
+    fit.value=matFitOf(pi);
+    const xLabel=document.createElement("b");xLabel.textContent=`↔ 横位置：${matXOf(pi)}%`;
+    const xRange=document.createElement("input");xRange.type="range";xRange.min="0";xRange.max="100";xRange.step="1";xRange.value=String(matXOf(pi));
+    const yLabel=document.createElement("b");yLabel.textContent=`↕ 縦位置：${matYOf(pi)}%`;
+    const yRange=document.createElement("input");yRange.type="range";yRange.min="0";yRange.max="100";yRange.step="1";yRange.value=String(matYOf(pi));
+    // 🖼 この調整は**このプレイヤーのマットだけ**にかかる
+    const preview=()=>g.querySelectorAll("img[data-mat-preview]").forEach(im=>{im.style.objectFit=matFitOf(pi);im.style.objectPosition=`${matXOf(pi)}% ${matYOf(pi)}%`;});
+    fit.onchange=()=>{S.matFitP[pi]=fit.value;preview();saveMatView(pi);};
+    xRange.oninput=()=>{S.matPosXP[pi]=+xRange.value;xLabel.textContent=`↔ 横位置：${xRange.value}%`;preview();saveMatView(pi);};
+    yRange.oninput=()=>{S.matPosYP[pi]=+yRange.value;yLabel.textContent=`↕ 縦位置：${yRange.value}%`;preview();saveMatView(pi);};
+    const who=document.createElement("span");
+    who.style.cssText="grid-column:1/-1;font-size:11px;color:var(--muted)";
+    who.textContent=`この調整は ${S.players[pi].label} のプレイマットだけに使われます`;
+    matBar.append(fitLabel,fit,xLabel,xRange,yLabel,yRange,who);g.appendChild(matBar);
     const _ks=_all
       .filter(k=>_st.all||isArtKey(k))
       .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
@@ -35048,11 +35148,14 @@ $("btnSendArtImages").addEventListener("click",async()=>{
 });
 $("btnMat0").addEventListener("click",()=>openMatPicker(0));
 $("btnMat1").addEventListener("click",()=>openMatPicker(1));
-async function saveMatView(){
+async function saveMatView(pi){
   if(db){
-    await idbPut("misc","matFit",S.matFit||"cover");
-    await idbPut("misc","matPosX",S.matPosX!=null?S.matPosX:50);
-    await idbPut("misc","matPosY",S.matPosY!=null?S.matPosY:50);
+    const list=(pi==null)?[0,1]:[pi|0];
+    for(const p of list){
+      await idbPut("misc",`matFit${p}`,matFitOf(p));
+      await idbPut("misc",`matPosX${p}`,matXOf(p));
+      await idbPut("misc",`matPosY${p}`,matYOf(p));
+    }
   }
   buildBoards();renderAll();
 }
@@ -35061,9 +35164,18 @@ $("setKeysOn").addEventListener("change",async ()=>{
   if(db)await idbPut("misc","keysOn",S.keysOn);
   toast(S.keysOn?"⌨️ ショートカットキー：ON":"ショートカットキー：OFF");
 });
-$("setMatFit").addEventListener("change",()=>{S.matFit=$("setMatFit").value;saveMatView();});
-$("setMatX").addEventListener("input",()=>{S.matPosX=+$("setMatX").value;saveMatView();});
-$("setMatY").addEventListener("input",()=>{S.matPosY=+$("setMatY").value;saveMatView();});
+/* 🖼 設定側のマット調整。どちらのプレイヤー分をいじるかを setMatWho で選ぶ。 */
+function matWho(){return ($("setMatWho")?(+$("setMatWho").value||0):0)|0;}
+function syncMatUI(){
+  const p=matWho();
+  if($("setMatFit"))$("setMatFit").value=matFitOf(p);
+  if($("setMatX"))$("setMatX").value=String(matXOf(p));
+  if($("setMatY"))$("setMatY").value=String(matYOf(p));
+}
+$("setMatWho").addEventListener("change",syncMatUI);
+$("setMatFit").addEventListener("change",()=>{S.matFitP[matWho()]=$("setMatFit").value;saveMatView(matWho());});
+$("setMatX").addEventListener("input",()=>{S.matPosXP[matWho()]=+$("setMatX").value;saveMatView(matWho());});
+$("setMatY").addEventListener("input",()=>{S.matPosYP[matWho()]=+$("setMatY").value;saveMatView(matWho());});
 $("btnMatReset").addEventListener("click",async ()=>{
   for(const pi of [0,1]){
     const mk="__mat"+pi+"__";
@@ -35078,8 +35190,10 @@ $("btnMatReset").addEventListener("click",async ()=>{
 $("btnSleeve0").addEventListener("click",()=>openSleevePicker(0));
 $("btnSleeve1").addEventListener("click",()=>openSleevePicker(1));
 $("btnSleeveReset").addEventListener("click",async ()=>{
-  S.sleeve=[null,null];S.sleevePos=[50,50];
-  if(db){await idbDel("misc","sleeve0");await idbDel("misc","sleeve1");await idbDel("misc","sleevePos0");await idbDel("misc","sleevePos1");}
+  S.sleeve=[null,null];S.sleevePos=[50,50];S.sleevePosX=[50,50];
+  if(db){await idbDel("misc","sleeve0");await idbDel("misc","sleeve1");
+    await idbDel("misc","sleevePos0");await idbDel("misc","sleevePos1");
+    await idbDel("misc","sleevePosX0");await idbDel("misc","sleevePosX1");}
   renderAll();
   $("sleeveStatus").textContent="スリーブをリセットしました";
 });
@@ -36380,8 +36494,10 @@ $("btnExport").addEventListener("click",async ()=>{
     v:6, exported:new Date().toISOString(),
     decks:{}, cardFx:Object.fromEntries(FXDB), faceLinks:Object.fromEntries(LINKS),
     nameMap:Object.fromEntries(dispName),
-    sleeve:S.sleeve, sleevePos:S.sleevePos, matKey:S.matKey,
+    sleeve:S.sleeve, sleevePos:S.sleevePos, sleevePosX:S.sleevePosX, matKey:S.matKey,
     matFit:S.matFit||"cover", matPosX:S.matPosX!=null?S.matPosX:50, matPosY:S.matPosY!=null?S.matPosY:50,
+    // 🖼 プレイヤーごとの見せ方
+    matFitP:[0,1].map(matFitOf), matPosXP:[0,1].map(matXOf), matPosYP:[0,1].map(matYOf),
     sound:S.sound, expert:S.expert,
     deckMeta:DECK_META, deckOrder:DECK_ORDER, deckSort:DECK_SORT,
     artKeys:[...ART_KEYS],   // 🎴 スリーブ・プレマ用の印
@@ -36539,9 +36655,23 @@ $("importInput").addEventListener("change",async e=>{
       S.matKey=data.matKey.slice(0,2);
       if(db){for(const pi of [0,1]){if(S.matKey[pi])await idbPut("misc",`matKey${pi}`,S.matKey[pi]);}}
     }
+    if(Array.isArray(data.sleevePosX)){
+      S.sleevePosX=[0,1].map(pi=>{const n=Number(data.sleevePosX[pi]);return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;});
+      if(db){await idbPut("misc","sleevePosX0",S.sleevePosX[0]);await idbPut("misc","sleevePosX1",S.sleevePosX[1]);}
+    }
     if(data.matFit)S.matFit=data.matFit;
     if(Number.isFinite(+data.matPosX))S.matPosX=+data.matPosX;
     if(Number.isFinite(+data.matPosY))S.matPosY=+data.matPosY;
+    // 🖼 プレイヤーごとの見せ方。無ければ古い共通の値を使う
+    for(const p of [0,1]){
+      const f2=Array.isArray(data.matFitP)?data.matFitP[p]:null;
+      S.matFitP[p]=f2||data.matFit||S.matFitP[p]||"cover";
+      const x2=Array.isArray(data.matPosXP)?data.matPosXP[p]:null;
+      const y2=Array.isArray(data.matPosYP)?data.matPosYP[p]:null;
+      S.matPosXP[p]=Number.isFinite(+x2)?+x2:(Number.isFinite(+data.matPosX)?+data.matPosX:matXOf(p));
+      S.matPosYP[p]=Number.isFinite(+y2)?+y2:(Number.isFinite(+data.matPosY)?+data.matPosY:matYOf(p));
+    }
+    if(typeof syncMatUI==="function")syncMatUI();
     await saveMatView();
     if(data.images&&Object.keys(data.images).length){
       toast("画像を復元中…");
@@ -38453,10 +38583,24 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   const cg=db?await idbGet("misc","cardGap"):null;
   if(cg){S.cardGap=+cg||5;document.documentElement.style.setProperty("--cardgap",S.cardGap+"px");}
   const mf=db?await idbGet("misc","matFit"):null;if(mf)S.matFit=mf;
+  // 🖼 プレイヤーごとの見せ方。無ければ古い共通の値を引き継ぐ
+  for(const p of [0,1]){
+    const f2=db?await idbGet("misc",`matFit${p}`):null;
+    S.matFitP[p]=f2||mf||"cover";
+    const x2=db?await idbGet("misc",`matPosX${p}`):null;
+    const y2=db?await idbGet("misc",`matPosY${p}`):null;
+    S.matPosXP[p]=(x2!=null&&x2!==undefined)?+x2:null;
+    S.matPosYP[p]=(y2!=null&&y2!==undefined)?+y2:null;
+  }
   const ko=db?await idbGet("misc","keysOn"):null;if(ko!=null&&ko!==undefined)S.keysOn=!!ko;
   const hk=db?await idbGet("misc","hotkeys"):null;if(hk){try{S.hotkeys=JSON.parse(hk);}catch(e){}}
   const mx=db?await idbGet("misc","matPosX"):null;if(mx!=null&&mx!==undefined)S.matPosX=+mx;
   const my=db?await idbGet("misc","matPosY"):null;if(my!=null&&my!==undefined)S.matPosY=+my;
+  for(const p of [0,1]){
+    if(S.matPosXP[p]==null)S.matPosXP[p]=(mx!=null&&mx!==undefined)?+mx:50;
+    if(S.matPosYP[p]==null)S.matPosYP[p]=(my!=null&&my!==undefined)?+my:50;
+  }
+  if(typeof syncMatUI==="function")syncMatUI();
   for(const pi of [0,1]){const mk=db?await idbGet("misc",`matKey${pi}`):null;if(mk)S.matKey[pi]=mk;}
   const an=db?await idbGet("misc","anim"):null;
   if(an!=null){S.anim=an;$("setAnim").checked=!!an;}
@@ -38537,6 +38681,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
     if(sk&&imgURL.has(sk))S.sleeve[pi]=sk;
     const sy=db?await idbGet("misc",`sleevePos${pi}`):null;
     if(sy!==null&&sy!==undefined)S.sleevePos[pi]=Math.max(0,Math.min(100,+sy||0));
+    const sx=db?await idbGet("misc",`sleevePosX${pi}`):null;
+    if(sx!==null&&sx!==undefined)S.sleevePosX[pi]=Math.max(0,Math.min(100,+sx||0));
   }
   const last=db?await idbGet("misc","lastDeck"):null;
   if(last){
