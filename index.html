@@ -4040,7 +4040,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.68";
+const APP_VER="v13.69";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36713,15 +36713,18 @@ async function backupImageForMode(blob,key,mode){
     if(scale===1&&blob.type==="image/webp")return blob;
     const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*scale));c.height=Math.max(1,Math.round(h*scale));
     c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
-    const out=await new Promise(resolve=>c.toBlob(resolve,"image/webp",art?0.92:0.90));
-    if(!out||out.type!=="image/webp")throw new Error("SafariがWebP変換に対応していません");
+    let out=await new Promise(resolve=>c.toBlob(resolve,"image/webp",art?0.92:0.90));
+    // SafariはWebPの表示に対応していても、CanvasからのWebP書き出しが
+    // 無効な環境がある。その場合は高品質JPEGへ自動的に切り替える。
+    if(!out||out.type!=="image/webp")out=await new Promise(resolve=>c.toBlob(resolve,"image/jpeg",art?0.94:0.92));
+    if(!out||!(out.type==="image/webp"||out.type==="image/jpeg"))throw new Error("Safariで画像の圧縮書き出しができません");
     return out;
   }catch(e){throw new Error(`高画質・軽量版の画像変換に失敗しました（${key}）：${e&&e.message||e}`);}
   finally{try{if(bmp&&typeof bmp.close==="function")bmp.close();}catch(e){}if(url)URL.revokeObjectURL(url);}
 }
 async function makeBackupZip(data,imageKeys,mode="original"){
   makeBackupZip._started=Date.now();
-  const manifest={v:1,format:"dmrv-backup-zip",profile:mode==="transfer"?"transfer-hq-webp-v1":"original",images:[]};
+  const manifest={v:1,format:"dmrv-backup-zip",profile:mode==="transfer"?"transfer-hq-auto-v2":"original",images:[]};
   const items=[];let imageBytes=0;
   for(let i=0;i<imageKeys.length;i++){
     const key=imageKeys[i],src=db?await idbGet("images",key):memImages.get(key);
@@ -36914,7 +36917,7 @@ $("btnExport").addEventListener("click",async ()=>{
   let imageMode="none";
   if(withImg){
     const q=await askChoice("画像の保存方法を選んでください",[
-      "✨ 高画質・軽量（受け渡し推奨／最大1200×1800・WebP品質90）",
+      "✨ 高画質・軽量（受け渡し推奨／最大1200×1800・Safari対応の自動圧縮）",
       "🗄 元画像のまま（長期保管／大容量）"
     ]);
     if(q===null)return;
