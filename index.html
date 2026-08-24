@@ -3961,7 +3961,7 @@ function emptyZones(){return {deck:[],hand:[],mana:[],battle:[],grave:[],shield:
 const S={
   vs:false, flip:false, hideOpp:true, who:0, turn:0, seat:0,
   expert:false, sound:true,
-  sleeve:[null,null],
+  sleeve:[null,null], sleevePos:[50,50],
   players:[
     {label:"P1", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
     {label:"P2", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
@@ -4016,7 +4016,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.55";
+const APP_VER="v13.56";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4455,24 +4455,6 @@ function markArrive(c,opt){
     }catch(e){}
   }
   c.dealIdx=null;c._pfAsked=false;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
-  // 🚯 名前指定の能力無視は、ドラッグ登場だけでなく全ての登場経路で宣言する。
-  try{
-    const rN=getReg(c);
-    // markArrive() は手札・盾・墓地へ移した時にも共用されるため、実際に
-    // バトルゾーンに存在する個体だけに登場時の名前宣言を出す。
-    const _ignoreOwn=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
-    if(_ignoreOwn!=null&&rN&&rN.ignore==="name"&&!c.ignoreName&&!c._ignoreNameAsking){
-      c._ignoreNameAsking=true;
-      Promise.resolve().then(()=>{
-        const nm=prompt(`🚯 ${faceNameOf(c)}：能力を無視するクリーチャー名を入力`,'');
-        if(nm&&nm.trim()){
-          c.ignoreName=normName(nm.trim());
-          toast(`🚯 「${nm.trim()}」の能力を無視する（${faceNameOf(c)}が場にある間）`);
-        }
-        delete c._ignoreNameAsking;renderAll();
-      });
-    }
-  }catch(e){}
   // 🔓 封印外し（ドルマゲドンX型）の案内は、S・トリガーの受け札パネルなどで
   //    1秒以上あとに処理されることがある。arrived が消えても取りこぼさないよう印を残す。
   try{
@@ -6450,6 +6432,14 @@ async function loadAllImages(){
 function backURL(pi){
   const sk=S.sleeve[pi||0];
   return (sk&&imgURL.get(sk))||imgURL.get("__back__")||null;
+}
+function sleevePosY(pi){
+  const n=Number(S.sleevePos&&S.sleevePos[pi||0]);
+  return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;
+}
+function applySleevePosition(im,pi){
+  if(im)im.style.objectPosition=`50% ${sleevePosY(pi)}%`;
+  return im;
 }
 function faceKeyOf(c){
   const base=normName(c.name);
@@ -15821,13 +15811,7 @@ function afterHandDiscard(owner,c){
         if(!yes)return;
         const list=rd&&rd.faces&&rd.faces[0]&&rd.faces[0].length?rd.faces[0]:null;
         if(list){toast(`🎪 ${faceNameOf(c)} の出た時能力を使用`);await runFxList(owner,list,holder);}
-        if(rd&&rd.ignore==="name"){
-          const nm=window.prompt(`🚯 ${faceNameOf(c)}（ジョラゴン・ビッグ1経由）：能力を無視するクリーチャーの名前を指定`,"");
-          if(nm&&nm.trim()){
-            holder.ignoreName=normName(nm.trim());
-            toast(`🚯 「${nm.trim()}」の能力を無視する（${faceNameOf(holder)}が場にある間）`);
-          }
-        }else if(!list){
+        if(!list){
           toast(`🎪 ${faceNameOf(c)}：自動効果の登録がないため手動で処理してください`);
         }
         renderAll();
@@ -15923,10 +15907,31 @@ function soulXCipFx(c){
   // 下の超魂Xカードの出た時(CIP)効果＝faces[0]
   return soulXUnder(c).filter(u=>{const ru=getReg(u);return ru&&ru.faces&&ru.faces[0]&&ru.faces[0].length;});
 }
+/* 🚯 名前指定の能力無視（エモーショナル・ハードコア型）。
+   markArrive() は登場以外のゾーン移動でも使われるため、
+   実際にバトルゾーンへ出たカードを enqueueFx() する時だけ宣言する。 */
+function askIgnoreNameOnBattleEntry(pi,c){
+  try{
+    if(!S.expert||!c||!zonesOf(pi).battle.some(x=>x.id===c.id))return;
+    const rN=getReg(c);
+    if(!rN||rN.ignore!=="name"||c.ignoreName||c._ignoreNameAsking)return;
+    c._ignoreNameAsking=true;
+    Promise.resolve().then(()=>{
+      // パネルを開くまでに離場した場合は宣言させない。
+      if(!zonesOf(pi).battle.some(x=>x.id===c.id))return;
+      const nm=window.prompt(`🚯 ${faceNameOf(c)}：能力を無視するクリーチャーの名前を指定`,"");
+      if(nm&&nm.trim()){
+        c.ignoreName=normName(nm.trim());
+        toast(`🚯 「${nm.trim()}」の能力を無視する（このカードが場にある間）`);
+      }
+    }).finally(()=>{delete c._ignoreNameAsking;renderAll();});
+  }catch(e){delete c._ignoreNameAsking;}
+}
 function enqueueFx(pi,c){
   if(!S.expert)return;
   if(c._repPending)return;
   if(isSealed(c))return;
+  askIgnoreNameOnBattleEntry(pi,c);
   {
     const rC=getReg(c);
     const fi=(rC&&rC.twin&&(c.face|0)===1)?1:0;
@@ -16225,6 +16230,8 @@ function gearOut(Z,g){
    ・重なっていた下敷き（進化元）は移動先へ
    toZone省略時は下敷きを墓地へ。moveCardX以外の直接移動（バウンス等）から呼ぶ。 */
 function leaveBattleCleanup(Z,c,toZone){
+  // 名前宣言は「このカードが場にある間」だけ有効。再登場時は改めて宣言する。
+  delete c.ignoreName;delete c._ignoreNameAsking;
   if(c.gear&&c.gear.length){
     const gs=c.gear.splice(0);
     gs.forEach(g=>gearOut(Z,g));
@@ -17886,7 +17893,7 @@ function pickShieldIdxs(op,count){
         if(!x.faceup){
           const th=el.querySelector(".thumb");th.innerHTML="";
           const b=backURL(op);
-          if(b){const im=document.createElement("img");im.src=b;im.draggable=false;im.style.cssText="width:100%;height:100%;object-fit:cover";th.appendChild(im);}
+          if(b){const im=document.createElement("img");im.src=b;im.draggable=false;im.style.cssText="width:100%;height:100%;object-fit:cover";applySleevePosition(im,op);th.appendChild(im);}
           else{const np=document.createElement("div");np.className="nameplate";np.textContent="盾";th.appendChild(np);}
         }
         if(picked.has(j))el.classList.add("picked");
@@ -26572,16 +26579,6 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         toast(`🔗 G・リンク！ ${nm2}（${parts.length}枚合体・メニューから解除可）`);
       })();
     }
-    if(S.expert&&reg&&reg.ignore==="name"&&!c.ignoreName){
-      (async()=>{
-        const nm=window.prompt(`🚯 ${faceNameOf(c)}：能力を無視するクリーチャーの名前を指定`,"");
-        if(nm&&nm.trim()){
-          c.ignoreName=normName(nm.trim());
-          toast(`🚯 「${nm.trim()}」の能力を無視する（このカードが場にある間）`);
-          renderAll();
-        }
-      })();
-    }
     if(S.expert&&reg&&reg.ignore==="cost"){
       toast(`🚯 ${faceNameOf(c)}：コスト${reg.ignoreN||0}以下のクリーチャーの能力を無視（両プレイヤー）`);
     }
@@ -27692,7 +27689,7 @@ function cardEl(pi,zone,c){
     el.appendChild(wrap);
   }else{
   const url=showFace?imgURL.get(faceKeyOf(c)):(topOver?imgURL.get(faceKeyOf(topOver)):backURL(pi));
-  if(url){const im=document.createElement("img");im.src=url;im.alt="";im.draggable=false;if(!showFace&&!topOver&&pi!==S.seat)im.style.transform="rotate(180deg)";el.appendChild(im);}
+  if(url){const im=document.createElement("img");im.src=url;im.alt="";im.draggable=false;if(!showFace&&!topOver)applySleevePosition(im,pi);if(!showFace&&!topOver&&pi!==S.seat)im.style.transform="rotate(180deg)";el.appendChild(im);}
   else{const np=document.createElement("div");np.className="nameplate";np.textContent=showFace?faceNameOf(c):(topOver?topOver.name:(zone==="shield"?"盾":"?"));el.appendChild(np);}
   }
   if(c.rot){
@@ -28150,7 +28147,7 @@ function pileEl(opts){
   const stk=cnt<=0?0:cnt<=3?1:cnt<=8?2:cnt<=15?3:cnt<=25?4:5;
   el.className="pile ol-viewable"+(opts.cls?" "+opts.cls:"")+(stk?" stk"+stk:"");
   if(opts.dz)el.dataset.zone=opts.dz;
-  if(opts.img){const im=document.createElement("img");im.src=opts.img;im.draggable=false;el.appendChild(im);}
+  if(opts.img){const im=document.createElement("img");im.src=opts.img;im.draggable=false;if(opts.sleevePi!=null)applySleevePosition(im,opts.sleevePi);el.appendChild(im);}
   const n=document.createElement("span");n.className="n";n.textContent=opts.n;
   const l=document.createElement("span");l.className="lbl";l.textContent=opts.label;
   el.appendChild(n);el.appendChild(l);
@@ -28179,7 +28176,7 @@ function renderPlayer(pi){
   row.innerHTML="";
   const wrap=document.createElement("div");wrap.className="pilewrap";
   const sideIdx=Z.deck.findIndex(c=>c.sideways);
-  wrap.appendChild(pileEl({n:Z.deck.length,label:"ドロー",img:backURL(pi),dz:"deckTop",
+  wrap.appendChild(pileEl({n:Z.deck.length,label:"ドロー",img:backURL(pi),sleevePi:pi,dz:"deckTop",
     badge:sideIdx>=0?`横:${sideIdx+1}枚目`:null,
     onTap:()=>{snap();draw(pi,1);}}));
   const pm=document.createElement("button");pm.className="pmenu";pm.textContent="⋯ 山札";
@@ -31127,7 +31124,7 @@ function openShieldStack(pi,id){
       if(su){
         const im2=document.createElement("img");
         im2.src=su;im2.draggable=false;
-        im2.style.cssText="width:100%;border-radius:6px;display:block";
+        im2.style.cssText="width:100%;border-radius:6px;display:block;object-fit:cover";applySleevePosition(im2,pi);
         cell.appendChild(im2);
       }else{
         const ph=document.createElement("div");
@@ -31227,7 +31224,7 @@ function flyGhost(srcRect,c,dstSel){
       const im=document.createElement("img");im.src=imgURL.get(key);g.appendChild(im);
     }else if(hidOwner>=0){
       const bu=(typeof backURL==="function")?backURL(hidOwner):null;
-      if(bu){const im=document.createElement("img");im.src=bu;g.appendChild(im);}
+      if(bu){const im=document.createElement("img");im.src=bu;applySleevePosition(im,hidOwner);g.appendChild(im);}
     }
     g.style.left=srcRect.left+"px";g.style.top=srcRect.top+"px";
     g.style.width=srcRect.width+"px";g.style.height=srcRect.height+"px";
@@ -34308,7 +34305,7 @@ function openShieldViewer(pi){
     if(!reveal){
       const th=el.querySelector(".thumb");th.innerHTML="";
       const b=backURL(pi);
-      if(b){const im=document.createElement("img");im.src=b;im.draggable=false;im.style.cssText="width:100%;height:100%;object-fit:cover";th.appendChild(im);}
+      if(b){const im=document.createElement("img");im.src=b;im.draggable=false;im.style.cssText="width:100%;height:100%;object-fit:cover";applySleevePosition(im,pi);th.appendChild(im);}
       else{const np=document.createElement("div");np.className="nameplate";np.textContent="盾";th.appendChild(np);}
     }
     if(!sh.faceup&&sh.seen){
@@ -34339,7 +34336,7 @@ function openShieldViewer(pi){
       if(!ureveal){
         const th=ue.querySelector(".thumb");
         if(th){th.innerHTML="";const b=backURL(pi);
-          if(b){const im=document.createElement("img");im.src=b;im.draggable=false;im.style.cssText="width:100%;height:100%;object-fit:cover";th.appendChild(im);}
+          if(b){const im=document.createElement("img");im.src=b;im.draggable=false;im.style.cssText="width:100%;height:100%;object-fit:cover";applySleevePosition(im,pi);th.appendChild(im);}
           else{const np=document.createElement("div");np.className="nameplate";np.textContent="盾";th.appendChild(np);}}
       }
       ue.addEventListener("click",()=>{
@@ -34859,6 +34856,22 @@ function openSleevePicker(pi){
     _st.nArt=_all.filter(isArtKey).length;
     if(!_st.nArt)_st.all=true;   // 専用の画像が無ければ全部出す
     g.appendChild(artPickBar(_st,render));
+    const posBar=document.createElement("div");
+    posBar.style.cssText="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid #334155;border-radius:12px;background:#0f172a";
+    const posLabel=document.createElement("b");
+    posLabel.textContent=`🎯 画像の縦位置：${sleevePosY(pi)}%`;
+    const posRange=document.createElement("input");
+    posRange.type="range";posRange.min="0";posRange.max="100";posRange.step="1";posRange.value=String(sleevePosY(pi));
+    posRange.style.cssText="flex:1 1 220px;min-width:180px";
+    const posHelp=document.createElement("span");
+    posHelp.style.cssText="font-size:11px;color:var(--muted)";
+    posHelp.textContent="縦長画像の見せたい位置を上〜下で調整";
+    posRange.oninput=()=>{
+      S.sleevePos[pi]=+posRange.value;posLabel.textContent=`🎯 画像の縦位置：${posRange.value}%`;
+      g.querySelectorAll("img[data-sleeve-preview]").forEach(x=>applySleevePosition(x,pi));
+    };
+    posRange.onchange=async()=>{if(db)await idbPut("misc",`sleevePos${pi}`,S.sleevePos[pi]);renderAll();};
+    posBar.append(posLabel,posRange,posHelp);g.appendChild(posBar);
     const _ks=_all
       .filter(k=>_st.all||isArtKey(k))
       .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
@@ -34868,7 +34881,8 @@ function openSleevePicker(pi){
       const el=vCardEl(name);
       const th=el.querySelector(".thumb");th.innerHTML="";
       const im=document.createElement("img");im.src=imgURL.get(k);im.draggable=false;
-      im.style.cssText="width:100%;height:100%;object-fit:cover";
+      im.dataset.sleevePreview="1";
+      im.style.cssText="width:100%;height:100%;object-fit:cover";applySleevePosition(im,pi);
       th.appendChild(im);
       el.addEventListener("click",async ()=>{
         S.sleeve[pi]=k;
@@ -35036,8 +35050,8 @@ $("btnMatReset").addEventListener("click",async ()=>{
 $("btnSleeve0").addEventListener("click",()=>openSleevePicker(0));
 $("btnSleeve1").addEventListener("click",()=>openSleevePicker(1));
 $("btnSleeveReset").addEventListener("click",async ()=>{
-  S.sleeve=[null,null];
-  if(db){await idbDel("misc","sleeve0");await idbDel("misc","sleeve1");}
+  S.sleeve=[null,null];S.sleevePos=[50,50];
+  if(db){await idbDel("misc","sleeve0");await idbDel("misc","sleeve1");await idbDel("misc","sleevePos0");await idbDel("misc","sleevePos1");}
   renderAll();
   $("sleeveStatus").textContent="スリーブをリセットしました";
 });
@@ -36338,7 +36352,7 @@ $("btnExport").addEventListener("click",async ()=>{
     v:6, exported:new Date().toISOString(),
     decks:{}, cardFx:Object.fromEntries(FXDB), faceLinks:Object.fromEntries(LINKS),
     nameMap:Object.fromEntries(dispName),
-    sleeve:S.sleeve, sound:S.sound, expert:S.expert,
+    sleeve:S.sleeve, sleevePos:S.sleevePos, sound:S.sound, expert:S.expert,
     deckMeta:DECK_META, deckOrder:DECK_ORDER, deckSort:DECK_SORT,
     artKeys:[...ART_KEYS],   // 🎴 スリーブ・プレマ用の印
     images:{},
@@ -36486,6 +36500,10 @@ $("importInput").addEventListener("change",async e=>{
     if(Array.isArray(data.sleeve)){
       S.sleeve=data.sleeve;
       if(db){if(data.sleeve[0])await idbPut("misc","sleeve0",data.sleeve[0]);if(data.sleeve[1])await idbPut("misc","sleeve1",data.sleeve[1]);}
+    }
+    if(Array.isArray(data.sleevePos)){
+      S.sleevePos=[0,1].map(pi=>{const n=Number(data.sleevePos[pi]);return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;});
+      if(db){await idbPut("misc","sleevePos0",S.sleevePos[0]);await idbPut("misc","sleevePos1",S.sleevePos[1]);}
     }
     if(data.images&&Object.keys(data.images).length){
       toast("画像を復元中…");
@@ -38478,6 +38496,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   for(const pi of [0,1]){
     const sk=db?await idbGet("misc",`sleeve${pi}`):null;
     if(sk&&imgURL.has(sk))S.sleeve[pi]=sk;
+    const sy=db?await idbGet("misc",`sleevePos${pi}`):null;
+    if(sy!==null&&sy!==undefined)S.sleevePos[pi]=Math.max(0,Math.min(100,+sy||0));
   }
   const last=db?await idbGet("misc","lastDeck"):null;
   if(last){
