@@ -708,8 +708,9 @@ body.shake{animation:bodyShake .4s ease-out}
 .revFxSlash{position:fixed;left:50%;top:50%;width:150vw;height:8px;z-index:961;pointer-events:none;
   transform-origin:center;animation:revSlash .5s ease-out both}
 .revFxCard{animation:revCardIn .4s cubic-bezier(.16,1.5,.4,1) .06s both}
-.revFxIcon{width:52px;height:52px;border-radius:50%;object-fit:cover;flex:0 0 auto;
+.revFxIcon{width:52px;height:52px;border-radius:50%;object-fit:cover;flex:0 0 auto;overflow:hidden;display:block;
   border:2px solid currentColor;box-shadow:0 3px 12px rgba(0,0,0,.6)}
+.revFxIcon img{width:100%;height:100%;object-fit:cover;display:block}
 @keyframes resPop{0%{transform:scale(.3) rotate(-6deg);opacity:0}55%{transform:scale(1.18) rotate(1deg)}100%{transform:scale(1) rotate(0);opacity:1}}
 /* 勝利：回転する金の放射光 */
 #resultOlay .rburst{position:absolute;left:50%;top:50%;width:240vmax;height:240vmax;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,rgba(251,191,36,.14) 0 7deg,transparent 7deg 16deg);animation:rSpin 14s linear infinite;pointer-events:none;mask-image:radial-gradient(circle,#000 0 34%,transparent 68%);-webkit-mask-image:radial-gradient(circle,#000 0 34%,transparent 68%)}
@@ -1311,18 +1312,22 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="hint">演出は処理を待たせません。オンラインでは相手の画面にも同じものが出ます。</div>
       <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;font-weight:700">👤 演出に出す自分の画像</span>
-        <img id="fxIconPrev0" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid var(--line);display:none">
+        <span id="fxIconPrev0" style="display:none;flex:0 0 auto"></span>
+        <button class="btn small" id="fxIconPick0" title="スリーブ・プレマ用に登録した画像や、カードの画像から選びます">🎴 画像集から選ぶ</button>
+        <button class="btn small ghost" id="fxIconAdj0" title="丸く切り抜く位置と拡大率を調整します">🎯 切り抜き</button>
         <input type="file" id="fxIconFile0" accept="image/*" style="flex:1;min-width:150px;font-size:12px">
         <button class="btn small ghost" id="fxIconClr0">消す</button>
       </div>
       <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;font-weight:700">👤 相手側（P2）の画像</span>
-        <img id="fxIconPrev1" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid var(--line);display:none">
+        <span id="fxIconPrev1" style="display:none;flex:0 0 auto"></span>
+        <button class="btn small" id="fxIconPick1" title="スリーブ・プレマ用に登録した画像や、カードの画像から選びます">🎴 画像集から選ぶ</button>
+        <button class="btn small ghost" id="fxIconAdj1" title="丸く切り抜く位置と拡大率を調整します">🎯 切り抜き</button>
         <input type="file" id="fxIconFile1" accept="image/*" style="flex:1;min-width:150px;font-size:12px">
         <button class="btn small ghost" id="fxIconClr1">消す</button>
       </div>
       <div class="hint">好きな画像を丸く切り抜いて演出に出します（自分の端末にだけ保存され、相手には送りません）。<br>
-        アイコン、自分で描いたもの、推しのデッキの写真など、お好きなものをどうぞ。</div>
+        「🎴 画像集から選ぶ」ではスリーブ・プレマ用の画像から選べ、そのまま切り抜く位置と拡大率も調整できます。ファイルから直接入れることもできます。</div>
       <div class="row" style="align-items:center;gap:8px">
         <span style="font-size:12px;font-weight:700">効果登録済みの⚙マーク（手札）</span>
         <select id="setFxBadge" style="flex:1">
@@ -3979,6 +3984,8 @@ const S={
   sleeve:[null,null], sleevePos:[50,50], sleevePosX:[50,50], matKey:[null,null],
   // 🖼 プレイマットの見せ方は**プレイヤーごと**に持つ
   matFitP:["cover","cover"], matPosXP:[50,50], matPosYP:[50,50], matZoomP:[100,100],
+  // 👤 演出に出す画像。fxIcon＝画像そのもの、fxIconView＝丸く切り抜く位置と拡大率
+  fxIcon:[null,null], fxIconView:[{x:50,y:50,z:100},{x:50,y:50,z:100}],
   players:[
     {label:"P1", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
     {label:"P2", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
@@ -4033,7 +4040,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.63";
+const APP_VER="v13.64";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5801,12 +5808,9 @@ function fxBanner(kind,title,sub,big,cardName,side){
     row.style.cssText="position:relative;display:flex;align-items:center;gap:"+(big?"16px":"11px")+";justify-content:center";
 
     // 👤 プレイヤーの画像（設定で登録したもの）。無ければ種類のアイコン。
-    const icoSrc=(side!=null&&S.fxIcon&&S.fxIcon[side])?S.fxIcon[side]:null;
-    if(icoSrc){
-      const im=document.createElement("img");
-      im.src=icoSrc;im.className="revFxIcon";im.alt="";
-      if(big){im.style.width="66px";im.style.height="66px";}
-      row.appendChild(im);
+    const icoEl=fxIconEl(side,big?66:52);
+    if(icoEl){
+      row.appendChild(icoEl);
     }else{
       const ic=document.createElement("div");
       ic.style.cssText=`font-size:${big?38:27}px;line-height:1;filter:drop-shadow(0 0 10px ${st.bd})`;
@@ -6485,6 +6489,49 @@ function sleevePosY(pi){
 function applySleevePosition(im,pi){
   if(im)im.style.objectPosition=`${sleevePosX(pi)}% ${sleevePosY(pi)}%`;
   return im;
+}
+/* 👤 演出に出す画像の「丸く切り抜く位置」と「拡大率」。
+   画像そのものは加工せず、見せ方だけを持つので、あとから何度でも調整できる。 */
+function fxIconView(side){
+  const v=(S.fxIconView&&S.fxIconView[side|0])||{};
+  const num=(a,lo,hi,def)=>{const n=Number(a);return Number.isFinite(n)?Math.max(lo,Math.min(hi,n)):def;};
+  return {x:num(v.x,0,100,50), y:num(v.y,0,100,50), z:num(v.z,100,300,100)};
+}
+/* 丸く切り抜いた画像の入れ物を作る。中の img を拡大しても丸からはみ出さない */
+function fxIconEl(side,px){
+  const src=(side!=null&&S.fxIcon&&S.fxIcon[side])?S.fxIcon[side]:null;
+  if(!src)return null;
+  const v=fxIconView(side);
+  const w=document.createElement("span");
+  w.className="revFxIcon";
+  if(px){w.style.width=px+"px";w.style.height=px+"px";}
+  const im=document.createElement("img");
+  im.src=src;im.alt="";im.draggable=false;
+  im.style.objectPosition=`${v.x}% ${v.y}%`;
+  if(v.z>100)im.style.transform=`scale(${v.z/100})`;
+  w.appendChild(im);
+  return w;
+}
+/* 選んだ画像を演出用に縮める（長辺256px）。拡大しても粗くならない程度に残す */
+async function fxIconShrink(url){
+  const img=await new Promise((res,rej)=>{const i2=new Image();i2.onload=()=>res(i2);i2.onerror=rej;i2.src=url;});
+  const M=256, sc=Math.min(1,M/Math.max(img.width,img.height));
+  const cv=document.createElement("canvas");
+  cv.width=Math.max(1,Math.round(img.width*sc));cv.height=Math.max(1,Math.round(img.height*sc));
+  cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
+  return cv.toDataURL("image/webp",0.85);
+}
+async function saveFxIcon(){
+  if(db){await idbPut("misc","fxIcon",S.fxIcon);await idbPut("misc","fxIconView",S.fxIconView);}
+}
+/* 設定画面の丸プレビューを、いまの切り抜き位置で描き直す */
+function refreshFxIconPreview(side){
+  const box=document.getElementById("fxIconPrev"+side);
+  if(!box)return;
+  box.innerHTML="";
+  const el=fxIconEl(side,40);
+  if(el){el.style.border="1px solid var(--line)";box.appendChild(el);box.style.display="";}
+  else box.style.display="none";
 }
 function faceKeyOf(c){
   const base=normName(c.name);
@@ -35139,6 +35186,94 @@ function openMatPicker(pi){
   render();
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
+/* 👤 演出に出す画像を、登録済みの画像集から選ぶ画面。
+   スリーブ・プレマの選択と同じ作りで、丸く切り抜く位置と拡大率もここで決める。
+   adjustOnly=true なら一覧を出さず、いまの画像の切り抜きだけ直す。 */
+function openFxIconPicker(side,adjustOnly){
+  side=side|0;
+  const has=!!(S.fxIcon&&S.fxIcon[side]);
+  if(adjustOnly&&!has){toast("先に画像を選んでください");return;}
+  if(!adjustOnly&&!imgURL.size&&!has){toast("先に画像を登録してください");return;}
+  {const d1=$("deckOlay");if(d1)d1.classList.remove("open");
+   const d2=$("settingsOlay");if(d2)d2.classList.remove("open");}
+  $("vTitle").textContent=`👤 ${S.players[side].label}の演出に出す画像`;
+  $("vHint").textContent=adjustOnly
+    ?"丸く切り抜く位置と拡大率を調整します。上の丸が実際の見え方です。"
+    :"画像を選んだ後も画面は閉じません。上の丸を見ながら、切り抜く位置と拡大率を調整できます。";
+  $("vOk").style.display="none";$("vStatus").textContent="";
+  const search=$("vSearch");search.style.display=adjustOnly?"none":"";if(!adjustOnly)search.value="";
+  const g=$("vGrid");
+  const _st={all:false,nArt:0};
+  const save=async()=>{await saveFxIcon();refreshFxIconPreview(side);};
+  const render=()=>{
+    g.innerHTML="";
+    const q=normName(search.value||"");
+    const _all=Array.from(imgURL.keys()).filter(k=>!String(k).startsWith("__mat"));
+    _st.nArt=_all.filter(isArtKey).length;
+    if(!_st.nArt)_st.all=true;
+    if(!adjustOnly)g.appendChild(artPickBar(_st,render));
+    // ── 調整欄（上に貼り付く）
+    const bar=document.createElement("div");
+    bar.style.cssText="grid-column:1/-1;position:sticky;top:0;z-index:20;display:grid;grid-template-columns:auto auto minmax(120px,1fr);gap:7px 10px;align-items:center;padding:10px 12px;border:1px solid #475569;border-radius:12px;background:#0f172af2;box-shadow:0 5px 14px #0009";
+    const prev=document.createElement("div");
+    prev.style.cssText="grid-row:1/4;display:flex;align-items:center;justify-content:center;width:72px";
+    const drawPrev=()=>{prev.innerHTML="";const e2=fxIconEl(side,64);if(e2){e2.style.color="#7dd3fc";prev.appendChild(e2);}
+      else{const s2=document.createElement("span");s2.style.cssText="font-size:11px;color:var(--muted);text-align:center";s2.textContent="画像なし";prev.appendChild(s2);}};
+    drawPrev();
+    const v=fxIconView(side);
+    const mk=(txt,min,max,step,val,onIn)=>{
+      const lb=document.createElement("b");lb.textContent=txt(val);
+      const rg=document.createElement("input");rg.type="range";rg.min=String(min);rg.max=String(max);rg.step=String(step);rg.value=String(val);
+      rg.oninput=()=>{lb.textContent=txt(rg.value);onIn(+rg.value);drawPrev();};
+      rg.onchange=()=>{save();};
+      return [lb,rg,()=>{rg.value=String(min===100?100:50);lb.textContent=txt(rg.value);}];
+    };
+    S.fxIconView=S.fxIconView||[{},{}];
+    S.fxIconView[side]=Object.assign({},v);
+    const [xL,xR,xRe]=mk(n=>`↔ 横位置：${n}%`,0,100,1,v.x,n=>{S.fxIconView[side].x=n;});
+    const [yL,yR,yRe]=mk(n=>`↕ 縦位置：${n}%`,0,100,1,v.y,n=>{S.fxIconView[side].y=n;});
+    const [zL,zR,zRe]=mk(n=>`🔍 拡大：${n}%`,100,300,5,v.z,n=>{S.fxIconView[side].z=n;});
+    const reset=document.createElement("button");
+    reset.type="button";reset.className="btn small ghost";reset.textContent="中央に戻す";
+    reset.style.cssText="grid-column:2/-1;justify-self:start";
+    reset.onclick=()=>{S.fxIconView[side]={x:50,y:50,z:100};xRe();yRe();zRe();drawPrev();save();};
+    bar.append(prev,xL,xR,yL,yR,zL,zR,reset);
+    g.appendChild(bar);
+    if(adjustOnly)return;
+    // ── 画像の一覧
+    const _ks=_all
+      .filter(k=>_st.all||isArtKey(k))
+      .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
+    for(const k of _ks){
+      const name=k==="__back__"?"（登録済み裏面）":(dispName.get(k)||k);
+      if(q&&!k.includes(q))continue;
+      const el=vCardEl(name);
+      if(S.fxIconKey&&S.fxIconKey[side]===k)el.classList.add("picked");
+      const th=el.querySelector(".thumb");th.innerHTML="";
+      const im=document.createElement("img");im.src=imgURL.get(k);im.draggable=false;
+      im.style.cssText="width:100%;height:100%;object-fit:cover";
+      th.appendChild(im);
+      el.addEventListener("click",async ()=>{
+        try{
+          const small=await fxIconShrink(imgURL.get(k));
+          S.fxIcon=S.fxIcon||[null,null];
+          S.fxIcon[side]=small;
+          S.fxIconKey=S.fxIconKey||[null,null];S.fxIconKey[side]=k;
+          await save();
+          drawPrev();
+          g.querySelectorAll(".vcard.picked").forEach(x=>x.classList.remove("picked"));
+          el.classList.add("picked");
+          $("vStatus").textContent=`選択中：${name}`;
+          toast(`👤 ${S.players[side].label}の演出の画像にしました（続けて切り抜きを調整できます）`);
+        }catch(e){toast("⚠ 画像を読み込めませんでした");}
+      });
+      g.appendChild(el);
+    }
+  };
+  search.oninput=render;
+  render();
+  $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
+}
 /* 🎴 スリーブ・プレマ用の印を付け外しする画面。
    印のある画像はカードの一覧（デッキ編成・効果登録の画像選択）に出ない。 */
 function openArtPicker(){
@@ -35995,25 +36130,25 @@ $("setBattleLabels").addEventListener("change",async ()=>{
   if(db)await idbPut("misc","battleLabels",S.battleLabels);
   renderAll();
 });
-/* 👤 演出に出す画像の登録。長辺160pxに縮めて端末に保存する（重くならないように） */
+/* 👤 演出に出す画像の登録。長辺256pxに縮めて端末に保存する（重くならないように） */
 for(const sideI of [0,1]){
-  const fi=$("fxIconFile"+sideI), pv=$("fxIconPrev"+sideI), cl=$("fxIconClr"+sideI);
+  const fi=$("fxIconFile"+sideI), cl=$("fxIconClr"+sideI);
+  const pk=$("fxIconPick"+sideI), aj=$("fxIconAdj"+sideI);
+  if(pk)pk.addEventListener("click",()=>openFxIconPicker(sideI,false));
+  if(aj)aj.addEventListener("click",()=>openFxIconPicker(sideI,true));
   if(fi)fi.addEventListener("change",async ()=>{
     const f=fi.files&&fi.files[0];
     if(!f)return;
     try{
       const url=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});
-      const img=await new Promise((res,rej)=>{const i2=new Image();i2.onload=()=>res(i2);i2.onerror=rej;i2.src=url;});
-      const M=160, sc=Math.min(1,M/Math.max(img.width,img.height));
-      const cv=document.createElement("canvas");
-      cv.width=Math.max(1,Math.round(img.width*sc));cv.height=Math.max(1,Math.round(img.height*sc));
-      cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
-      const small=cv.toDataURL("image/webp",0.85);
+      const small=await fxIconShrink(url);
       S.fxIcon=S.fxIcon||[null,null];
       S.fxIcon[sideI]=small;
-      if(db)await idbPut("misc","fxIcon",S.fxIcon);
-      if(pv){pv.src=small;pv.style.display="";}
-      toast("👤 演出の画像を設定しました");
+      S.fxIconKey=S.fxIconKey||[null,null];S.fxIconKey[sideI]=null;
+      S.fxIconView=S.fxIconView||[{},{}];S.fxIconView[sideI]={x:50,y:50,z:100};
+      await saveFxIcon();
+      refreshFxIconPreview(sideI);
+      toast("👤 演出の画像を設定しました（「🎯 切り抜き」で位置を調整できます）");
       fxBanner("trig","この画像で出ます",`${S.players[sideI].label}`,true,"",sideI);
     }catch(e){toast("⚠ 画像を読み込めませんでした");}
     fi.value="";
@@ -36021,8 +36156,9 @@ for(const sideI of [0,1]){
   if(cl)cl.addEventListener("click",async ()=>{
     S.fxIcon=S.fxIcon||[null,null];
     S.fxIcon[sideI]=null;
-    if(db)await idbPut("misc","fxIcon",S.fxIcon);
-    if(pv){pv.src="";pv.style.display="none";}
+    S.fxIconKey=S.fxIconKey||[null,null];S.fxIconKey[sideI]=null;
+    await saveFxIcon();
+    refreshFxIconPreview(sideI);
     toast("👤 演出の画像を消しました");
   });
 }
@@ -36658,6 +36794,8 @@ $("btnExport").addEventListener("click",async ()=>{
     matFit:S.matFit||"cover", matPosX:S.matPosX!=null?S.matPosX:50, matPosY:S.matPosY!=null?S.matPosY:50,
     // 🖼 プレイヤーごとの見せ方
     matFitP:[0,1].map(matFitOf), matPosXP:[0,1].map(matXOf), matPosYP:[0,1].map(matYOf), matZoomP:[0,1].map(matZoomOf),
+    // 👤 演出に出す画像と、その切り抜き方
+    fxIcon:S.fxIcon||[null,null], fxIconView:[0,1].map(fxIconView),
     sound:S.sound, expert:S.expert,
     deckMeta:DECK_META, deckOrder:DECK_ORDER, deckSort:DECK_SORT,
     artKeys:[...ART_KEYS],   // 🎴 スリーブ・プレマ用の印
@@ -36825,6 +36963,13 @@ $("importInput").addEventListener("change",async e=>{
     if(Array.isArray(data.sleevePosX)){
       S.sleevePosX=[0,1].map(pi=>{const n=Number(data.sleevePosX[pi]);return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;});
       if(db){await idbPut("misc","sleevePosX0",S.sleevePosX[0]);await idbPut("misc","sleevePosX1",S.sleevePosX[1]);}
+    }
+    // 👤 演出に出す画像と切り抜き方
+    if(Array.isArray(data.fxIcon)){
+      S.fxIcon=[0,1].map(k=>data.fxIcon[k]||null);
+      S.fxIconView=[0,1].map(k=>Object.assign({x:50,y:50,z:100},(data.fxIconView&&data.fxIconView[k])||{}));
+      await saveFxIcon();
+      for(const k of [0,1])refreshFxIconPreview(k);
     }
     if(data.matFit)S.matFit=data.matFit;
     if(Number.isFinite(+data.matPosX))S.matPosX=+data.matPosX;
@@ -38815,11 +38960,11 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   {const fl=db?await idbGet("misc","fxLevel"):null;
    if(fl)S.fxLevel=fl;
    const fi2=db?await idbGet("misc","fxIcon"):null;
-   if(Array.isArray(fi2)){
-     S.fxIcon=fi2;
-     for(const k of [0,1]){const pv=document.getElementById("fxIconPrev"+k);
-       if(pv&&fi2[k]){pv.src=fi2[k];pv.style.display="";}}
-   }}
+   if(Array.isArray(fi2))S.fxIcon=fi2;
+   const fv2=db?await idbGet("misc","fxIconView"):null;
+   if(Array.isArray(fv2))S.fxIconView=[0,1].map(k=>Object.assign({x:50,y:50,z:100},fv2[k]||{}));
+   for(const k of [0,1])refreshFxIconPreview(k);
+  }
   {const fb=db?await idbGet("misc","fxBadge"):null;
    if(fb!==null&&fb!==undefined)S.fxBadge=!!fb;
    const fr=db?await idbGet("misc","fxRegBtn"):null;
