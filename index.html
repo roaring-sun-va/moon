@@ -4005,14 +4005,21 @@ const imgURL=(()=>{
   const urls=new Map();  // キー→一時URL（求められた分だけ作る）
   const loading=new Set(),queue=[];let active=0,renderTimer=null;
   const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));urls.delete(k);}};
-  const redraw=()=>{if(renderTimer)return;renderTimer=setTimeout(()=>{renderTimer=null;try{renderAll();}catch(e){}},80);};
+  const redraw=()=>{if(renderTimer)return;renderTimer=setTimeout(()=>{renderTimer=null;try{renderAll();}catch(e){}},180);};
   const pump=()=>{
-    while(active<6&&queue.length){
+    while(active<12&&queue.length){
       const k=queue.shift();active++;
       idbGet("images",k).then(b=>{if(b&&known.has(k))blobs.set(k,b);}).finally(()=>{active--;loading.delete(k);redraw();pump();});
     }
   };
-  const request=k=>{if(!db||loading.has(k)||blobs.has(k)||!known.has(k))return;loading.add(k);queue.push(k);pump();};
+  const request=k=>{
+    if(!db||blobs.has(k)||!known.has(k))return;
+    if(loading.has(k)){
+      const i=queue.indexOf(k);if(i>0){queue.splice(i,1);queue.unshift(k);}
+      return;
+    }
+    loading.add(k);queue.unshift(k);pump();
+  };
   const api={
     get size(){return known.size;},
     has(k){return known.has(k);},
@@ -4051,7 +4058,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.71";
+const APP_VER="v13.72";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
