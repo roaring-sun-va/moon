@@ -436,6 +436,9 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
 .zpair{display:flex;gap:6px}
 .zone[data-zone] .card{height:calc(var(--card-h)*var(--zsc,1));width:auto;aspect-ratio:63/88}
 .zone[data-zone] .cards{min-height:calc(var(--card-h)*var(--zsc,1))}
+/* 盾のカードは専用の倍率（設定の「盾（シールド）」スライダー）。段組みでも山札の段でも同じ大きさになる */
+.subzone[data-zone="shield"] .card{height:calc(var(--card-h)*var(--shsc,1))}
+.pile.shieldpile{width:calc(var(--card-w)*var(--shsc,1));height:calc(var(--card-h)*var(--shsc,1))}
 .zpair .zone{flex:1 1 0;min-width:0}
 .zpair.mhpair .zone[data-zone="mana"]{flex:0 0 auto;min-width:0}
 .zpair.mhpair .zone[data-zone="hand"]{flex:1 1 auto;min-width:0}
@@ -459,6 +462,9 @@ body.lay-cols .pboard{flex:1 1 0;min-width:0}
 .sprow>.zone[data-zone="hand"]{flex:6 1 0;min-width:0}
 .pboard.cmw>.zpair.cmwide{flex:1 1 auto;min-height:0}
 .zone.shieldz .zone-head .kanji{color:#7dd3fc}
+/* 「盾を確認」を見出しの行に置く（縦の余白を詰める） */
+.zone.shieldz .zone-head{gap:6px}
+.zone.shieldz .zone-head .pmenu{padding:2px 9px;font-size:10px;color:#bae6fd;border-color:#2a5b7a;background:#16293c}
 body.vs .pboard.cmw{flex:1 1 0;min-height:0}
 .zpair .zone.manaslim{flex:0 0 auto;min-width:0}
 .manaslim .zone-head{flex-wrap:wrap;gap:4px}
@@ -1347,6 +1353,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
         <span style="font-size:12px;font-weight:700">ゾーンの縦幅（カードの大きさ）比率</span>
         <div id="zoneScaleList" style="display:flex;flex-direction:column;gap:3px"></div>
+        <div class="hint">「盾（シールド）のカード」は盾だけの大きさ。「山札/墓地の段（段の高さ）」はその段が確保する縦幅、「山札・墓地・GR・超次元の束」は枚数が出ている四角そのものの大きさです。</div>
       </div>
       <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
         <label><input type="checkbox" id="setKeysOn"> ⌨️ ショートカットキーを有効にする</label>
@@ -4026,7 +4033,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.60";
+const APP_VER="v13.62";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -27150,14 +27157,23 @@ function renderZoneOrderEditor(){
   });
 }
 const ZONE_SCALE_DEF={battle:100,sys:100,shield:100,mana:100,hand:100,pile:100};
+/* スライダー用の名前。どのゾーンを動かすのかが見て分かるようにしてある（並び替え用の ZONE_LB とは別） */
+const ZONE_SC_LB={
+  battle:"バトルゾーン",
+  shield:"盾（シールド）のカード",
+  sys:"山札/墓地の段（段の高さ）",
+  pile:"山札・墓地・GR・超次元の束",
+  mana:"マナ",
+  hand:"手札"
+};
 function renderZoneScaleEditor(){
   const box=$("zoneScaleList");if(!box)return;
   box.innerHTML="";
   const zs=Object.assign({},ZONE_SCALE_DEF,S.zoneScale||{});
-  for(const k of ["battle","sys","pile","mana","hand"]){
+  for(const k of ["battle","shield","sys","pile","mana","hand"]){
     const row=document.createElement("div");
     row.style.cssText="display:flex;align-items:center;gap:8px";
-    const lb=document.createElement("span");lb.style.cssText="font-size:12px;width:120px";lb.textContent=ZONE_LB[k];
+    const lb=document.createElement("span");lb.style.cssText="font-size:12px;width:136px";lb.textContent=ZONE_SC_LB[k]||ZONE_LB[k];
     const rg=document.createElement("input");
     rg.type="range";rg.min="70";rg.max="200";rg.step="5";rg.value=String(zs[k]);rg.style.flex="1";
     const val=document.createElement("span");val.style.cssText="font-size:12px;width:42px;text-align:right";val.textContent=zs[k]+"%";
@@ -27179,6 +27195,10 @@ function applyZoneScales(){
   });
   // 山札系パイル（山札/墓地/GR/超次元/ゲーム外）だけ別倍率
   document.querySelectorAll('.zone[data-zone="sys"]').forEach(z=>z.style.setProperty("--pilesc",(zs.pile||100)/100));
+  // 盾は専用倍率。ワイド段組みの盾ゾーンにも、山札の段に並ぶ盾にも同じように効く
+  const shv=(zs.shield||100)/100;
+  document.documentElement.style.setProperty("--shsc",shv);
+  document.querySelectorAll('.zone[data-zone="shieldz"]').forEach(z=>z.style.setProperty("--zsc",shv));
 }
 function buildBoards(){
   const board=$("board");board.innerHTML="";
@@ -28380,10 +28400,21 @@ function renderPlayer(pi){
       $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
     }
   });
-  swrap.appendChild(sb);
   const _srow=document.getElementById(`shieldrow-${pi}`);
-  if(_srow){ _srow.innerHTML=""; _srow.appendChild(swrap); }
-  else { const dv=document.createElement("div");dv.className="vdiv";row.appendChild(dv); row.appendChild(swrap); }
+  if(_srow){
+    _srow.innerHTML="";
+    // ワイド段組み：「盾を確認」は盾ゾーンの見出しと同じ行に置く（1行ぶん縦が詰まる）
+    const _shd=_srow.parentElement?_srow.parentElement.querySelector(".zone-head"):null;
+    if(_shd){
+      _shd.querySelectorAll(".shbtn").forEach(x=>x.remove());
+      sb.classList.add("shbtn");
+      _shd.appendChild(sb);
+    }else{
+      swrap.appendChild(sb);
+    }
+    _srow.appendChild(swrap);
+  }
+  else { swrap.appendChild(sb); const dv=document.createElement("div");dv.className="vdiv";row.appendChild(dv); row.appendChild(swrap); }
   if(Z.reveal.length){
     const dv2=document.createElement("div");dv2.className="vdiv";row.appendChild(dv2);
     const rwrap=document.createElement("div");rwrap.className="pilewrap";
@@ -36507,6 +36538,91 @@ async function exportBuiltinSnippet(){
   setTimeout(()=>URL.revokeObjectURL(a.href),5000);
   toast(`🧩 同梱データを書き出しました（${keys.length}件・約${Math.max(1,Math.round(text.length/1024))}KB）\nindex.html の BUILTIN_CARDFX_START〜END の間を、このファイルの中身で置き換えてください`);
 }
+// 大容量バックアップ v7: JSONへ画像のBase64を詰めず、無圧縮ZIP内へBlobのまま格納する。
+// これによりBase64の約33%増量と、巨大JSONを一括文字列化するメモリ負荷を避ける。
+const ZIP_TE=new TextEncoder(),ZIP_TD=new TextDecoder();
+let ZIP_CRC_TABLE=null;
+function zipCrcTable(){
+  if(ZIP_CRC_TABLE)return ZIP_CRC_TABLE;
+  ZIP_CRC_TABLE=new Uint32Array(256);
+  for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);ZIP_CRC_TABLE[n]=c>>>0;}
+  return ZIP_CRC_TABLE;
+}
+async function zipCrc32(blob){
+  const tab=zipCrcTable();let crc=0xffffffff;
+  const step=4*1024*1024;
+  for(let p=0;p<blob.size;p+=step){
+    const u=new Uint8Array(await blob.slice(p,Math.min(blob.size,p+step)).arrayBuffer());
+    for(let i=0;i<u.length;i++)crc=tab[(crc^u[i])&255]^(crc>>>8);
+  }
+  return (crc^0xffffffff)>>>0;
+}
+function zipU16(v){const b=new Uint8Array(2);new DataView(b.buffer).setUint16(0,v,true);return b;}
+function zipU32(v){const b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,v>>>0,true);return b;}
+function zipDosTime(d=new Date()){
+  return {time:((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&65535,
+    date:((((d.getFullYear()-1980)&127)<<9)|((d.getMonth()+1)<<5)|d.getDate())&65535};
+}
+async function makeBackupZip(data,imageKeys){
+  const manifest={v:1,format:"dmrv-backup-zip",images:[]};
+  const items=[];let imageBytes=0;
+  for(let i=0;i<imageKeys.length;i++){
+    const key=imageKeys[i],blob=db?await idbGet("images",key):memImages.get(key);
+    if(!blob)continue;
+    const file=`images/${String(i+1).padStart(6,"0")}.bin`;
+    manifest.images.push({key,file,type:blob.type||"image/webp",size:blob.size});
+    items.push({name:file,blob});imageBytes+=blob.size;
+    if((i+1)%50===0)toast(`バックアップ準備中… ${i+1}/${imageKeys.length}枚`);
+  }
+  data.v=7;data.backupFormat="zip";delete data.images;
+  items.unshift({name:"manifest.json",blob:new Blob([JSON.stringify(manifest)],{type:"application/json"})});
+  items.unshift({name:"backup.json",blob:new Blob([JSON.stringify(data)],{type:"application/json"})});
+  if(imageBytes>0xffffffff-20*1024*1024)throw new Error("画像容量が4GBを超えています。画像なしバックアップを使用してください");
+  const parts=[],central=[];let offset=0;const dt=zipDosTime();
+  for(let i=0;i<items.length;i++){
+    const it=items[i],name=ZIP_TE.encode(it.name),crc=await zipCrc32(it.blob),size=it.blob.size;
+    const local=new Blob([zipU32(0x04034b50),zipU16(20),zipU16(0x800),zipU16(0),zipU16(dt.time),zipU16(dt.date),zipU32(crc),zipU32(size),zipU32(size),zipU16(name.length),zipU16(0),name]);
+    parts.push(local,it.blob);
+    central.push(new Blob([zipU32(0x02014b50),zipU16(20),zipU16(20),zipU16(0x800),zipU16(0),zipU16(dt.time),zipU16(dt.date),zipU32(crc),zipU32(size),zipU32(size),zipU16(name.length),zipU16(0),zipU16(0),zipU16(0),zipU16(0),zipU32(0),zipU32(offset),name]));
+    offset+=local.size+size;
+  }
+  const centralOffset=offset,centralSize=central.reduce((n,b)=>n+b.size,0),count=central.length;
+  return new Blob([...parts,...central,zipU32(0x06054b50),zipU16(0),zipU16(0),zipU16(count),zipU16(count),zipU32(centralSize),zipU32(centralOffset),zipU16(0)],{type:"application/zip"});
+}
+async function readBackupZip(file){
+  const tailSize=Math.min(file.size,65557),tail=new Uint8Array(await file.slice(file.size-tailSize).arrayBuffer());
+  let eocd=-1;for(let i=tail.length-22;i>=0;i--){if(new DataView(tail.buffer,tail.byteOffset+i,4).getUint32(0,true)===0x06054b50){eocd=i;break;}}
+  if(eocd<0)throw new Error("ZIPの終端情報が見つかりません");
+  const ev=new DataView(tail.buffer,tail.byteOffset+eocd),count=ev.getUint16(10,true),cdSize=ev.getUint32(12,true),cdOff=ev.getUint32(16,true);
+  const cd=new Uint8Array(await file.slice(cdOff,cdOff+cdSize).arrayBuffer()),entries=new Map();let p=0;
+  for(let i=0;i<count;i++){
+    const v=new DataView(cd.buffer,cd.byteOffset+p);if(v.getUint32(0,true)!==0x02014b50)throw new Error("ZIPの目次が壊れています");
+    const method=v.getUint16(10,true),size=v.getUint32(24,true),nl=v.getUint16(28,true),xl=v.getUint16(30,true),cl=v.getUint16(32,true),local=v.getUint32(42,true);
+    const name=ZIP_TD.decode(cd.slice(p+46,p+46+nl));entries.set(name,{method,size,local});p+=46+nl+xl+cl;
+  }
+  async function entryBlob(name,type="application/octet-stream"){
+    const e=entries.get(name);if(!e)throw new Error(`${name} がありません`);if(e.method!==0)throw new Error("このZIPの圧縮方式には対応していません");
+    const h=new DataView(await file.slice(e.local,e.local+30).arrayBuffer()),nl=h.getUint16(26,true),xl=h.getUint16(28,true),start=e.local+30+nl+xl;
+    return file.slice(start,start+e.size,type);
+  }
+  const data=JSON.parse(await (await entryBlob("backup.json","application/json")).text());
+  const manifest=JSON.parse(await (await entryBlob("manifest.json","application/json")).text());
+  if(manifest.format!=="dmrv-backup-zip"||!Array.isArray(manifest.images))throw new Error("DM Re:VaultのバックアップZIPではありません");
+  return {data,manifest,entryBlob};
+}
+async function restoreBackupZipImages(ctx){
+  const list=ctx.manifest.images;
+  toast(`画像を復元中… 0/${list.length}枚`);
+  for(let i=0;i<list.length;i++){
+    const x=list[i],b=await ctx.entryBlob(x.file,x.type||"application/octet-stream");
+    if(db)await idbPut("images",x.key,b);else memImages.set(x.key,b);
+    if((i+1)%25===0||i+1===list.length)toast(`画像を復元中… ${i+1}/${list.length}枚`);
+  }
+}
+function downloadBlob(blob,name){
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),30000);
+}
+
 $("btnExport").addEventListener("click",async ()=>{
   const nNew=BUILTIN_NEWER?Object.keys(BUILTIN_NEWER.cardFx).length:0;
   const menu=["💾 全体のバックアップ（デッキ＋カード登録＋設定）",
@@ -36549,27 +36665,34 @@ $("btnExport").addEventListener("click",async ()=>{
   };
   // 🖼 デッキ本体をそのまま入れる（表紙 cover と超次元 ex を含む）
   for(const n of await deckNames())data.decks[n]=await getDeck(n);
+  const day=new Date().toISOString().slice(0,10);
   if(withImg){
-    toast("画像を変換中…少しお待ちください");
-    for(const k of (db?await idbKeys("images"):Array.from(memImages.keys()))){
-      const b=db?await idbGet("images",k):memImages.get(k);
-      if(b)data.images[k]=await blobToDataURL(b);
-    }
+    const keys=db?await idbKeys("images"):Array.from(memImages.keys());
+    toast(`大容量対応ZIPを作成中… ${keys.length}枚`);
+    const blob=await makeBackupZip(data,keys);
+    downloadBlob(blob,`dmps-backup-${day}.dmrv.zip`);
+    toast(`書き出しました（画像${keys.length}枚・${Math.max(1,Math.round(blob.size/1024/1024))}MB）`);
+  }else{
+    const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+    downloadBlob(blob,`dmps-backup-${day}.json`);
+    toast("画像なし軽量バックアップを書き出しました");
   }
-  const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download=`dmps-backup-${new Date().toISOString().slice(0,10)}.json`;
-  document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-  toast("書き出しました（ダウンロード/共有シートを確認）");
 });
 $("btnImport").addEventListener("click",()=>$("importInput").click());
 $("importInput").addEventListener("change",async e=>{
   const f=e.target.files[0];e.target.value="";
   if(!f)return;
   try{
-    const data=JSON.parse(await f.text());
+    let zipCtx=null,data;
+    const sig=(typeof f.slice==="function"&&Number.isFinite(f.size)&&f.size>=4)
+      ?new DataView(await f.slice(0,4).arrayBuffer()).getUint32(0,true):0;
+    if(sig===0x04034b50){
+      toast("大容量バックアップZIPを確認中…");
+      zipCtx=await readBackupZip(f);data=zipCtx.data;
+    }else{
+      if(f.size>450*1024*1024)throw new Error("旧形式の画像入りJSONが大きすぎます。画像なし軽量版へ変換するか、v13.62以降のZIP形式で書き出してください");
+      data=JSON.parse(await f.text());
+    }
     if(data&&data.type==="fxPack"&&data.cardFx){
       // 📦 カード登録だけの共有パック（画像なし）
       const n=Object.keys(data.cardFx).length;
@@ -36719,7 +36842,9 @@ $("importInput").addEventListener("change",async e=>{
     }
     if(typeof syncMatUI==="function")syncMatUI();
     await saveMatView();
-    if(data.images&&Object.keys(data.images).length){
+    if(zipCtx){
+      await restoreBackupZipImages(zipCtx);
+    }else if(data.images&&Object.keys(data.images).length){
       toast("画像を復元中…");
       for(const [k,durl] of Object.entries(data.images)){
         const b=await (await fetch(durl)).blob();
