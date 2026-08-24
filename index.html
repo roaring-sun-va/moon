@@ -1111,6 +1111,8 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row">
         <button class="btn small" id="btnPickImages">画像を登録</button>
         <button class="btn small" id="btnManageImages">🗂 画像を管理（改名/削除）</button>
+        <button class="btn small" id="btnPickArtImages" title="スリーブやプレイマットに使う画像を、カードとは別の置き場に登録します。カードの一覧には最初から出ません">🎴 スリーブ・プレマ画像を登録</button>
+        <input type="file" id="artInput" accept="image/*" multiple style="display:none">
         <button class="btn small" id="btnArtImages" title="スリーブやプレイマットに使う画像を選びます。印を付けた画像はカードの一覧（デッキ編成・効果登録）に出なくなります">🎴 スリーブ・プレマ用の印</button>
         <button class="btn small" id="btnSendArtImages" title="スリーブ・プレマ用の画像を、オンラインでつながっている相手に送ります">📤 相手に送る</button>
         <button class="btn small warn" id="btnClearImages">画像を全削除</button>
@@ -4014,7 +4016,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.52";
+const APP_VER="v13.53";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6479,8 +6481,9 @@ function pickOneImageFile(){
    ここに入っている画像は**カードの一覧には出さない**（デッキ編成・効果登録など）。
    ファイル名が「スリーブ」「プレマ」「プレイマット」「背景」sleeve/mat で始まる場合は自動でこちらへ。 */
 let ART_KEYS=new Set();
+const ART_PREFIX="__art__";   // 🎴 スリーブ・プレマ専用の置き場（カードとは別の名前で保存する）
 const ART_NAME_RE=/^(スリーブ|プレマ|プレイマット|背景|sleeve|mat|playmat)/i;
-function isArtKey(k){return ART_KEYS.has(String(k));}
+function isArtKey(k){const t=String(k);return t.startsWith(ART_PREFIX)||ART_KEYS.has(t);}
 async function persistArtKeys(){
   try{if(db)await idbPut("misc","artKeys",[...ART_KEYS]);}catch(e){}
 }
@@ -6494,7 +6497,8 @@ async function setArtKey(k,on){
   if(on)ART_KEYS.add(k);else ART_KEYS.delete(k);
   await persistArtKeys();
 }
-async function registerImages(files){
+async function registerImages(files,opt){
+  const asArt=!!(opt&&opt.art);   // 🎴 スリーブ・プレマ専用として登録する
   let n=0;
   for(const f of files){
     const okType=(f.type&&f.type.startsWith("image/"))||/\.(png|jpe?g|gif|webp|heic|heif|bmp|avif)$/i.test(f.name||"")||(!f.type&&f.size>0);
@@ -6502,10 +6506,11 @@ async function registerImages(files){
     const orig=f.name.replace(/\.[^.]+$/,"").trim();
     let key=normName(orig);
     if(!key)continue;
-    if(BACK_KEYS.has(key))key="__back__";
+    if(asArt)key=ART_PREFIX+key;                 // 🎴 専用の置き場へ
+    else if(BACK_KEYS.has(key))key="__back__";
     if(db)await idbPut("images",key,f);else memImages.set(key,f);
     if(key!=="__back__")dispName.set(key,orig);
-    if(key!=="__back__"&&ART_NAME_RE.test(orig))ART_KEYS.add(key);   // 🎴 スリーブ・プレマ用として覚える
+    if(asArt||(key!=="__back__"&&ART_NAME_RE.test(orig)))ART_KEYS.add(key);   // 🎴 スリーブ・プレマ用として覚える
     if(key!=="__back__"&&!imgOrder.has(key))imgOrder.set(key,++imgSeq);
     n++;
   }
@@ -6513,7 +6518,7 @@ async function registerImages(files){
   await persistImgOrder();
   await persistArtKeys();
   await loadAllImages();renderAll();
-  if(n)toast(`${n} 枚の画像を登録しました`);
+  if(n)toast(asArt?`🎴 ${n} 枚をスリーブ・プレマ用として登録しました（カードの一覧には出ません）`:`${n} 枚の画像を登録しました`);
   else toast("画像を認識できませんでした（写真アプリからは一度「ファイルに保存」してから登録すると確実です）");
 }
 function walkEntry(entry,out){return new Promise(res=>{
@@ -34913,6 +34918,10 @@ function openArtPicker(){
         el.appendChild(bd);
       }
       el.addEventListener("click",async()=>{
+        if(String(k).startsWith(ART_PREFIX)){
+          toast("🎴 専用の置き場に登録されています（カードには戻せません）。カードとして使うなら「画像を登録」から入れ直してください");
+          return;
+        }
         await setArtKey(k,!isArtKey(k));
         toast(isArtKey(k)?`🎴 ${dispName.get(k)||k} をスリーブ・プレマ用にしました`:`${dispName.get(k)||k} をカードの画像に戻しました`);
         render();
@@ -34925,6 +34934,12 @@ function openArtPicker(){
   render();
   $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
 }
+$("btnPickArtImages").addEventListener("click",()=>$("artInput").click());
+$("artInput").addEventListener("change",async e=>{
+  const fs2=[...(e.target.files||[])];
+  e.target.value="";
+  if(fs2.length)await registerImages(fs2,{art:true});
+});
 $("btnArtImages").addEventListener("click",openArtPicker);
 $("btnSendArtImages").addEventListener("click",async()=>{
   const ks=[...ART_KEYS].filter(k=>imgURL.has(k));
