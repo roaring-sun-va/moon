@@ -1141,6 +1141,8 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
         <select id="setMatFit" style="width:auto;flex:0 0 auto">
           <option value="cover">切れてもいいので全面（cover）</option>
+          <option value="height">縦に合わせる（横位置が動く）</option>
+          <option value="width">横に合わせる（縦位置が動く）</option>
           <option value="contain">全体を収める（contain）</option>
           <option value="100% 100%">引き伸ばし（stretch）</option>
         </select>
@@ -1148,6 +1150,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="range" id="setMatY" min="0" max="100" step="5" value="50" style="flex:1;min-width:80px">
         <span style="font-size:12px">横位置</span>
         <input type="range" id="setMatX" min="0" max="100" step="5" value="50" style="flex:1;min-width:80px">
+        <span style="font-size:12px">拡大</span>
+        <input type="range" id="setMatZoom" min="100" max="300" step="5" value="100" style="flex:1;min-width:80px" title="上げると縦横ともはみ出すので、位置を動かせるようになります">
         <button class="btn small ghost" id="btnSleeveReset">リセット</button>
       </div>
       <div class="status" id="sleeveStatus"></div>
@@ -3967,7 +3971,7 @@ const S={
   expert:false, sound:true,
   sleeve:[null,null], sleevePos:[50,50], sleevePosX:[50,50], matKey:[null,null],
   // 🖼 プレイマットの見せ方は**プレイヤーごと**に持つ
-  matFitP:["cover","cover"], matPosXP:[50,50], matPosYP:[50,50],
+  matFitP:["cover","cover"], matPosXP:[50,50], matPosYP:[50,50], matZoomP:[100,100],
   players:[
     {label:"P1", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
     {label:"P2", deckName:"", mainList:[], grList:[], hyList:[], spList:[], exList:[], zones:emptyZones()},
@@ -4022,7 +4026,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.59";
+const APP_VER="v13.60";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6444,6 +6448,21 @@ function sleevePosX(pi){
   return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;
 }
 function matFitOf(pi){return (S.matFitP&&S.matFitP[pi|0])||S.matFit||"cover";}
+function matZoomOf(pi){
+  const n=Number(S.matZoomP&&S.matZoomP[pi|0]);
+  return Number.isFinite(n)?Math.max(100,Math.min(400,n)):100;
+}
+/* 🖼 背景の大きさを決める。
+   `cover` は「はみ出す方向」にしか余白ができないので、
+   横位置を動かしたい時は「縦に合わせる」か拡大率を上げる。 */
+function matSizeOf(pi){
+  const f=matFitOf(pi), z=matZoomOf(pi);
+  if(f==="width")return `${z}% auto`;
+  if(f==="height")return `auto ${z}%`;
+  if(f==="contain")return (z>100)?`auto ${z}%`:"contain";
+  if(f==="100% 100%")return "100% 100%";
+  return (z>100)?`auto ${z}%`:"cover";
+}
 function matXOf(pi){
   const n=Number(S.matPosXP&&S.matPosXP[pi|0]);
   return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;
@@ -27302,7 +27321,7 @@ function buildBoards(){
         const mb=document.createElement("div");
         mb.className="matbg";
         mb.style.backgroundImage=`url(${imgURL.get(mk)})`;
-        mb.style.backgroundSize=matFitOf(pi);
+        mb.style.backgroundSize=matSizeOf(pi);
         mb.style.backgroundPosition=`${matXOf(pi)}% ${matYOf(pi)}%`;
         pb.insertBefore(mb,pb.firstChild);
         pb.classList.add("hasmat");
@@ -35017,21 +35036,43 @@ function openMatPicker(pi){
     matBar.style.cssText="grid-column:1/-1;position:sticky;top:0;z-index:20;display:grid;grid-template-columns:auto minmax(120px,1fr);gap:7px 10px;align-items:center;padding:10px 12px;border:1px solid #475569;border-radius:12px;background:#0f172af2;box-shadow:0 5px 14px #0009";
     const fitLabel=document.createElement("b");fitLabel.textContent="🎯 表示方法";
     const fit=document.createElement("select");
-    fit.innerHTML='<option value="cover">全体に敷き詰める</option><option value="contain">画像全体を収める</option><option value="auto">元の大きさ</option>';
+    fit.innerHTML='<option value="cover">全体に敷き詰める</option>'
+      +'<option value="height">縦に合わせる（横位置が動く）</option>'
+      +'<option value="width">横に合わせる（縦位置が動く）</option>'
+      +'<option value="contain">画像全体を収める</option>';
     fit.value=matFitOf(pi);
     const xLabel=document.createElement("b");xLabel.textContent=`↔ 横位置：${matXOf(pi)}%`;
     const xRange=document.createElement("input");xRange.type="range";xRange.min="0";xRange.max="100";xRange.step="1";xRange.value=String(matXOf(pi));
     const yLabel=document.createElement("b");yLabel.textContent=`↕ 縦位置：${matYOf(pi)}%`;
     const yRange=document.createElement("input");yRange.type="range";yRange.min="0";yRange.max="100";yRange.step="1";yRange.value=String(matYOf(pi));
     // 🖼 この調整は**このプレイヤーのマットだけ**にかかる
-    const preview=()=>g.querySelectorAll("img[data-mat-preview]").forEach(im=>{im.style.objectFit=matFitOf(pi);im.style.objectPosition=`${matXOf(pi)}% ${matYOf(pi)}%`;});
+    const preview=()=>g.querySelectorAll("img[data-mat-preview]").forEach(im=>{
+      const f=matFitOf(pi),z=matZoomOf(pi);
+      im.style.objectFit=(f==="width"||f==="height")?"cover":(f==="contain"?"contain":"cover");
+      im.style.objectPosition=`${matXOf(pi)}% ${matYOf(pi)}%`;
+      im.style.transform=(z>100)?`scale(${z/100})`:"";
+    });
     fit.onchange=()=>{S.matFitP[pi]=fit.value;preview();saveMatView(pi);};
     xRange.oninput=()=>{S.matPosXP[pi]=+xRange.value;xLabel.textContent=`↔ 横位置：${xRange.value}%`;preview();saveMatView(pi);};
     yRange.oninput=()=>{S.matPosYP[pi]=+yRange.value;yLabel.textContent=`↕ 縦位置：${yRange.value}%`;preview();saveMatView(pi);};
+    // 🔍 拡大率。上げると縦横ともはみ出すので、位置を動かせるようになる
+    const zLabel=document.createElement("b");zLabel.textContent=`🔍 拡大：${matZoomOf(pi)}%`;
+    const zRange=document.createElement("input");zRange.type="range";zRange.min="100";zRange.max="300";zRange.step="5";zRange.value=String(matZoomOf(pi));
+    zRange.oninput=()=>{S.matZoomP[pi]=+zRange.value;zLabel.textContent=`🔍 拡大：${zRange.value}%`;preview();saveMatView(pi);};
+    const mReset=document.createElement("button");
+    mReset.type="button";mReset.className="btn small ghost";mReset.textContent="最初の状態に戻す";
+    mReset.style.cssText="grid-column:1/-1;justify-self:start";
+    mReset.onclick=()=>{
+      S.matFitP[pi]="cover";S.matPosXP[pi]=50;S.matPosYP[pi]=50;S.matZoomP[pi]=100;
+      fit.value="cover";xRange.value="50";yRange.value="50";zRange.value="100";
+      xLabel.textContent="↔ 横位置：50%";yLabel.textContent="↕ 縦位置：50%";zLabel.textContent="🔍 拡大：100%";
+      preview();saveMatView(pi);
+    };
     const who=document.createElement("span");
-    who.style.cssText="grid-column:1/-1;font-size:11px;color:var(--muted)";
-    who.textContent=`この調整は ${S.players[pi].label} のプレイマットだけに使われます`;
-    matBar.append(fitLabel,fit,xLabel,xRange,yLabel,yRange,who);g.appendChild(matBar);
+    who.style.cssText="grid-column:1/-1;font-size:11px;color:var(--muted);line-height:1.5";
+    who.textContent=`この調整は ${S.players[pi].label} のプレイマットだけに使われます。`
+      +`横位置が動かない時は、合わせ方を「縦に合わせる」にするか、拡大を上げてください（はみ出した分だけ動きます）`;
+    matBar.append(fitLabel,fit,xLabel,xRange,yLabel,yRange,zLabel,zRange,mReset,who);g.appendChild(matBar);
     const _ks=_all
       .filter(k=>_st.all||isArtKey(k))
       .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
@@ -35155,6 +35196,7 @@ async function saveMatView(pi){
       await idbPut("misc",`matFit${p}`,matFitOf(p));
       await idbPut("misc",`matPosX${p}`,matXOf(p));
       await idbPut("misc",`matPosY${p}`,matYOf(p));
+      await idbPut("misc",`matZoom${p}`,matZoomOf(p));
     }
   }
   buildBoards();renderAll();
@@ -35171,11 +35213,13 @@ function syncMatUI(){
   if($("setMatFit"))$("setMatFit").value=matFitOf(p);
   if($("setMatX"))$("setMatX").value=String(matXOf(p));
   if($("setMatY"))$("setMatY").value=String(matYOf(p));
+  if($("setMatZoom"))$("setMatZoom").value=String(matZoomOf(p));
 }
 $("setMatWho").addEventListener("change",syncMatUI);
 $("setMatFit").addEventListener("change",()=>{S.matFitP[matWho()]=$("setMatFit").value;saveMatView(matWho());});
 $("setMatX").addEventListener("input",()=>{S.matPosXP[matWho()]=+$("setMatX").value;saveMatView(matWho());});
 $("setMatY").addEventListener("input",()=>{S.matPosYP[matWho()]=+$("setMatY").value;saveMatView(matWho());});
+$("setMatZoom").addEventListener("input",()=>{S.matZoomP[matWho()]=+$("setMatZoom").value;saveMatView(matWho());});
 $("btnMatReset").addEventListener("click",async ()=>{
   for(const pi of [0,1]){
     const mk="__mat"+pi+"__";
@@ -36497,7 +36541,7 @@ $("btnExport").addEventListener("click",async ()=>{
     sleeve:S.sleeve, sleevePos:S.sleevePos, sleevePosX:S.sleevePosX, matKey:S.matKey,
     matFit:S.matFit||"cover", matPosX:S.matPosX!=null?S.matPosX:50, matPosY:S.matPosY!=null?S.matPosY:50,
     // 🖼 プレイヤーごとの見せ方
-    matFitP:[0,1].map(matFitOf), matPosXP:[0,1].map(matXOf), matPosYP:[0,1].map(matYOf),
+    matFitP:[0,1].map(matFitOf), matPosXP:[0,1].map(matXOf), matPosYP:[0,1].map(matYOf), matZoomP:[0,1].map(matZoomOf),
     sound:S.sound, expert:S.expert,
     deckMeta:DECK_META, deckOrder:DECK_ORDER, deckSort:DECK_SORT,
     artKeys:[...ART_KEYS],   // 🎴 スリーブ・プレマ用の印
@@ -36670,6 +36714,8 @@ $("importInput").addEventListener("change",async e=>{
       const y2=Array.isArray(data.matPosYP)?data.matPosYP[p]:null;
       S.matPosXP[p]=Number.isFinite(+x2)?+x2:(Number.isFinite(+data.matPosX)?+data.matPosX:matXOf(p));
       S.matPosYP[p]=Number.isFinite(+y2)?+y2:(Number.isFinite(+data.matPosY)?+data.matPosY:matYOf(p));
+      const z2=Array.isArray(data.matZoomP)?data.matZoomP[p]:null;
+      if(Number.isFinite(+z2))S.matZoomP[p]=+z2;
     }
     if(typeof syncMatUI==="function")syncMatUI();
     await saveMatView();
@@ -38591,6 +38637,8 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
     const y2=db?await idbGet("misc",`matPosY${p}`):null;
     S.matPosXP[p]=(x2!=null&&x2!==undefined)?+x2:null;
     S.matPosYP[p]=(y2!=null&&y2!==undefined)?+y2:null;
+    const z2=db?await idbGet("misc",`matZoom${p}`):null;
+    if(z2!=null&&z2!==undefined)S.matZoomP[p]=+z2;
   }
   const ko=db?await idbGet("misc","keysOn"):null;if(ko!=null&&ko!==undefined)S.keysOn=!!ko;
   const hk=db?await idbGet("misc","hotkeys"):null;if(hk){try{S.hotkeys=JSON.parse(hk);}catch(e){}}
