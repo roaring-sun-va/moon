@@ -3959,8 +3959,9 @@ function makeDlgGate(){
     return ticket;
   };
 }
-let ASK_GATE=makeDlgGate();   // ask / askNumber / askText / askChoice 用（🚑処理リセットで再生成される）
-let PICK_GATE=makeDlgGate();  // pickCard / pickCards 用（🚑処理リセットで再生成される）
+let UI_GATE=makeDlgGate();    // 確認・カード選択・盾選択をまたぐ共通ゲート
+let ASK_GATE=UI_GATE;         // ask / askNumber / askText / askChoice
+let PICK_GATE=UI_GATE;        // pickCard / pickCards（ask系と同時に開かせない）
 /* 👁 いま開いている一覧パネルが「ゾーンを眺めるだけ」かどうか。
    true の時だけ、相手のターン中に中身を動かせないようにする。
    選択を求めるパネル（pickCard 等）では必ず false にすること。
@@ -4226,7 +4227,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.83";
+const APP_VER="v13.84";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7286,7 +7287,7 @@ function emergencyUnstick(){
     // 動作チェーンを新品に（止まった古いawait連鎖から切り離す）
     WATCH_CHAIN=Promise.resolve();MOVE_TAP_CHAIN=Promise.resolve();
     // 確認ダイアログの直列ゲートを再生成（未解決のまま詰まった順番待ちを破棄）
-    ASK_GATE=makeDlgGate();PICK_GATE=makeDlgGate();
+    UI_GATE=makeDlgGate();ASK_GATE=UI_GATE;PICK_GATE=UI_GATE;
     // 開いている確認・選択パネルを閉じる（回答待ちのPromiseは破棄される＝上のゲート再生成とセット）
     for(const id of ["askOlay","viewerOlay","breakOlay","revealOlay"]){
       const e=document.getElementById(id);if(e)e.classList.remove("open");
@@ -16255,28 +16256,27 @@ function soulXCipFx(c){
 /* 🚯 名前指定の能力無視（エモーショナル・ハードコア型）。
    markArrive() は登場以外のゾーン移動でも使われるため、
    実際にバトルゾーンへ出たカードを enqueueFx() する時だけ宣言する。 */
-function askIgnoreNameOnBattleEntry(pi,c){
+async function askIgnoreNameOnBattleEntry(pi,c){
   try{
     if(!S.expert||!c||!zonesOf(pi).battle.some(x=>x.id===c.id))return;
     const rN=getReg(c);
     if(!rN||rN.ignore!=="name"||c.ignoreName||c._ignoreNameAsking)return;
     c._ignoreNameAsking=true;
-    Promise.resolve().then(()=>{
-      // パネルを開くまでに離場した場合は宣言させない。
-      if(!zonesOf(pi).battle.some(x=>x.id===c.id))return;
-      const nm=window.prompt(`🚯 ${faceNameOf(c)}：能力を無視するクリーチャーの名前を指定`,"");
-      if(nm&&nm.trim()){
-        c.ignoreName=normName(nm.trim());
-        toast(`🚯 「${nm.trim()}」の能力を無視する（このカードが場にある間）`);
-      }
-    }).finally(()=>{delete c._ignoreNameAsking;renderAll();});
+    // enqueueFx() の時点では開かない。pumpFx がこのカードの解決順まで来てから
+    // 共通モーダル列を通して宣言する（親効果・盾選択への割り込み防止）。
+    if(!zonesOf(pi).battle.some(x=>x.id===c.id))return;
+    const nm=await askText(`🚯 ${faceNameOf(c)}：能力を無視するクリーチャーの名前を指定`,"");
+    if(nm&&nm.trim()&&zonesOf(pi).battle.some(x=>x.id===c.id)){
+      c.ignoreName=normName(nm.trim());
+      toast(`🚯 「${nm.trim()}」の能力を無視する（このカードが場にある間）`);
+    }
+    delete c._ignoreNameAsking;renderAll();
   }catch(e){delete c._ignoreNameAsking;}
 }
 function enqueueFx(pi,c){
   if(!S.expert)return;
   if(c._repPending)return;
   if(isSealed(c))return;
-  askIgnoreNameOnBattleEntry(pi,c);
   {
     const rC=getReg(c);
     const fi=(rC&&rC.twin&&(c.face|0)===1)?1:0;
@@ -16335,6 +16335,9 @@ async function pumpFx(){
     // ⚡ どのカードの効果を処理中か常時表示（同時に複数体出た時に取り違えないように・残り待機数も出す）
     {const _bi=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
      setFxNowChip(`⚡ 処理中：${faceNameOf(c)}${_bi>=0?`（左から${_bi+1}体目）`:""}${fxQueue.length?`／あと${fxQueue.length}体待機`:""}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`);}
+    // 🚯 名前宣言は「場に出た瞬間」ではなく、このカードのCIP解決順が来た時だけ聞く。
+    // これにより、キリコ等の親効果の途中や別カードの選択中には割り込まない。
+    await askIgnoreNameOnBattleEntry(pi,c);
     {const _wt=fxQueue.length>=3?120:fxQueue.length>=1?220:380;toast(`▶ 効果処理：${faceNameOf(c)}`);await new Promise(r=>setTimeout(r,_wt));}
     snap();
     // 🚩 革命N：自分の盾がN枚以下でのみ追加能力が有効。未達なら発動しない（他の効果があれば選択）
@@ -16685,24 +16688,10 @@ async function waitFxIdle(inPump){
   //    fxRunningはこのポンプ自身なので、待つと最大36秒スピンしてから諦める＝「処理が遅れる」「ターン終了処理中になる」の主因。
   //    enqueueFxした子CIPは、このハンドラを抜けた後に同じポンプループが順番に処理するので、ここで待つ必要はない。
   if(inPump)return;
-  // ⏱ inPump の渡し漏れがあると、自分自身の処理が終わるのを待ってしまい30秒以上固まる。
-  //    「パネルも出ていないのに1.5秒なにも進まない」時は噛み合っていないと判断して抜ける。
-  let guard=0,stuck=0,last="";
-  while((fxRunning||fxQueue.length)&&guard++<1400){
-    const panel=!!document.querySelector("#askOlay.open,#viewerOlay.open,#sheet.open");
-    const sig=[fxRunning?1:0,fxQueue.length,
-      (typeof TRIG_PENDING!=="undefined"&&TRIG_PENDING?TRIG_PENDING.length:0),
-      (typeof HILITE_ID!=="undefined"?HILITE_ID:""),
-      (typeof WATCH_BUSY!=="undefined"&&WATCH_BUSY?1:0)].join("|");
-    if(panel){stuck=0;last=sig;}                 // 選択・確認の待ちは「進んでいる」扱い
-    else if(sig===last){
-      if(++stuck>=60){
-        logOnly("⏱ 効果の待ち合わせが噛み合っていないため、待たずに次へ進みました（処理は続きます）");
-        break;
-      }
-    }else{stuck=0;last=sig;}
-    await new Promise(r=>setTimeout(r,25));
-  }
+  // 選択に時間がかかっても絶対に後続処理を追い越させない。
+  // 旧実装は約1.5秒状態が変わらないと強制的に抜けたため、選択中に次のCIP・誘発・
+  // 攻撃のブレイクへ進む原因になっていた。自己待ちは呼び出し側が inPump=true で明示する。
+  while(fxRunning||fxQueue.length)await new Promise(r=>setTimeout(r,25));
   // ⚡ 一連の効果解決が終わったので、解決中に墓地へ落ちたカードの「墓地に置かれた時」を発火（割り込まない）
   await drainToGrave();
   if(TRIG_PENDING.length)await drainTrig(false);
@@ -17853,12 +17842,19 @@ async function processBroken(op,stack,label){
   // 親カードの効果解決中に呼ばれたかを入口で固定する。
   // S・トリガー獣のCIPや「出た時」監視を途中で排出せず、親の残りを終えてから処理するため。
   const inFxPump=!!fxRunning;
+  // ask / pickCard と同じ共通列を取得。別の選択画面が開いている間は盾パネルを重ねない。
+  const releasePanel=await UI_GATE();
+  let panelReleased=false;
+  const releasePanelOnce=()=>{if(!panelReleased){panelReleased=true;releasePanel();}};
   return new Promise(res=>{
     const Z=zonesOf(op);
     let remaining=stack.slice(), sel=new Set(), wentGrave=false;
     const stDefer=[]; // ⚡ S・トリガーの効果処理はパネルを閉じた後に、選んだ順で1枚ずつ実行（配置と順番だけパネルで決める）
     const finish=()=>{
       $("breakOlay").classList.remove("open");renderAll();
+      // 盾の行き先選択は完了。ここでゲートを解放してから、選んだ呪文/CIPが必要とする
+      // 次の確認パネルを開けるようにする（保持したままだと自己デッドロックする）。
+      releasePanelOnce();
       if(wentGrave){
         const hz=Z.hand.filter(h=>{const r3=getReg(h);return r3&&(r3.sback||r3.sabaki);});
         if(hz.length)toast(`S・バック/サバキZ：${[...new Set(hz.map(h=>faceNameOf(h)))].join("、")} を手札から踏み倒せます`);
@@ -17879,7 +17875,17 @@ async function processBroken(op,stack,label){
               const still=Z.resolve.find(x=>x.id===cc.id);
               if(!still)continue; // 手動で動かされていたらスキップ
               toast(`⚡ 解決（${ordered.indexOf(d)+1}/${ordered.length}）：${faceNameOf(cc)}`);
-              emitEvent(op,"spell",cc);enqueueFx(op,cc);
+              emitEvent(op,"spell",cc);
+              if(inFxPump){
+                // 呪文（S・トリガー）は親クリーチャーの効果へ割り込んで即時解決する。
+                // ただし、その呪文で出たクリーチャーのCIPは enqueueFx() に積まれるだけで、
+                // 親クリーチャーの残りが終わるまで pumpFx は再入しない。
+                const rr=getReg(cc), fi=(rr&&rr.twin)?((cc.face|0)===1?1:0):0;
+                if(rr&&faceFx(rr,fi).length)await runFxList(op,faceFx(rr,fi),cc,true);
+                if(rr&&(rr.modeN|0)>0)await runModeChoice(op,rr,cc,true,fi);
+                const ri=Z.resolve.findIndex(x=>x.id===cc.id);
+                if(ri>=0){const done=Z.resolve.splice(ri,1)[0];resolveOut(Z,done);}
+              }else enqueueFx(op,cc);
             }else{
               const onB=Z.battle.find(x=>x.id===cc.id);
               const asB=!onB&&Z.battle.some(x=>x.under&&x.under.some(u=>u.id===cc.id));
