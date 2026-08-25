@@ -4227,7 +4227,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.84";
+const APP_VER="v13.85";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8824,7 +8824,7 @@ function battleSlotCount(pi){
   return n;
 }
 function battleSlotFull(pi){
-  return S.gameMode!=="tcg"&&S.expert&&!S.freePlay&&battleSlotCount(pi)>=7;
+  return S.gameMode!=="tcg"&&!S.freePlay&&battleSlotCount(pi)>=7;
 }
 /* 効果でクリーチャーを出す時：7体埋まっていればバトルゾーンを経由せず直接墓地へ。
    出せた場合はtrue（呼び出し側でmarkArrive済み）、墓地に送った場合はfalse */
@@ -8853,8 +8853,13 @@ function enterBattleOrGrave(pi,c){
   return true;
 }
 function battleEntryOk(pi,c){
-  if(!S.expert||S.freePlay||S.turn<=0)return true;
   const r=getReg(c);
+  // デュエプレの7面上限はEX登録の有無と別のゲームルール。
+  // 進化は既存の進化元へ重ねる経路があるため、ここでは非進化の8体目だけを拒否する。
+  if(battleSlotFull(pi)&&!isEvoReg(r)){
+    sfx("flip");toast(`🟥 バトルゾーン上限（7体）：${faceNameOf(c)} は出せない`);return false;
+  }
+  if(!S.expert||S.freePlay||S.turn<=0)return true;
   // 🌟 ドリーム・クリーチャー（DMR）：自分のバトルゾーンに同名は2つ以上出ない
   {
     const dd=dreamDupOf(pi,c);
@@ -13218,8 +13223,7 @@ async function runFxList(pi,list,srcCard,inPump){
       let moved=0;
       for(let i=0;i<n;i++){
         if(!Z.shield.length){if(i===0)toast("シールドがありません");break;}
-        const lbs=Z.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表：${faceNameOf(x)}）`:""}${x.under&&x.under.length?` +${x.under.length}枚重ね`:""}`);
-        const j=await askChoice(`🛡 手札に加える自分のシールドを1枚選択（${i+1}/${n}枚目・S・トリガーは使えません）`,lbs);
+        const j=await pickCard(`🛡 手札に加える自分のシールドを1枚選択（${i+1}/${n}枚目・S・トリガーは使えません）`,Z.shield,{hint:"実際のシールドをタップして選択（キャンセルで終了）"});
         if(j===null)break;
         const sh=Z.shield.splice(j,1)[0];
         const kids=sh.under?sh.under.splice(0):[];
@@ -13236,8 +13240,7 @@ async function runFxList(pi,list,srcCard,inPump){
       let moved=0;
       for(let i=0;i<n;i++){
         if(!Z.shield.length){toast("シールドがありません");break;}
-        const lbs=Z.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表：${faceNameOf(x)}）`:""}${x.under&&x.under.length?` +${x.under.length}枚重ね`:""}`);
-        const j=await askChoice(`🛡 自分のシールドを1枚選択（${i+1}/${n}枚目・キャンセルで終了）`,lbs);
+        const j=await pickCard(`🛡 自分のシールドを1枚選択（${i+1}/${n}枚目）`,Z.shield,{hint:"実際のシールドをタップして選択（キャンセルで終了）"});
         if(j===null)break;
         // 条件欄に「手札」「マナ」「墓地」と書いておくと、行き先の確認を省略できる
         const fixZ=String(f.cond||"").trim();
@@ -14798,6 +14801,8 @@ async function runFxList(pi,list,srcCard,inPump){
       const nm=[];let toGraveA=0;
       for(const x of tg){
         if(await offerTrueEscape(op,x)){renderAll();continue;} // 🔽 離場置換（ジャオウガ型・真エスケープ）
+        // オーウェン型の離場置換も、現在の盾枚数で1体ずつ完全に解決してから次へ進む。
+        if(await leaveRepToHandGate(op,x)){renderAll();continue;}
         const bi=OZ.battle.findIndex(y=>y.id===x.id);if(bi<0)continue;
         const cc=OZ.battle.splice(bi,1)[0];
         // 進化元・クロスギアの整理（Ω処理と同様：進化元は墓地・ギアは場に残す）
@@ -16276,6 +16281,8 @@ async function askIgnoreNameOnBattleEntry(pi,c){
 function enqueueFx(pi,c){
   if(!S.expert)return;
   if(c._repPending)return;
+  // 踏み倒しは「召喚時のみ」ではないことが確定済み。親効果中に確認を割り込ませない。
+  if(c&&c._viaCheat)c._wasSummon=false;
   if(isSealed(c))return;
   {
     const rC=getReg(c);
@@ -25876,8 +25883,7 @@ async function leaveRepToHandGate(pi,c){
         [`♻ ランダム盾ブレイク＋場に残る（${faceNameOf(lrs)} の常在）`,"♾ エターナルΩ（かわりに手札へ）"]);
       if(j===1)return false;
     }
-    await stLeaveRepApply(pi,c,lrs);
-    return true;
+    return await stLeaveRepApply(pi,c,lrs);
   }
   return false;
 }
@@ -25909,9 +25915,12 @@ function stLeaveRepSource(pi,c){
   const pw=dispPower(c);
   if(pw!=null&&pw<=0)return null;                    // パワー0以下は置換しない（不明＝適用）
   for(const b of zonesOf(pi).battle){
+    if(b.id===c.id)continue;                           // 「自分の他のクリーチャー」だけを守る
     const rb=getReg(b);
     if(!rb||!rb.stLeaveRep)continue;
     if(isSealed(b)||isIgnored(b,pi))continue;
+    const need=Math.max(1,(rb.stLeaveRepN|0)||2);
+    if(zonesOf(pi).shield.length<need)continue;
     return b;
   }
   return null;
@@ -25919,7 +25928,11 @@ function stLeaveRepSource(pi,c){
 async function stLeaveRepApply(pi,c,src){
   const Z=zonesOf(pi);
   const n=Math.max(1,(getReg(src)&&getReg(src).stLeaveRepN)|0||2);
-  const bkN=Math.min(n,Z.shield.length);
+  if(Z.shield.length<n){
+    toast(`♻ ${faceNameOf(src)}：シールドが${n}枚未満のため、${faceNameOf(c)} の離場は置き換えられない`);
+    return false;
+  }
+  const bkN=n;
   toast(`♻ ${faceNameOf(src)} の常在：${faceNameOf(c)} は離れるかわりに、自分のランダムなシールド${bkN}枚を同時にブレイク！`);
   if(bkN){
     // 🛡 1枚ずつではなく同時にブレイクする（割れた盾はまとめて手札へ／S・トリガーもまとめて選べる）
@@ -25948,11 +25961,11 @@ async function stLeaveRepApply(pi,c,src){
     logOnly(`♻ ${S.players[pi].label}：《${faceNameOf(src)}》の離場置換で自分のシールド${bkN}枚を同時ブレイク（《${faceNameOf(c)}》は離れない）`);
     await processBroken(pi,stack,`♻ 離場置換：ランダムに${bkN}枚を同時ブレイク（計${stack.length}枚・S・トリガー使用可）`);
   }
-  if(bkN<n)toast(`（シールドが${bkN}枚しかないため${bkN}枚のみブレイク）`);
   c.buff=c.buff||{};c.buff.noLeave=true;
   if(typeof markBuffTurn==="function")markBuffTurn(c,["noLeave"]);
   renderAll();
   toast(`⚓ ${faceNameOf(c)} はこのターン、バトルゾーンを離れない`);
+  return true;
 }
 async function dormaCoreRemove(pi,c,manual){
   fxAnim(c.id,"an-dark",700);
