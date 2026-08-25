@@ -1325,7 +1325,7 @@ body.shake{animation:bodyShake .4s ease-out}
     </div>
     <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
       <span style="font-size:12px;font-weight:700">BGM</span>
-      <input type="file" id="bgmFile" accept="audio/*" style="flex:1;min-width:120px;font-size:11px">
+      <input type="file" id="bgmFile" accept="audio/*" title="50MBまで。この端末にだけ保存され、バックアップには入りません" style="flex:1;min-width:120px;font-size:11px">
       <button class="btn small" id="bgmPlay">▶ 再生</button>
       <button class="btn small ghost" id="bgmDel">🗑</button>
     </div>
@@ -4227,7 +4227,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.87";
+const APP_VER="v13.90";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4693,6 +4693,11 @@ function markArrive(c,opt){
   try{
     if(c._viaCheat&&!c._mvxRep){
       c._viaCheat=false;
+      // 🪧 踏み倒しで出たことを、消えない印として残す。
+      //    _viaCheat はこの下の踏み倒しメタ判定で消費されて消えるため、
+      //    あとから走る enqueueFx がこれを見られず、「召喚によって出ましたか？」を
+      //    親の効果の途中で聞いてしまっていた（キリコ→ヘブンズ・ゲート→ライオネル）。
+      if(c._wasSummon==null)c._wasSummon=false;
       const own=[0,1].find(p=>zonesOf(p)&&zonesOf(p).battle&&zonesOf(p).battle.includes(c));
       if(own!=null)queueCheatMeta(own,c,true);
     }
@@ -7074,6 +7079,7 @@ function startGame(picks){
   MOVE_TAP_CHAIN=Promise.resolve();
   FX_HOLD=false;GAME_PAUSE=false;LABY_RUN=false;ALLY_WAIT=0;try{ORI_QUEUE.length=0;TOGRAVE_PENDING.length=0;TRIG_PENDING.length=0;}catch(e){}{const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
   MUGETSU_BUSY=false;MUGETSU_TE_DONE=false;MUGETSU_ASKED={};MUGETSU_PENDING=new Set();MUGETSU_THIS_TRIG=new Set();
+  MUGETSU_OUT_WAIT=new Set();MUGETSU_OUT_BUSY=false;
   S._watchOnce={};S._once1G={};S.pendingAtk=null;MOVE_BLOCKED=false;
   try{$("fxBanner").classList.remove("show");}catch(e){}
   if(!S.players[0].mainList.length){openDeckPanel();toast("先にデッキを登録してください");return;}
@@ -7395,6 +7401,7 @@ function nextTurn(){
     }
   }
   MUGETSU_ASKED={};MUGETSU_PENDING.clear();MUGETSU_THIS_TRIG.clear(); // ターンが変わるので無月の門の確認済み/登場フラグをリセット（絶は毎ターン終了時に再確認）
+  try{if(MUGETSU_OUT_WAIT.size)flushMugetsuOut();}catch(e){}   // 🌙 出しそびれたムーゲッツの宣言をここで消化
   if(LABY_RUN){
     toast("⏳ ラビリンス・マジックの処理中です");
     return;
@@ -8850,6 +8857,21 @@ function enterBattleOrGrave(pi,c){
   }
   Z.battle.push(c);
   markArrive(c);
+  return true;
+}
+/* 🟥 踏み倒しでバトルゾーンへ入れる共通の入口。デュエプレの7面上限をここで必ず通す。
+   進化は既存の進化元へ重ねるので面数を増やさない＝上限の対象外。
+   ※ Z.battle.push(cc) を直に書くと上限を素通りする。踏み倒し系は必ずここを通すこと。 */
+function cheatEnterBattle(pi,cc){
+  const Z=zonesOf(pi);
+  if(battleSlotFull(pi)&&!isEvoReg(getReg(cc))){
+    cc.faceup=true;cc.tapped=false;cc.sideways=false;
+    Z.grave.push(cc);
+    sfx("grave");
+    toast(`🟥 バトルゾーン上限（7体）：${faceNameOf(cc)} はバトルゾーンに出るかわりに墓地へ`);
+    return false;
+  }
+  Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);
   return true;
 }
 function battleEntryOk(pi,c){
@@ -11080,13 +11102,24 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
   const zoneJa={deck:"山札",grave:"墓地",hand:"手札",mana:"マナ"}[zone]||"山札";
   let put=0;
   const played=[]; // 🔁 出したクリーチャーを溜めて、全部出し終わってから「出た時」をまとめて処理（割り込み防止）
-  for(let i=0;i<n;i++){
-    let pool=src.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x));});
-    if(!pool.length){if(i===0)toast(`${zoneJa}に該当カードなし${filt?`（${filt}）`:""}`);break;}
-    if(searchN>0)pool=searchCandidates(pool,searchN); // 🔎 同名は1枚にまとめてから種類単位で提示
-    const j=await pickCard(`🔎 ${labelJa}（${i+1}/${n}）：${zoneJa}から出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:(searchN>0&&S.gameMode!=="tcg")?`${searchN}種まで提示（同名は1枚にまとめています）／タップで選択・キャンセルで終了`:(searchN>0?"TCGモード：全候補を提示／タップで選択・キャンセルで終了":"タップで選択・キャンセルで終了")});
-    if(j===null)break;
-    const tgt=pool[j];
+  // 🎯 ①まず出すカードをぜんぶ選ぶ。選んでいる途中で盤面が変わらないので、
+  //    「1枚ずつ出す」ではなく「まとめて選んで同時に出す」見え方になる
+  const picks=[];
+  {
+    const taken=new Set();
+    for(let i=0;i<n;i++){
+      let pool=src.filter(x=>{const rx=getReg(x);return rx&&(!filt||lockFilterOk(filt,rx,x))&&!taken.has(x.id);});
+      if(!pool.length){if(i===0)toast(`${zoneJa}に該当カードなし${filt?`（${filt}）`:""}`);break;}
+      if(searchN>0)pool=searchCandidates(pool,searchN); // 🔎 同名は1枚にまとめてから種類単位で提示
+      const _sel=picks.length?`／選択中：${picks.map(faceNameOf).join("、")}`:"";
+      const j=await pickCard(`🔎 ${labelJa}（${i+1}/${n}）：${zoneJa}から出すカードを選択${filt?`（${filt}）`:""}`,pool,{hint:((searchN>0&&S.gameMode!=="tcg")?`${searchN}種まで提示（同名は1枚にまとめています）／タップで選択・キャンセルで終了`:(searchN>0?"TCGモード：全候補を提示／タップで選択・キャンセルで終了":"タップで選択・キャンセルで終了"))+_sel});
+      if(j===null)break;
+      picks.push(pool[j]);taken.add(pool[j].id);
+    }
+  }
+  // 🎯 ②選んだぶんをまとめて出す（普通のクリーチャーなら間に確認が入らないので同時に並ぶ）
+  for(let i=0;i<picks.length;i++){
+    const tgt=picks[i];
     const di=src.findIndex(x=>x.id===tgt.id);
     if(di<0)continue;
     const cc=src.splice(di,1)[0];cc.faceup=true;cc.tapped=false;
@@ -11119,7 +11152,8 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
         if(!asEvo){
           // 通常クリーチャーとして出す（非進化・召喚酔いあり）
           cc.neoEvo=false;
-          Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);played.push(cc);
+          if(!cheatEnterBattle(pi,cc)){renderAll();continue;}
+          played.push(cc);
           put++;renderAll();
           toast(`🃏 ${faceNameOf(cc)} をそのまま出した（非進化）`);
           continue;
@@ -11161,7 +11195,8 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
           [`${evoLbl2}として出す（進化元に重ねる）`,"そのまま出す（進化元なし・非進化として）"]);
         if(evc===1){
           cc.neoEvo=false;
-          Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);played.push(cc);
+          if(!cheatEnterBattle(pi,cc)){renderAll();continue;}
+          played.push(cc);
           put++;renderAll();
           toast(`🃏 ${faceNameOf(cc)} をそのまま出した（非進化）`);
           continue;
@@ -11874,7 +11909,8 @@ async function runFxList(pi,list,srcCard,inPump){
         const rc=getReg(cc);
         cc.sick=!(rc&&rc.sa);
         if(!battleEntryOk(pi,cc)){Z.mana.push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないためマナゾーンに残しました`);continue;}
-        Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);put.push(cc);
+        if(!cheatEnterBattle(pi,cc)){renderAll();continue;}   // 🟥 7面上限を通す
+        put.push(cc);
         sfx("move");renderAll();
         toast(`🌱 ${faceNameOf(cc)} をマナゾーンからバトルゾーンに出した`);
       }
@@ -12220,7 +12256,8 @@ async function runFxList(pi,list,srcCard,inPump){
         const rc=getReg(cc);
         cc.sick=!(rc&&rc.sa);
         if(!battleEntryOk(pi,cc)){Z[zk].push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないため元のゾーンに戻しました`);continue;}
-        Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);put.push(cc);
+        if(!cheatEnterBattle(pi,cc)){renderAll();continue;}   // 🟥 7面上限を通す
+        put.push(cc);
         sfx("move");renderAll();
         toast(`✋🔷 ${faceNameOf(cc)} をバトルゾーンに出した`);
       }
@@ -12278,7 +12315,8 @@ async function runFxList(pi,list,srcCard,inPump){
         const rc=getReg(cc);
         cc.sick=!(rc&&rc.sa);
         if(!battleEntryOk(pi,cc)){Z[zk].push(cc);continue;}
-        Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);put2.push(cc);
+        if(!cheatEnterBattle(pi,cc)){renderAll();continue;}   // 🟥 7面上限を通す
+        put2.push(cc);
         sfx("move");renderAll();
         toast(`💀 ${faceNameOf(cc)} を出した`);
       }
@@ -13436,9 +13474,14 @@ async function runFxList(pi,list,srcCard,inPump){
       //    相手自身が選ぶ foeSelf系は持ち主＝選ぶ側なので選べる。攻撃・ブロック・全体（すべて）効果には無関係。
       const chooserPi=fixedFoe?tp:pi;
       const _ncOk=x=>{const rx=getReg(x);return !(((rx&&rx.noChoose)||momoUntouchable(x))&&chooserPi!==tp&&!isIgnored(x,tp));};
+      // 🎯 ①まず対象をぜんぶ選ぶ。選んでいる途中で盤面が変わらないので、
+      //    「1体ずつ」ではなく「まとめて選んで同時に処理」の見え方になる
+      const chosen=[];
+      const takenT=new Set();
       for(let i=0;i<n;i++){
         // 🔧 エレメント＝バトルゾーンのカード＋クロス中のクロスギア（クロス中のギアは配列に並ばないためzoneCardsで拾う）
         let pool=isElem?zoneCards(TZ,"battle").slice():TZ.battle.filter(x=>isCreatureReg(getReg(x)));
+        pool=pool.filter(x=>!takenT.has(x.id));
         if(pickFilt)pool=pool.filter(x=>lockFilterOk(pickFilt,getReg(x),x));
         const _ncCut=pool.filter(x=>!_ncOk(x)).length;
         pool=pool.filter(_ncOk);
@@ -13453,9 +13496,15 @@ async function runFxList(pi,list,srcCard,inPump){
           logOnly(`⚡ ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${act}の対象がいないため選択パネルを出しませんでした（対象：${S.players[tp].label}の場${_tot}枚${_nonCre?`・非クリーチャー${_nonCre}`:""}${pickFilt?`・条件「${pickFilt}」に合わない${_filtOut}`:""}${_ncCut?`・選ばれない${_ncCut}`:""}）`);
           break;
         }
-        const j=await pickCard(`🎯 ${chooser?chooser+"：":""}${act}する${unit}を選択${pickFilt?`（${pickFilt}）`:""}（${i+1}/${n}${isElem?"個":"体"}目・キャンセルで終了）`,pool,{sub:x=>x.tapped?"タップ":""});
+        const _selT=chosen.length?`／選択中：${chosen.map(faceNameOf).join("、")}`:"";
+        const j=await pickCard(`🎯 ${chooser?chooser+"：":""}${act}する${unit}を選択${pickFilt?`（${pickFilt}）`:""}（${i+1}/${n}${isElem?"個":"体"}目・キャンセルで終了）`,pool,
+          {sub:x=>x.tapped?"タップ":"",hint:`タップで選択　／　キャンセルで終了${_selT}`});
         if(j===null)break;
-        const tgt=pool[j];
+        chosen.push(pool[j]);takenT.add(pool[j].id);
+      }
+      // 🎯 ②選んだぶんをまとめて処理する
+      for(const tgt of chosen){
+        if(!zoneCards(TZ,"battle").some(x=>x.id===tgt.id)&&!TZ.battle.some(x=>x.id===tgt.id))continue;
         // ⚙ クロス中のクロスギアは共通の破壊・移動処理を通れないため、クロス元から外して送る
         if(isElem&&detachCrossedGearTo(TZ,tgt,isDestroy?"grave":(isMana?"mana":"hand"))){
           sfx(isDestroy?"grave":"move");
@@ -15039,7 +15088,8 @@ async function runFxList(pi,list,srcCard,inPump){
         const rc=getReg(cc);
         cc.sick=(S.turn>0)&&!(rc&&rc.sa)&&!/psy/.test(String(rc&&rc.ctype||""));
         if(!battleEntryOk(pi,cc)){Z.hyper.push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないため超次元ゾーンに残しました`);continue;}
-        Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);_out.push(cc);
+        if(!cheatEnterBattle(pi,cc)){renderAll();continue;}   // 🟥 7面上限を通す
+        _out.push(cc);
         sfx("move");renderAll();
         toast(`🌌 ${faceNameOf(cc)} を超次元ゾーンから出した`);
       }
@@ -15195,7 +15245,8 @@ async function runFxList(pi,list,srcCard,inPump){
         const rc=getReg(cc);
         cc.sick=!(rc&&rc.sa);
         if(!battleEntryOk(pi,cc)){Z[zk].push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないため元のゾーンに残しました`);continue;}
-        Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);put.push(cc);
+        if(!cheatEnterBattle(pi,cc)){renderAll();continue;}   // 🟥 7面上限を通す
+        put.push(cc);
         sfx("move");renderAll();
         toast(`🎲 ${faceNameOf(cc)} を出した`);
       }
@@ -26426,6 +26477,17 @@ function moveCardXRaw(pFrom,fromZone,id,pTo,toZone){
 }
 function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   MOVE_BLOCKED=false;
+  // 🟥 デュエプレのバトルゾーン7面上限。効果の中の選択パネルから手で置く経路も、ここで必ず通す。
+  //    進化は既存の進化元へ重ねるので面数を増やさない＝対象外。「踏倒:ON」なら通す。
+  if(toZone==="battle"&&fromZone!=="battle"&&battleSlotFull(pTo)){
+    const _fb=findCard(pFrom,fromZone,id);
+    const _rb=_fb?getReg(_fb.card):null;
+    if(_rb&&isCreatureReg(_rb)&&!isEvoReg(_rb)){
+      MOVE_BLOCKED=true;sfx("flip");
+      toast(`🟥 バトルゾーン上限（7体）：${faceNameOf(_fb.card)} は出せません\n※例外的に通す場合は「踏倒:ON」で`);
+      return;
+    }
+  }
   // 🌌 サイキック・ロック（5000GT型）：超次元からサイキックを出せない（stLockPsy持ちが相手or両者にいる時）
   if(S.expert&&S.vs&&fromZone==="hyper"&&toZone==="battle"){
     const _f=findCard(pFrom,fromZone,id);
@@ -28894,7 +28956,31 @@ async function doMugetsuSummon(pi,zn,id){
   await waitFxIdle();
   const needN=type==="zetsu"?6:4;
   await mugetsuGate(pi,h.id,needN);
-  await offerMugetsuOut(pi);
+  // 🌙 ムーゲッツの宣言は、続く無月の門の確認がすべて終わってから出す。
+  //    ここで出すと、まだ開く門が残っているのに割り込んでしまう（checkMugetsu が
+  //    1回につき1体しか処理せず、次の描画で残りを続けて聞くため）。
+  MUGETSU_OUT_WAIT.add(pi);
+}
+/* 🌙 無月の門の確認がぜんぶ済んだプレイヤーの、ムーゲッツの宣言をまとめて出す */
+let MUGETSU_OUT_WAIT=new Set();
+let MUGETSU_OUT_BUSY=false;
+async function flushMugetsuOut(){
+  if(MUGETSU_OUT_BUSY||!MUGETSU_OUT_WAIT.size)return;
+  if(MUGETSU_BUSY||fxRunning||fxQueue.length)return;
+  if(typeof WATCH_BUSY!=="undefined"&&WATCH_BUSY)return;
+  if((($("askOlay")&&$("askOlay").classList.contains("open"))||($("viewerOlay")&&$("viewerOlay").classList.contains("open"))))return;
+  // まだ開ける門が残っているなら待つ（その門の確認が先）
+  for(const pi of [...MUGETSU_OUT_WAIT]){
+    if(MUGETSU_PENDING.has(pi+":cre")||MUGETSU_PENDING.has(pi+":spl"))return;
+  }
+  MUGETSU_OUT_BUSY=true;
+  try{
+    for(const pi of [...MUGETSU_OUT_WAIT]){
+      MUGETSU_OUT_WAIT.delete(pi);
+      await offerMugetsuOut(pi);
+    }
+  }catch(e){}
+  finally{MUGETSU_OUT_BUSY=false;}
 }
 /* 🌙 ムーゲッツ：自分の「無月の門」能力を使った時、墓地（設定によっては手札からも）このクリーチャーを
    バトルゾーンに出してもよい。無月の門・虚無月の門・無月の門・絶 のどれで召喚した場合も対象。
@@ -28956,8 +29042,9 @@ async function checkMugetsu(atTurnEnd){
     const graveMad=Z.grave.filter(isMad).length;
     const total=battleMad+graveMad;
     let asked=false;
-    // 🌑 門カードの候補：手札＋（虚無月の門のみ）墓地からも召喚できる
-    const gateCands=[...Z.hand.map(h=>({h,zn:"hand"})),...Z.grave.map(h=>({h,zn:"grave"}))];
+    // 🌑 門カードの候補。**墓地から先に**確認する（墓地から出せるなら、そちらを使うことが多いため）。
+    //    手札のカードは温存できるが、墓地のカードは他に使い道が無い。
+    const gateCands=[...Z.grave.map(h=>({h,zn:"grave"})),...Z.hand.map(h=>({h,zn:"hand"}))];
     for(const {h,zn} of gateCands){
       const r=getReg(h);
       if(!r||!r.mugetsu||r.mugetsu==="zetsu")continue; // 絶はターン終了ゲートで処理
@@ -28975,7 +29062,18 @@ async function checkMugetsu(atTurnEnd){
         const label=type==="kyomu"?"虚無月の門":"無月の門";
         const trigTxt=type==="kyomu"?"水の魔導具呪文の解決":(hasCre?"魔導具クリーチャーが出た":"水の魔導具呪文の解決");
         const condTxt=type==="normal"?`場${battleMad}・墓${graveMad}（各2以上）`:`場+墓 計${total}（4以上）`;
-        const yes=await ask(`🌑 ${label}：${trigTxt} → 条件成立！ 魔導具 ${condTxt}\n《${faceNameOf(h)}》を${zn==="grave"?"墓地":"手札"}からコストを支払わずに召喚しますか？`);
+        // 同じカードが手札と墓地の両方にある時に取り違えないよう、ゾーンを頭に出す。
+        // 残りの候補数も出して、まだ確認が続くことが分かるようにする
+        const _rest=gateCands.filter(g=>{
+          const rg=getReg(g.h);
+          if(!rg||!rg.mugetsu||rg.mugetsu==="zetsu")return false;
+          if(g.zn==="grave"&&rg.mugetsu!=="kyomu")return false;
+          if(rg.mugetsu==="kyomu"&&!hasSpl)return false;
+          const mt=rg.mugetsu==="normal"?(battleMad>=2&&graveMad>=2):(total>=4);
+          return mt&&!MUGETSU_THIS_TRIG.has(pi+":"+g.h.id);
+        }).length;
+        const _zn=zn==="grave"?"🪦 墓地":"✋ 手札";
+        const yes=await ask(`🌑 ${label}：${trigTxt} → 条件成立！ 魔導具 ${condTxt}\n\n【${_zn}】《${faceNameOf(h)}》\nコストを支払わずに召喚しますか？${_rest?`\n（このあと残り${_rest}枚の確認があります）`:""}`);
         if(yes)await doMugetsuSummon(pi,zn,h.id);
       }catch(e){}
       finally{MUGETSU_BUSY=false;}
@@ -29027,6 +29125,7 @@ function renderAllNow(){
   try{if(typeof autoSaveSchedule==="function")autoSaveSchedule();}catch(e){} // 💾 リロード復帰用の自動保存
   checkLibWin();
   checkMugetsu(false);
+  flushMugetsuOut();    // 🌙 無月の門の確認がぜんぶ済んでから、ムーゲッツの宣言を出す
   checkGraveAwaken();   // 🔄 自分の墓地にカードが置かれた時の覚醒／進化
   fixPsyStray();        // 🌌 サイキック／ドラグハートが超次元ゾーン以外に紛れていたら戻す
   fixStrayBuff();       // 🧹 バトルゾーンの外に残った一時的な付与を消す
@@ -38133,19 +38232,40 @@ async function importAll(file){
   }
 }
 let BGM=null;
+let BGM_URL=null;   // 🎵 ファイルのまま持っている時の一時URL（作り直す前に必ず捨てる）
+const BGM_MAX_MB=50;
 function bgmSetState(t){const e=$("bgmState");if(e)e.textContent=t;}
+/* 🎵 保存された中身を再生できる形にする。
+   新しい版はファイル（Blob）のまま保存する。古い版は文字（data URL）で保存されているので、
+   どちらでも読めるようにしてある。base64の文字にすると容量が約1.33倍に膨らむため、
+   大きいファイルはファイルのまま持つほうが速くて軽い。 */
+function bgmSrcOf(d){
+  if(!d)return null;
+  if(typeof d==="string")return d;                 // 旧：data URL の文字
+  try{
+    if(BGM_URL){URL.revokeObjectURL(BGM_URL);BGM_URL=null;}
+    BGM_URL=URL.createObjectURL(d);                // 新：Blob
+    return BGM_URL;
+  }catch(e){return null;}
+}
+function bgmSizeLabel(d){
+  const n=(typeof d==="string")?Math.round(d.length*3/4):(d&&d.size)||0;
+  return n?`約${(n/1024/1024).toFixed(1)}MB`:"";
+}
 async function bgmLoad(){
   try{
     const d=db?await idbGet("misc","bgmData"):null;
     if(!d){bgmSetState("未登録");return;}
-    BGM=new Audio(d);
+    const src=bgmSrcOf(d);
+    if(!src){bgmSetState("読み込みに失敗しました");return;}
+    BGM=new Audio(src);
     BGM.loop=true;
     BGM.volume=(S.bgmVol!=null?S.bgmVol:40)/100;
     BGM.addEventListener("error",()=>{
       bgmSetState("読み込みに失敗しました（形式を確認してください）");
       console.warn("BGM load error",BGM.error);
     });
-    bgmSetState("登録済み（▶で再生・ループ）");
+    bgmSetState(`登録済み（▶で再生・ループ）${bgmSizeLabel(d)?`・${bgmSizeLabel(d)}`:""}`);
   }catch(e){
     bgmSetState("読み込みに失敗しました");
     console.warn("bgmLoad",e);
@@ -38154,18 +38274,25 @@ async function bgmLoad(){
 $("bgmFile").addEventListener("change",async e=>{
   const f=e.target.files&&e.target.files[0];
   if(!f)return;
-  if(f.size>25*1024*1024){toast("25MB以下のファイルにしてください");return;}
-  const r=new FileReader();
-  r.onload=async ()=>{
-    if(db)await idbPut("misc","bgmData",r.result);
+  if(f.size>BGM_MAX_MB*1024*1024){toast(`${BGM_MAX_MB}MB以下のファイルにしてください（選んだファイルは約${(f.size/1024/1024).toFixed(1)}MB）`);return;}
+  try{
+    // 🎵 ファイル（Blob）のまま保存する。文字（data URL）にすると容量が約1.33倍に膨らむため
+    if(db)await idbPut("misc","bgmData",f);
     if(BGM){BGM.pause();}
-    BGM=new Audio(r.result);
+    const src=bgmSrcOf(f);
+    BGM=new Audio(src);
     BGM.loop=true;
     BGM.volume=(S.bgmVol!=null?S.bgmVol:40)/100;
-    bgmSetState("登録済み（▶で再生・ループ）");
+    BGM.addEventListener("error",()=>{
+      bgmSetState("読み込みに失敗しました（形式を確認してください）");
+    });
+    bgmSetState(`登録済み（▶で再生・ループ）・約${(f.size/1024/1024).toFixed(1)}MB`);
     toast(`🎵 BGMを登録しました：${f.name}`);
-  };
-  r.readAsDataURL(f);
+  }catch(err){
+    console.warn("bgm save",err);
+    toast("BGMの保存に失敗しました（容量が大きすぎる可能性があります）");
+  }
+  e.target.value="";
 });
 $("bgmPlay").addEventListener("click",async ()=>{
   if(!BGM){toast("BGMが未登録です（ファイルを選択してください）");return;}
@@ -38184,6 +38311,7 @@ $("bgmPlay").addEventListener("click",async ()=>{
 });
 $("bgmDel").addEventListener("click",async ()=>{
   if(BGM){BGM.pause();BGM=null;}
+  if(BGM_URL){try{URL.revokeObjectURL(BGM_URL);}catch(e){}BGM_URL=null;}
   if(db)await idbPut("misc","bgmData",null);
   $("bgmPlay").textContent="▶ 再生";
   bgmSetState("未登録");
