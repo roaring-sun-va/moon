@@ -266,6 +266,31 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   background:#0e7a5f;color:#fff;
   font-size:9px;font-weight:900;padding:0 4px;border-bottom-left-radius:6px;
 }
+/* 🎯 見ながら調整の小窓。盤面の上に浮かべて、動かしながら結果を確かめられるようにする */
+#adjDock{
+  position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);
+  z-index:560;display:none;width:min(560px,94vw);
+  background:rgba(13,18,28,.96);border:1px solid #475569;border-radius:14px;
+  box-shadow:0 12px 34px rgba(0,0,0,.72);padding:8px 10px 10px;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#adjDock.show{display:block}
+#adjDock.fold #adjBody{display:none}
+#adjDock.fold{padding-bottom:8px}
+#adjHead{display:flex;align-items:center;gap:8px}
+#adjGrip{cursor:grab;font-size:16px;color:#94a3b8;padding:2px 4px;touch-action:none;user-select:none;flex:0 0 auto}
+#adjDock.dragging #adjGrip{cursor:grabbing}
+#adjTarget{flex:1;min-width:0;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 7px;font-size:12px;font-weight:700}
+#adjBody{display:grid;grid-template-columns:auto minmax(90px,1fr);gap:6px 9px;align-items:center;margin-top:8px}
+#adjBody b{font-size:11.5px;font-weight:800;white-space:nowrap}
+#adjBody input[type=range]{width:100%;min-width:70px}
+#adjBody select{background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:4px 6px;font-size:12px}
+#adjBody .adjfull{grid-column:1/-1}
+#adjBody .adjnote{grid-column:1/-1;font-size:10.5px;color:var(--muted);line-height:1.45}
+@media (max-width:640px){
+  #adjDock{width:96vw;padding:7px 8px 8px}
+  #adjBody{gap:5px 7px}
+  #adjBody b{font-size:11px}
+}
 #peekChip{
   position:fixed;right:10px;bottom:calc(120px + env(safe-area-inset-bottom));z-index:650;
   background:linear-gradient(180deg,var(--accent),#d9a520);color:#241a00;
@@ -832,6 +857,35 @@ body.shake{animation:bodyShake .4s ease-out}
 #bGrid.bg-tiny .vcard .vname{font-size:7.5px;-webkit-line-clamp:1}
 #bGrid.bg-tiny .vcard .cnt{font-size:9px;padding:0 2px;min-width:12px}
 #bGrid.bg-micro .vcard .vname{display:none}
+/* 📑 デッキ編成の右側「マイデッキ」。入れながら中身を確かめられるようにする */
+#bBody{display:flex;gap:8px;flex:1 1 auto;min-height:0}
+#bBody>#bGrid{flex:1 1 auto;min-width:0}
+#bSide{flex:0 0 208px;display:none;flex-direction:column;min-height:0;
+  border:1px solid var(--line);border-radius:10px;background:#0c111b;overflow:hidden}
+#builderOlay.showside #bSide{display:flex}
+#bSideHead{display:flex;justify-content:space-between;align-items:center;gap:6px;
+  font-size:11px;font-weight:900;color:var(--accent);padding:6px 8px;
+  border-bottom:1px solid var(--line);background:#111a2b}
+#bSideTotal{color:#cbd3df;font-size:11px}
+#bSideList{overflow-y:auto;flex:1 1 auto;padding:4px}
+.bsrow{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:7px;
+  background:#121a29;margin-bottom:3px;border:1px solid #1e2941}
+.bsrow .bsimg{width:26px;height:36px;border-radius:4px;object-fit:cover;flex:0 0 auto;background:#0d1119}
+.bsrow .bscost{flex:0 0 auto;font-size:10px;font-weight:900;color:#9fc6ff;min-width:15px;text-align:center}
+.bsrow .bsname{flex:1 1 auto;min-width:0;font-size:10.5px;font-weight:700;line-height:1.25;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.bsrow .bsn{flex:0 0 auto;font-size:12px;font-weight:900;color:var(--accent);min-width:20px;text-align:right}
+.bsrow .bsdec{flex:0 0 auto;width:19px;height:19px;border-radius:50%;padding:0;line-height:1;
+  border:1px solid #e57373;background:rgba(10,14,22,.9);color:#ff8a80;font-size:13px;font-weight:900;cursor:pointer}
+.bsrow.flash{animation:bsFlash .55s ease-out}
+@keyframes bsFlash{0%{background:rgba(255,200,60,.6);border-color:var(--accent)}100%{background:#121a29;border-color:#1e2941}}
+#bSideEmpty{font-size:10.5px;color:var(--muted);padding:8px 6px;line-height:1.5}
+/* 👉 右にはらって1枚入れる。動かしている間だけカードを追従させる */
+#bGrid .vcard{touch-action:pan-y}
+#bGrid .vcard.swiping{transition:none;z-index:5}
+#bGrid .vcard.swipeback{transition:transform .16s ease-out,opacity .16s ease-out}
+@media (max-width:820px){#bSide{flex:0 0 150px}.bsrow .bsimg{width:20px;height:28px}}
+@media (max-width:640px){#bSide{flex:0 0 128px}.bsrow .bsname{font-size:9.5px}}
 .dpChip{font-size:12px;font-weight:700;padding:6px 11px;border-radius:999px;cursor:pointer;
   background:#141c2e;color:#cbd3df;border:1px solid var(--line);white-space:nowrap}
 .dpChip:hover{border-color:#7b4bd6}
@@ -1139,6 +1193,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <button class="btn small" id="btnSleeve1">P2のスリーブ</button>
         <button class="btn small" id="btnMat0">P1のプレイマット</button>
         <button class="btn small" id="btnMat1">P2のプレイマット</button>
+        <button class="btn small primary" id="btnAdjLive" title="この画面を閉じて、盤面の上に小さな調整窓を出します。閉じたり開いたりせずに、動かしながら見え方を直せます">👁 盤面で見ながら調整</button>
         <button class="btn small ghost" id="btnMatReset">マット解除</button>
       </div>
       <div class="row" style="align-items:center;gap:8px">
@@ -1591,6 +1646,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <input type="text" id="bSearch" placeholder="絞り込み" style="flex:1;min-width:100px">
       <button class="btn small ghost" id="bReset">クリア</button>
       <button class="btn small" id="bCancel">閉じる</button>
+      <button class="btn small" id="bSideBtn" title="右にいまのデッキを出しておきます。カードを右にはらうと1枚入り、ここに反映されます">📑<span class="blbl"> デッキ表示</span><span class="bshort"> デッキ</span></button>
       <button class="btn small" id="bListView" title="いまのデッキの中身を一覧で確認します">📋<span class="blbl"> リスト確認</span><span class="bshort"> リスト</span></button>
       <button class="btn small" id="bFxEdit" title="カードの効果登録を開きます。閉じると、作りかけのデッキをそのまま保ったままビルダーに戻ります">⚙<span class="blbl"> カード登録</span><span class="bshort"> 登録</span></button>
       <button class="btn small" id="bImage" title="デッキ画像を書き出す">🖼<span class="blbl"> デッキ画像</span><span class="bshort"> 画像</span></button>
@@ -1599,7 +1655,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <div id="bFolds">
     <details id="bHelpBox" style="margin:2px 0">
       <summary style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">❔ 使い方</summary>
-      <div class="hint" style="margin:4px 0 0">タップで＋1（⌘/Ctrl＋タップで−1）。上限（4枚／超GR2枚）に達した状態でタップすると「制限なしカード」として5枚以上も指定できます。ゲーム外タブはタップで枚数を直接入力。特殊カード（禁断など）はテキスト欄に直接入力してください。</div>
+      <div class="hint" style="margin:4px 0 0"><b style="color:var(--accent)">カードを右にはらうと＋1、左にはらうと−1。</b>入れたカードは右の「📑 デッキ表示」の欄にその場で並びます。タップでも＋1（⌘/Ctrl＋タップで−1）。上限（4枚／超GR2枚）に達した状態でタップすると「制限なしカード」として5枚以上も指定できます。ゲーム外タブはタップで枚数を直接入力。特殊カード（禁断など）はテキスト欄に直接入力してください。</div>
     </details>
     <details id="bFilterBox" style="margin:2px 0">
       <summary id="bFilterSum" style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;list-style-position:inside">🔎 絞り込み（タイプ・文明・コスト・採用中）</summary>
@@ -1637,7 +1693,13 @@ body.shake{animation:bodyShake .4s ease-out}
       <div id="bSummary" style="margin-top:2px"></div>
     </details>
     </div>
-    <div id="bGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;overflow-y:auto;flex:1 1 auto;min-height:120px;padding:4px"></div>
+    <div id="bBody">
+      <div id="bGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;overflow-y:auto;flex:1 1 auto;min-height:120px;padding:4px"></div>
+      <aside id="bSide">
+        <div id="bSideHead"><span id="bSideTitle">マイデッキ</span><span id="bSideTotal">0</span></div>
+        <div id="bSideList"></div>
+      </aside>
+    </div>
   </div>
 </div>
 
@@ -2687,6 +2749,16 @@ body.shake{animation:bodyShake .4s ease-out}
 </div>
 
 <button id="peekChip">📋 パネルに戻る</button>
+<!-- 🎯 盤面を見ながらスリーブ／プレイマットの見え方を直す小窓。つまんで動かせる -->
+<div id="adjDock">
+  <div id="adjHead">
+    <span id="adjGrip" title="つまんで動かせます">⠿</span>
+    <select id="adjTarget" title="どれを調整するか"></select>
+    <button class="btn small ghost" id="adjFold" title="たたむ／広げる">▾</button>
+    <button class="btn small ghost" id="adjClose" title="閉じる">✕</button>
+  </div>
+  <div id="adjBody"></div>
+</div>
 <div id="fxNowChip"></div>
 <button id="logFab" title="ログを開く／閉じる（長押しで大きさ切替）">📜</button>
 <div id="olBar">
@@ -4094,7 +4166,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.75";
+const APP_VER="v13.76";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6540,8 +6612,18 @@ function sleevePosY(pi){
   const n=Number(S.sleevePos&&S.sleevePos[pi||0]);
   return Number.isFinite(n)?Math.max(0,Math.min(100,n)):50;
 }
+/* 🎯 スリーブ／プレイマットの見せ方は CSS の変数に入れておく。
+   こうしておくと、スライダーを動かした時に盤面を作り直さずその場で変わる（見ながら調整できる） */
+function applyViewVars(){
+  const r=document.documentElement.style;
+  for(const pi of [0,1]){
+    r.setProperty(`--slvp${pi}`,`${sleevePosX(pi)}% ${sleevePosY(pi)}%`);
+    r.setProperty(`--matsz${pi}`,matSizeOf(pi));
+    r.setProperty(`--matps${pi}`,`${matXOf(pi)}% ${matYOf(pi)}%`);
+  }
+}
 function applySleevePosition(im,pi){
-  if(im)im.style.objectPosition=`${sleevePosX(pi)}% ${sleevePosY(pi)}%`;
+  if(im)im.style.objectPosition=`var(--slvp${pi|0},50% 50%)`;
   return im;
 }
 /* 👤 演出に出す画像の「丸く切り抜く位置」と「拡大率」。
@@ -27441,9 +27523,10 @@ function buildBoards(){
       if(imgURL.has(mk)){
         const mb=document.createElement("div");
         mb.className="matbg";
+        mb.dataset.matPi=pi;
         mb.style.backgroundImage=`url(${imgURL.get(mk)})`;
-        mb.style.backgroundSize=matSizeOf(pi);
-        mb.style.backgroundPosition=`${matXOf(pi)}% ${matYOf(pi)}%`;
+        mb.style.backgroundSize=`var(--matsz${pi})`;
+        mb.style.backgroundPosition=`var(--matps${pi})`;
         pb.insertBefore(mb,pb.firstChild);
         pb.classList.add("hasmat");
       }
@@ -27451,6 +27534,7 @@ function buildBoards(){
     board.appendChild(pb);
   }
   applyZoneScales();
+  applyViewVars();
   board.querySelectorAll(".zbtn[data-act]").forEach(b=>{
     b.addEventListener("click",e=>{
       e.stopPropagation();
@@ -35106,9 +35190,9 @@ function openSleevePicker(pi){
     posHelp.textContent="縦長画像の見せたい位置を上〜下で調整";
     posRange.oninput=()=>{
       S.sleevePos[pi]=+posRange.value;posLabel.textContent=`🎯 画像の縦位置：${posRange.value}%`;
-      g.querySelectorAll("img[data-sleeve-preview]").forEach(x=>applySleevePosition(x,pi));
+      applyViewVars();
     };
-    posRange.onchange=async()=>{if(db)await idbPut("misc",`sleevePos${pi}`,S.sleevePos[pi]);renderAll();};
+    posRange.onchange=()=>saveSleeveView(pi);
     // ↔ 横位置（横長の絵を左右に寄せる）
     const posLabelX=document.createElement("b");
     posLabelX.textContent=`↔ 画像の横位置：${sleevePosX(pi)}%`;
@@ -35117,9 +35201,9 @@ function openSleevePicker(pi){
     posRangeX.style.cssText="flex:1 1 220px;min-width:180px";
     posRangeX.oninput=()=>{
       S.sleevePosX[pi]=+posRangeX.value;posLabelX.textContent=`↔ 画像の横位置：${posRangeX.value}%`;
-      g.querySelectorAll("img[data-sleeve-preview]").forEach(x=>applySleevePosition(x,pi));
+      applyViewVars();
     };
-    posRangeX.onchange=async()=>{if(db)await idbPut("misc",`sleevePosX${pi}`,S.sleevePosX[pi]);renderAll();};
+    posRangeX.onchange=()=>saveSleeveView(pi);
     const posReset=document.createElement("button");
     posReset.type="button";posReset.className="btn small ghost";posReset.textContent="中央に戻す";
     posReset.onclick=async()=>{
@@ -35127,12 +35211,14 @@ function openSleevePicker(pi){
       posRange.value="50";posRangeX.value="50";
       posLabel.textContent="🎯 画像の縦位置：50%";
       posLabelX.textContent="↔ 画像の横位置：50%";
-      g.querySelectorAll("img[data-sleeve-preview]").forEach(x=>applySleevePosition(x,pi));
-      if(db){await idbPut("misc",`sleevePos${pi}`,50);await idbPut("misc",`sleevePosX${pi}`,50);}
-      renderAll();
+      await saveSleeveView(pi);
     };
     posHelp.textContent=`この調整は ${S.players[pi].label} だけに使われます`;
-    posBar.append(posLabel,posRange,posLabelX,posRangeX,posReset,posHelp);g.appendChild(posBar);
+    const posLive=document.createElement("button");
+    posLive.type="button";posLive.className="btn small primary";posLive.textContent="👁 盤面で調整";
+    posLive.title="この画面を閉じて、盤面の上に小さな調整窓を出します。動かしながら結果を確認できます";
+    posLive.onclick=()=>openAdjustDock("sleeve"+pi);
+    posBar.append(posLabel,posRange,posLabelX,posRangeX,posLive,posReset,posHelp);g.appendChild(posBar);
     const _ks=_all
       .filter(k=>_st.all||isArtKey(k))
       .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
@@ -35218,7 +35304,12 @@ function openMatPicker(pi){
     who.style.cssText="grid-column:1/-1;font-size:11px;color:var(--muted);line-height:1.5";
     who.textContent=`この調整は ${S.players[pi].label} のプレイマットだけに使われます。`
       +`横位置が動かない時は、合わせ方を「縦に合わせる」にするか、拡大を上げてください（はみ出した分だけ動きます）`;
-    matBar.append(fitLabel,fit,xLabel,xRange,yLabel,yRange,zLabel,zRange,mReset,who);g.appendChild(matBar);
+    const mLive=document.createElement("button");
+    mLive.type="button";mLive.className="btn small primary";mLive.textContent="👁 盤面で調整";
+    mLive.title="この画面を閉じて、盤面の上に小さな調整窓を出します。動かしながら結果を確認できます";
+    mLive.style.cssText="grid-column:1/-1;justify-self:start";
+    mLive.onclick=()=>openAdjustDock("mat"+pi);
+    matBar.append(fitLabel,fit,xLabel,xRange,yLabel,yRange,zLabel,zRange,mLive,mReset,who);g.appendChild(matBar);
     const _ks=_all
       .filter(k=>_st.all||isArtKey(k))
       .sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(a).localeCompare(String(b),"ja"));
@@ -35424,6 +35515,7 @@ $("btnSendArtImages").addEventListener("click",async()=>{
 $("btnMat0").addEventListener("click",()=>openMatPicker(0));
 $("btnMat1").addEventListener("click",()=>openMatPicker(1));
 async function saveMatView(pi){
+  applyViewVars();   // 🎯 見た目は先に反映（作り直さないので、動かしながら確認できる）
   if(db){
     const list=(pi==null)?[0,1]:[pi|0];
     for(const p of list){
@@ -35433,7 +35525,137 @@ async function saveMatView(pi){
       await idbPut("misc",`matZoom${p}`,matZoomOf(p));
     }
   }
-  buildBoards();renderAll();
+}
+async function saveSleeveView(pi){
+  applyViewVars();
+  if(db){
+    const list=(pi==null)?[0,1]:[pi|0];
+    for(const p of list){
+      await idbPut("misc",`sleevePos${p}`,sleevePosY(p));
+      await idbPut("misc",`sleevePosX${p}`,sleevePosX(p));
+    }
+  }
+}
+/* ================= 🎯 見ながら調整の小窓（adjDock） =================
+   スリーブやプレイマットは「閉じて確かめる」の往復が面倒なので、
+   盤面の上に小さな調整窓を浮かべて、動かしながら結果を見られるようにする。 */
+const ADJ={target:"mat0",moved:false};
+function adjTargets(){
+  return [
+    {v:"mat0",  t:`🖼 ${S.players[0].label} のプレイマット`},
+    {v:"mat1",  t:`🖼 ${S.players[1].label} のプレイマット`},
+    {v:"sleeve0",t:`🎴 ${S.players[0].label} のスリーブ`},
+    {v:"sleeve1",t:`🎴 ${S.players[1].label} のスリーブ`},
+  ];
+}
+function adjRow(box,label,el){
+  const b=document.createElement("b");b.textContent=label;
+  box.appendChild(b);box.appendChild(el);
+  return el;
+}
+function adjRange(box,mkLabel,min,max,step,val,onIn,onEnd){
+  const b=document.createElement("b");b.textContent=mkLabel(val);
+  const r=document.createElement("input");
+  r.type="range";r.min=String(min);r.max=String(max);r.step=String(step);r.value=String(val);
+  r.oninput=()=>{b.textContent=mkLabel(r.value);onIn(+r.value);};
+  r.onchange=()=>{if(onEnd)onEnd();};
+  box.appendChild(b);box.appendChild(r);
+  return {label:b,range:r,reset:v=>{r.value=String(v);b.textContent=mkLabel(v);}};
+}
+function adjRenderBody(){
+  const box=document.getElementById("adjBody");if(!box)return;
+  box.innerHTML="";
+  const tg=ADJ.target||"mat0";
+  const pi=+tg.slice(-1)||0;
+  if(tg.startsWith("mat")){
+    const mk="__mat"+pi+"__";
+    if(!imgURL.has(mk)){
+      const n=document.createElement("div");n.className="adjnote";
+      n.textContent="このプレイヤーにはまだプレイマットが設定されていません。デッキ画面の「プレイマット」から選んでください。";
+      box.appendChild(n);return;
+    }
+    const fit=document.createElement("select");
+    fit.innerHTML='<option value="cover">全体に敷き詰める</option>'
+      +'<option value="height">縦に合わせる（横位置が動く）</option>'
+      +'<option value="width">横に合わせる（縦位置が動く）</option>'
+      +'<option value="contain">画像全体を収める</option>'
+      +'<option value="100% 100%">引き伸ばし</option>';
+    fit.value=matFitOf(pi);
+    fit.onchange=()=>{S.matFitP[pi]=fit.value;saveMatView(pi);};
+    adjRow(box,"🎯 合わせ方",fit);
+    const rx=adjRange(box,n=>`↔ 横位置 ${n}%`,0,100,1,matXOf(pi),n=>{S.matPosXP[pi]=n;applyViewVars();},()=>saveMatView(pi));
+    const ry=adjRange(box,n=>`↕ 縦位置 ${n}%`,0,100,1,matYOf(pi),n=>{S.matPosYP[pi]=n;applyViewVars();},()=>saveMatView(pi));
+    const rz=adjRange(box,n=>`🔍 拡大 ${n}%`,100,300,5,matZoomOf(pi),n=>{S.matZoomP[pi]=n;applyViewVars();},()=>saveMatView(pi));
+    const rs=document.createElement("button");
+    rs.type="button";rs.className="btn small ghost adjfull";rs.style.justifySelf="start";rs.textContent="最初の状態に戻す";
+    rs.onclick=()=>{
+      S.matFitP[pi]="cover";S.matPosXP[pi]=50;S.matPosYP[pi]=50;S.matZoomP[pi]=100;
+      fit.value="cover";rx.reset(50);ry.reset(50);rz.reset(100);saveMatView(pi);
+    };
+    box.appendChild(rs);
+    const n2=document.createElement("div");n2.className="adjnote";
+    n2.textContent="横位置が動かない時は、合わせ方を「縦に合わせる」にするか拡大を上げてください（はみ出した分だけ動きます）。";
+    box.appendChild(n2);
+  }else{
+    const rx=adjRange(box,n=>`↔ 横位置 ${n}%`,0,100,1,sleevePosX(pi),n=>{S.sleevePosX[pi]=n;applyViewVars();},()=>saveSleeveView(pi));
+    const ry=adjRange(box,n=>`↕ 縦位置 ${n}%`,0,100,1,sleevePosY(pi),n=>{S.sleevePos[pi]=n;applyViewVars();},()=>saveSleeveView(pi));
+    const rs=document.createElement("button");
+    rs.type="button";rs.className="btn small ghost adjfull";rs.style.justifySelf="start";rs.textContent="中央に戻す";
+    rs.onclick=()=>{S.sleevePos[pi]=50;S.sleevePosX[pi]=50;rx.reset(50);ry.reset(50);saveSleeveView(pi);};
+    box.appendChild(rs);
+    const n2=document.createElement("div");n2.className="adjnote";
+    n2.textContent="山札や盾など、裏向きのカードで確かめられます。対戦を始めていない時は「開始/再試合」で盤面を出してください。";
+    box.appendChild(n2);
+  }
+}
+/* 調整窓を開く。開く前に、盤面を隠している画面はすべて閉じる */
+function openAdjustDock(target){
+  const d=document.getElementById("adjDock");if(!d)return;
+  for(const id of ["viewerOlay","deckOlay","settingsOlay","builderOlay","deckListOlay"]){
+    const o=document.getElementById(id);if(o)o.classList.remove("open");
+  }
+  const sel=document.getElementById("adjTarget");
+  sel.innerHTML="";
+  for(const o of adjTargets()){
+    const op=document.createElement("option");op.value=o.v;op.textContent=o.t;sel.appendChild(op);
+  }
+  ADJ.target=target||ADJ.target||"mat0";
+  sel.value=ADJ.target;
+  adjRenderBody();
+  d.classList.add("show");d.classList.remove("fold");
+  {const f=document.getElementById("adjFold");if(f)f.textContent="▾";}
+}
+{
+  const d=document.getElementById("adjDock");
+  if(d){
+    document.getElementById("adjTarget").addEventListener("change",e=>{ADJ.target=e.target.value;adjRenderBody();});
+    document.getElementById("adjClose").addEventListener("click",()=>d.classList.remove("show"));
+    document.getElementById("adjFold").addEventListener("click",()=>{
+      d.classList.toggle("fold");
+      document.getElementById("adjFold").textContent=d.classList.contains("fold")?"▴":"▾";
+    });
+    // ✋ つまんで動かす。邪魔な場所にあれば逃がせるように
+    const grip=document.getElementById("adjGrip");
+    let sx=0,sy=0,ox=0,oy=0,on=false;
+    grip.addEventListener("pointerdown",ev=>{
+      on=true;d.classList.add("dragging");
+      try{grip.setPointerCapture(ev.pointerId);}catch(e){}
+      const r=d.getBoundingClientRect();
+      if(!ADJ.moved){d.style.left=r.left+"px";d.style.top=r.top+"px";d.style.bottom="auto";d.style.transform="none";ADJ.moved=true;}
+      sx=ev.clientX;sy=ev.clientY;ox=r.left;oy=r.top;
+      ev.preventDefault();
+    });
+    grip.addEventListener("pointermove",ev=>{
+      if(!on)return;
+      const w=d.offsetWidth,h=d.offsetHeight;
+      const nx=Math.max(4,Math.min(window.innerWidth-w-4,ox+ev.clientX-sx));
+      const ny=Math.max(4,Math.min(window.innerHeight-h-4,oy+ev.clientY-sy));
+      d.style.left=nx+"px";d.style.top=ny+"px";
+    });
+    const end=()=>{on=false;d.classList.remove("dragging");};
+    grip.addEventListener("pointerup",end);
+    grip.addEventListener("pointercancel",end);
+  }
 }
 $("setKeysOn").addEventListener("change",async ()=>{
   S.keysOn=$("setKeysOn").checked;
@@ -35465,6 +35687,7 @@ $("btnMatReset").addEventListener("click",async ()=>{
   buildBoards();renderAll();
   toast("プレイマットを解除しました");
 });
+{const bl=$("btnAdjLive");if(bl)bl.addEventListener("click",()=>openAdjustDock(ADJ.target||"mat0"));}
 $("btnSleeve0").addEventListener("click",()=>openSleevePicker(0));
 $("btnSleeve1").addEventListener("click",()=>openSleevePicker(1));
 $("btnSleeveReset").addEventListener("click",async ()=>{
@@ -35472,7 +35695,7 @@ $("btnSleeveReset").addEventListener("click",async ()=>{
   if(db){await idbDel("misc","sleeve0");await idbDel("misc","sleeve1");
     await idbDel("misc","sleevePos0");await idbDel("misc","sleevePos1");
     await idbDel("misc","sleevePosX0");await idbDel("misc","sleevePosX1");}
-  renderAll();
+  applyViewVars();renderAll();
   $("sleeveStatus").textContent="スリーブをリセットしました";
 });
 
@@ -37249,7 +37472,7 @@ $("importInput").addEventListener("change",async e=>{
     // 500MB超をもう一周するため、旧JSONの時だけ従来処理を行う。
     if(!zipCtx)await loadAllImages();
     await refreshDeckSelects();
-    renderAll();
+    buildBoards();renderAll();
     sfx("ok");
     toast("読み込み完了！デッキ一覧から使用するデッキを選んでください");
   }catch(err){
@@ -37995,6 +38218,141 @@ function bTotals(){
   $("bTotalHy").textContent=t(B.counts.hy);
   $("bTotalEx").textContent=t(B.counts.ex);
 }
+/* ================= 📑 デッキ編成の右側「マイデッキ」 =================
+   カードを右にはらうと1枚入り、ここがその場で増える（デュエプレの編成画面と同じ感覚） */
+const B_MODE_LB={main:"メインデッキ",gr:"超GR",hy:"超次元",ex:"ゲーム外"};
+const B_MODE_CAP={main:40,gr:12,hy:8,ex:0};
+function bSideRender(flashKey){
+  const list=document.getElementById("bSideList");if(!list)return;
+  const m=B.counts[B.mode]||new Map();
+  {const t=document.getElementById("bSideTitle");if(t)t.textContent=B_MODE_LB[B.mode]||"マイデッキ";}
+  {const t=document.getElementById("bSideTotal");
+   if(t){const n=Array.from(m.values()).reduce((a,b)=>a+b,0);
+     const cap=B_MODE_CAP[B.mode]||0;
+     t.textContent=cap?`${n}/${cap}`:`${n}枚`;
+     t.style.color=(cap&&n>cap)?"#ff8a80":"#cbd3df";}}
+  list.innerHTML="";
+  if(!m.size){
+    const e=document.createElement("div");e.id="bSideEmpty";
+    e.textContent="まだ空です。カードを右にはらう（またはタップ）と1枚入ります。左にはらうと1枚減ります。";
+    list.appendChild(e);return;
+  }
+  const ks=[...m.keys()].sort((a,b)=>{
+    const ra=FXDB.get(a),rb=FXDB.get(b);
+    const ca=(ra&&ra.cost!=null&&ra.cost!=="")?+ra.cost:99;
+    const cb=(rb&&rb.cost!=null&&rb.cost!=="")?+rb.cost:99;
+    if(ca!==cb)return ca-cb;
+    return String(dispName.get(a)||a).localeCompare(String(dispName.get(b)||b),"ja");
+  });
+  for(const k of ks){
+    const r=FXDB.get(k);
+    const row=document.createElement("div");row.className="bsrow";row.dataset.k=k;
+    const c=document.createElement("span");c.className="bscost";
+    c.textContent=(r&&r.cost!=null&&r.cost!=="")?String(r.cost):"–";
+    const u=imgURL.get(k);
+    const im=document.createElement("img");im.className="bsimg";im.draggable=false;im.loading="lazy";
+    if(u)im.src=u;
+    const nm=document.createElement("span");nm.className="bsname";nm.textContent=dispName.get(k)||k;
+    const n=document.createElement("span");n.className="bsn";n.textContent="×"+(m.get(k)||0);
+    const dec=document.createElement("button");dec.type="button";dec.className="bsdec";dec.textContent="−";
+    dec.title="1枚減らす";
+    dec.addEventListener("click",ev=>{ev.stopPropagation();bQuickAdd(k,null,-1);});
+    row.append(c,im,nm,n,dec);
+    if(flashKey&&k===flashKey)row.classList.add("flash");
+    list.appendChild(row);
+  }
+  if(flashKey){
+    const el=list.querySelector(`.bsrow[data-k="${CSS.escape(flashKey)}"]`);
+    if(el&&el.scrollIntoView)try{el.scrollIntoView({block:"nearest"});}catch(e){}
+  }
+}
+/* 1枚だけ増減する共通処理。はらう操作と「−」ボタンから呼ぶ（確認は出さない） */
+function bQuickAdd(k,el,dir){
+  const counts=B.counts[B.mode];
+  const cur=counts.get(k)||0;
+  let next;
+  if(dir<0){
+    if(!cur)return;
+    next=cur-1;
+  }else{
+    const mx=(B.mode==="ex")?999:bMax();
+    if(cur>=mx){toast(`${dispName.get(k)||k}：上限${mx}枚です（タップすると制限なしにできます）`);return;}
+    next=cur+1;
+  }
+  if(next===0)counts.delete(k);else counts.set(k,next);
+  const card=el||document.querySelector(`#bGrid .vcard[data-bkey="${CSS.escape(k)}"]`);
+  if(card){
+    const c=card.querySelector(".cnt");if(c)c.textContent=next;
+    card.classList.toggle("picked",next>0);
+    const mb=card.querySelector(".dec-btn");if(mb)mb.style.display=next>0?"flex":"none";
+  }
+  bTotals();
+  {const sm=$("bSummary");if(sm){sm.innerHTML="";sm.appendChild(buildDeckSummaryEl(B.counts[B.mode]||new Map()));}}
+  bSideRender(k);
+  if(dir>0&&card)bFlyToDeck(card,k);
+}
+/* ✨ 入れた瞬間、カードがシュッとデッキの側へ飛ぶ演出（入ったことが目で分かるように） */
+function bFlyToDeck(el,k){
+  if(!el||!el.getBoundingClientRect)return;
+  const r=el.getBoundingClientRect();
+  if(!r.width)return;
+  const side=document.getElementById("bSide");
+  const shown=side&&side.offsetParent!==null;
+  const t=shown?side.getBoundingClientRect():null;
+  const g=document.createElement("div");
+  g.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;`
+    +"z-index:900;pointer-events:none;border-radius:6px;overflow:hidden;"
+    +"border:2px solid var(--accent);box-shadow:0 8px 24px rgba(0,0,0,.6);background:#26304a";
+  const u=imgURL.get(k);
+  if(u){const im=document.createElement("img");im.src=u;im.style.cssText="width:100%;height:100%;object-fit:cover";g.appendChild(im);}
+  document.body.appendChild(g);
+  const cx=r.left+r.width/2, cy=r.top+r.height/2;
+  const tx=(t?t.left+t.width/2:window.innerWidth-40)-cx;
+  const ty=(t?t.top+34:cy)-cy;
+  const done=()=>{try{g.remove();}catch(e){}};
+  try{
+    g.animate([
+      {transform:"translate(0,0) scale(1)",opacity:1},
+      {transform:`translate(${tx*.55}px,${ty*.55}px) scale(.62)`,opacity:.95,offset:.55},
+      {transform:`translate(${tx}px,${ty}px) scale(.14)`,opacity:0}
+    ],{duration:400,easing:"cubic-bezier(.3,.9,.4,1)"}).onfinish=done;
+  }catch(e){done();}
+  setTimeout(done,650);
+}
+/* 👉 カードを左右にはらって増減できるようにする（縦スクロールとは取り合わない） */
+function bAttachSwipe(el,k){
+  let sx=0,sy=0,on=false,sw=false,pid=null;
+  const clear=()=>{el.classList.remove("swiping");el.style.transform="";el.style.opacity="";};
+  el.addEventListener("pointerdown",ev=>{
+    if(ev.button)return;
+    on=true;sw=false;pid=ev.pointerId;sx=ev.clientX;sy=ev.clientY;
+    el.classList.remove("swipeback");
+  });
+  el.addEventListener("pointermove",ev=>{
+    if(!on)return;
+    const dx=ev.clientX-sx, dy=ev.clientY-sy;
+    if(!sw&&Math.abs(dx)>14&&Math.abs(dx)>Math.abs(dy)*1.5){
+      sw=true;el.classList.add("swiping");
+      try{el.setPointerCapture(pid);}catch(e){}
+    }
+    if(sw){
+      const d=Math.max(-80,Math.min(80,dx));
+      el.style.transform=`translateX(${d}px)`;
+      el.style.opacity=String(1-Math.min(.35,Math.abs(d)/240));
+    }
+  });
+  el.addEventListener("pointerup",ev=>{
+    if(!on)return;
+    on=false;
+    if(!sw){clear();return;}
+    const dx=ev.clientX-sx;
+    el.classList.add("swipeback");clear();
+    el._swiped=true;setTimeout(()=>{el._swiped=false;},80);
+    if(dx>=38)bQuickAdd(k,el,1);
+    else if(dx<=-38)bQuickAdd(k,el,-1);
+  });
+  el.addEventListener("pointercancel",()=>{on=false;sw=false;clear();});
+}
 /* 📊 デッキ集計（文明別の枚数・タイプ別の枚数）を計算してDOM要素で返す。作りながら見られるよう、リスト確認に表示する。 */
 function buildDeckSummaryEl(m){
   const CIV=[["light","光","#e8c65a"],["water","水","#5ab0e8"],["dark","闇","#a97fe0"],["fire","火","#e87a6a"],["nature","自然","#6fc46a"],["zero","無色","#b8c0cc"]];
@@ -38344,6 +38702,8 @@ function bRender(){
     const el=vCardEl(dispName.get(k),{cnt:n});
     if(n)el.classList.add("picked");
     el.style.position="relative";
+    el.dataset.bkey=k;
+    bAttachSwipe(el,k);   // 👉 右にはらって＋1／左にはらって−1
     // ℹ️ 効果を見るボタン（タップで枚数が変わらないよう伝播停止）。
     //    カードが小さい時はℹを出すと絵柄が見えなくなるので、長押しで開く方式にする。
     if(!_tiny){
@@ -38385,12 +38745,13 @@ function bRender(){
       const cntEl=el.querySelector(".cnt");if(cntEl)cntEl.textContent=nx;
       el.classList.toggle("picked",nx>0);
       mb.style.display=nx>0?"flex":"none";
-      bTotals();
+      bTotals();bSideRender();
       {const sm=$("bSummary");if(sm){sm.innerHTML="";sm.appendChild(buildDeckSummaryEl(B.counts[B.mode]||new Map()));}}
     });
     el.appendChild(mb);
     el.addEventListener("click",async ev=>{
       if(el._longInfo){el._longInfo=false;return;} // 長押しで情報を開いた時は枚数を変えない
+      if(el._swiped)return;                        // はらった直後のタップは無視する
       let next;
       const cur=counts.get(k)||0;
       if(ev.metaKey||ev.ctrlKey){
@@ -38417,12 +38778,13 @@ function bRender(){
       el.querySelector(".cnt").textContent=next;
       el.classList.toggle("picked",next>0);
       {const _mb=el.querySelector(".dec-btn");if(_mb)_mb.style.display=next>0?"flex":"none";}
-      bTotals();
+      bTotals();bSideRender(next>cur?k:null);
       {const sm=$("bSummary");if(sm){sm.innerHTML="";sm.appendChild(buildDeckSummaryEl(B.counts[B.mode]||new Map()));}}
+      if(next>cur)bFlyToDeck(el,k);
     });
     g.appendChild(el);
   }
-  bTotals();
+  bTotals();bSideRender();
 }
 function bSetMode(m){
   B.mode=m;
@@ -38432,10 +38794,28 @@ function bSetMode(m){
   $("bTabEx").classList.toggle("on",m==="ex");
   bRender();
 }
+/* 📑 右の「マイデッキ」を出すかどうか。広い画面では最初から出しておく */
+function bSyncSideBtn(){
+  const o=document.getElementById("builderOlay"),b=document.getElementById("bSideBtn");
+  if(!o||!b)return;
+  b.classList.toggle("on",o.classList.contains("showside"));
+}
+function bSetSide(on){
+  const o=document.getElementById("builderOlay");if(!o)return;
+  o.classList.toggle("showside",!!on);
+  B._side=!!on;
+  bSyncSideBtn();
+  // 一覧の幅が変わるので、並べ直してから中身を出す
+  try{bFitBuilderUI();}catch(e){}
+  try{bRender();}catch(e){bSideRender();}
+}
+{const b=document.getElementById("bSideBtn");
+ if(b)b.addEventListener("click",()=>bSetSide(!document.getElementById("builderOlay").classList.contains("showside")));}
 $("btnBuilder").addEventListener("click",()=>{
   if(!dispName.size){toast("先に画像を登録してください");return;}
   bSeed();bSetMode("main");
   bBuildCivBar();bBuildCostBar();bFitBuilderUI();$("builderOlay").classList.add("open");
+  bSetSide(B._side!=null?B._side:(window.innerWidth>=820));
 });
 $("bTabMain").addEventListener("click",()=>bSetMode("main"));
 $("bTabGR").addEventListener("click",()=>bSetMode("gr"));
@@ -39257,6 +39637,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
     const sx=db?await idbGet("misc",`sleevePosX${pi}`):null;
     if(sx!==null&&sx!==undefined)S.sleevePosX[pi]=Math.max(0,Math.min(100,+sx||0));
   }
+  applyViewVars();   // 🎯 読み込んだ見え方を先に反映しておく
   const last=db?await idbGet("misc","lastDeck"):null;
   if(last){
     const d=await getDeck(last);
