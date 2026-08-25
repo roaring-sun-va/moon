@@ -799,7 +799,9 @@ body.shake{animation:bodyShake .4s ease-out}
 .olay{
   position:fixed;inset:0;background:rgba(4,7,13,.78);z-index:90;
   display:none;align-items:flex-start;justify-content:center;
-  overflow-y:auto;padding:16px 8px;
+  overflow-y:auto;
+  /* 📱 iPhone の時計・電波の帯（セーフエリア）を避ける。viewport-fit=cover のため自前で避ける必要がある */
+  padding:max(16px, env(safe-area-inset-top)) 8px max(16px, env(safe-area-inset-bottom));
 }
 .olay.open{display:flex}
 .panelbox{
@@ -842,6 +844,7 @@ body.shake{animation:bodyShake .4s ease-out}
 .vname{font-size:9px;color:var(--muted);margin-top:3px;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;text-align:center}
 
 #builderOlay .bshort{display:none}
+#builderOlay #bTools>.btn{flex:0 0 auto;white-space:nowrap}
 /* 🗂 デッキ編成の折りたたみ（使い方／絞り込み／内訳）は、閉じている時は横に並べて1行にまとめる */
 #bFolds{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;flex:0 0 auto}
 #bFolds>details{flex:0 0 auto;margin:2px 0!important}
@@ -885,6 +888,8 @@ body.shake{animation:bodyShake .4s ease-out}
 #bGrid .vcard.swiping{transition:none;z-index:5}
 #bGrid .vcard.swipeback{transition:transform .16s ease-out,opacity .16s ease-out}
 @media (max-width:900px){#bSide{flex:0 0 158px}.bsrow .bsimg{width:22px;height:30px}}
+/* 🔘 画面が狭くなってきたら、頭のボタンの文字を短くする（はみ出して切れるのを防ぐ） */
+@media (max-width:900px){#builderOlay .blbl{display:none}#builderOlay .bshort{display:inline}}
 /* 📱 縦長の画面では右の列にせず、下に横スクロールの帯として出す（一覧の幅を削らない） */
 @media (max-width:700px){
   #bBody{flex-direction:column;gap:6px}
@@ -892,14 +897,16 @@ body.shake{animation:bodyShake .4s ease-out}
   #bSideHead{padding:4px 7px;font-size:10.5px}
   #bSideList{display:flex;flex-direction:row;gap:5px;padding:5px;
     overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
-  .bsrow{flex:0 0 auto;flex-direction:column;width:46px;gap:2px;padding:3px;margin:0}
-  .bsrow .bsimg{width:40px;height:54px}
+  .bsrow{flex:0 0 auto;flex-direction:column;width:48px;gap:0;padding:3px;margin:0}
+  .bsrow .bsimg{width:42px;height:57px}
   .bsrow .bsname{display:none}
-  .bsrow .bscost{position:absolute;left:3px;top:3px;min-width:0;padding:0 3px;font-size:9px;
-    background:rgba(8,12,20,.88);border-radius:5px;line-height:1.4}
-  .bsrow .bsn{position:absolute;right:3px;top:3px;min-width:0;padding:0 3px;font-size:10px;
-    background:rgba(8,12,20,.88);border-radius:5px;line-height:1.4}
-  .bsrow .bsdec{width:100%;height:17px;border-radius:6px;font-size:12px}
+  /* コスト・枚数・「−」は絵の上に重ねて、帯の高さを抑える */
+  .bsrow .bscost{position:absolute;left:4px;top:4px;min-width:0;padding:0 3px;font-size:9px;
+    background:rgba(8,12,20,.9);border-radius:5px;line-height:1.5}
+  .bsrow .bsn{position:absolute;right:4px;top:4px;min-width:0;padding:0 3px;font-size:10px;
+    background:rgba(8,12,20,.9);border-radius:5px;line-height:1.5}
+  .bsrow .bsdec{position:absolute;right:3px;bottom:3px;width:21px;height:21px;border-radius:50%;
+    font-size:13px;background:rgba(8,12,20,.92)}
   #bSideEmpty{padding:6px 8px}
 }
 .dpChip{font-size:12px;font-weight:700;padding:6px 11px;border-radius:999px;cursor:pointer;
@@ -986,7 +993,7 @@ body.shake{animation:bodyShake .4s ease-out}
 .card.marked{outline:2px solid #ff9f43;outline-offset:-2px}
 /* 📱 スマホでデッキを組む時、上の操作欄で画面が埋まらないように詰める */
 @media (max-width:640px){
-  #builderOlay{padding:4px!important}
+  #builderOlay{padding-left:4px!important;padding-right:4px!important;padding-top:max(4px, env(safe-area-inset-top))!important;padding-bottom:max(4px, env(safe-area-inset-bottom))!important}
   #builderOlay .panelbox{max-height:98dvh;padding:8px}
   #builderOlay .row{gap:4px;margin-top:4px}
   #builderOlay .btn.small{padding:5px 8px;font-size:11px;border-radius:8px}
@@ -996,7 +1003,7 @@ body.shake{animation:bodyShake .4s ease-out}
   #builderOlay #bCivBar{margin-top:2px}
   #builderOlay .panelbox>.row:first-child{margin-top:0}
   /* 📱 デッキ一覧を開いた時のカードもスマホでは小さく（横に多く並べる） */
-  #deckListOlay{padding:4px!important}
+  #deckListOlay{padding-left:4px!important;padding-right:4px!important;padding-top:max(4px, env(safe-area-inset-top))!important;padding-bottom:max(4px, env(safe-area-inset-bottom))!important}
   #deckListOlay .panelbox{padding:8px;max-height:98dvh}
   #deckListOlay .dl-item{padding:6px 7px;margin-top:5px}
   .dl-grid{grid-template-columns:repeat(auto-fill,minmax(50px,1fr));gap:4px;margin-top:6px}
@@ -1011,7 +1018,7 @@ body.shake{animation:bodyShake .4s ease-out}
   /* 📱 スマホでは一覧のカード名も詰める（縦の枚数を稼ぐ） */
   #viewerOlay #vGrid.decklist .vcard .vname{font-size:9px;line-height:1.2;-webkit-line-clamp:2}
   /* 📱 カード選択・画像管理も、デッキ編成と同じようにカードを小さく詰める */
-  #viewerOlay{padding:4px!important}
+  #viewerOlay{padding-left:4px!important;padding-right:4px!important;padding-top:max(4px, env(safe-area-inset-top))!important;padding-bottom:max(4px, env(safe-area-inset-bottom))!important}
   #viewerOlay .panelbox{padding:9px;max-height:98dvh}
   #viewerOlay #vGrid:not(.decklist){grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:5px;padding:2px;max-height:56dvh}
   #viewerOlay #vGrid:not(.decklist) .vcard .vname{font-size:8px;line-height:1.15;-webkit-line-clamp:2;margin-top:1px}
@@ -1023,13 +1030,16 @@ body.shake{animation:bodyShake .4s ease-out}
   #viewerOlay .btn.small{padding:5px 8px;font-size:11px}
   #builderOlay details>summary{padding:2px 0}
   #builderOlay .blbl{display:none} /* 狭い画面ではボタンを絵文字だけにして、カードの表示枚数を稼ぐ */
-  /* 📱 iPhone の時計・電波の帯（セーフエリア）に画面がもぐり込まないようにする。
-     100dvh は帯の下も含むので、帯のぶんを引いた高さに収める */
-  .olay{padding-top:max(4px, env(safe-area-inset-top))!important;
-        padding-bottom:max(4px, env(safe-area-inset-bottom))!important}
+  /* 🔘 頭のボタンは「タブの段」と「道具の段」の2段に収める。
+     道具の段は折り返さず、はみ出すぶんは絞り込み欄が縮んで吸収する（反映だけ1行になるのを防ぐ） */
+  #builderOlay .bshort{display:none} /* さらに狭い時は絵文字だけ */
+  #builderOlay #bTools{gap:4px}
+  #builderOlay #bTools .btn.small{padding:5px 6px;font-size:10.5px;flex:0 0 auto}
+  #builderOlay #bSearch{flex:1 1 44px;min-width:0}
+  /* 📱 100dvh は帯の下も含むので、帯のぶんを引いた高さに収める（上下の余白は各 olay 側で確保） */
   .olay>.panelbox{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 10px)!important}
   /* 📱 デッキ作成画面も余白を詰める（入力欄の文字は16px未満にしない＝iOSで勝手に拡大されるため） */
-  #deckOlay{padding:4px!important}
+  #deckOlay{padding-left:4px!important;padding-right:4px!important;padding-top:max(4px, env(safe-area-inset-top))!important;padding-bottom:max(4px, env(safe-area-inset-bottom))!important}
   #deckOlay .panelbox{padding:8px;max-height:98dvh}
   #deckOlay .row{gap:4px;margin-top:4px}
   #deckOlay .btn.small{padding:5px 8px;font-size:11px}
@@ -1664,7 +1674,8 @@ body.shake{animation:bodyShake .4s ease-out}
       <button class="btn small" id="bTabGR">超GR <span id="bTotalGR">0</span>/12</button>
       <button class="btn small" id="bTabHy">超次元 <span id="bTotalHy">0</span>/8</button>
       <button class="btn small" id="bTabEx">ゲーム外 <span id="bTotalEx">0</span></button>
-      <input type="text" id="bSearch" placeholder="絞り込み" style="flex:1;min-width:100px">
+      <div class="row" id="bTools" style="margin-top:0;flex:1 1 auto;min-width:0;flex-wrap:nowrap">
+      <input type="text" id="bSearch" placeholder="絞り込み" style="flex:1 1 60px;min-width:0">
       <button class="btn small ghost" id="bReset">クリア</button>
       <button class="btn small" id="bCancel">閉じる</button>
       <button class="btn small" id="bSideBtn" title="いまのデッキを出しておきます（広い画面では右の列、縦長の画面では下の帯）。カードを右にはらうと1枚入り、ここに反映されます">📑<span class="blbl"> デッキ表示</span><span class="bshort"> デッキ</span></button>
@@ -1672,6 +1683,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <button class="btn small" id="bFxEdit" title="カードの効果登録を開きます。閉じると、作りかけのデッキをそのまま保ったままビルダーに戻ります">⚙<span class="blbl"> カード登録</span><span class="bshort"> 登録</span></button>
       <button class="btn small" id="bImage" title="デッキ画像を書き出す">🖼<span class="blbl"> デッキ画像</span><span class="bshort"> 画像</span></button>
       <button class="btn primary small" id="bApply">反映</button>
+      </div>
     </div>
     <div id="bFolds">
     <details id="bHelpBox" style="margin:2px 0">
@@ -4187,7 +4199,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.77";
+const APP_VER="v13.79";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
