@@ -4226,7 +4226,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.82";
+const APP_VER="v13.83";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9532,6 +9532,7 @@ const FX_TYPES=[
   ["foeSelfDiscard","🗑 相手は自身の手札をn枚選び、捨てる（選ぶのは相手・公開しない／条件欄で対象を絞れる）"],
   ["peepShield","相手の手札を見てn枚選び、裏向きの新しいシールドに（パクリオ型）"],
   ["selfShieldMove","自分のシールドをn枚、墓地/マナ/手札へ（行き先は実行時選択：ジャドク丸型／条件欄に「手札」「マナ」「墓地」と書くと行き先を固定・シールドを選んで手札に戻すコダマンマ型に使える）"],
+  ["shieldToHandNoST","🛡→✋ 自分のシールドをn枚選んで手札に加える（そのS・トリガーは使えない・トライガード・チャージャー型）"],
   ["selfDiscard","自分の手札からn枚選んで捨てる（バレッドゥ型：捨て終わるまで解決が完了しない）"],
   ["peek","相手の手札を見る"],
   ["bounce","相手クリーチャーをランダムn体 手札に戻す"],
@@ -13210,6 +13211,25 @@ async function runFxList(pi,list,srcCard,inPump){
         }
         sfx("move");renderAll();
       }
+    }else if(f.t==="shieldToHandNoST"){
+      // 🛡→✋ トライガード・チャージャー型：自分の盾を選んで手札へ。
+      // ブレイクではないので processBroken を通さず、S・トリガーは使用できない。
+      let moved=0;
+      for(let i=0;i<n;i++){
+        if(!Z.shield.length){if(i===0)toast("シールドがありません");break;}
+        const lbs=Z.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表：${faceNameOf(x)}）`:""}${x.under&&x.under.length?` +${x.under.length}枚重ね`:""}`);
+        const j=await askChoice(`🛡 手札に加える自分のシールドを1枚選択（${i+1}/${n}枚目・S・トリガーは使えません）`,lbs);
+        if(j===null)break;
+        const sh=Z.shield.splice(j,1)[0];
+        const kids=sh.under?sh.under.splice(0):[];
+        sh.faceup=true;sh.tapped=false;sh.mark=false;sh.sideways=false;
+        const kept=typeof toHand==="function"?toHand(Z,sh):(Z.hand.push(sh),true);
+        kids.forEach(u=>{u.faceup=true;u.tapped=false;Z.grave.push(u);});
+        if(kids.length)toast(`盾の下の${kids.length}枚（要塞化の城など）は墓地へ`);
+        toast(`🛡→✋ 盾${j+1}を${kept?"手札へ":"手札上限のため墓地へ"}（S・トリガーは使えない）：${faceNameOf(sh)}`);
+        moved++;sfx(kept?"move":"grave");renderAll();
+      }
+      if(moved)await notifyShieldLeave(pi);
     }else if(f.t==="selfShieldMove"){
       // 🛡 自分のシールドをn枚、墓地/マナ/手札へ（誘発型：ダグラジャパニカン／ルピア＆ガ：ナテハ／ジャドク丸 等）
       let moved=0;
@@ -17830,6 +17850,9 @@ async function notifyShieldLeave(owner){
   }
 }
 async function processBroken(op,stack,label){
+  // 親カードの効果解決中に呼ばれたかを入口で固定する。
+  // S・トリガー獣のCIPや「出た時」監視を途中で排出せず、親の残りを終えてから処理するため。
+  const inFxPump=!!fxRunning;
   return new Promise(res=>{
     const Z=zonesOf(op);
     let remaining=stack.slice(), sel=new Set(), wentGrave=false;
@@ -17864,7 +17887,10 @@ async function processBroken(op,stack,label){
               toast(`⚡ 出た時効果（${ordered.indexOf(d)+1}/${ordered.length}）：${faceNameOf(cc)}`);
               emitEvent(op,"summon");enqueueFx(op,cc);
             }
-            await waitFxIdle();
+            // 親クリーチャーの効果中は、その親自身が fxRunning なので通常待機すると自己待ちになり、
+            // タイムアウト後の drainTrig() が親効果の途中へ割り込んでいた。
+            // キューへ積むだけにして、pumpFx が親の効果を完了した後に左から順に解決する。
+            await waitFxIdle(inFxPump);
             renderAll();
           }
           res();
