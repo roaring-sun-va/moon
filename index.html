@@ -898,13 +898,14 @@ body.shake{animation:bodyShake .4s ease-out}
 
 #toast{
   position:fixed;top:calc(10px + env(safe-area-inset-top));left:50%;
-  transform:translateX(-50%) translateY(-90px);
+  /* 固定pxでは長い通知の下端が画面に残る。自身の高さぶん完全に上へ退避する。 */
+  transform:translateX(-50%) translateY(calc(-100% - 24px));opacity:0;visibility:hidden;
   background:linear-gradient(180deg,var(--accent-2),var(--accent));color:#1a1405;
   font-weight:800;font-size:13px;padding:8px 16px;border-radius:20px;z-index:500;
-  transition:transform .2s ease,opacity .2s ease;pointer-events:auto;touch-action:none;cursor:pointer;user-select:none;box-shadow:0 4px 16px rgba(0,0,0,.45);
+  transition:transform .2s ease,opacity .2s ease,visibility 0s linear .2s;pointer-events:none;touch-action:none;cursor:pointer;user-select:none;box-shadow:0 4px 16px rgba(0,0,0,.45);
   max-width:90vw;text-align:center;
 }
-#toast.show{transform:translateX(-50%) translateY(0)}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s}
 #toast.toast-drag{transition:none}
 
 /* v6 additions */
@@ -4093,7 +4094,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.74";
+const APP_VER="v13.75";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
