@@ -4227,7 +4227,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.85";
+const APP_VER="v13.87";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11214,7 +11214,11 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🔧 条件欄を「対象の絞り込み／書式」として使う効果の一覧。
    これらの効果ではcondをゾーン条件式（マナ>=3など）として判定してはいけない。
    runFxList だけでなく、誘発側（攻撃の終わりに等）の判定でも同じ集合を使う。 */
-const FILT_COND_SET=new Set(["nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
+/* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
+   満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
+   （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
+const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+  "handes","peepDiscard","grantBlockerPick","deckShield","revealBottomShield","nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "exileRecruitPerZone","elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
   "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho"]);
@@ -13223,7 +13227,8 @@ async function runFxList(pi,list,srcCard,inPump){
       let moved=0;
       for(let i=0;i<n;i++){
         if(!Z.shield.length){if(i===0)toast("シールドがありません");break;}
-        const j=await pickCard(`🛡 手札に加える自分のシールドを1枚選択（${i+1}/${n}枚目・S・トリガーは使えません）`,Z.shield,{hint:"実際のシールドをタップして選択（キャンセルで終了）"});
+        const j=await pickCard(`🛡 手札に加える自分のシールドを1枚選択（${i+1}/${n}枚目・S・トリガーは使えません）`,Z.shield,
+          {hint:"実際のシールドをタップして選択（裏向きの中身は見えません／キャンセルで終了）",mask:true,maskPi:pi,maskLabel:"盾"});
         if(j===null)break;
         const sh=Z.shield.splice(j,1)[0];
         const kids=sh.under?sh.under.splice(0):[];
@@ -13240,7 +13245,8 @@ async function runFxList(pi,list,srcCard,inPump){
       let moved=0;
       for(let i=0;i<n;i++){
         if(!Z.shield.length){toast("シールドがありません");break;}
-        const j=await pickCard(`🛡 自分のシールドを1枚選択（${i+1}/${n}枚目）`,Z.shield,{hint:"実際のシールドをタップして選択（キャンセルで終了）"});
+        const j=await pickCard(`🛡 自分のシールドを1枚選択（${i+1}/${n}枚目）`,Z.shield,
+          {hint:"実際のシールドをタップして選択（裏向きの中身は見えません／キャンセルで終了）",mask:true,maskPi:pi,maskLabel:"盾"});
         if(j===null)break;
         // 条件欄に「手札」「マナ」「墓地」と書いておくと、行き先の確認を省略できる
         const fixZ=String(f.cond||"").trim();
@@ -25914,8 +25920,10 @@ function stLeaveRepSource(pi,c){
   if(c.buff&&c.buff.noLeave)return null;             // 既に置換済み（このターン離れない）→ 二重置換しない
   const pw=dispPower(c);
   if(pw!=null&&pw<=0)return null;                    // パワー0以下は置換しない（不明＝適用）
+  // 🔁 このカード自身も守る。テキストは「自分の他のクリーチャー」ではなく「自分のクリーチャー」
+  //    （オーエン・ザ・ロードは自身が離れる時にも置換する。ここを「他の」にすると、
+  //      まとめて離れる効果でオーエンが先に落ちて、以降が全部素通りになる）
   for(const b of zonesOf(pi).battle){
-    if(b.id===c.id)continue;                           // 「自分の他のクリーチャー」だけを守る
     const rb=getReg(b);
     if(!rb||!rb.stLeaveRep)continue;
     if(isSealed(b)||isIgnored(b,pi))continue;
@@ -34496,6 +34504,24 @@ function refreshLazyImages(){
     const p=im.parentElement;if(p){const np=p.querySelector(".nameplate,.lazy-nameplate");if(np)np.remove();}
   });
 }
+/* 🛡 中身を伏せたまま選ばせる時の札。スリーブ（裏面）と位置の番号だけを出す */
+function pi0Of(opts){const n=Number(opts&&opts.maskPi);return Number.isFinite(n)?(n|0):(S.who|0);}
+function vCardBackEl(pi,label){
+  const el=document.createElement("div");el.className="vcard";
+  const th=document.createElement("div");th.className="thumb";
+  const url=(typeof backURL==="function")?backURL(pi):null;
+  if(url){
+    const im=document.createElement("img");im.src=url;im.draggable=false;
+    if(typeof applySleevePosition==="function")applySleevePosition(im,pi);
+    th.appendChild(im);
+  }else{
+    const np=document.createElement("div");np.className="nameplate";np.textContent="？";th.appendChild(np);
+  }
+  el.appendChild(th);
+  const cnt=document.createElement("span");cnt.className="cnt";cnt.textContent="";el.appendChild(cnt);
+  const nm=document.createElement("div");nm.className="vname";nm.textContent=label||"？";el.appendChild(nm);
+  return el;
+}
 function vCardEl(name,opts={}){
   const el=document.createElement("div");el.className="vcard"+(opts.side?" side":"");
   const th=document.createElement("div");th.className="thumb";
@@ -34572,8 +34598,11 @@ function _pickCardBase(title,cards,opts={}){
     const finish=v=>{if(done)return;done=true;$("vCancel").onclick=defaultVCancel;{const sIn=$("vSearch");if(sIn){sIn.oninput=null;sIn.value="";}}$("viewerOlay").classList.remove("open");res(v);};
     const _pickEls=[];
     cards.forEach((c,i)=>{
-      const nm=faceNameOf(c);
-      const el=vCardEl(nm,{cnt:""});
+      // 🛡 裏向きのカードを選ばせる時は中身を伏せる（自分の盾を選ぶ場面など）。
+      //    ここで名前を出すと、本来は分からないはずの盾の中身が見えてしまう
+      const _masked=!!(opts.mask&&!c.faceup);
+      const nm=_masked?"":faceNameOf(c);
+      const el=_masked?vCardBackEl(pi0Of(opts),`${opts.maskLabel||"盾"}${i+1}`):vCardEl(nm,{cnt:""});
       el.style.cursor="pointer";el.style.position="relative";
       const sub=opts.sub?opts.sub(c,i):"";
       if(sub){
