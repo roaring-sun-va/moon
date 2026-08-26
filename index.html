@@ -4338,7 +4338,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.95";
+const APP_VER="v13.96";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11283,7 +11283,8 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
         Z.battle.forEach(x=>{const rx=getReg(x);if(rx&&(rx.ctype==="crossgear"||rx.ctype==="evocrossgear"))bases.push({card:x,where:"battle"});});
         Z.battle.forEach(host=>{(host.gear||[]).forEach(g=>{const rg=getReg(g);if(rg&&(rg.ctype==="crossgear"||rg.ctype==="evocrossgear"))bases.push({card:g,where:"gear",host});});});
       }else{
-        Z.battle.forEach(x=>{if(x.id!==cc.id&&isCreatureReg(getReg(x)))bases.push({card:x,where:"battle"});});
+        // ⤴ 「進化－自分のドラゴン1体の上に置く」等の進化元の条件も、踏み倒しの経路で通す
+        Z.battle.forEach(x=>{if(x.id!==cc.id&&isCreatureReg(getReg(x))&&evoSrcOk(rCC,x))bases.push({card:x,where:"battle"});});
         // 🪦 墓地進化・マナ進化・手札進化・ルナティック進化。登録の evoZone で置き場を決める。
         //    未設定でもバトルゾーンに進化元がいなければ、他のゾーンから探す（HADESドラゲリオン型）。
         const _ez=String(rCC.evoZone||"").trim();
@@ -11297,6 +11298,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
           (Z[zn]||[]).forEach(x=>{
             if(x.id===cc.id)return;
             if(!isCreatureReg(getReg(x)))return;
+            if(!evoSrcOk(rCC,x))return;
             _extra.push({card:x,where:zn,zoneLabel:lbl});
           });
         }
@@ -11307,7 +11309,8 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
       if(!bases.length){
         // 下敷きが無い→進化不成立。手札に戻す（デュエプレの挙動に合わせ、出せないものは出さない）
         cc.faceup=true;Z.hand.push(cc);
-        toast(`⚠ 《${faceNameOf(cc)}》は${isEvoGear?"重ねられるクロスギア":"進化元のクリーチャー"}がないため出せません（手札へ）`);
+        toast(`⚠ 《${faceNameOf(cc)}》は${isEvoGear?"重ねられるクロスギア":"進化元のクリーチャー"}がないため出せません（手札へ）`
+          +((rCC&&rCC.evoSrcFilt)?`\n※進化元は「${rCC.evoSrcFilt}」のみ`:""));
         renderAll();continue;
       }
       // ⤴ 進化元を選ぶ。進化GVのように複数必要なら、その枚数ぶん続けて選ばせる
