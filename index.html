@@ -2008,7 +2008,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="メカ・エンジェル・コマンド"><option value="メガ・コマンド・ドラゴン"><option value="メカ・サンダー"><option value="メカ・デル・ソル"><option value="メカ・デル・ディネロ"><option value="メカサンダー"><option value="メタリカ"><option value="メルト・ウォリアー"><option value="ライトブリンガー"><option value="リヴァイアサン">
           <option value="リキッド・ピープル"><option value="リキッド・ピープル閃"><option value="レインボー・ファントム"><option value="レクスターズ"><option value="レッド・コマンド・ドラゴン"><option value="ロスト・クルセイダー"><option value="ロック・ビースト"><option value="ワーム"><option value="ワールド・コマンド"><option value="ワールド・ドラゴン">
           <option value="ワイルド・ベジーズ"><option value="革命軍"><option value="鬼レクスターズ"><option value="禁断"><option value="月光王国"><option value="最終禁断"><option value="侵略者"><option value="超化獣"><option value="超竜"><option value="不死樹王国">
-          <option value="暴拳王国"><option value="魔導具"><option value="無色">
+          <option value="暴拳王国"><option value="魔導具"><option value="無色"><option value="生徒会組">
           <option value="ルナティック"><option value="ルナティック・エンペラー"><option value="ナイトメア"><option value="ブレインジャッカー"><option value="リビング・デッド"><option value="チルドレン"><option value="ソルダート"><option value="ロボット">
         </datalist>
       </div>
@@ -4363,7 +4363,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.99";
+const APP_VER="v13.100";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5402,6 +5402,7 @@ function applyFlipSeal(pi,c){
       if(put){
         toast(`🔏 ${faceNameOf(c)} に封印を${put}個付けた`);
         fxShare("seal","封印！",`${S.players[pi].label}　${faceNameOf(c)}（封印${(c.seals||[]).length}個）`,put>=4,c.name,pi);
+        renderAll();
       }
       return;
     }
@@ -5416,6 +5417,7 @@ function applyFlipSeal(pi,c){
       toast(`🔏 ${S.players[op2].label} のクリーチャー${tgts.length}体に封印を付けた（計${cnt}個）`);
       logOnly(`🔏 ${faceNameOf(c)}：${S.players[op2].label} のクリーチャー${tgts.length}体に封印を付与`);
       fxShare("seal","全体封印！！",`${S.players[op2].label}　${tgts.length}体を封印`,true,c.name,pi);
+      renderAll();
     }
   }catch(e){}
 }
@@ -5634,6 +5636,56 @@ async function playEvoCreature(p,zone,id){
   if(!f0){renderAll();return;}
   const rc=getReg(f0.card);
   const isUlt=evoKindOf(rc)==="ultimate";
+  // 🪦 墓地進化GV／マナ進化／手札進化など。
+  // ドラッグ経路でも効果登録の evoZone・evoBaseN を必ず参照する。
+  const _ezRaw=String(rc&&rc.evoZone||"").trim();
+  const _ezMap={"バトル":"battle","墓地":"grave","マナ":"mana","手札":"hand","ゲーム外":"exile",
+                battle:"battle",grave:"grave",mana:"mana",hand:"hand",exile:"exile"};
+  const _needBase=Math.max(1,(rc&&rc.evoBaseN|0)||1);
+  if(_ezRaw||_needBase>1){
+    const srcZone=_ezMap[_ezRaw]||"battle";
+    const srcLabel={battle:"バトルゾーン",grave:"墓地",mana:"マナゾーン",hand:"手札",exile:"ゲーム外"}[srcZone]||srcZone;
+    const pool=(Z[srcZone]||[]).filter(x=>x.id!==id&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||(srcZone==="battle"&&rr.shinkalize))&&evoSrcOk(rc,x);})());
+    if(pool.length<_needBase){
+      toast(`⚠ 《${faceNameOf(f0.card)}》は${srcLabel}の進化元が${_needBase}枚必要です（候補${pool.length}枚）`
+        +((rc&&rc.evoSrcFilt)?`\n※進化元は「${rc.evoSrcFilt}」のみ`:""));
+      renderAll();return;
+    }
+    const picked=[];let rest=pool.slice();
+    for(let i=0;i<_needBase;i++){
+      const k=rest.length===1?0:await pickCard(`⤴ 《${faceNameOf(f0.card)}》の進化元を選択（${srcLabel}・${i+1}/${_needBase}枚目）`,rest,
+        {hint:`${_needBase}枚必要です（${picked.length}／${_needBase}枚選択済み）`,sub:x=>srcLabel});
+      if(k===null){renderAll();return;}
+      picked.push(rest[k]);rest.splice(k,1);
+    }
+    // 場以外の進化元では盤面が1面増えるため、上限時は出せない。
+    if(srcZone!=="battle"&&battleSlotFull(p)){
+      toast(`🟥 バトルゾーン上限（7面）：《${faceNameOf(f0.card)}》を${srcLabel}から進化させて出せません`);
+      renderAll();return;
+    }
+    const f1=findCard(p,zone,id);if(!f1){renderAll();return;}
+    snap();f1.arr.splice(f1.idx,1);const evc=f1.card;
+    const unders=[];
+    if(srcZone==="battle"){
+      // 2枚目以降を先に外し、1枚目の位置へ進化クリーチャーを置く。
+      for(const x of picked.slice(1)){const xi=Z.battle.findIndex(y=>y.id===x.id);if(xi>=0)Z.battle.splice(xi,1);}
+      const host=picked[0],bi=Z.battle.findIndex(x=>x.id===host.id);
+      for(const x of picked){x.faceup=true;x.sideways=false;unders.push(x,...(x.under?x.under.splice(0):[]));}
+      evc.tapped=host.tapped;if(host.gear&&host.gear.length)evc.gear=[...(evc.gear||[]),...host.gear.splice(0)];
+      if(bi>=0)Z.battle[bi]=evc;else Z.battle.push(evc);
+      transferAtkState(picked.map(x=>x.id),evc);
+    }else{
+      for(const x of picked){const xi=Z[srcZone].findIndex(y=>y.id===x.id);if(xi>=0)Z[srcZone].splice(xi,1);x.faceup=true;x.tapped=false;x.sideways=false;x._evoFrom=srcZone;unders.push(x,...(x.under?x.under.splice(0):[]));}
+      evc.tapped=false;Z.battle.push(evc);
+    }
+    evc.faceup=true;evc.sick=false;evc.sideways=false;evc.under=[...unders,...(evc.under||[])];
+    markArrive(evc);emitEvent(p,"summon");
+    if(S.expert&&S.autoTap&&!S.freePlay)MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(p,evc)).catch(()=>{});
+    enqueueFx(p,evc);closeSel();sfx("ok");renderAll();
+    toast(`⤴ ${srcLabel}進化${_needBase>1?"GV":""}！ ${picked.map(x=>faceNameOf(x)).join("＋")} の上に ${faceNameOf(evc)}`);
+    try{fxShare("evo",`${srcLabel}進化${_needBase>1?"GV":""}！`,`${S.players[p].label}　${picked.length}枚の上に`,true,evc.name,p);}catch(e){}
+    return;
+  }
   // 進化元候補（自分のクリーチャー／シンカライズ持ち）。究極進化は進化クリーチャーの上に重ねる想定だが、ここでは任意のクリーチャーを許可。
   // 🌪 超無限進化（進化元をまとめて選び、コスト合計で判定する）
   if(rc&&+rc.evoSrcSum>0){
@@ -8409,16 +8461,9 @@ function runWatchFx(pi,type,trigCard){
         if(w.once){
           S._watchOnce=S._watchOnce||{};
           if(S._watchOnce[onceKey]===`${S.turn}:${S.who}`){_onceSkipped++;return;}
-          // 🕐 「初めて〔対象〕が出た時」：このターン、既に条件に合うカードが出ていたら（＝今回のが初回でなければ）不発。
-          //    キューティー・ルピア型＝先にドラゴンが出た後で自分が出て、その後のドラゴンには反応しない。
-          if(type==="allyEnter"&&trigCard&&S._turnArrived&&S._turnArrived.key===`${S.turn}:${S.who}`){
-            const cndF=String(w.cond||"").split(/[＆&]/).map(x=>x.trim()).filter(x=>x&&!/^(?:自分|相手)の?ターン$/.test(x)&&!/^(?:相手|自分の?)?(?:マナ|墓地|手札|盾|シールド|バトル|山札)/.test(x)&&!/[<>=]|以上|以下/.test(x)).join("／").replace(/^他の/,"");
-            const prior=S._turnArrived.list.filter(a=>a.pi===pi&&a.id!==trigCard.id&&(!cndF||lockFilterOk(cndF,a.reg,a)));
-            // trigCard自身より前に条件対象が出ていれば「初めて」ではない
-            const selfIdx=S._turnArrived.list.findIndex(a=>a.id===trigCard.id);
-            const before=prior.filter(a=>{const ai=S._turnArrived.list.findIndex(x=>x.id===a.id);return ai>=0&&(selfIdx<0||ai<selfIdx);});
-            if(before.length){return;} // 既に出ている＝初めてではない→不発
-          }
+          // 「各ターン1回」はこの登録を持つカード個体ごとに数える。
+          // 以前は allyEnter 全般へ「そのターン最初の対象だけ」という別能力まで混ぜていたため、
+          // アーシュの後に出た熊田すず等が不発になっていた。初回限定は専用登録で表現する。
         }
         let w2=w;
         // 🕐 ターン限定（自分ターン/相手ターン）は全イベント共通でゲート（allyEnter以外の誘発に登録しても効くように）
@@ -9688,6 +9733,8 @@ const FX_TYPES=[
   ["trigCantAtk","⛔ そのターン、誘発のきっかけになったクリーチャー1体は攻撃できない（相手のクリーチャーが出た時・カルマ コットン型）"],
   ["trigCantAtkNextMine","⛔ 誘発した相手クリーチャー1体は、次の自分のターン開始まで攻撃できない（登場/アンタップ時・ダンテバスター型）"],
   ["foeCantAtkAllTurn","⛔ このターン、相手のクリーチャーはすべて攻撃できない（後から出たクリーチャーにも適用）"],
+  ["foeCantAtkCurrentTurn","⛔ このターン、現在場にいる相手のクリーチャーだけ攻撃できない（後から出たカードには付与しない）"],
+  ["shieldPlacedSelfMode","🛡 自分の盾が置かれた時：自身をアンタップし、ドロー／相手1体タップ＆フリーズ／自身が離れない から1つ"],
   ["foePowDownAll","⬇ そのターン、条件に合う相手クリーチャーすべてのパワーを−n×1000（ターン終了時まで・条件欄で対象指定・空欄＝全部・HADES型）"],
   ["foePowDownPick","⬇ 相手クリーチャー1体を選び、そのターン、パワーを−n×1000（ターン終了時まで・パワー0以下で破壊・メテオバーン等の対象指定に）"],
   ["foePowDownPer","⬇ 相手クリーチャー1体を選び、〔ゾーン:対象〕の枚数×n×1000だけそのターンパワーマイナス（条件欄に「墓地:クリーチャー」等・墓地の数だけ−1000型／オブザ08号型）"],
@@ -10432,7 +10479,7 @@ async function autoTapCost(pi,c){
   }
   // ゲイル・ヴェスパー型：場のgrantDS持ちが手札のクリーチャーにシンパシー付与（複数で重複）
   if(paySide==="creature"){
-    const granters=Z.battle.filter(b=>{const rb=getReg(b);return rb&&rb.grantDS&&rb.sympathy&&b.id!==c.id&&(!rb.grantDSFilt||lockFilterOk(rb.grantDSFilt,r,c));});
+    const granters=Z.battle.filter(b=>{const rb=getReg(b);return rb&&rb.grantDS&&rb.sympathy&&b.id!==c.id&&String(rb.sympathy)!==String(r.sympathy||"")&&(!rb.grantDSFilt||lockFilterOk(rb.grantDSFilt,r,c));});
     for(const g of granters){
       const rg=getReg(g);
       const gcnt=sympathyCount(pi,c,rg.sympathy).cnt;
@@ -11811,7 +11858,7 @@ async function runFxList(pi,list,srcCard,inPump){
     }else if(f.t==="graveToMana"){
       // ⚰→🔷 自分の墓地から条件(f.cond)に合うカードをn枚マナゾーンに置く
       const filt=String(f.cond||"").trim();
-      let put=0;
+      let put=0,placed=[];
       for(let i=0;i<n;i++){
         const pool=Z.grave.filter(x=>{const rx=getReg(x);return !filt||lockFilterOk(filt,rx,x);});
         if(!pool.length){if(i===0)toast(`墓地に該当カードなし${filt?`（${filt}）`:""}`);break;}
@@ -13050,6 +13097,7 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       if(ms.length)toast(`🪦 捨てた${dropped.length}枚×${per} → ${S.players[op].label} の山札から${ms.length}枚を墓地へ`);
       for(const mc of ms)queueToGrave(op,mc,"deck");
+      if(S.vs&&!OZh.deck.length&&!libWinHolderOf(op))declareWin(pi,`山札破壊：${S.players[op].label} の山札が0枚`);
       sfx("grave");renderAll();
     }else if(f.t==="elemKillCastGrave"){
       // 💥 自分のエレメントを好きな数破壊 → その合計コスト以下の呪文を相手の墓地からコストなしで唱える
@@ -14209,7 +14257,8 @@ async function runFxList(pi,list,srcCard,inPump){
         //    条件欄に「強制」（または「必ず」）と書いた時だけ確認なしで実行する。
         //    ❓任意にチェックしている場合は上の共通確認で既に聞いているので、ここでは聞かない。
         if(!f.opt&&!/強制|必ず/.test(String(f.cond||""))){
-          const useMb=await ask(`☄ メテオバーン（《${faceNameOf(srcLive)}》${mbTag}）\n下のカードを${n}枚墓地に置いて、続く効果を発動しますか？\n（「いいえ」ならメテオバーンせず、この効果は発動しません）`);
+          const mbTarget=FX_TRIG?`\n⬇ 続く−効果の対象：《${faceNameOf(FX_TRIG)}》`:"";
+          const useMb=await ask(`☄ メテオバーン（《${faceNameOf(srcLive)}》${mbTag}）${mbTarget}\n下のカードを${n}枚墓地に置いて、続く効果を発動しますか？\n（「いいえ」ならメテオバーンせず、この効果は発動しません）`);
           if(!useMb){toast(`☄ メテオバーンしませんでした（この効果は発動しない）`);logOnly(`☄ ${S.players[pi].label}：《${faceNameOf(srcLive)}》のメテオバーンを使わなかった`);break;}
         }
         // 🔎 どのクリーチャーの処理か一目で分かるよう、対象カードをハイライトして名前を出す
@@ -14739,6 +14788,21 @@ async function runFxList(pi,list,srcCard,inPump){
       S._cantAtkAllTurn=S._cantAtkAllTurn||{};
       S._cantAtkAllTurn[op]=`${S.turn}:${S.who}`;
       toast(`⛔ このターン、${S.players[op].label}のクリーチャーは攻撃できない`);renderAll();
+    }else if(f.t==="foeCantAtkCurrentTurn"){
+      const now=OZ.battle.filter(x=>{const rx=getReg(x);return !rx||isCreatureReg(rx);});
+      for(const x of now){x.buff=x.buff||{};x.buff.cantAtk=true;markBuffTurn(x,["cantAtk"]);}
+      toast(`⛔ このターン、現在場にいる${S.players[op].label}のクリーチャー${now.length}体は攻撃できない（後から出たクリーチャーには適用しない）`);renderAll();
+    }else if(f.t==="shieldPlacedSelfMode"){
+      const me=srcCard&&Z.battle.find(x=>x.id===srcCard.id);
+      if(!me){toast("（誘発元は場を離れています）");continue;}
+      me.tapped=false;me.frozen=false;renderAll();
+      const md=await askChoice(`🛡 ${faceNameOf(me)}：自身をアンタップしました。次の中から1つ選ぶ`,["カードを1枚引く","相手のクリーチャー1体をタップし、次の相手のターン開始にアンタップさせない","次の自分のターンのはじめまで、このクリーチャーは離れない"]);
+      if(md===0){if(Z.deck.length){const dc=Z.deck.shift();dc.faceup=true;Z.hand.push(dc);sfx("draw");emitEvent(pi,"draw");}}
+      else if(md===1){
+        const pool=OZ.battle.filter(x=>{const rx=getReg(x);return !rx||isCreatureReg(rx);});
+        if(pool.length){const j=pool.length===1?0:await pickCard("タップしてフリーズする相手のクリーチャー",pool);if(j!==null){pool[j].tapped=true;pool[j].frozen=true;}}
+      }else if(md===2){me.buff=me.buff||{};me.buff.noLeave=true;markBuffNext(me,["noLeave"],pi);}
+      renderAll();
     }else if(f.t==="dSwitchOn"||f.t==="dSwitchOff"){
       // 🅳 Dスイッチの向きを効果から切り替える（確認パネルのあと自動で反転させたい時に使う）
       const meD=srcCard&&[0,1].map(pp=>zonesOf(pp).battle.find(x=>x.id===srcCard.id)).find(Boolean);
@@ -14820,8 +14884,8 @@ async function runFxList(pi,list,srcCard,inPump){
       tgT.buff=tgT.buff||{};tgT.buff.pow=(+tgT.buff.pow||0)-amtT;markBuffTurn(tgT,["pow"]);
       sfx("ok");renderAll();
       toast(`⬇ ${srcTag}${faceNameOf(tgT)} のパワー−${amtT}（ターン終了時まで）`);
+      await checkZeroPower();
       HILITE_ID=null;
-      await checkZeroPower(); // 💥 パワー0以下は破壊
     }else if(f.t==="trigCantAtk"){
       if(!FX_TRIG){toast("⛔ きっかけになったクリーチャーが分からないためスキップしました");continue;}
       const tgA=[0,1].map(pp=>zonesOf(pp).battle.find(x=>x.id===FX_TRIG.id)).find(Boolean);
@@ -14920,17 +14984,17 @@ async function runFxList(pi,list,srcCard,inPump){
       else{
         snap();
         // ゲーム外は無限枚：毎回すべての候補から独立・均等に抽選（重複あり得る）
-        const made=[];let capHit3=false;
+        const made=[],madeCards=[];let capHit3=false;
         for(let i=0;i<n;i++){
           if(!shieldCapOk(Z)){capHit3=true;break;} // 🛡 デュエプレ10枚上限：超過分は作らない
           const nm=names[Math.floor(Math.random()*names.length)];
           const sc=makeCard(nm);
           sc.faceup=false;sc.tapped=false;
-          Z.shield.push(sc);made.push(nm);
+          Z.shield.push(sc);made.push(nm);madeCards.push(sc);
         }
         if(capHit3)toast(`🛡 シールド上限（10枚）：これ以上は追加できません`);
         sfx("move");renderAll();
-        if(made.length)toast(`🛡 ゲーム外からランダムに${made.length}枚をシールド化した（内容は非公開）`);
+        if(made.length){toast(`🛡 ゲーム外からランダムに${made.length}枚をシールド化した（内容は非公開）`);await notifyShieldPlaced(pi,madeCards);}
       }
     }else if(f.t==="pauseManual"){
       // ⏸ 手動処理タイム：処理を止めて盤面を自由に操作 →「▶ 続行」で再開
@@ -15047,10 +15111,10 @@ async function runFxList(pi,list,srcCard,inPump){
         let up=false;
         if(f.faceChoice){const q=await askChoice("シールドを置く向き",["裏向き","表向き"]);if(q===null){Z.hand.splice(j,0,sc);break;}up=q===1;}
         sc.faceup=up;sc.tapped=false;sc.sideways=false;sc.rot=0;sc.mark=S.turn>0;
-        Z.shield.push(sc);put++;
+        Z.shield.push(sc);placed.push(sc);put++;
         renderAll();
       }
-      if(put>0){sfx("move");toast(`🛡 手札から${put}枚をシールド化した`);}
+      if(put>0){sfx("move");toast(`🛡 手札から${put}枚をシールド化した`);await notifyShieldPlaced(pi,placed);}
     }else if(f.t==="graveToDeckAll"){
       // 🔀 自分の墓地のカードをすべて山札に加えてシャッフル
       if(!Z.grave.length){toast("墓地にカードがありません");}
@@ -15108,6 +15172,7 @@ async function runFxList(pi,list,srcCard,inPump){
       for(const o of revealed){if(o.grave)continue;o.c.faceup=true;o.c.tapped=false;OZ.grave.push(o.c);gv++;}
       sfx("grave");renderAll();
       toast(`🃏 公開したカードをすべて${S.players[op].label}の墓地に置いた（計${revealed.length}枚）`);
+      if(S.vs&&!OZ.deck.length&&!libWinHolderOf(op))declareWin(pi,`山札破壊：${S.players[op].label} の山札が0枚`);
     }else if(f.t==="sumRecruit"){
       // 🌋 〔ゾーン（複数可）〕から好きな数のクリーチャーをコスト合計n以下で選んで出す（汎用・条件欄「マナ／墓地:クリーチャー」）
       const spec=String(f.cond||"マナ／墓地:クリーチャー").trim();
@@ -15886,32 +15951,33 @@ async function runFxList(pi,list,srcCard,inPump){
       if(f.cond&&String(f.cond).trim()&&!zoneCondOk(f.cond,pi,srcCard)){
         toast(`🛡 条件「${f.cond}」を満たさないため、シールドを追加しません`);continue;
       }
-      let add=0,toGrave=0;
+      let add=0,toGrave=0,placed=[];
       for(let i=0;i<n&&Z.deck.length;i++){
         const cc=Z.deck.shift();cc.tapped=false;cc.sideways=false;
         if(!shieldCapOk(Z)){cc.faceup=true;Z.grave.push(cc);toGrave++;continue;} // 🛡 10枚超過は墓地
         cc.faceup=false;if(S.turn>0)cc.mark=true;
-        Z.shield.push(cc);add++;
+        Z.shield.push(cc);placed.push(cc);add++;
       }
       if(toGrave>0)toast(`🛡 シールド上限（10枚）：超過${toGrave}枚は墓地へ`);
-      if(add>0){sfx("move");renderAll();toast(`🛡 山札の上${add}枚をシールドゾーンに加えた`);}
+      if(add>0){sfx("move");renderAll();toast(`🛡 山札の上${add}枚をシールドゾーンに加えた`);await notifyShieldPlaced(pi,placed);}
       else if(!toGrave)toast("山札がありません");
       else renderAll();
     }else if(f.t==="deckShieldUp"){
       // 🛡 山札の上からn枚を「表向き」でシールド化（ボルシャック・カクメイジン型・v10.40）
-      let addU=0,gvU=0;
+      let addU=0,gvU=0,placedU=[];
       const nmsU=[];
       for(let i=0;i<Math.max(1,n)&&Z.deck.length;i++){
         const cc=Z.deck.shift();cc.tapped=false;cc.sideways=false;cc.rot=0;
         if(!shieldCapOk(Z,true)){cc.faceup=true;Z.grave.push(cc);gvU++;continue;} // 🛡 上限超過は墓地
         cc.faceup=true;if(S.turn>0)cc.mark=true;
-        Z.shield.push(cc);addU++;nmsU.push(`《${faceNameOf(cc)}》`);
+        Z.shield.push(cc);placedU.push(cc);addU++;nmsU.push(`《${faceNameOf(cc)}》`);
       }
       if(gvU>0)toast(`🛡 シールド上限（10枚）：超過${gvU}枚は墓地へ`);
       if(addU>0){
         sfx("move");
         toast(`🛡 山札の上${addU}枚を表向きのシールドに：${nmsU.join("")}`);
         logOnly(`🛡 ${S.players[pi].label}：山札の上${addU}枚を表向きでシールド化 → ${nmsU.join("")}`);
+        await notifyShieldPlaced(pi,placedU);
       }else if(!gvU)toast("山札がありません");
       renderAll();
     }else if(f.t==="revealBottomShield"){
@@ -15930,29 +15996,29 @@ async function runFxList(pi,list,srcCard,inPump){
       rv.faceup=false;
       Z.deck.push(rv);
       if(okRB){
-        let addRB=0,gvRB=0;
+        let addRB=0,gvRB=0,placedRB=[];
         for(let i=0;i<Math.max(1,n)&&Z.deck.length;i++){
           const cc=Z.deck.shift();cc.tapped=false;cc.sideways=false;
           if(!shieldCapOk(Z)){cc.faceup=true;Z.grave.push(cc);gvRB++;continue;} // 🛡 10枚超過は墓地
           cc.faceup=false;if(S.turn>0)cc.mark=true;
-          Z.shield.push(cc);addRB++;
+          Z.shield.push(cc);placedRB.push(cc);addRB++;
         }
         if(gvRB>0)toast(`🛡 シールド上限（10枚）：超過${gvRB}枚は墓地へ`);
-        if(addRB>0){sfx("move");toast(`🛡 山札の上${addRB}枚をシールド化した`);logOnly(`🛡 ${S.players[pi].label}：条件を満たしたため山札の上${addRB}枚をシールド化`);}
+        if(addRB>0){sfx("move");toast(`🛡 山札の上${addRB}枚をシールド化した`);logOnly(`🛡 ${S.players[pi].label}：条件を満たしたため山札の上${addRB}枚をシールド化`);await notifyShieldPlaced(pi,placedRB);}
       }else{
         toast(`（条件を満たさないためシールド化しません）`);
       }
       renderAll();
     }else if(f.t==="deckShieldFill"){
       // 🛡 山札の上からn枚をシールド化。上限(10)を超える分は加えずに山札の上へ残す（墓地に落とさない・ミルザム型）
-      let add=0,left=0;
+      let add=0,left=0,placedFill=[];
       for(let i=0;i<n&&Z.deck.length;i++){
         if(!shieldCapOk(Z)){left++;break;} // 上限到達：以降は山札に残す（先頭のまま）
         const cc=Z.deck.shift();cc.tapped=false;cc.sideways=false;
         cc.faceup=false;if(S.turn>0)cc.mark=true;
-        Z.shield.push(cc);add++;
+        Z.shield.push(cc);placedFill.push(cc);add++;
       }
-      if(add>0){sfx("move");toast(`🛡 山札の上${add}枚をシールド化${left?`（上限10枚に達したため残りは山札に残した）`:""}`);}
+      if(add>0){sfx("move");toast(`🛡 山札の上${add}枚をシールド化${left?`（上限10枚に達したため残りは山札に残した）`:""}`);await notifyShieldPlaced(pi,placedFill);}
       else toast(left?`🛡 シールドは既に上限（10枚）のため、シールド化しませんでした`:"山札がありません");
       renderAll();
     }else if(f.t==="shieldRandToHand"){
@@ -16670,11 +16736,11 @@ function enqueueFx(pi,c){
   }
   if([0,1].some(p=>zonesOf(p).battle.some(b=>b.gear&&b.gear.includes(c))))return;
   const reg=getReg(c);
-  const hasFx=reg&&(faceFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0);
+  // 名前指定の能力無視は通常の faces/CIP を持たなくても、登場時に宣言が必要。
+  const hasFx=reg&&(faceFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0||reg.ignore==="name");
   if(!hasFx&&!(reg&&(reg.soulRaid||reg.momoKingX))&&!soulXCipFx(c).length)return;
-  // 🔢 いまカードを1枚処理している最中に生まれたCIP（＝その効果の結果出たカード）は、
-  //    残りの兄弟カードより先に解決する（カーソル位置に順番を保って挿入）。処理中でなければ末尾へ。
-  if(fxRunning&&fxInsertAt!=null){fxQueue.splice(fxInsertAt,0,{pi,c,reg});fxInsertAt++;}
+  // ⏳ 解決中のクリーチャー能力によって生まれたCIPは、親能力を最後まで終えてから解決する。
+  if(fxRunning){fxQueue.push({pi,c,reg});}
   else{
     // ⏱ APNAP（v10.44）：同時に複数のCIPが待機している時は、ターンプレイヤーの持ち主のものから解決する。
     //    従来は到着順だったため、両者のクリーチャーが同時に出る場面（革命0トリガー・全体踏み倒し・
@@ -16699,7 +16765,7 @@ async function pumpFx(){
     //    1枚ごとに待たないと、コストの確認より先に効果が解決してしまい、確認が後の操作までずれ込む。
     try{await MOVE_TAP_CHAIN;}catch(e){}
     const {pi,c,reg}=fxQueue.shift();
-    fxInsertAt=0; // 🔢 このカードの子CIP（結果出たカード）は残りキューの先頭から順に入れる＝深さ優先で先に解決
+    fxInsertAt=null; // 子CIPは待機列の末尾へ積み、現在のカードの解決へ割り込ませない
     // ▶ 効果処理の演出待ち：連続処理（キューが多い）時は短縮して詰まり感を軽減
     // ⏱ APNAP：オリオティス所有者がターンプレイヤーなら、出た時(CIP)より先に判定
     if(ORI_QUEUE.length&&ORI_QUEUE.some(o=>S.who===o.defO))await drainOriotis(true);
@@ -17135,7 +17201,7 @@ function dispCost(c,pi){
     }
     // 💞 場の付与元が、対象に合う手札のカードへ与えるシンパシーもコスト表示へ反映。
     if(r.ctype!=="spell"){
-      const granters=zonesOf(pi).battle.filter(b=>{const rb=getReg(b);return rb&&rb.grantDS&&rb.sympathy&&b.id!==c.id&&(!rb.grantDSFilt||lockFilterOk(rb.grantDSFilt,r,c));});
+      const granters=zonesOf(pi).battle.filter(b=>{const rb=getReg(b);return rb&&rb.grantDS&&rb.sympathy&&b.id!==c.id&&String(rb.sympathy)!==String(r.sympathy||"")&&(!rb.grantDSFilt||lockFilterOk(rb.grantDSFilt,r,c));});
       for(const g of granters){
         const rg=getReg(g),cnt=sympathyCount(pi,c,rg.sympathy).cnt;
         if(cnt>0){const mult=rg.symX||1;const civ0S=r.civs||[];const floorS=(civ0S.length===1&&civ0S[0]==="zero")?0:Math.max(1,civ0S.length||1);cost-=Math.min(cnt*mult,Math.max(0,cost-floorS));}
@@ -18013,7 +18079,7 @@ function resolveOut(Z,o){
     return true;
   }
   if(rg&&rg.charger){
-    if(rg.crystalCharger){o.faceup=false;o.seen=false;o._crystalMana=true;}
+    if(isCrystalChargerReg(rg)){o.faceup=false;o.seen=false;o._crystalMana=true;}
     Z.mana.push(o);return true;
   }
   // 🔀 「この呪文を唱えた後、墓地に置くかわりに山札に加えてシャッフルする」（革命の防壁型・v10.34）
@@ -18033,6 +18099,11 @@ function resolveOut(Z,o){
     if(pi>=0){MUGETSU_PENDING.add(pi+":spl");MUGETSU_AT[pi]=Date.now();}
   }
   return false;
+}
+function isCrystalChargerReg(r){
+  if(!r)return false;
+  if(r.crystalCharger)return true;
+  return Array.isArray(r.faces)&&r.faces.some(f=>f&&f.crystalCharger);
 }
 /* 📚 解決中スタックの自動クローズ：
    そのカード自身の効果処理（fxキュー）が終わり、かつスタックの一番上（＝後から使ったカードが全て処理済み）に
@@ -18222,6 +18293,12 @@ async function notifyShieldLeave(owner){
       }
     }
   }
+}
+/* 🛡 シールドゾーンにカードが置かれた時の共通通知。
+   追加枚数にかかわらず「置いた一回の出来事」として1回誘発させる。 */
+async function notifyShieldPlaced(owner,placed){
+  if(!S.expert||!placed||!placed.length)return;
+  await runWatchFx(owner,"shieldPlaced",placed[placed.length-1]);
 }
 async function processBroken(op,stack,label){
   // 親カードの効果解決中に呼ばれたかを入口で固定する。
@@ -21330,6 +21407,7 @@ const TRIG_EVS=[
   ["turnEndBoth","お互いのターンの終わりに"],
   ["manaCharge","自分のマナにカードが置かれた時（スペース・チャージ）"],
   ["shieldLeave","自分のシールドが離れた時（オシオキムーン）"],
+  ["shieldPlaced","自分のシールドゾーンにカードが置かれた時"],
   ["myDestroyed","自分のクリーチャーが破壊された時"],
   ["allyEnter","自分のクリーチャーがバトルゾーンに出た時（条件欄に種族などの対象条件・自身が出た時も含む）"],
   ["allyNinja","🥷 自分のクリーチャーが「ニンジャ・ストライク」で出た時（条件欄で種族などの対象条件／斬隠蒼頭龍バイケン型）"],
@@ -27030,12 +27108,9 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         // ⤴ 通常の進化クリーチャー／究極進化：ドラッグで表向きに出す時は必ず進化元を選ばせる（NEO以外・ツインパクトも上面が進化なら対象）
         //    ただし進化元不要（カリスマ・スター進化／禁断スター進化／S-MAX進化など）は、そのまま出す
         else if(isEvoReg(rN)&&!isNeoReg(rN)&&!isNoBaseEvoReg(rN)&&rN.ctype!=="evocrossgear"&&!S.freePlay&&!f.card._neoAsked&&pFrom===pTo&&["hand","grave","mana","deck","shield","exile","look","reveal"].includes(fromZone)){
-          const baseOK=zonesOf(pTo).battle.some(x=>x.id!==f.card.id&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize);})());
-          if(baseOK){
-            MOVE_BLOCKED=true;
-            playEvoCreature(pTo,fromZone,f.card.id);
-            return;
-          }
+          MOVE_BLOCKED=true;
+          playEvoCreature(pTo,fromZone,f.card.id);
+          return;
         }
       }
       // 🟥 デュエプレ：バトルゾーン7体上限。手動召喚（8体目）はブロック（効果での踏み倒しはenterBattleOrGraveで墓地へ）
@@ -27233,9 +27308,9 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     return false;
   })()){
     const rgCh=getReg(c);
-    if(rgCh&&rgCh.crystalCharger){c.faceup=false;c.seen=false;c._crystalMana=true;}
+    if(isCrystalChargerReg(rgCh)){c.faceup=false;c.seen=false;c._crystalMana=true;}
     placeCard(Z,"mana",c);
-    toast(`${rgCh&&rgCh.crystalCharger?"💎水晶チャージャー":"⚡チャージャー"}：${faceNameOf(c)} はマナゾーンへ`);
+    toast(`${isCrystalChargerReg(rgCh)?"💎水晶チャージャー":"⚡チャージャー"}：${faceNameOf(c)} はマナゾーンへ`);
     sfx("move");
   }
   else if((toZone==="shield"||toZone==="shieldUp")&&(()=>{const rg=getReg(c);return rg&&rg.ctype==="gcastle";})()){
@@ -27280,6 +27355,12 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     }
     const zl=(typeof ZLOG!=="undefined"&&ZLOG[toZone])||toZone;
     toast(`🔗 重ねていた${_stackMove.length}枚も一緒に${S.players[pTo].label}の${zl}へ${toGrave?`（上限超過${toGrave}枚は墓地）`:""}`);
+  }
+  // 🛡 手動移動・効果型の直接移動でも「シールドゾーンに置かれた時」を共通で通す。
+  //    同じ盾内の並べ替えは新たに置かれた扱いにしない。
+  if((toZone==="shield"||toZone==="shieldUp")&&fromZone!=="shield"&&fromZone!=="shieldUp"){
+    const newly=[c,...(_stackMove||[])].filter(x=>zonesOf(pTo).shield.includes(x));
+    if(newly.length)void notifyShieldPlaced(pTo,newly);
   }
   if(toZone==="mana"){
     // ⤵ このカード自身の「マナゾーンに置く時、このカードはタップして置く」（ボルバルザーク・エクス型）
