@@ -2491,6 +2491,17 @@ body.shake{animation:bodyShake .4s ease-out}
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
           <span style="font-size:12px;font-weight:700;color:#93c5fd">⤴ 進化元の条件</span>
           <input type="text" id="fxEvoSrcFilt" list="raceList" placeholder="進化元の条件（例：サイバー／多色／ドラゴン・空欄＝どれでも）" title="「進化－自分の◯◯1体の上に置く」の◯◯を書きます。条件に合わないクリーチャーは進化元の候補に出ません" style="flex:1;min-width:200px">
+          <span style="font-size:12px;font-weight:700">進化元の枚数</span>
+          <input type="number" id="fxEvoBaseN" style="width:70px" placeholder="1" min="1" max="5" title="進化GVのように進化元を複数必要とする場合に枚数を書きます（例：3）。空欄または1で通常の進化">
+          <span style="font-size:12px;font-weight:700">進化元の置き場</span>
+          <select id="fxEvoZone" style="width:auto" title="墓地進化・マナ進化・手札進化など、進化元をどこから取るかを決めます。「自動」ならバトルゾーンを優先し、いなければ他のゾーンから探します">
+            <option value="">自動（バトルゾーン優先）</option>
+            <option value="バトル">バトルゾーンのみ</option>
+            <option value="墓地">墓地（墓地進化）</option>
+            <option value="マナ">マナ（マナ進化）</option>
+            <option value="手札">手札（手札進化）</option>
+            <option value="ゲーム外">ゲーム外（ルナティック進化）</option>
+          </select>
           <span style="font-size:12px;font-weight:700">超無限進化：合計コスト</span>
           <input type="number" id="fxEvoSrcSum" style="width:80px" placeholder="0" min="0" title="0より大きくすると、進化元を好きな数まとめて選び、コストの合計がこの値以上になったら進化できます（超時空ストームG・XX型）">
           <label title="覚醒する時、下に重ねたカードをすべて墓地に置きます（メテオバーン覚醒）"><input type="checkbox" id="fxAwakenMeteor"> ☄ メテオバーン覚醒</label>
@@ -4327,7 +4338,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.94";
+const APP_VER="v13.95";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11273,16 +11284,64 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
         Z.battle.forEach(host=>{(host.gear||[]).forEach(g=>{const rg=getReg(g);if(rg&&(rg.ctype==="crossgear"||rg.ctype==="evocrossgear"))bases.push({card:g,where:"gear",host});});});
       }else{
         Z.battle.forEach(x=>{if(x.id!==cc.id&&isCreatureReg(getReg(x)))bases.push({card:x,where:"battle"});});
+        // 🪦 墓地進化・マナ進化・手札進化・ルナティック進化。登録の evoZone で置き場を決める。
+        //    未設定でもバトルゾーンに進化元がいなければ、他のゾーンから探す（HADESドラゲリオン型）。
+        const _ez=String(rCC.evoZone||"").trim();
+        const _zoneOf={"墓地":"grave","マナ":"mana","手札":"hand","ゲーム外":"exile",
+                       grave:"grave",mana:"mana",hand:"hand",exile:"exile"};
+        const _extra=[];
+        for(const [lbl,zn] of Object.entries({"墓地":"grave","マナ":"mana","手札":"hand","ゲーム外":"exile"})){
+          if(_ez==="バトル"||_ez==="battle")continue;   // バトルゾーンのみ指定
+          if(_ez&&_zoneOf[_ez]!==zn)continue;
+          if(!_ez&&bases.length)continue;              // 盤面に進化元がいるなら、それを優先する
+          (Z[zn]||[]).forEach(x=>{
+            if(x.id===cc.id)return;
+            if(!isCreatureReg(getReg(x)))return;
+            _extra.push({card:x,where:zn,zoneLabel:lbl});
+          });
+        }
+        bases.push(..._extra);
       }
+      // ⤴ 必要な進化元の枚数（進化GVは3枚など）。1より大きければ、その枚数だけ選ばせる
+      const _needBase=Math.max(1,(rCC.evoBaseN|0)||1);
       if(!bases.length){
         // 下敷きが無い→進化不成立。手札に戻す（デュエプレの挙動に合わせ、出せないものは出さない）
         cc.faceup=true;Z.hand.push(cc);
         toast(`⚠ 《${faceNameOf(cc)}》は${isEvoGear?"重ねられるクロスギア":"進化元のクリーチャー"}がないため出せません（手札へ）`);
         renderAll();continue;
       }
-      const bj=bases.length===1?0:await pickCard(`⤴ 《${faceNameOf(cc)}》を重ねる${isEvoGear?"クロスギア":"クリーチャー"}を選択`,bases.map(b=>b.card));
-      if(bj===null){cc.faceup=true;Z.hand.push(cc);toast(`（重ねずに手札へ戻しました）`);renderAll();continue;}
-      const base=bases[bj];
+      // ⤴ 進化元を選ぶ。進化GVのように複数必要なら、その枚数ぶん続けて選ばせる
+      const _picked=[];
+      {
+        let pool2=bases.slice();
+        let _abort=false;
+        for(let bi2=0;bi2<_needBase;bi2++){
+          if(!pool2.length){
+            if(_picked.length<_needBase){
+              // 足りない＝進化不成立。選んだぶんは元のゾーンに残したまま手札へ戻す
+              cc.faceup=true;Z.hand.push(cc);
+              toast(`⚠ 《${faceNameOf(cc)}》は進化元が${_needBase}枚必要ですが足りません（手札へ）`);
+              _abort=true;
+            }
+            break;
+          }
+          const _hint=_needBase>1
+            ?`${_needBase}枚必要です（${_picked.length}／${_needBase}枚選択済み）`
+            :"タップで選択";
+          const jj=(pool2.length===1&&_needBase===1)?0:await pickCard(
+            `⤴ 《${faceNameOf(cc)}》を重ねる${isEvoGear?"クロスギア":"クリーチャー"}を選択`
+            +(_needBase>1?`（${bi2+1}/${_needBase}枚目）`:""),
+            pool2.map(b=>b.card),
+            {hint:_hint,sub:x=>{const b2=pool2.find(y=>y.card.id===x.id);return b2&&b2.zoneLabel?b2.zoneLabel:(x.tapped?"タップ":"");}});
+          if(jj===null){
+            cc.faceup=true;Z.hand.push(cc);toast(`（重ねずに手札へ戻しました）`);_abort=true;break;
+          }
+          _picked.push(pool2[jj]);
+          pool2=pool2.filter(b=>b.card.id!==pool2[jj].card.id);
+        }
+        if(_abort){renderAll();continue;}
+      }
+      const base=_picked[0];
       if(isEvoGear){
         // 進化クロスギア：下敷きクロスギアの上に重ねる。クロス中ならクロス状態を継続
         if(base.where==="battle"){const bi=Z.battle.findIndex(x=>x.id===base.card.id);if(bi>=0)Z.battle.splice(bi,1);cc.under=[base.card,...(base.card.under||[])];Z.battle.push(cc);}
@@ -11303,13 +11362,35 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
           continue;
         }
         if(evc===null){cc.faceup=true;Z.hand.push(cc);toast(`（出さずに手札へ戻しました）`);renderAll();continue;}
-        // 進化クリーチャー：下敷きの上に重ねる
-        const host=base.card;const bi=Z.battle.findIndex(x=>x.id===host.id);
-        cc.under=[host,...(host.under?host.under.splice(0):[]),...(cc.under||[])];
-        cc.tapped=host.tapped;
+        // 進化クリーチャー：下敷きの上に重ねる。
+        // 🪦 墓地進化GVのように、盤面以外のゾーンから複数枚を進化元にする形にも対応する。
+        const host=base.card;
+        const _unders=[];
+        let _bi=-1;
+        for(const b2 of _picked){
+          if(b2.where==="battle"){
+            const k2=Z.battle.findIndex(x=>x.id===b2.card.id);
+            if(k2<0)continue;
+            if(_bi<0)_bi=k2; else Z.battle.splice(k2,1);
+          }else{
+            const arr=Z[b2.where]||[];
+            const k2=arr.findIndex(x=>x.id===b2.card.id);
+            if(k2<0)continue;
+            arr.splice(k2,1);
+            b2.card._evoFrom=b2.where;   // 💞 支払い時はそのゾーンにあった扱い（墓地進化GVのシンパシー等）
+          }
+          b2.card.faceup=true;b2.card.tapped=false;b2.card.sideways=false;
+          _unders.push(b2.card,...(b2.card.under?b2.card.under.splice(0):[]));
+        }
+        cc.under=[..._unders,...(cc.under||[])];
+        cc.tapped=(base.where==="battle")?host.tapped:false;
         if(host.gear&&host.gear.length)cc.gear=[...(cc.gear||[]),...host.gear.splice(0)];
         if(isNeoReg(rCC))cc.neoEvo=true;
-        Z.battle[bi]=cc;
+        if(_bi>=0)Z.battle[_bi]=cc;
+        else Z.battle.push(cc);
+        if(_picked.length>1||base.where!=="battle")
+          toast(`⤴ ${faceNameOf(cc)}：${_picked.map(b=>`${b.zoneLabel?b.zoneLabel+"の":""}${faceNameOf(b.card)}`).join("、")} の上に重ねた`);
+        const bi=_bi;
         transferAtkState([host.id],cc);markArrive(cc);
         toast(`⤴ 進化！ 《${faceNameOf(host)}》の上に《${faceNameOf(cc)}》を重ねた`);
         try{fxShare("evo","進化！",`${S.players[pi].label}　${faceNameOf(host)} の上に`,true,cc.name,pi);}catch(e){}
@@ -20291,7 +20372,13 @@ async function execAttack(pi,id,tg){
       if(!_word)return null;
       for(const a of _atkChain){
         const ra=getReg(a);
-        if(_needEvo&&!(ra&&isEvoReg(ra)))continue;
+        // 🧬 NEOクリーチャーは「NEO進化として出した時」だけ進化として数える。
+        //    登録が進化型でも、非進化で出していれば進化ではない。
+        if(_needEvo){
+          if(!(ra&&isEvoReg(ra)))continue;
+          if(isNeoReg(ra)&&!isNeoEvoInstance(a))continue;
+          if(!isNeoReg(ra)&&!(a.under&&a.under.length))continue;   // 進化元が無い＝進化していない
+        }
         if((ra&&raceMatch(ra,_word))||faceNameOf(a).includes(_word))return a;
       }
       return null;
@@ -22482,6 +22569,8 @@ function renderFxEditor(){
   $("fxDragonB").checked=!!FXEDIT.dragonB;
   $("fxShieldBurn").checked=!!FXEDIT.shieldBurn;
   $("fxQqqx").checked=!!FXEDIT.qqqx;
+  {const v=$("fxEvoBaseN");if(v)v.value=(FXEDIT.evoBaseN>1)?String(FXEDIT.evoBaseN):"";}
+  {const v=$("fxEvoZone");if(v)v.value=FXEDIT.evoZone||"";}
   $("fxAuraTapIn").checked=!!FXEDIT.auraTapIn;
   {const e=$("fxAuraTapInNeo");if(e)e.checked=!!FXEDIT.auraTapInNeo;}
   {const e=$("fxAuraTapInPow");if(e)e.checked=!!FXEDIT.auraTapInPow;}
@@ -25107,6 +25196,8 @@ $("fxSave").addEventListener("click",async ()=>{
     dragonB:$("fxDragonB").checked,
     shieldBurn:$("fxShieldBurn").checked,
     qqqx:$("fxQqqx").checked,
+    evoBaseN:(()=>{const v=$("fxEvoBaseN");const n=v?parseInt(v.value,10):0;return (n>1)?Math.min(5,n):undefined;})(),
+    evoZone:(()=>{const v=$("fxEvoZone");return v&&v.value?v.value:undefined;})(),
     auraTapIn:$("fxAuraTapIn").checked,
     auraTapInNeo:$("fxAuraTapInNeo")?$("fxAuraTapInNeo").checked:false,
     auraTapInPow:$("fxAuraTapInPow")?$("fxAuraTapInPow").checked:false,
