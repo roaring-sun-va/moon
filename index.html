@@ -4227,7 +4227,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.90";
+const APP_VER="v13.91";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9535,7 +9535,7 @@ const FX_TYPES=[
   ["manaRecruitLess","🌱 自分のマナ枚数よりコストが小さい非進化クリーチャーを1体、マナから出す（ダグラジャパニカン型）"],
   ["foeToShield","🛡 相手のクリーチャーをn体、裏向きの新しいシールドにする（条件欄でコスト等指定・爆進オリジナル・チューニング型）"],
   ["deckCastSpell","🔮 山札の上からn枚を見て、条件に合う呪文1枚をコストを支払わず唱えてよい→残りをランダムに山札の下（トユケテラス型・条件欄で文明/コスト指定）"],
-  ["deckTopToHand","👀 山札の上からn枚を見て、その中の条件に合うカード1枚を公開して手札に加えてもよい→残りをランダムな順番で山札の一番下（未来設計図型・条件欄で対象を指定）"],
+  ["deckTopToHand","👀 山札の上からn枚を見て、その中の条件に合うカード1枚を公開して手札に加えてもよい→残りをランダムな順番で山札の一番下（未来設計図型・条件欄で対象を指定・登録に must を付けると「加える」の強制になる）"],
   ["deckTopSplitSHM","🌸 山札の上からn枚を見て、1枚をシールド化→1枚を手札→残りをマナへ（超開花妖精アジサイ！型）"],
   ["exileRecruitPerZone","🌺 自分の指定ゾーンの〔対象〕n枚につき、ゲーム外から指定カード1枚を出す（条件欄：ゾーン:対象→出すカード名。例「マナ:スノーフェアリー→超開花妖精ハイドロジア」）"],
   ["exileRecruitPerBattle","🌺【旧互換】自分のバトルゾーンの〔対象〕n枚につき、ゲーム外から指定カード1枚を出す"],
@@ -13769,8 +13769,16 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`👀 山上${lookTH.length}枚を見た（該当${poolTH.length}枚${filtTH?`・${filtTH}`:""}）`);
         logOnly(`👀 ${S.players[pi].label}：山札の上${lookTH.length}枚を見た → ${cnList(lookTH)}`);
         if(poolTH.length){
-          const j=await pickCard(`👀 手札に加える1枚を選択${filtTH?`（${filtTH}）`:""}`,poolTH,
-            {hint:"タップで選択　／　✕ で「加えない」"});
+          // 🔒 must=true（強制）＝「加えてもよい」ではなく「加える」カード（ケンザン・チャージャー型）。
+          //    候補が1枚しかない時は選ばせず、そのまま手札へ入れる。
+          const _mustTH=!!f.must;
+          let j;
+          if(_mustTH&&poolTH.length===1)j=0;
+          else{
+            j=await pickCard(`👀 手札に加える1枚を選択${filtTH?`（${filtTH}）`:""}`,poolTH,
+              {hint:_mustTH?"タップで選択（この効果は必ず1枚加えます）":"タップで選択　／　✕ で「加えない」"});
+            if(_mustTH&&(j===null||j>=poolTH.length))j=0;   // 強制なので取り消せない
+          }
           if(j!==null&&j<poolTH.length){
             const selTH=poolTH[j];
             const li=lookTH.findIndex(x=>x.id===selTH.id);
