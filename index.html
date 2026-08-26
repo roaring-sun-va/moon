@@ -4227,7 +4227,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.91";
+const APP_VER="v13.92";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9565,6 +9565,7 @@ const FX_TYPES=[
   ["peek","相手の手札を見る"],
   ["bounce","相手クリーチャーをランダムn体 手札に戻す"],
   ["deckPin4","選んだクリーチャーを山札の上から4枚目に横向きで刺す（終葬/Q.Q.QX型・引くと特殊敗北）"],
+  ["selfCardToBattle","🃏 いま解決しているこのカード自身を、バトルゾーンに出す（ツインパクトなら上面のクリーチャーとして・終葬 5.S.D.型）"],
   ["destroyRnd","相手クリーチャーをランダムn体 破壊"],
   ["destroyPick","相手クリーチャーをn体選んで破壊（対象選択）"],
   ["destroyElemPick","相手エレメントをn個選んで破壊（対象選択・クリーチャー/タマシード/フィールド等）"],
@@ -13416,6 +13417,25 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`バウンス：${faceNameOf(c)} を${S.players[tp].label}の手札へ`);
       }
       sfx("move");
+    }else if(f.t==="selfCardToBattle"){
+      // 🃏 「このカードをバトルゾーンに出す」。解決中の呪文カード自身を場へ移す。
+      //    ツインパクトなら上面のクリーチャーとして出す（面を0に戻す）。
+      if(!srcCard){toast("（このカード自身が分からないためスキップ）");continue;}
+      let _from=null,_fi=-1;
+      for(const zn of ["resolve","hand","grave","battle"]){
+        const i2=(Z[zn]||[]).findIndex(x=>x.id===srcCard.id);
+        if(i2>=0){_from=zn;_fi=i2;break;}
+      }
+      if(_from==="battle"){toast(`${faceNameOf(srcCard)} はすでにバトルゾーンにいます`);continue;}
+      if(_from==null){toast(`${faceNameOf(srcCard)} が見つからないためスキップ`);continue;}
+      const _cc=Z[_from].splice(_fi,1)[0];
+      _cc.face=0;_cc.faceup=true;_cc.tapped=false;_cc.sideways=false;_cc.buff=null;_cc.under=[];_cc.seals=[];_cc.gear=[];
+      if(!cheatEnterBattle(pi,_cc)){renderAll();continue;}
+      sfx("play");renderAll();
+      toast(`🃏 ${faceNameOf(_cc)} をバトルゾーンに出した`);
+      logOnly(`🃏 ${S.players[pi].label}：${faceNameOf(_cc)} を（このカード自身の効果で）バトルゾーンへ`);
+      enqueueFx(pi,_cc);
+      await waitFxIdle(inPump);
     }else if(f.t==="deckPin4"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
       const pc=await askChoice("🔀 山札4枚目に横差し：どのプレイヤーのクリーチャーを対象にしますか？",[`相手（${pName(op)}）`,`自分（${pName(pi)}）`]);
@@ -18981,6 +19001,7 @@ async function startAttack(pi,id){
   if(pick===null){renderAll();return;}
   let tg=targets[pick]; // 🔥 革命0トリガーでシールドが増えた場合にブレイクへ差し替えるため let
   c._atkFxDone=false; // 新規アタック宣言のたびにアタック時効果を再有効化（保留→再開は別経路なので影響なし）
+  c._acAsked=false;   // ✨ アタック・チャンスの確認も、新規宣言のたびに1回だけ出す
   c._allyAtkDone=false;c._anyAtkDone=false;c._gearAtkDone=false; // 攻撃するたびに誘発し直せるよう毎回リセット
   noteAttackThisTurn(pi,c);   // 🕐 「そのターン◯体目の攻撃」を数える
   c._sxAtkDone=false;
@@ -20162,14 +20183,24 @@ async function execAttack(pi,id,tg){
     const _acHit=h=>{
       const rh=getReg(h);
       if(!rh||!rh.atkChance)return null;
+      // 🧬 「進化ドラゴン・ゾンビ」のように頭に『進化』が付く指定は、進化クリーチャーだけを対象にする。
+      //    種族名だけで見ると、進化でないドラゴン・ゾンビでも通ってしまっていた。
+      const _raw=String(rh.atkChance).trim();
+      const _needEvo=/^進化/.test(_raw);
+      const _word=_needEvo?_raw.replace(/^進化[・\s]*/,"").trim():_raw;
+      if(!_word)return null;
       for(const a of _atkChain){
         const ra=getReg(a);
-        if((ra&&raceMatch(ra,rh.atkChance))||faceNameOf(a).includes(rh.atkChance))return a;
+        if(_needEvo&&!(ra&&isEvoReg(ra)))continue;
+        if((ra&&raceMatch(ra,_word))||faceNameOf(a).includes(_word))return a;
       }
       return null;
     };
     const acs=Z.hand.filter(h=>!!_acHit(h));
-    if(acs.length){
+    // 🔁 1回の攻撃につき1度だけ聞く。革命チェンジ・侵略などで攻撃の流れに戻ると
+    //    ここを何度も通り、そのたびに選択が出ていた。
+    if(acs.length&&!c._acAsked){
+      c._acAsked=true;
       const _acWho=acs.map(h=>_acHit(h)).find(a=>a&&a.id!==c.id);
       const chosen=await askMultiChoice(`✨ アタック・チャンス！ コストを支払わずに唱えるカードを複数選べます。\nタップした順に解決します。`
         +(_acWho?`\n（攻撃を宣言した《${faceNameOf(_acWho)}》で条件を満たしています）`:""),
@@ -20182,7 +20213,15 @@ async function execAttack(pi,id,tg){
         renderAll();
         for(const sp of spells){
           try{fxKeyword(pi,"アタック・チャンス！",sp.name,"攻撃中に呪文を唱えた");}catch(e){}
-          const rs=getReg(sp);if(rs&&rs.faces&&rs.faces[0]&&rs.faces[0].length)await runFxList(pi,rs.faces[0],sp);
+          // 📜 アタック・チャンスは「呪文を唱える」なので、ツインパクトは下面（呪文面）を使う。
+          //    これまで常に上面を走らせていたため、下面が呪文のカードで何も起きなかった。
+          const rs=getReg(sp);
+          const _fi=(rs&&(rs.ctype==="twinpact"||rs.twin)&&rs.faces&&rs.faces[1]&&rs.faces[1].length)?1:0;
+          if(rs&&rs.faces&&rs.faces[_fi]&&rs.faces[_fi].length){
+            sp.face=_fi;
+            if(_fi===1)toast(`📜 ${faceNameOf(sp)}：下面（呪文）を唱えた`);
+            await runFxList(pi,rs.faces[_fi],sp);
+          }
         }
         renderAll();
         const holdAC=await ask(`⏸ アタック・チャンス${spells.length}枚の処理を手動で続けますか？\n「はい」で攻撃を保留します（解決後「▶ 攻撃を再開」で続行）`);
@@ -31117,7 +31156,7 @@ async function ghostTurn(opts){
       if(lethal&&!S.ghostLethalSaid){S.ghostLethalSaid=true;toast("👻🎯 リーサル判定：全員で攻撃します");}
       const scoreBefore=SCORE[0]+SCORE[1];
       atk.tapped=true;
-      atk._atkFxDone=false;atk._allyAtkDone=false;atk._anyAtkDone=false;atk._sxAtkDone=false;atk._mbDone=false;
+      atk._atkFxDone=false;atk._allyAtkDone=false;atk._anyAtkDone=false;atk._sxAtkDone=false;atk._mbDone=false;atk._acAsked=false;
       logOnly(`👻⚔ ゴースト：《${faceNameOf(atk)}》で${tg.kind==="creature"?"相手のタップ中クリーチャーを攻撃":tg.kind==="shield"?"シールドを攻撃":"ダイレクトアタック"}${lethal?"（リーサル）":mode==="split"?"（分割リーサルの刻み）":mode==="even"?"（偶数調整の刻み）":""}`);
       renderAll();
       await execAttack(pi,atk.id,tg);
@@ -36924,7 +36963,10 @@ async function openDeckListViewer(name){
   if(!name){toast("デッキを選択してください");return;}
   const d=await getDeck(name);if(!d){toast("デッキが見つかりません");return;}
   const ol=document.createElement("div");
-  ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:995;display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px;overflow:auto";
+  // 📱 この画面は .olay を使わない独自の作りなので、セーフエリアを自前で避ける
+  //    （--safetop / --safebot は applySafeArea() が実測して入れている）
+  ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:995;display:flex;flex-direction:column;align-items:center;gap:8px;overflow:auto;"
+    +"padding:max(14px, var(--safetop,0px)) 14px max(14px, var(--safebot,0px))";
   const secs=[["メイン",d.main||[]],["超GR",d.gr||[]],["超次元",d.hy||[]],["ゲーム外",d.ex||[]],["特殊",d.sp||[]]];
   const ttl=document.createElement("div");
   ttl.style.cssText="color:#fff;font-weight:900;font-size:15px";
@@ -36934,11 +36976,31 @@ async function openDeckListViewer(name){
   ol.appendChild(ttl);
   // 🔢 横に何枚並べるか（「現在のリスト」と同じ設定を共有。既定8枚）
   const colsNow=()=>Math.max(4,Math.min(16,+B._listCols||8));
+  // 🖥 画面の幅。ノートPCだと 1280px でも大きすぎるので選べるようにする（既定は画面なり）
+  const widNow=()=>Math.max(50,Math.min(100,+B._listWide||100));
   const wrap=document.createElement("div");
-  wrap.style.cssText="width:100%;max-width:min(1280px,96vw);display:flex;flex-direction:column;gap:8px";
-  if(window.innerWidth>=700){
+  const applyWide=()=>{wrap.style.maxWidth=`min(${Math.round(1280*widNow()/100)}px,${widNow()}vw)`;};
+  wrap.style.cssText="width:100%;display:flex;flex-direction:column;gap:8px";
+  applyWide();
+  {
     const cw=document.createElement("label");
-    cw.style.cssText="display:inline-flex;gap:4px;align-items:center;font-size:12px;color:#cbd3df;align-self:flex-end";
+    cw.style.cssText="display:inline-flex;gap:8px;align-items:center;font-size:12px;color:#cbd3df;align-self:flex-end;flex-wrap:wrap";
+    // 🖥 全体の幅
+    const ws=document.createElement("select");
+    ws.style.cssText="width:auto;font-size:12px;padding:1px 6px";
+    for(const v of [50,60,70,80,90,100]){
+      const o=document.createElement("option");
+      o.value=v;o.textContent=v+"%";
+      if(widNow()===v)o.selected=true;
+      ws.appendChild(o);
+    }
+    ws.onchange=async()=>{
+      B._listWide=parseInt(ws.value,10)||100;
+      try{if(db)await idbPut("misc","listWide",B._listWide);}catch(e){}
+      applyWide();
+    };
+    cw.appendChild(document.createTextNode("画面の幅"));
+    cw.appendChild(ws);
     const cs=document.createElement("select");
     cs.style.cssText="width:auto;font-size:12px;padding:1px 6px";
     for(const v of [4,5,6,7,8,9,10,12]){
@@ -38241,7 +38303,8 @@ async function importAll(file){
 }
 let BGM=null;
 let BGM_URL=null;   // 🎵 ファイルのまま持っている時の一時URL（作り直す前に必ず捨てる）
-const BGM_MAX_MB=50;
+const BGM_MAX_MB=500;   // 🎵 ファイル（Blob）のまま保存するので大きくても文字化で膨らまない
+const BGM_WARN_MB=120;  // これを超えたら、端末の空き次第で保存に失敗しうることを知らせる
 function bgmSetState(t){const e=$("bgmState");if(e)e.textContent=t;}
 /* 🎵 保存された中身を再生できる形にする。
    新しい版はファイル（Blob）のまま保存する。古い版は文字（data URL）で保存されているので、
@@ -38282,7 +38345,11 @@ async function bgmLoad(){
 $("bgmFile").addEventListener("change",async e=>{
   const f=e.target.files&&e.target.files[0];
   if(!f)return;
-  if(f.size>BGM_MAX_MB*1024*1024){toast(`${BGM_MAX_MB}MB以下のファイルにしてください（選んだファイルは約${(f.size/1024/1024).toFixed(1)}MB）`);return;}
+  const _mb=f.size/1024/1024;
+  if(_mb>BGM_MAX_MB){toast(`${BGM_MAX_MB}MB以下のファイルにしてください（選んだファイルは約${_mb.toFixed(1)}MB）`);return;}
+  if(_mb>BGM_WARN_MB){
+    if(!await ask(`🎵 約${_mb.toFixed(0)}MB あります。\n端末の空き容量によっては保存に失敗することがあります。\nこのまま登録しますか？\n（失敗する場合は、音質を下げるか短く切ってお試しください）`)){e.target.value="";return;}
+  }
   try{
     // 🎵 ファイル（Blob）のまま保存する。文字（data URL）にすると容量が約1.33倍に膨らむため
     if(db)await idbPut("misc","bgmData",f);
@@ -39854,6 +39921,7 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   if(lk)for(const [k,v] of Object.entries(lk))LINKS.set(k,v);
   {const bo=db?await idbGet("misc","builtinOff"):null;if(bo!==null&&bo!==undefined)BUILTIN_OFF=!!bo;}
   {const lc=db?await idbGet("misc","listCols"):null;if(lc!=null&&lc!=="")B._listCols=(+lc===0)?0:(+lc||8);}
+  {const lw=db?await idbGet("misc","listWide"):null;if(lw!=null&&lw!=="")B._listWide=Math.max(50,Math.min(100,+lw||100));}
   {const bc=db?await idbGet("misc","builderCols"):null;if(bc!=null&&bc!=="")B._bCols=Math.max(0,Math.min(14,+bc||0));}
   {const pc=db?await idbGet("misc","pickCols"):null;if(pc!=null&&pc!=="")B._pickCols=Math.max(0,Math.min(12,+pc||0));}
   {const ls=db?await idbGet("misc","logSize"):null;if(ls!=null)S.logSize=String(ls||"");}
