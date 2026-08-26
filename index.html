@@ -291,6 +291,26 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
   #adjBody{gap:5px 7px}
   #adjBody b{font-size:11px}
 }
+/* 🃏 ツインパクトの面選び。絵を上下に切って左右に並べ、選ばない側を暗くする */
+.twinPickRow{display:flex;gap:10px;width:100%}
+.twinPick{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:6px;padding:6px;
+  background:#121a29;border:2px solid var(--line);border-radius:12px;cursor:pointer;color:var(--ink)}
+.twinPick:hover,.twinPick:focus-visible{border-color:var(--accent);background:#18233a}
+.twinPickArt{position:relative;display:block;width:100%;aspect-ratio:63/88;border-radius:8px;overflow:hidden;background:#0b0f18}
+.twinPickArt img{width:100%;height:100%;object-fit:cover;display:block}
+/* 使わない側を暗くする。上面のボタンでは下半分、下面のボタンでは上半分を伏せる */
+.twinPickShade{position:absolute;left:0;right:0;height:50%;pointer-events:none;
+  background:rgba(3,6,12,.74);backdrop-filter:grayscale(1) blur(1px);-webkit-backdrop-filter:grayscale(1) blur(1px)}
+.twinPickShade.upper{top:0}
+.twinPickShade.lower{bottom:0}
+.twinPickTag{position:absolute;left:6px;top:6px;font-size:10px;font-weight:900;letter-spacing:.04em;
+  color:#0b0f18;background:var(--accent);border-radius:6px;padding:1px 7px}
+.twinPickTxt{font-size:11.5px;font-weight:700;line-height:1.4;text-align:left;white-space:normal;word-break:break-word}
+@media (max-width:520px){
+  .twinPickRow{gap:7px}
+  .twinPick{padding:5px}
+  .twinPickTxt{font-size:10.5px}
+}
 #peekChip{
   position:fixed;right:10px;bottom:calc(120px + env(safe-area-inset-bottom));z-index:650;
   background:linear-gradient(180deg,var(--accent),#d9a520);color:#241a00;
@@ -1440,6 +1460,14 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="file" id="fxIconFile1" accept="image/*" style="flex:1;min-width:150px;font-size:12px">
         <button class="btn small ghost" id="fxIconClr1">消す</button>
       </div>
+      <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700">🃏 ツインパクトの面の選び方</span>
+        <select id="setTwinPick" style="width:auto;font-size:12px" title="ツインパクトでどちらの面を使うか聞かれる時の見せ方">
+          <option value="art">絵で選ぶ（上下を並べて表示）</option>
+          <option value="text">文字で選ぶ（これまでの一覧）</option>
+        </select>
+      </div>
+      <div class="hint">「絵で選ぶ」は、カードの絵を左右に並べ、使わない側を暗くして示します。画像が未登録のカードは自動で文字の一覧になります。</div>
       <div class="hint">好きな画像を丸く切り抜いて演出に出します（自分の端末にだけ保存され、相手には送りません）。<br>
         「🎴 画像集から選ぶ」ではスリーブ・プレマ用の画像から選べ、そのまま切り抜く位置と拡大率も調整できます。ファイルから直接入れることもできます。</div>
       <div class="row" style="align-items:center;gap:8px">
@@ -4021,6 +4049,50 @@ function askChoice(msg,options){return _serialDlg(ASK_GATE,()=>new Promise(res=>
   box.appendChild(c);
   $("askOlay").classList.add("open");
 }));}
+/* 🃏 ツインパクトの面選び。カードの絵を上下に切り分けて左右に並べ、
+   選んでいない側を暗くして見せる。設定「ツインパクトの選び方」で文字の一覧にも戻せる。
+   返り値は askChoice と同じ（0＝上面／1＝下面／null＝やめる）。 */
+function twinFaceLabel(){return (S.twinPick==="text")?"text":"art";}
+function askTwinFace(card,msg,topLabel,botLabel,cancelLabel){
+  // 文字で選ぶ設定の時と、ゴーストの自動応答中は、これまでどおりの文字の一覧にする
+  if(twinFaceLabel()==="text"||(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO))
+    return askChoice(msg,[`上面：${topLabel}`,`下面：${botLabel}`,cancelLabel||"やめる"]);
+  const url=(()=>{try{const k=normName(card&&card.name);return imgURL.get(k)||null;}catch(e){return null;}})();
+  if(!url)return askChoice(msg,[`上面：${topLabel}`,`下面：${botLabel}`,cancelLabel||"やめる"]);
+  return _serialDlg(ASK_GATE,()=>new Promise(res=>{
+    dlgReset();$("askMsg").textContent=msg;$("askYN").style.display="none";
+    const box=$("askChoices");box.style.display="";box.innerHTML="";
+    box.style.flexDirection="column";box.style.maxHeight="72vh";box.style.overflowY="auto";box.style.gap="8px";
+    const row=document.createElement("div");
+    row.className="twinPickRow";
+    // 上面＝絵の上半分、下面＝下半分。選ばない側は暗くする
+    const mk=(idx,label,topHalf)=>{
+      const b=document.createElement("button");
+      b.type="button";b.className="twinPick";
+      const th=document.createElement("span");th.className="twinPickArt";
+      const im=document.createElement("img");im.src=url;im.draggable=false;
+      im.style.objectPosition="50% 50%";   // 絵はカード全体。どちらを使うかは影で示す
+      th.appendChild(im);
+      const sh=document.createElement("span");sh.className="twinPickShade "+(topHalf?"lower":"upper");
+      th.appendChild(sh);
+      const tag=document.createElement("span");tag.className="twinPickTag";tag.textContent=topHalf?"上面":"下面";
+      th.appendChild(tag);
+      const tx=document.createElement("span");tx.className="twinPickTxt";tx.textContent=label;
+      b.append(th,tx);
+      b.onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(idx);};
+      return b;
+    };
+    row.appendChild(mk(0,topLabel,true));
+    row.appendChild(mk(1,botLabel,false));
+    box.appendChild(row);
+    const c2=document.createElement("button");
+    c2.className="btn small ghost";c2.style.cssText="flex:0 0 auto;width:100%;white-space:normal;height:auto;padding:9px 12px";
+    c2.textContent=cancelLabel||"やめる";
+    c2.onclick=()=>{$("askOlay").classList.remove("open");res(null);};
+    box.appendChild(c2);
+    $("askOlay").classList.add("open");
+  }));
+}
 /* ☑ 複数候補を一度に選ぶ。タップした順を解決順として返す（アタック・チャンス等）。 */
 function askMultiChoice(msg,options){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
   if(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO){setTimeout(()=>res(options.length?[0]:[]),120);return;}
@@ -4227,7 +4299,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.92";
+const APP_VER="v13.93";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10070,8 +10142,8 @@ async function autoTapCost(pi,c){
   let cost=r.cost;
   let paySide=(r.ctype==="spell")?"spell":"creature"; // 支払う面の種別（コスト＋n常在の判定用）
   if((r.twin||r.ctype==="twinpact")&&r.cost2!=null&&c._altPay==null){
-    const j=await askChoice(`《${faceNameOf(c)}》どちらの面のコストを支払う？`,
-      [`上面：コスト${r.cost!=null?r.cost:"未設定"}`,`下面：コスト${r.cost2}`,"支払わない"]);
+    const j=await askTwinFace(c,`《${faceNameOf(c)}》どちらの面のコストを支払う？`,
+      `コスト${r.cost!=null?r.cost:"未設定"}`,`コスト${r.cost2}`,"支払わない");
     if(j===null||j===2)return;
     cost=j===0?r.cost:r.cost2;
     // ツインパクトは上面＝クリーチャー・下面＝呪文が通例
@@ -16475,8 +16547,8 @@ async function pumpFx(){
       let pick=null;
       if(c._twinPaid===0||c._twinPaid===1){pick=c._twinPaid;c._twinPaid=null;toast(`🃏 ${pick===0?"上面":"下面"}の効果を処理（支払った面）`);}
       else{
-        pick=await askChoice(`《${faceNameOf(c)}》はツインパクトです。\nどちらの面の効果を処理しますか？`,
-          [`上面：${fxSummary(faceFx(reg,0))}`,`下面：${fxSummary(faceFx(reg,1))}`,"処理しない"]);
+        pick=await askTwinFace(c,`《${faceNameOf(c)}》はツインパクトです。\nどちらの面の効果を処理しますか？`,
+          fxSummary(faceFx(reg,0)),fxSummary(faceFx(reg,1)),"処理しない");
       }
       if(pick===0)await runTimes(faceFx(reg,0));
       else if(pick===1)await runTimes(faceFx(reg,1));
@@ -36032,6 +36104,13 @@ $("btnMatReset").addEventListener("click",async ()=>{
   toast("プレイマットを解除しました");
 });
 {const bl=$("btnAdjLive");if(bl)bl.addEventListener("click",()=>openAdjustDock(ADJ.target||"mat0"));}
+/* 🃏 ツインパクトの面の選び方（絵／文字）。うまくいかない時は文字に戻せる */
+{const tp=$("setTwinPick");
+ if(tp)tp.addEventListener("change",async()=>{
+   S.twinPick=tp.value==="text"?"text":"art";
+   if(db)await idbPut("misc","twinPick",S.twinPick);
+   toast(S.twinPick==="text"?"🃏 ツインパクトは文字で選びます":"🃏 ツインパクトは絵で選びます");
+ });}
 $("btnSleeve0").addEventListener("click",()=>openSleevePicker(0));
 $("btnSleeve1").addEventListener("click",()=>openSleevePicker(1));
 $("btnSleeveReset").addEventListener("click",async ()=>{
@@ -39922,6 +40001,9 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   {const bo=db?await idbGet("misc","builtinOff"):null;if(bo!==null&&bo!==undefined)BUILTIN_OFF=!!bo;}
   {const lc=db?await idbGet("misc","listCols"):null;if(lc!=null&&lc!=="")B._listCols=(+lc===0)?0:(+lc||8);}
   {const lw=db?await idbGet("misc","listWide"):null;if(lw!=null&&lw!=="")B._listWide=Math.max(50,Math.min(100,+lw||100));}
+  {const tp=db?await idbGet("misc","twinPick"):null;
+   S.twinPick=(tp==="text")?"text":"art";
+   const el=document.getElementById("setTwinPick");if(el)el.value=S.twinPick;}
   {const bc=db?await idbGet("misc","builderCols"):null;if(bc!=null&&bc!=="")B._bCols=Math.max(0,Math.min(14,+bc||0));}
   {const pc=db?await idbGet("misc","pickCols"):null;if(pc!=null&&pc!=="")B._pickCols=Math.max(0,Math.min(12,+pc||0));}
   {const ls=db?await idbGet("misc","logSize"):null;if(ls!=null)S.logSize=String(ls||"");}
