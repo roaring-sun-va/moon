@@ -298,11 +298,28 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 .twinPick:hover,.twinPick:focus-visible{border-color:var(--accent);background:#18233a}
 .twinPickArt{position:relative;display:block;width:100%;aspect-ratio:63/88;border-radius:8px;overflow:hidden;background:#0b0f18}
 .twinPickArt img{width:100%;height:100%;object-fit:cover;display:block}
-/* 使わない側を暗くする。上面のボタンでは下半分、下面のボタンでは上半分を伏せる */
-.twinPickShade{position:absolute;left:0;right:0;height:50%;pointer-events:none;
+/* 使わない側を暗くする。ツインパクトの区切りは水平ではなく**斜め**なので、
+   カードの分割線に合わせて clip-path で斜めに切る。
+   --twinCutL＝左端の分割位置、--twinCutR＝右端の分割位置（上からの割合）。
+   カードによって傾きが違うので、合わなければこの2つの数字を直すだけで調整できる。 */
+:root{--twinCutL:64%;--twinCutR:57%}
+.twinPickShade{position:absolute;inset:0;pointer-events:none;
   background:rgba(3,6,12,.74);backdrop-filter:grayscale(1) blur(1px);-webkit-backdrop-filter:grayscale(1) blur(1px)}
-.twinPickShade.upper{top:0}
-.twinPickShade.lower{bottom:0}
+/* 下面のボタン：上側（クリーチャー面）を伏せる */
+.twinPickShade.upper{
+  -webkit-clip-path:polygon(0 0,100% 0,100% var(--twinCutR),0 var(--twinCutL));
+  clip-path:polygon(0 0,100% 0,100% var(--twinCutR),0 var(--twinCutL))}
+/* 上面のボタン：下側（呪文面）を伏せる */
+.twinPickShade.lower{
+  -webkit-clip-path:polygon(0 var(--twinCutL),100% var(--twinCutR),100% 100%,0 100%);
+  clip-path:polygon(0 var(--twinCutL),100% var(--twinCutR),100% 100%,0 100%)}
+/* 分割線を1本入れて、どこで切れているか分かるようにする */
+.twinPickLine{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(to bottom right,transparent 0,transparent 100%)}
+.twinPickLine::after{content:"";position:absolute;inset:0;
+  background:var(--accent);opacity:.85;
+  -webkit-clip-path:polygon(0 calc(var(--twinCutL) - 1px),100% calc(var(--twinCutR) - 1px),100% calc(var(--twinCutR) + 1px),0 calc(var(--twinCutL) + 1px));
+  clip-path:polygon(0 calc(var(--twinCutL) - 1px),100% calc(var(--twinCutR) - 1px),100% calc(var(--twinCutR) + 1px),0 calc(var(--twinCutL) + 1px))}
 .twinPickTag{position:absolute;left:6px;top:6px;font-size:10px;font-weight:900;letter-spacing:.04em;
   color:#0b0f18;background:var(--accent);border-radius:6px;padding:1px 7px}
 .twinPickTxt{font-size:11.5px;font-weight:700;line-height:1.4;text-align:left;white-space:normal;word-break:break-word}
@@ -1467,7 +1484,16 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="text">文字で選ぶ（これまでの一覧）</option>
         </select>
       </div>
-      <div class="hint">「絵で選ぶ」は、カードの絵を左右に並べ、使わない側を暗くして示します。画像が未登録のカードは自動で文字の一覧になります。</div>
+      <div class="row" id="twinCutRow" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px">分割線の位置</span>
+        <label style="display:inline-flex;gap:4px;align-items:center;font-size:11px;color:var(--muted)">左
+          <input type="range" id="setTwinCutL" min="35" max="85" step="1" style="width:104px"></label>
+        <label style="display:inline-flex;gap:4px;align-items:center;font-size:11px;color:var(--muted)">右
+          <input type="range" id="setTwinCutR" min="35" max="85" step="1" style="width:104px"></label>
+        <button class="btn small ghost" id="setTwinCutReset">既定に戻す</button>
+        <span id="setTwinCutVal" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div class="hint">「絵で選ぶ」は、カードの絵を左右に並べ、使わない側を暗くして示します。ツインパクトの区切りは斜めなので、その傾きを左右の位置で合わせられます（カードによって多少ずれます）。画像が未登録のカードは自動で文字の一覧になります。</div>
       <div class="hint">好きな画像を丸く切り抜いて演出に出します（自分の端末にだけ保存され、相手には送りません）。<br>
         「🎴 画像集から選ぶ」ではスリーブ・プレマ用の画像から選べ、そのまま切り抜く位置と拡大率も調整できます。ファイルから直接入れることもできます。</div>
       <div class="row" style="align-items:center;gap:8px">
@@ -4075,6 +4101,8 @@ function askTwinFace(card,msg,topLabel,botLabel,cancelLabel){
       th.appendChild(im);
       const sh=document.createElement("span");sh.className="twinPickShade "+(topHalf?"lower":"upper");
       th.appendChild(sh);
+      const ln=document.createElement("span");ln.className="twinPickLine";
+      th.appendChild(ln);
       const tag=document.createElement("span");tag.className="twinPickTag";tag.textContent=topHalf?"上面":"下面";
       th.appendChild(tag);
       const tx=document.createElement("span");tx.className="twinPickTxt";tx.textContent=label;
@@ -4299,7 +4327,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.93";
+const APP_VER="v13.94";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36104,6 +36132,32 @@ $("btnMatReset").addEventListener("click",async ()=>{
   toast("プレイマットを解除しました");
 });
 {const bl=$("btnAdjLive");if(bl)bl.addEventListener("click",()=>openAdjustDock(ADJ.target||"mat0"));}
+/* 🃏 分割線の傾き。カードによって違うので合わせられるようにする */
+function applyTwinCut(){
+  const r=document.documentElement.style;
+  const L=Math.max(35,Math.min(85,+S.twinCutL||64));
+  const R=Math.max(35,Math.min(85,+S.twinCutR||57));
+  r.setProperty("--twinCutL",L+"%");
+  r.setProperty("--twinCutR",R+"%");
+  const v=document.getElementById("setTwinCutVal");if(v)v.textContent=`左${L}% / 右${R}%`;
+  const a=document.getElementById("setTwinCutL");if(a&&a.value!=String(L))a.value=String(L);
+  const b=document.getElementById("setTwinCutR");if(b&&b.value!=String(R))b.value=String(R);
+}
+{
+  const bindCut=(id,key)=>{
+    const el=document.getElementById(id);if(!el)return;
+    el.addEventListener("input",()=>{S[key]=+el.value;applyTwinCut();});
+    el.addEventListener("change",async()=>{if(db)await idbPut("misc",key,S[key]);});
+  };
+  bindCut("setTwinCutL","twinCutL");
+  bindCut("setTwinCutR","twinCutR");
+  const rs=document.getElementById("setTwinCutReset");
+  if(rs)rs.addEventListener("click",async()=>{
+    S.twinCutL=64;S.twinCutR=57;applyTwinCut();
+    if(db){await idbPut("misc","twinCutL",64);await idbPut("misc","twinCutR",57);}
+    toast("🃏 分割線の位置を既定に戻しました");
+  });
+}
 /* 🃏 ツインパクトの面の選び方（絵／文字）。うまくいかない時は文字に戻せる */
 {const tp=$("setTwinPick");
  if(tp)tp.addEventListener("change",async()=>{
@@ -40004,6 +40058,9 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   {const tp=db?await idbGet("misc","twinPick"):null;
    S.twinPick=(tp==="text")?"text":"art";
    const el=document.getElementById("setTwinPick");if(el)el.value=S.twinPick;}
+  {const cl=db?await idbGet("misc","twinCutL"):null;if(cl!=null&&cl!=="")S.twinCutL=+cl||64;
+   const cr=db?await idbGet("misc","twinCutR"):null;if(cr!=null&&cr!=="")S.twinCutR=+cr||57;
+   applyTwinCut();}
   {const bc=db?await idbGet("misc","builderCols"):null;if(bc!=null&&bc!=="")B._bCols=Math.max(0,Math.min(14,+bc||0));}
   {const pc=db?await idbGet("misc","pickCols"):null;if(pc!=null&&pc!=="")B._pickCols=Math.max(0,Math.min(12,+pc||0));}
   {const ls=db?await idbGet("misc","logSize"):null;if(ls!=null)S.logSize=String(ls||"");}
