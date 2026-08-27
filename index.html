@@ -569,18 +569,18 @@ body.vs .pboard.cmw{flex:1 1 0;min-height:0}
 }
 .card.gearside.auraside img{object-position:50% 20%}
 .card.gearside.auraside .sealtag{font-size:9px;padding:1px 4px}
-/* ⚙ クロス中のクロスギア：ドラグハート／オーラと同じく、クリーチャーに付いた小さな装備として見せる */
+/* ⚙ クロス中のクロスギア：カード画像全体だけを縦向きで表示する */
 .card.gearside.crossside{
-  width:calc(var(--card-h)*.79)!important;
-  height:calc(var(--card-h)*.56);
+  width:calc(var(--card-h)*.42)!important;
+  height:calc(var(--card-h)*.59);
   align-self:flex-start;
   margin-left:-12px;margin-top:-3px;
   outline:2.5px solid #8446c9;outline-offset:-2px;
   border-radius:8px;z-index:2;
+  background:#080b12;
   box-shadow:0 2px 8px rgba(0,0,0,.55);
 }
-.card.gearside.crossside img{object-position:50% 45%}
-.card.gearside.crossside .sealtag{font-size:9px;padding:1px 4px}
+.card.gearside.crossside img{object-fit:contain;object-position:50% 50%}
 .card .gearpeek{position:absolute;top:0;left:0;right:0;height:30%;display:flex;z-index:1;border-bottom:2px solid #8446c9;pointer-events:none;background:#1a1030}
 .card .gearpeek img{flex:1;min-width:0;object-fit:cover;object-position:top;height:100%;opacity:.95}
 .card .gearpeek .gname{flex:1;font-size:8px;color:#e6d9ff;font-weight:800;overflow:hidden;padding:1px 2px}
@@ -4363,7 +4363,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.101";
+const APP_VER="v13.102";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -28329,15 +28329,17 @@ function gearSideEl(pi,host,g){
   const isAuraG=rg&&["aura","gigaaura"].includes(rg.ctype);
   const isCrossG2=!!(g.isCross||(rg&&(rg.ctype==="crossgear"||rg.ctype==="evocrossgear")));
   if(isAuraG)el.classList.add("auraside");
-  else if(isCrossG2)el.classList.add("crossside"); // ⚙ クロス中は小さく表示（ドラグハート・オーラと同じ装備の見た目）
+  else if(isCrossG2)el.classList.add("crossside"); // ⚙ クロス中はカード画像だけを縦向きで表示
   const u=imgURL.get(faceKeyOf(g));
   if(u){const im=document.createElement("img");im.src=u;im.draggable=false;el.appendChild(im);}
   else{const np=document.createElement("div");np.className="nameplate";np.textContent=faceNameOf(g);el.appendChild(np);}
-  const tg=document.createElement("span");
-  tg.className="sealtag";tg.style.background=isAuraG?"#a855f7":"#8446c9";
-  tg.textContent=isAuraG?"オーラ":isCrossG2?`クロス：${faceNameOf(g)}`:"装";
-  if(isCrossG2)tg.style.cssText+=";max-width:96%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px";
-  el.appendChild(tg);
+  // クロスギアには「クロス」やカード名を重ねず、登録画像そのものだけを見せる。
+  if(!isCrossG2){
+    const tg=document.createElement("span");
+    tg.className="sealtag";tg.style.background=isAuraG?"#a855f7":"#8446c9";
+    tg.textContent=isAuraG?"オーラ":"装";
+    el.appendChild(tg);
+  }
   el.title=`${faceNameOf(g)}（${faceNameOf(host)} に${isCrossG2?"クロス":"装備"}）`;
   el.addEventListener("dragstart",ev=>ev.preventDefault());
   el.addEventListener("click",ev=>{ev.stopPropagation();gearMenu(pi,host,g);});
