@@ -2231,6 +2231,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="これをクロスしたクリーチャーに「スレイヤー」を与える（秘福 キナコ・カチューシャ型）。クロスギア／オレガ・オーラ／ドラグハート・ウエポン共通"><input type="checkbox" id="fxGearSlayer"> ⚙ クロス先に「スレイヤー」を与える</label>
         <label title="このギアをクロスしたクリーチャーに「エスケープP'S」を与える（破壊される時パワー0超なら、かわりにランダム盾1つを手札へ・ST不可・各ターン1回）"><input type="checkbox" id="fxGearEscapePS"> ⚙ クロス先に「エスケープP'S」を与える</label>
         <label title="このギアをクロスしたクリーチャー（クロス先）が破壊された時、このギアのコントローラーがn枚引く（秘福 サスペンス・ブーツ型）。ギア自身の破壊ではなく、クロス先クリーチャーの破壊が条件です">⚙ クロス先が破壊された時 <input type="number" id="fxGearHostDeadDraw" min="0" max="9" value="0" style="width:52px"> 枚引く</label>
+        <label title="《神託アイドル！コットン》にクロス中で、そのコットンがタップしている自分のターン終了時、手札の光または闇のゼニス1体を任意でコストを支払わずに召喚します（ライオネル・グロリア型）"><input type="checkbox" id="fxGearEndZenith"> ⚙ ターン終了時、タップ中のコットンから光/闇のゼニスを無料召喚</label>
         <label><input type="checkbox" id="fxGearSA"> ⚙ クロス先に「スピードアタッカー」を与える</label>
         <label>⚙ クロス先のブレイク+<input type="number" id="fxGearBreakAdd" min="0" max="9" value="0" style="width:52px"></label>
         <label title="このクリーチャー自身が「エスケープP'S」を持つ（破壊される時パワー0超なら、かわりにランダム盾1つを手札へ・ST不可・各ターン1回）"><input type="checkbox" id="fxEscapePS"> 🏃 エスケープP'S（自身）</label>
@@ -4363,7 +4364,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.102";
+const APP_VER="v13.103";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5828,7 +5829,7 @@ async function playEvoCrossGear(p,zone,id){
     evc.isCross=true;
     base.host.gear[gi]=evc;
   }
-  markArrive(evc);emitEvent(p,"summon");enqueueFx(p,evc);
+  markArrive(evc);emitEvent(p,"summon",evc);enqueueFx(p,evc);
   closeSheet();closeSel();sfx("ok");renderAll();
   toast(`⤴ 進化クロスギア！ ${faceNameOf(base.card)} の上に ${faceNameOf(evc)} を重ねた${base.where==="gear"?"（クロス状態を継続）":""}`);
   try{fxShare("evo","進化クロスギア！",`${S.players[p].label}`,true,evc.name,p);}catch(e){}
@@ -5868,7 +5869,7 @@ async function summonCreatureNeoAware(pi,t,opts){
             Z.battle[bi]=t;
             transferAtkState([host.id],t);
             markArrive(t);
-            emitEvent(pi,"summon");enqueueFx(pi,t);
+            emitEvent(pi,"summon",t);enqueueFx(pi,t);
             toast(`⤴ ${faceNameOf(host)} に重ねて${isNeo?"NEO進化":evoKindLabel(evoKindOf(r))}！ → ${faceNameOf(t)}`);
             return true;
           }
@@ -5876,7 +5877,7 @@ async function summonCreatureNeoAware(pi,t,opts){
       }
     }
   }
-  if(enterBattleOrGrave(pi,t)){emitEvent(pi,"summon");enqueueFx(pi,t);if(typeof mdEv==="function")mdEv("summon",pi,faceNameOf(t),{m:zonesOf(pi).mana.length});return true;}
+  if(enterBattleOrGrave(pi,t)){emitEvent(pi,"summon",t);enqueueFx(pi,t);if(typeof mdEv==="function")mdEv("summon",pi,faceNameOf(t),{m:zonesOf(pi).mana.length});return true;}
   return false;
 }
 function qqqxOwnerOpp(pi){
@@ -7760,6 +7761,30 @@ async function runTurnEndTriggers(cur2){
     await WATCH_CHAIN;
     await waitFxIdle();
     TURN_END_PHASE="";
+    // ⚙ ライオネル・グロリア：タップ中の《神託アイドル！コットン》にクロスしている時、
+    // 自分のターン終了時に手札の光/闇ゼニスを任意でコストを支払わず「召喚」する。
+    {
+      const ZG=zonesOf(cur2);
+      const hosts=ZG.battle.filter(h=>h.tapped&&(h.gear||[]).some(g=>{const rg=getReg(g);return rg&&rg.gearEndZenith;})&&/神託アイドル.*コットン/.test(faceNameOf(h)));
+      for(const host of hosts){
+        if(!ZG.battle.some(x=>x.id===host.id)||!host.tapped)continue;
+        const zen=ZG.hand.filter(x=>{const r=getReg(x);return r&&isCreatureReg(r)&&raceMatch(r,"ゼニス")&&((r.civs||[]).includes("light")||(r.civs||[]).includes("dark"));});
+        if(!zen.length){toast(`⚙ ライオネル・グロリア：手札に召喚できる光/闇のゼニスがありません`);continue;}
+        const j=await pickCard(`⚙ ライオネル・グロリア（${faceNameOf(host)}）：コストを支払わずに召喚する光/闇のゼニスを選択`,zen,{hint:"任意：キャンセルで召喚しない"});
+        if(j===null)continue;
+        const chosen=zen[j], hi=ZG.hand.findIndex(x=>x.id===chosen.id);if(hi<0)continue;
+        const lk=stLockerOf(cur2,"stLockCre","stLockCreF",getReg(chosen),chosen);
+        const tl=lk?null:turnLockHit(cur2,"creature",getReg(chosen));
+        if(lk||tl){toast(`⛔ 召喚ロック：${faceNameOf(chosen)} は召喚できません`);continue;}
+        if(!battleEntryOk(cur2,chosen)){toast(`⛔ ${faceNameOf(chosen)} はバトルゾーンに出せません`);continue;}
+        snap();ZG.hand.splice(hi,1);chosen.faceup=true;chosen.tapped=false;chosen.sideways=false;chosen._wasSummon=true;
+        if(!enterBattleOrGrave(cur2,chosen)){renderAll();continue;}
+        emitEvent(cur2,"summon",chosen);enqueueFx(cur2,chosen);
+        toast(`⚙ ライオネル・グロリア：${faceNameOf(chosen)} をコストを支払わずに召喚した`);renderAll();
+        TURN_END_PHASE="⚙ ライオネル・グロリアで召喚したゼニスの効果を処理中";
+        await waitFxIdle();await WATCH_CHAIN;await waitFxIdle();TURN_END_PHASE="";
+      }
+    }
     // アンタップ状態ならターン終了時に手札へ戻る（グレイト“S-駆”型）
     {
       const ZR=zonesOf(cur2);
@@ -8531,14 +8556,14 @@ function runWatchFx(pi,type,trigCard){
           for(const k of _oks)S._watchOnce[k]=`${S.turn}:${S.who}`;
         };
         if(S.expert&&S.vs&&fxRunning){
-          TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type,pos:_pos0});
+          TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type,pos:_pos0,trigCard:trigCard||null});
         }else if(S.expert&&(type==="allyEnter"||type==="allyEvo")){
           // 🕐 「自分のクリーチャーが出た時」の誘発（カスミ／アジサイ／キューティ・ルピア型）は、
           //    既定では出たカード自身の「出た時（CIP）」を解決してから処理する。
           //    設定「盤面の『出た時』誘発をCIPより先に処理する」をONにすると従来の順番になる。
           if(S.allyEnterFirst){
             Promise.resolve().then(()=>{
-              if(fxRunning)TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type,pos:_pos0});
+              if(fxRunning)TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type,pos:_pos0,trigCard:trigCard||null});
               else enqueueWatchJob(_job);
             });
           }else{
@@ -11534,7 +11559,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
       if(!onBattle&&!asBase)continue;
       if(asBase)toast(`⚡ ${faceNameOf(cc)} は進化元になったが、出た時効果は誘発済みのため解決します`);
       LAST_ARRIVED=cc;
-      emitEvent(pi,"summon");enqueueFx(pi,cc);
+      emitEvent(pi,"summon",cc);enqueueFx(pi,cc);
     }
     await waitFxIdle(inPump);
   }
@@ -15073,35 +15098,10 @@ async function runFxList(pi,list,srcCard,inPump){
         renderAll();
       }
     }else if(f.t==="breakMineAny"){
-      // 💥 自分のシールドを好きな数ブレイク（同時ブレイク：先に全部選ぶ→まとめてブレイク→S・トリガーを一括処理）
-      const picked=[];
-      while(true){
-        const TZ=zonesOf(pi);
-        if(!TZ.shield.length){if(!picked.length)toast("シールドがありません");break;}
-        const opts=TZ.shield.map((x,i2)=>`${picked.includes(x.id)?"✅ ":""}盾${i2+1}${x.faceup?`（表：${faceNameOf(x)}）`:""}${x.under&&x.under.length?` +${x.under.length}`:""}`);
-        const si=await askChoice(`💥 ブレイクする自分のシールドを選択（現在${picked.length}枚選択中・タップで選択/解除・同時にブレイクします）`,
-          [...opts,picked.length?`💥 選んだ${picked.length}枚をまとめてブレイク`:"ブレイクしない（終了）"]);
-        if(si===null){picked.length=0;break;}
-        if(si>=TZ.shield.length)break;
-        const sc=TZ.shield[si];
-        const k=picked.indexOf(sc.id);
-        if(k>=0)picked.splice(k,1);else picked.push(sc.id);
-      }
-      if(picked.length){
-        snap();
-        const TZ=zonesOf(pi);
-        const stack=[];
-        for(const id of picked){
-          const si=TZ.shield.findIndex(x=>x.id===id);
-          if(si<0)continue;
-          const sc=TZ.shield.splice(si,1)[0];
-          stack.push(sc,...(sc.under?sc.under.splice(0):[]));
-        }
-        sfx("break");
-        toast(`💥 自分のシールド${picked.length}枚を同時にブレイク！`);
-        await processBroken(pi,stack,"💥 自分のシールドを同時ブレイク（効果・S・トリガー使用可）");
-        renderAll();
-      }
+      // 💥 ライオネル・フィナーレ型：下部に常時表示される専用確定ボタンで好きな数を同時ブレイク。
+      if(!Z.shield.length){toast("シールドがありません");continue;}
+      const idxs=await pickShieldIdxsAny(pi);
+      if(idxs&&idxs.length){await breakShields(pi,idxs.length,null,idxs);renderAll();}
     }else if(f.t==="handShield"){
       // 🛡 手札からn枚まで選んで裏向きにシールド化（キャンセルで打ち切り）
       if(f.shieldMax>0&&Z.shield.length>f.shieldMax){toast(`🛡 自分のシールドが${f.shieldMax}枚以下でないため発動しません（現在${Z.shield.length}枚）`);continue;}
@@ -15720,8 +15720,14 @@ async function runFxList(pi,list,srcCard,inPump){
       if(handG.length){
         const j=await pickCard("⚙ 手札からジェネレートするクロスギアを選択（キャンセルで出さない）",handG,{hint:"任意：出さなくても、続く無料クロスは行えます"});
         if(j!==null){
-          const hi=Z.hand.findIndex(x=>x.id===handG[j].id);
-          if(hi>=0){const g=Z.hand.splice(hi,1)[0];g.faceup=true;g.tapped=false;g.sideways=false;g.buff=null;Z.battle.push(g);sfx("move");renderAll();toast(`⚙ ${faceNameOf(g)} をジェネレートした`);}
+          const chosen=handG[j], rg=getReg(chosen);
+          if(rg&&rg.ctype==="evocrossgear"){
+            // 進化クロスギアは通常ギアとして直置きせず、進化元を選んで重ねる。
+            await playEvoCrossGear(pi,"hand",chosen.id);
+          }else{
+            const hi=Z.hand.findIndex(x=>x.id===chosen.id);
+            if(hi>=0){const g=Z.hand.splice(hi,1)[0];g.faceup=true;g.tapped=false;g.sideways=false;g.buff=null;Z.battle.push(g);sfx("move");renderAll();toast(`⚙ ${faceNameOf(g)} をジェネレートした`);}
+          }
         }
       }
       if(!srcCard||!Z.battle.some(x=>x.id===srcCard.id)){toast("⚙ クロス先のクリーチャーが場にいないため、無料クロスは行えません");continue;}
@@ -18761,6 +18767,26 @@ function pickShieldIdxs(op,count){
     $("breakOlay").classList.add("open");
   });
 }
+/* 🛡 ライオネル・フィナーレ型：好きな数の盾を画像パネルで複数選択。
+   確定項目が画面外へ隠れないよう、breakOlay 下部の固定ボタンを使う。 */
+function pickShieldIdxsAny(op){
+  const OZ=zonesOf(op);
+  return new Promise(res=>{
+    const picked=new Set(),g=$("bkGrid");
+    const finish=v=>{const ba=$("bkActions");if(ba){ba.innerHTML="";ba.style.display="none";}$("bkDone").onclick=null;$("breakOlay").classList.remove("open");res(v);};
+    const render=()=>{
+      $("bkTitle").textContent="💥 ブレイクする自分のシールドを好きな数選択";
+      $("bkHint").textContent=`${picked.size}枚選択中。盾をタップして選択/解除し、下の黄色いボタンでブレイクします。`;
+      g.innerHTML="";
+      OZ.shield.forEach((x,j)=>{const el=vCardEl(x.faceup?faceNameOf(x):"（裏向きの盾）",{idx:j+1});
+        if(!x.faceup){const th=el.querySelector(".thumb");th.innerHTML="";const b=backURL(op);if(b){const im=document.createElement("img");im.src=b;im.draggable=false;im.style.cssText="width:100%;height:100%;object-fit:cover";applySleevePosition(im,op);th.appendChild(im);}}
+        if(picked.has(x.id))el.classList.add("picked");el.onclick=()=>{if(picked.has(x.id))picked.delete(x.id);else picked.add(x.id);render();};g.appendChild(el);});
+      const bar=$("bkActions");bar.innerHTML="";bar.style.display="";const cx=document.createElement("button");cx.className="btn small ghost";cx.textContent="ブレイクしない（終了）";cx.onclick=()=>finish([]);bar.appendChild(cx);
+      $("bkDone").textContent=picked.size?`選択した${picked.size}枚をブレイク`:`ブレイクする盾を選んでください`;
+      $("bkDone").onclick=()=>{if(!picked.size){toast("ブレイクする盾を1枚以上選んでください");return;}finish([...picked].map(id=>OZ.shield.findIndex(x=>x.id===id)).filter(i=>i>=0));};
+    };render();$("breakOlay").classList.add("open");
+  });
+}
 async function breakShields(op,count,attacker,forceIdx){
   const OZ=zonesOf(op);
   // 👻 ブレイク処理は防御側(op)の選択（どの盾を割るか・S・トリガーを使うか）。
@@ -19508,7 +19534,9 @@ async function drainTrig(activeOnly,skipAlly){
       }
       toast(`⚡誘発処理：${faceNameOf(t.c)}`);
       setFxNowChip(`⚡ 誘発処理：${faceNameOf(t.c)}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`); // ⏳ 残りの待機誘発を解決順で表示
-      await runFxList(t.pi,t.fx,t.c,fxRunning);
+      const _prevTrig=FX_TRIG;FX_TRIG=t.trigCard||null;
+      try{await runFxList(t.pi,t.fx,t.c,fxRunning);}
+      finally{FX_TRIG=_prevTrig;}
       S._watchOnce=S._watchOnce||{};
       for(const k of (t.onceKeys||[]))S._watchOnce[k]=`${S.turn}:${S.who}`;
     }
@@ -22487,6 +22515,7 @@ function renderFxEditor(){
   {const e=$("fxGearBreakAdd");if(e)e.value=String(FXEDIT.gearBreakAdd||0);}
   {const e=$("fxGearEscapePS");if(e)e.checked=!!FXEDIT.gearEscapePS;}
   {const e=$("fxGearHostDeadDraw");if(e)e.value=String(FXEDIT.gearHostDeadDraw||0);}
+  {const e=$("fxGearEndZenith");if(e)e.checked=!!FXEDIT.gearEndZenith;}
   {const e=$("fxEscapePS");if(e)e.checked=!!FXEDIT.escapePS;}
   {const e=$("fxCostRedAllyF");if(e)e.value=FXEDIT.costRedAllyF||"";}
   {const e=$("fxCostRedAllyN");if(e)e.value=String(FXEDIT.costRedAllyN||0);}
@@ -24692,6 +24721,7 @@ function openFxEditor(key){
     gearPow:cur&&cur.gearPow||0,
     gearPowOppT:cur&&cur.gearPowOppT||0,
     gearBlocker:cur?!!cur.gearBlocker:false,
+    gearEndZenith:cur?!!cur.gearEndZenith:false,
     gearSlayer:cur?!!cur.gearSlayer:false,
     gearSA:cur?!!cur.gearSA:false,
     gearBreakAdd:cur&&(+cur.gearBreakAdd||0)||0,
@@ -25166,6 +25196,7 @@ $("fxSave").addEventListener("click",async ()=>{
     gearBreakAdd:$("fxGearBreakAdd")?(parseInt($("fxGearBreakAdd").value,10)||0):0,
     gearEscapePS:$("fxGearEscapePS")?$("fxGearEscapePS").checked:false,
     gearHostDeadDraw:$("fxGearHostDeadDraw")?(parseInt($("fxGearHostDeadDraw").value,10)||0):0,
+    gearEndZenith:$("fxGearEndZenith")?$("fxGearEndZenith").checked:false,
     escapePS:$("fxEscapePS")?$("fxEscapePS").checked:false,
     costRedAllyF:$("fxCostRedAllyF")?$("fxCostRedAllyF").value.trim():"",
     costRedAllyN:$("fxCostRedAllyN")?(parseInt($("fxCostRedAllyN").value,10)||0):0,
@@ -25806,6 +25837,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gearPow)attrs.push(`⚙クロス先パワー+${v.gearPow}`);
     if(v.gearPowOppT)attrs.push(`⚙クロス先パワー+${v.gearPowOppT}（相手ターン中）`);
     if(v.gearBlocker)attrs.push("⚙クロス先に「ブロッカー」付与");
+    if(v.gearEndZenith)attrs.push("⚙ターン終了時：タップ中コットンから光/闇ゼニスを無料召喚");
     if(v.gearEscapePS)attrs.push("⚙クロス先に「エスケープP'S」付与");
     if(v.gearSA)attrs.push("⚙クロス先にSA付与");
     if(v.gearBreakAdd)attrs.push(`⚙クロス先のブレイク+${v.gearBreakAdd}`);
