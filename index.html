@@ -4363,7 +4363,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.100";
+const APP_VER="v13.101";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8623,6 +8623,9 @@ async function offerSealPeel(actor){
   }
 }
 function emitEvent(actor,type,card){
+  // 到着カードをイベント開始時に固定する。踏み倒しパネルから複数体を出す途中で
+  // LAST_ARRIVED が次のカードに更新されても、HADES等の対象を取り違えない。
+  const eventCard=card||((type==="summon")?LAST_ARRIVED:null);
   // ✨ 呪文を唱えた演出（設定「多め」の時だけ）
   try{
     if(type==="spell"&&card&&fxAllowed("spell"))
@@ -8635,7 +8638,7 @@ function emitEvent(actor,type,card){
   //    出たカードは card 引数または直近の到着（LAST_ARRIVED）で判定。未登録・特定不能時は従来どおり発火（安全側）
   let _sumCre=true;
   if(type==="summon"){
-    const cA=card||LAST_ARRIVED;
+    const cA=eventCard;
     if(cA&&zonesOf(actor)&&zonesOf(actor).battle&&zonesOf(actor).battle.includes(cA)){
       const rA=getReg(cA);
       if(rA&&!isCreatureReg(rA))_sumCre=false;
@@ -8668,9 +8671,9 @@ function emitEvent(actor,type,card){
       });
     }
   }
-  if(S.vs&&(type!=="summon"||_sumCre))runWatchFx(actor===0?1:0,type,card);
+  if(S.vs&&(type!=="summon"||_sumCre))runWatchFx(actor===0?1:0,type,eventCard||card);
   // 🎺 「相手がカードを実行した時」：召喚と呪文を共通イベントにまとめる。
-  if(S.vs&&((type==="summon"&&_sumCre)||type==="spell"))runWatchFx(actor===0?1:0,"oppPlay",card);
+  if(S.vs&&((type==="summon"&&_sumCre)||type==="spell"))runWatchFx(actor===0?1:0,"oppPlay",eventCard||card);
   // ⏭ 禁断機関 ViVy-R型：相手のクリーチャーがタップしていれば、自分のターン中にクリーチャーを召喚するか
   //    呪文を唱えた時、このターンの残りが飛ぶ。
   //    「〜した時」の誘発なので、実行した瞬間にタップしていれば誘発は確定する。
@@ -8749,14 +8752,14 @@ function emitEvent(actor,type,card){
   }
   if(type==="summon"&&_sumCre){
     // ⚡ 自分のクリーチャーが出た時（allyEnter）：出た側のバトルゾーンの誘発を確認（ソロでも動く）
-    runWatchFx(actor,"allyEnter",LAST_ARRIVED);
+    runWatchFx(actor,"allyEnter",eventCard);
     // 🌌 出たのがサイキックなら、超次元ゾーンから呼べるカードを確認する（超時空ストームG・XX 型）
     try{
-      const _rp=LAST_ARRIVED&&getReg(LAST_ARRIVED);
-      if(_rp&&/psy/.test(String(_rp.ctype||"")))offerHyperCall(actor,`自分の《${faceNameOf(LAST_ARRIVED)}》がバトルゾーンに出ました`);
+      const _rp=eventCard&&getReg(eventCard);
+      if(_rp&&/psy/.test(String(_rp.ctype||"")))offerHyperCall(actor,`自分の《${faceNameOf(eventCard)}》がバトルゾーンに出ました`);
     }catch(e){}
     // ⚡ 自分の他のクリーチャーが進化した時（allyEvo）：出たカードが進化（下敷きあり/NEO/進化ctype）なら発火
-    const _la=LAST_ARRIVED, _rla=_la&&getReg(_la);
+    const _la=eventCard, _rla=_la&&getReg(_la);
     if(_la&&((_la.under&&_la.under.length)||_la.neoEvo||(_rla&&isEvoReg(_rla)))){
       runWatchFx(actor,"allyEvo",_la);
     }
@@ -8765,12 +8768,12 @@ function emitEvent(actor,type,card){
     const def=actor===0?1:0;
     const DZ=zonesOf(def);
     if(_sumCre){
-      runWatchFx(def,"oppSummon",LAST_ARRIVED);
-      runWatchFx(def,"oppSummonTapped",LAST_ARRIVED);
+      runWatchFx(def,"oppSummon",eventCard);
+      runWatchFx(def,"oppSummonTapped",eventCard);
     }
     // 🏯 超鯱城型（G城）：相手のマナ枚数よりコストが大きい相手クリーチャーが出た時、それを破壊
     {
-      const arrived=LAST_ARRIVED;const aReg=arrived&&getReg(arrived);
+      const arrived=eventCard;const aReg=arrived&&getReg(arrived);
       if(arrived&&aReg&&isCreatureReg(aReg)&&aReg.cost!=null){
         const castle=DZ.shield.find(s=>s.faceup&&!isSealed(s)&&(()=>{const rs=getReg(s);return rs&&rs.castleManaKill;})());
         if(castle&&+aReg.cost>zonesOf(actor).mana.length){
@@ -9876,6 +9879,7 @@ const FX_TYPES=[
   ["nWorldShuffle","🌐 各プレイヤーは手札と墓地をすべて山札に加えてシャッフルし、その後それぞれn枚引く（サイバー・N・ワールド型）"],
   ["deckCastSpellAll","🔮 自分の山札を見て、条件に合う呪文1枚をコストを支払わずに唱える→山札をシャッフル（条件欄＝例：コスト4以下）"],
   ["deckGearFree","⚙ 自分の山札を見て、条件に合うクロスギア1枚をコストを支払わずにジェネレートする→山札をシャッフル（条件欄＝例：コスト4以下）"],
+  ["handGearCrossSelf","⚙ 手札からクロスギア1枚を任意でジェネレートする。その後、自分のクロスギア1枚をこのクリーチャーに任意で無料クロス（コットン型）"],
   ["hoganBlaster","🎰 自分の山札をシャッフルし、上から1枚を表向きにする。クリーチャーならバトルゾーンに出し、呪文ならコストを支払わずに唱える（どちらでもなければ手札へ・ホーガン・ブラスター型／条件欄で対象を絞れる）"],
   ["dartsHandes","🎯 数字をひとつ選び、相手の手札をランダムにn枚捨てさせる。捨てたカードのコストが選んだ数と同じなら、カードを1枚引く（アンラッキーダーツ型）"],
   ["anyToShield","🛡 クリーチャーをn体選び、持ち主の裏向きの新しいシールドにする（自分・相手どちらでも選べる／条件欄＝例：進化以外・魂と記憶の盾型）"],
@@ -9905,7 +9909,7 @@ const FX_TYPES=[
   ["foeMaxCostDiscardRevive","🗑 相手の手札から最もコストの大きいカード1枚を捨てさせ、自分の墓地からそのコスト以下のクリーチャー1枚を出してもよい（雷獣ヴォルグ・ティーガー型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 function fxSummary(list){
@@ -11544,7 +11548,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
 const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
-  "handes","peepDiscard","grantBlockerPick","deckShield","revealBottomShield","nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
+  "handes","peepDiscard","grantBlockerPick","deckShield","revealBottomShield","nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "exileRecruitPerZone","elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
   "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho"]);
@@ -15710,6 +15714,21 @@ async function runFxList(pi,list,srcCard,inPump){
       try{fxShare("gear","ジェネレート！",`${S.players[pi].label}`,false,cc.name,pi);}catch(e){}
       logOnly(`⚙ ${S.players[pi].label}：山札から《${faceNameOf(cc)}》をジェネレート`);
       renderAll();
+    }else if(f.t==="handGearCrossSelf"){
+      // ⚙ コットン型：手札から任意で1枚ジェネレートし、その後は盤面のギアを任意でこのカードへ無料クロス。
+      const handG=Z.hand.filter(x=>{const rx=getReg(x);return rx&&(rx.ctype==="crossgear"||rx.ctype==="evocrossgear");});
+      if(handG.length){
+        const j=await pickCard("⚙ 手札からジェネレートするクロスギアを選択（キャンセルで出さない）",handG,{hint:"任意：出さなくても、続く無料クロスは行えます"});
+        if(j!==null){
+          const hi=Z.hand.findIndex(x=>x.id===handG[j].id);
+          if(hi>=0){const g=Z.hand.splice(hi,1)[0];g.faceup=true;g.tapped=false;g.sideways=false;g.buff=null;Z.battle.push(g);sfx("move");renderAll();toast(`⚙ ${faceNameOf(g)} をジェネレートした`);}
+        }
+      }
+      if(!srcCard||!Z.battle.some(x=>x.id===srcCard.id)){toast("⚙ クロス先のクリーチャーが場にいないため、無料クロスは行えません");continue;}
+      const fieldG=Z.battle.filter(x=>{const rx=getReg(x);return x.id!==srcCard.id&&rx&&(rx.ctype==="crossgear"||rx.ctype==="evocrossgear");});
+      if(!fieldG.length){toast("⚙ クロスできる自分のクロスギアがありません");continue;}
+      const k=await pickCard(`⚙ 《${faceNameOf(srcCard)}》に無料でクロスするギアを選択（キャンセルでクロスしない）`,fieldG,{hint:"任意：コストは支払いません"});
+      if(k!==null)await crossGearTo(pi,fieldG[k].id,{free:true,hostId:srcCard.id});
     }else if(f.t==="destroySumPow"){
       // 💥 パワーの合計がn以下になるように好きな数選んで破壊（スクラッパーレッド型）。
       //    残り予算より大きいクリーチャーは選択肢に出さない。キャンセルでそこまでの選択を実行。
@@ -28316,7 +28335,8 @@ function gearSideEl(pi,host,g){
   else{const np=document.createElement("div");np.className="nameplate";np.textContent=faceNameOf(g);el.appendChild(np);}
   const tg=document.createElement("span");
   tg.className="sealtag";tg.style.background=isAuraG?"#a855f7":"#8446c9";
-  tg.textContent=isAuraG?"オーラ":isCrossG2?"クロス":"装";
+  tg.textContent=isAuraG?"オーラ":isCrossG2?`クロス：${faceNameOf(g)}`:"装";
+  if(isCrossG2)tg.style.cssText+=";max-width:96%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px";
   el.appendChild(tg);
   el.title=`${faceNameOf(g)}（${faceNameOf(host)} に${isCrossG2?"クロス":"装備"}）`;
   el.addEventListener("dragstart",ev=>ev.preventDefault());
@@ -28426,13 +28446,14 @@ async function crossGearTo(pi,id,opt){
   const Z2=zonesOf(pi);
   const c=Z2.battle.find(x=>x.id===id);
   if(!c){toast("クロスギアが見つかりません");return false;}
-  const pool=Z2.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return !r2||r2.ctype!=="crossgear";})());
+  const pool=Z2.battle.filter(x=>x.id!==c.id&&(()=>{const r2=getReg(x);return !r2||(r2.ctype!=="crossgear"&&r2.ctype!=="evocrossgear");})());
   if(!pool.length){toast("クロスできるクリーチャーがいません");return false;}
-  const j=pool.length===1?0:await pickCard("クロスする対象を選択",pool,{hint:"タップで選択／クロスギアを装備させるクリーチャーを選びます"});
+  let j=opt.hostId?pool.findIndex(x=>x.id===opt.hostId):-1;
+  if(j<0)j=pool.length===1?0:await pickCard("クロスする対象を選択",pool,{hint:"タップで選択／クロスギアを装備させるクリーチャーを選びます"});
   if(j===null)return false;
   const rG=getReg(c);
   const xc=(S.gameMode==="tcg")?((rG&&rG.cost!=null?+rG.cost:0)||0):((rG&&+rG.gearCrossN)||0);
-  if(S.expert&&xc>0&&!S.freePlay){
+  if(!opt.free&&S.expert&&xc>0&&!S.freePlay){
     const untapped=Z2.mana.filter(m=>!m.tapped);
     const jj=await askChoice(`⚙ クロスコスト${xc}（未タップマナ${untapped.length}）`,
       [`支払ってクロス（マナ${xc}枚タップ）`,"コストを支払わずにクロス（効果による無料クロス）","やめる"]);
@@ -28464,7 +28485,7 @@ async function crossGearTo(pi,id,opt){
   sfx("ok");
   if(opt.fromSheet){closeSheet();closeSel();}
   renderAll();
-  toast(`⚙ クロス！ ${faceNameOf(c)} → ${faceNameOf(host)}${xc?`（クロスコスト${xc}）`:""}`);
+  toast(`⚙ クロス！ ${faceNameOf(c)} → ${faceNameOf(host)}${opt.free?"（効果による無料クロス）":(xc?`（クロスコスト${xc}）`:"")}`);
   return true;
 }
 /* 🔗 G・リンクの並び順を決める。
@@ -28926,8 +28947,9 @@ function cardEl(pi,zone,c){
   if(zone==="battle"&&c.faceup&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!isGearCard&&!isD2Card){
     const _rS=getReg(c);
     // 封印を扱えるカード：禁断カード＝付ける／外す、それ以外＝封印されていれば外すだけ
-    const _isKindanCard=!!(_rS&&(_rS.ctype==="kindancre"||_rS.ctype==="kindanbeat"||_rS.loseIfNotBattle
-      ||_rS.sealSelfOnFlip||(_rS.races||[]).some(x=>/禁断/.test(String(x)))))||/禁断|ドキンダム|ドルマゲドン/.test(String(c.name||""));
+    // 「禁断」という名前・種族だけでは付与しない。追加ボタンはカードタイプで限定する。
+    // 最終禁断フィールドは登録上 fieldKind="kindan" として扱う。
+    const _isKindanCard=!!(_rS&&(_rS.ctype==="kindancre"||_rS.ctype==="kindanbeat"||_rS.fieldKind==="kindan"));
     const _hasSealNow=!!(c.seals&&c.seals.length);
     if(_isKindanCard||_hasSealNow){
       const sb=document.createElement("button");
