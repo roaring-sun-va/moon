@@ -2872,13 +2872,13 @@ body.shake{animation:bodyShake .4s ease-out}
 </div>
 
 <div class="olay" id="breakOlay" style="align-items:center;background:rgba(4,7,13,.72);z-index:95">
-  <div class="panelbox" style="max-width:640px">
+  <div class="panelbox" style="max-width:720px;max-height:calc(100dvh - var(--safetop,0px) - var(--safebot,0px) - 12px);display:flex;flex-direction:column;overflow:hidden">
     <div class="row" style="margin:0;justify-content:space-between;align-items:center">
       <h2 id="bkTitle" style="margin:0">🛡 シールドブレイク</h2>
       <button class="btn small ghost" id="bkPeek" style="padding:4px 10px">👁 盤面</button>
     </div>
     <div class="hint" id="bkHint"></div>
-    <div id="bkGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px;max-height:38dvh;overflow-y:auto;padding:4px"></div>
+    <div id="bkGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px;max-height:none;min-height:0;flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;scroll-padding-bottom:18px;padding:4px 4px 18px"></div>
     <div class="row" id="bkActions" style="display:none;background:#0f1524;border:1px solid var(--line);border-radius:10px;padding:8px"></div>
     <div class="row" style="justify-content:flex-end">
       <button class="btn primary small" id="bkDone">残りをすべて手札へ（完了）</button>
@@ -4364,7 +4364,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v13.103";
+const APP_VER="v13.104";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9787,6 +9787,7 @@ const FX_TYPES=[
   ["suspenseReveal","🃏 相手のシールドn枚と手札n枚をランダムに公開→その中の呪文を好きな数コストを支払わず唱える→公開カードはすべて墓地へ（サスペンス型）"],
   ["sumRecruit","🌋 〔ゾーン〕から好きな数のクリーチャーをコスト合計n以下で選んでバトルゾーンへ（条件欄「マナ／墓地:クリーチャー」・nが合計上限）"],
   ["foeAllShield","🛡 相手の〔対象〕クリーチャーをすべて持ち主のシールドに（裏向き・ウェディング型・条件欄で対象）"],
+  ["foeHandBattleShield4","💒 相手が自身の手札＋バトルゾーンから合計n枚を順番に選び、裏向きでシールド化（ウェディング型・自身と同名を除外）"],
   ["foeHandShieldRand","🛡 相手のランダムな手札n枚を持ち主のシールドに（条件欄に「自分の〔対象〕1体につき」で枚数を場から自動計算）"],
   ["breakMineRand","👁 自分のランダムなシールドn枚を見る→それぞれブレイクしてもよい（S・トリガー処理つき）"],
   ["deckEvo","🂠 山札の上から1枚目を表向きにし、条件に合えばバトルゾーンに出して（CIP発動）このクリーチャーをその上に重ねる（デッキ進化・ボルドギ型・条件欄で対象）"],
@@ -15221,6 +15222,46 @@ async function runFxList(pi,list,srcCard,inPump){
         renderAll();
       }
       if(put>0)sfx("move");
+    }else if(f.t==="foeHandBattleShield4"){
+      // 💒 ウェディング型：相手自身が手札＋バトルゾーンから合計n枚を1枚ずつ選ぶ。
+      // 選択した順番で shield.push するため、その順序がそのまま盾の並び順になる。
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const isWedding=x=>/祝.*頂.*ウェディング/.test(normName(faceNameOf(x)));
+      const eligibleBattle=()=>OZ.battle.filter(x=>isCreatureReg(getReg(x))&&!isWedding(x));
+      const target=Math.min(Math.max(1,n|0),OZ.hand.length+eligibleBattle().length);
+      if(!target){toast("💒 相手の手札・対象クリーチャーがありません");continue;}
+      snap();
+      const made=[];
+      for(let step=0;step<target;step++){
+        const hand=[...OZ.hand];
+        const battle=eligibleBattle();
+        const pool=[...hand,...battle];
+        if(!pool.length)break;
+        const j=await olPickRemote(op,
+          `💒 ${S.players[op].label}：シールド化するカードを選択（${step+1}/${target}枚目）`,pool,
+          `手札＋バトルゾーンから合計${target}枚。選んだ順で盾に置かれます。`);
+        if(j===null){step--;continue;} // 強制効果：必要枚数までは選択を続ける
+        const picked=pool[j];
+        let cc=null;
+        const hi=OZ.hand.findIndex(x=>x.id===picked.id);
+        if(hi>=0){cc=OZ.hand.splice(hi,1)[0];}
+        else{
+          const bi=OZ.battle.findIndex(x=>x.id===picked.id);
+          if(bi<0){step--;continue;}
+          if(await offerTrueEscape(op,picked)){renderAll();step--;continue;}
+          if(await leaveRepToHandGate(op,picked)){renderAll();step--;continue;}
+          const bi2=OZ.battle.findIndex(x=>x.id===picked.id);
+          if(bi2<0){step--;continue;}
+          cc=OZ.battle.splice(bi2,1)[0];
+          if(cc.gear&&cc.gear.length){const gs=cc.gear.splice(0);gs.forEach(g=>gearOut(OZ,g));}
+          if(cc.under&&cc.under.length){const us=cc.under.splice(0);us.forEach(u=>{u.faceup=true;OZ.grave.push(u);});}
+        }
+        cc.faceup=false;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;cc.seals=[];cc.mark=S.turn>0;
+        if(!shieldCapOk(OZ)){cc.faceup=true;OZ.grave.push(cc);toast(`🛡 シールド上限（10枚）：《${faceNameOf(cc)}》は墓地へ`);}
+        else{OZ.shield.push(cc);made.push(cc);}
+        renderAll();
+      }
+      if(made.length){sfx("move");toast(`💒 選んだ順に${made.length}枚を相手のシールドへ置いた`);await notifyShieldPlaced(op,made);}
     }else if(f.t==="foeAllShield"){
       // 🛡 相手の〔対象〕クリーチャーをすべて持ち主のシールドに（裏向き・ウェディング型）
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
@@ -21121,7 +21162,7 @@ function fxTypeCat(lb){
   return "🔧 その他";
 }
 /* ⭐ 1枚のカード専用に近いギミックfx（表示上ドロップダウン最下部にまとめる・削除はしない） */
-const FX_CARD_SPECIFIC=new Set(["deckPin4","diaBliz","breakMineAny","suspenseReveal","shieldMakeRand","foeAllShield","deckEvo","millUntilCre","underDeck"]);
+const FX_CARD_SPECIFIC=new Set(["deckPin4","diaBliz","breakMineAny","suspenseReveal","shieldMakeRand","foeAllShield","foeHandBattleShield4","deckEvo","millUntilCre","underDeck"]);
 /* 📊 登録済みカード（FXDB）から効果の実使用数を集計。
    type: 効果タイプ（出た時fx＋誘発fxのt）／ev: 誘発タイミング／kw: キーワード系フラグ（boolean true / 数値>0） */
 function fxUsageCounts(){
@@ -21303,7 +21344,7 @@ function fxRowEl(faceIdx,i){
   cnd.value=f.cond||"";
   cnd.onchange=()=>{f.cond=cnd.value.trim();};
   // 🛡 盾追加系の「自分のシールドが○枚以下のときだけ発動」ゲート欄（空欄/0＝無条件）
-  const SHIELD_ADD_TYPES=new Set(["deckShield","deckShieldFill","handShield","foeToShield","foeAllShield","foeHandShieldRand","shieldMakeRand","revealBottomShield","deckShieldUp"]);
+  const SHIELD_ADD_TYPES=new Set(["deckShield","deckShieldFill","handShield","foeToShield","foeAllShield","foeHandBattleShield4","foeHandShieldRand","shieldMakeRand","revealBottomShield","deckShieldUp"]);
   const shb=document.createElement("input");
   shb.type="number";shb.min="0";shb.placeholder="盾≤";
   shb.title="自分のシールドが この枚数以下のときだけ発動する（空欄/0＝無条件）。デュエプレの「シールドが○枚以下なら」型。";
