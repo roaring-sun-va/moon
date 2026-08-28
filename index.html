@@ -4369,7 +4369,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.8";
+const APP_VER="v14.10";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7577,7 +7577,7 @@ async function runLabyEnd(cur2){
     {
       const rL=getReg(lc);
       const ev=["labyI","labyII","labyIII"][step];
-      const fx=rL&&rL.watchFx?rL.watchFx.filter(w=>w.ev===ev):[];
+      const fx=rL&&rL.watchFx?onceFilter(lc,rL.watchFx.filter(w=>w.ev===ev)):[];
       if(fx.length)await runFxList(cur2,fx,lc);
       else toast(`（${["I","II","III"][step]}の効果は手動で処理してください）`);
     }
@@ -8242,7 +8242,7 @@ async function finishNextTurn(cur){
         for(const c of ts){
           if(isIgnored(c,pi))continue;
           const r=getReg(c);
-          const fx=r.watchFx.filter(w=>w.ev==="turnStartMine");
+          const fx=onceFilter(c,r.watchFx.filter(w=>w.ev==="turnStartMine"));
           if(fx.length){toast(`⚡ターン開始時：${faceNameOf(c)}`);await runFxList(pi,fx,c);}
         }
         renderAll();
@@ -9607,7 +9607,7 @@ const EFFECTS=[
      const pi=fxActor();
      closeSheet();
      const Z=zonesOf(pi);const cnt=Z.hand.length;
-     while(Z.hand.length){const c=Z.hand.shift();c.faceup=true;Z.grave.push(c);if(typeof afterHandDiscard==="function")afterHandDiscard(pi,c);}
+     while(Z.hand.length){const c=Z.hand.shift();c.faceup=true;Z.grave.push(c);if(typeof afterHandDiscard==="function")afterHandDiscard(pi,c,S.who|0);}
      renderAll();sfx("grave");
      toast(`🗑 ${S.players[pi].label} は手札をすべて捨てた（${cnt}枚）`);
    }},
@@ -9623,7 +9623,7 @@ const EFFECTS=[
          if(hb){toast(`🛡 ${faceNameOf(hb)}：手札は相手の効果によって捨てられない！`);continue;}
        }
        const Z=zonesOf(sp);const cnt=Z.hand.length;
-       while(Z.hand.length){const c=Z.hand.shift();c.faceup=true;Z.grave.push(c);if(typeof afterHandDiscard==="function")afterHandDiscard(sp,c);}
+       while(Z.hand.length){const c=Z.hand.shift();c.faceup=true;Z.grave.push(c);if(typeof afterHandDiscard==="function")afterHandDiscard(sp,c,S.who|0);}
        toast(`🗑 ${S.players[sp].label} は手札をすべて捨てた（${cnt}枚）`);
      }
      renderAll();sfx("grave");
@@ -13894,7 +13894,7 @@ async function runFxList(pi,list,srcCard,inPump){
         cc.faceup=true;cc.tapped=false;Z.grave.push(cc);
         logOnly(`${S.players[pi].label}：《${faceNameOf(cc)}》を捨てた`);
         toast(`🗑 ${faceNameOf(cc)} を捨てた`);
-        afterHandDiscard(pi,cc);
+        afterHandDiscard(pi,cc,pi); // 😈 自分の効果で捨てた＝マッドネスは発動しない
       }
       sfx("grave");renderAll();
     }else if(f.t==="winDiscardDrawUntap"){
@@ -13909,7 +13909,7 @@ async function runFxList(pi,list,srcCard,inPump){
       cc.faceup=true;cc.tapped=false;Z.grave.push(cc);
       toast(`🗑 ${faceNameOf(cc)} を捨てた`);
       logOnly(`${S.players[pi].label}：《${faceNameOf(cc)}》を捨てた`);
-      afterHandDiscard(pi,cc);
+      afterHandDiscard(pi,cc,pi); // 😈 自分の効果で捨てた＝マッドネスは発動しない
       {
         let dc=0,ov=0;
         for(let i=0;i<n&&Z.deck.length;i++){const c2=Z.deck.shift();c2.faceup=true;c2.sideways=false;if(toHand(Z,c2)){markArrive(c2);dc++;}else ov++;}
@@ -13932,7 +13932,7 @@ async function runFxList(pi,list,srcCard,inPump){
       const j=await pickCard("🗑 捨てるカードを1枚選択（捨てたらターン終了時にドロー）",Z.hand,{hint:"キャンセルで捨てない"});
       if(j===null)continue;
       const cc=Z.hand.splice(j,1)[0];cc.faceup=true;cc.tapped=false;Z.grave.push(cc);
-      afterHandDiscard(pi,cc);
+      afterHandDiscard(pi,cc,pi); // 😈 自分の効果で捨てた＝マッドネスは発動しない
       S.turnEndTasks=S.turnEndTasks||[];
       S.turnEndTasks.push({t:"draw",pi,n:+f.n||2,by:faceNameOf(srcCard)});
       toast(`🗑 ${faceNameOf(cc)} を捨てた（ターン終了時に${+f.n||2}枚ドロー）`);
@@ -14001,7 +14001,7 @@ async function runFxList(pi,list,srcCard,inPump){
         while(ZH.hand.length){
           const c2=ZH.hand.shift();
           c2.faceup=true;ZH.grave.push(c2);
-          afterHandDiscard(sp,c2);
+          afterHandDiscard(sp,c2,pi); // 😈 捨てさせた側を渡す（相手ならマッドネスが自動で出る）
         }
         toast(`🗑 ${S.players[sp].label} は手札をすべて捨てた（${cnt}枚）`);
       }
@@ -16469,7 +16469,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(zoneKey==="battle"&&cc.under&&cc.under.length){const us=cc.under.splice(0);us.forEach(u=>{u.faceup=true;sp2.grave.push(u);});}
         if(dj===0){cc.faceup=false;sp2.deck.push(cc);}
         else if(dj===1){cc.faceup=false;sp2.deck.unshift(cc);}
-        else if(dj===2){cc.faceup=true;sp2.grave.push(cc);if(zoneKey==="hand")afterHandDiscard(tp,cc);}
+        else if(dj===2){cc.faceup=true;sp2.grave.push(cc);if(zoneKey==="hand")afterHandDiscard(tp,cc,pi);}
         else if(dj===3){cc.faceup=true;sp2.hand.push(cc);}
         else if(dj===4){cc.faceup=true;sp2.mana.push(cc);}
         else{
@@ -18915,6 +18915,8 @@ async function processBroken(op,stack,label){
           const twin=r&&(r.twin||r.ctype==="twinpact");
           let castFace=asSpell?1:0;
           if(twin){
+            // 🃏 素のS・トリガーでも、条件付きでS・トリガーになる札（ガ・リュザーク型）でも
+            //    カード自身の能力なので、登録した面（stFace）に従う
             const sf=r.stFace|0;
             if(sf===1)castFace=0;        // 上面のみST→クリーチャー面で出す
             else if(sf===2)castFace=1;   // 下面のみST→呪文面で唱える
@@ -19110,14 +19112,20 @@ async function processBroken(op,stack,label){
             const cSel=selCards[0];
             const rSel=getReg(cSel);
             const twinSel=!!(rSel&&(rSel.twin||rSel.ctype==="twinpact"));
-            const sfSel=(twinSel&&rSel.st)?(rSel.stFace|0):0;
+            // 🃏 面の限定は「素のS・トリガー」だけでなく、
+            //    条件付きでS・トリガーになる札（ガ・リュザーク型の stCond／stWhen）にも効かせる。
+            //    どちらもカード自身のテキストに書かれた能力なので、面は決まっている。
+            //    ※他のカードから配られたS・トリガー（ライオネル型の付与）はカード全体に付くので、
+            //      面は限定せず従来どおり両方出す。
+            const stOwn=!!(rSel&&(rSel.st||rSel.stWhen||rSel.stCond));
+            const sfSel=(twinSel&&stOwn)?(rSel.stFace|0):0;
             // 🃏 ツインパクトで面が未登録（stFace無し）の時は、選んだ面をそのカードのS・トリガー面として覚える。
             //    次からは片方のボタンだけになり、毎回面を選ばずに済む。登録から直せる。
             const mkST=(lb,zone)=>{
               const b=document.createElement("button");
               b.className="btn small";b.textContent=lb;
               b.addEventListener("click",async()=>{
-                if(twinSel&&rSel&&rSel.st&&!(rSel.stFace|0)){
+                if(twinSel&&rSel&&stOwn&&!(rSel.stFace|0)){
                   rSel.stFace=(zone==="resolve")?2:1;
                   try{await persistFx();}catch(e){}
                   toast(`🃏 ${faceNameOf(cSel)} のS・トリガー面を「${zone==="resolve"?"下面（呪文）":"上面（クリーチャー）"}」として覚えました\n次からは選ばずに済みます（登録の「S・トリガーの面」から直せます）`);
@@ -20728,7 +20736,7 @@ async function execAttack(pi,id,tg){
             if(!S.finalRevUsed[tk]){
               S.finalRevUsed[tk]=hcard.id;
               toast("⚡ ファイナル革命！");
-              await runFxList(pi,rH.watchFx.filter(w=>w.ev==="revFinal"),hcard);
+              await runFxList(pi,onceFilter(hcard,rH.watchFx.filter(w=>w.ev==="revFinal")),hcard);
               renderAll();await waitFxIdle();
             }else toast("⚡ ファイナル革命：このターンすでに他のファイナル革命を使っているため発動しません");
           }
@@ -21125,7 +21133,9 @@ async function execAttack(pi,id,tg){
             const ri=Z.resolve.findIndex(x=>x.id===sp.id);
             if(ri>=0){
               const done=Z.resolve.splice(ri,1)[0];
-              if(!resolveOut(Z,done)){done.faceup=true;done.tapped=false;done.sideways=false;done.rot=0;Z.grave.push(done);}
+              // ⚠ resolveOut は自分で行き先（墓地／マナ／山札）へ置く。戻り値は「墓地以外へ行ったか」。
+              //    ここで墓地に積み直すと1枚増える（v14.7の増殖の原因）。
+              resolveOut(Z,done);
               logOnly(`📜 ${S.players[pi].label}：《${faceNameOf(done)}》の解決が終わったので墓地へ`);
               sfx("grave");renderAll();
             }
@@ -21229,7 +21239,7 @@ async function execAttack(pi,id,tg){
   if(S.expert){
     const rK=getReg(c);
     if(rK&&rK.kizuna&&rK.kizuna!=="k"){ // 素の「キズナ」は出た時なので、ここでは扱わない
-      const kFxOf=x=>{const rx=getReg(x);return rx&&rx.watchFx?rx.watchFx.filter(w=>w.ev==="kizuna"):[];};
+      const kFxOf=x=>{const rx=getReg(x);return rx&&rx.watchFx?onceFilter(x,rx.watchFx.filter(w=>w.ev==="kizuna")):[];};
       const runK=async x=>{
         const fx=kFxOf(x);
         if(fx.length){toast(`🤝 キズナ能力：${faceNameOf(x)}`);await runFxList(pi,fx,x);}
@@ -21354,10 +21364,14 @@ async function execAttack(pi,id,tg){
     await breakShields(op,n,c,undefined,{skipBonus:true});   // 攻撃側は上で加算済み
     if(S.expert&&brokeN>0&&Z.battle.find(x=>x.id===id)){
       const rBB=getReg(c);
-      const fxBB=rBB&&rBB.watchFx?rBB.watchFx.filter(w=>w.ev==="onBreak"):[];
-      if(fxBB.length){
+      const fxAll=rBB&&rBB.watchFx?rBB.watchFx.filter(w=>w.ev==="onBreak"):[];
+      if(fxAll.length){
         toast(`💥 ブレイク・ボーナス！（${brokeN}回）`);
+        // 1️⃣ 各ターン1回の印が付いた効果は、ブレイク枚数ぶん繰り返さない。
+        //    毎回 onceFilter を通すので、2回目以降は自動で外れる。
         for(let i2=0;i2<brokeN;i2++){
+          const fxBB=onceFilter(c,fxAll);
+          if(!fxBB.length)break;
           await runFxList(pi,fxBB,c);
           if(!Z.battle.find(x=>x.id===id))break;
         }
@@ -21542,7 +21556,7 @@ async function execAttack(pi,id,tg){
         if(q2===0){
           for(const x of dw){
             const r2=getReg(x);
-            await runFxList(op,r2.watchFx.filter(w=>w.ev==="atkP"),x);
+            await runFxList(op,onceFilter(x,r2.watchFx.filter(w=>w.ev==="atkP")),x);
           }
           renderAll();
           toast("⏸ 誘発処理後、攻撃が防がれなければもう一度ダイレクトアタックで勝敗を記録できます");
@@ -27503,6 +27517,17 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   MOVE_BLOCKED=false;
   // 🟥 デュエプレのバトルゾーン7面上限。効果の中の選択パネルから手で置く経路も、ここで必ず通す。
   //    進化は既存の進化元へ重ねるので面数を増やさない＝対象外。「踏倒:ON」なら通す。
+  // 🐉 呪文以外を解決中ゾーンに置こうとした時は、バトルゾーンへ回す。
+  //    解決中ゾーンは呪文を唱えるための場所で、クリーチャーやクロスギアは置けない。
+  //    （ツインパクトは解決中＝呪文面なので対象外）
+  if(toZone==="resolve"){
+    const _fCr=findCard(pFrom,fromZone,id);
+    const _rCr=_fCr?getReg(_fCr.card):null;
+    if(_rCr&&_rCr.ctype!=="spell"&&!_rCr.twin&&_rCr.ctype!=="twinpact"){
+      toZone="battle";
+      toast(`🐉 ${faceNameOf(_fCr.card)} は呪文ではありません。バトルゾーンへ出します`);
+    }
+  }
   // ✨ 呪文をバトルゾーンに置こうとした時は、解決中ゾーンへ回す。
   //    呪文は解決中ゾーンで唱えるもので、バトルゾーンには存在しない。
   //    （ツインパクトはバトルゾーン＝クリーチャー面なので対象外）
@@ -28327,7 +28352,12 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   // 📊 対戦データ：手札からのマナチャージを記録（v10.46・効果による移動もここを通るが人間の判断として近似）
   if(fromZone==="hand"&&toZone==="mana"&&pFrom===pTo&&typeof mdEv==="function")mdEv("charge",pTo,faceNameOf(c),{m:zonesOf(pTo).mana.length});
   if(S.expert&&fromZone==="hand"&&toZone==="grave"){
-    afterHandDiscard(pFrom,c);
+    // 😈 手で手札→墓地に動かした場合、誰の効果で捨てたのかは分からない。
+    //    効果の処理中ならその効果の持ち主、そうでなければターンプレイヤーを原因とみなす。
+    //    相手のターン中に自分の手札が墓地へ動けば「相手の効果」＝強制マッドネスが確認なしで出る。
+    //    自分のターンに自分で捨てたなら「自分の効果」＝マッドネスは出ない。
+    const _byM=(fxRunning&&typeof FX_PI!=="undefined"&&FX_PI!=null)?(FX_PI|0):(S.who|0);
+    afterHandDiscard(pFrom,c,_byM);
   }
   if(S.expert&&(fromZone==="shield"||fromZone==="shieldUp")){
     runWatchFx(pFrom,"shieldLeave");
@@ -28883,7 +28913,7 @@ function buildBoards(){
         c.faceup=true;Z.grave.push(c);
         sfx("grave");
         renderAll();toast(`ランダムハンデス（${S.players[pi].label}）：${c.name} を墓地へ`);
-        afterHandDiscard(pi,c);
+        afterHandDiscard(pi,c,pi===0?1:0); // 😈 ハンデス＝相手の効果とみなす
       }else if(act==="selall"){
         const z=b.dataset.z;
         if(!Z[z].length){toast("カードがありません");return;}
@@ -33712,7 +33742,7 @@ function openCardSheet(ctx){
           c.tapped=true;
           closeSel();renderAll();
           toast(`🔃 タップ能力：${faceNameOf(c)}`);
-          await runFxList(ctx.p,rT.watchFx.filter(w=>w.ev==="tapAbility"));
+          await runFxList(ctx.p,onceFilter(c,rT.watchFx.filter(w=>w.ev==="tapAbility")),c);
         },"primary",true));
       }
     }
