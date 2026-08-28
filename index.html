@@ -2473,6 +2473,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="相手がコストを支払わずにクリーチャーを出した時、そのクリーチャーを持ち主のマナゾーンに置く（フォーエバー・プリンセス型）。出た時の効果は先に誘発します"><input type="checkbox" id="fxStManaCheat"> 🌱 相手がコストを支払わずに出したクリーチャーを、持ち主のマナゾーンに置く（フォーエバー・プリンセス型）</label>
         <label title="相手のクリーチャーがコストを支払わずに出た時、このクリーチャーとそのクリーチャーをバトルさせてもよい（カツムゲン型）。出た時の効果は先に誘発します"><input type="checkbox" id="fxStBattleCheat"> ⚔ 相手がコストを支払わずに出したクリーチャーと、このクリーチャーをバトルさせてもよい（カツムゲン型）</label>
         <label title="キーワード能力。出た時、手札からクロスギア1つをコストを支払わずにジェネレートしてもよい。「出た時」の効果欄の先頭に自動で足されます（効果欄には書かなくてかまいません）"><input type="checkbox" id="fxSamuraiGen"> 🗡 侍流ジェネレート（出た時、手札からクロスギア1つを無料でジェネレートしてもよい）</label>
+        <label title="ツインパクトで、どちらの面にS・トリガーが付いているか。片面だけにしておくと、受け札のパネルで面を選ばずに済みます"><span style="font-size:12px;font-weight:700">🃏 S・トリガーの面</span><select id="fxStFace" style="width:auto;font-size:12px"><option value="0">未設定（毎回選ぶ）</option><option value="1">上面（クリーチャー）のみ</option><option value="2">下面（呪文）のみ</option><option value="3">両面</option></select></label>
         <label title="このクリーチャーにクロスギアがn個以上クロスされていれば、バトルゾーンを離れない（バザガベルグ型）。0＝無効"><span style="font-size:12px;font-weight:700">⚙⚓ クロスギアが</span><input type="number" id="fxNoLeaveGearN" min="0" max="9" value="0" style="width:52px"><span style="font-size:12px;font-weight:700">個以上クロスされていれば離れない</span></label>
         <label title="バトル中だけパワーを∞として扱う（カツムゲン型）。バトル以外のパワー参照には影響しません"><input type="checkbox" id="fxPowInfBattle"> ♾ バトル中、このクリーチャーのパワーを∞にする（カツムゲン型）</label>
         <label title="どちらのプレイヤーでも、コストを支払わずにクリーチャーを出した時、そのクリーチャーを破壊します（早撃人形マグナム型）。自分が踏み倒した場合も対象です"><input type="checkbox" id="fxStKillCheat"> 💥 いずれかのプレイヤーがコストを支払わずに出したクリーチャーを破壊する（早撃人形マグナム型）</label>
@@ -4368,7 +4369,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.5";
+const APP_VER="v14.7";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8601,7 +8602,7 @@ function runWatchFx(pi,type,trigCard){
           S._watchOnce=S._watchOnce||{};
           for(const k of _oks)S._watchOnce[k]=`${S.turn}:${S.who}`;
         };
-        if(S.expert&&S.vs&&fxRunning){
+        if(S.expert&&S.vs&&(fxRunning||FX_GATE>0)){
           TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type,pos:_pos0,trigCard:trigCard||null});
         }else if(S.expert&&(type==="allyEnter"||type==="allyEvo")){
           // 🕐 「自分のクリーチャーが出た時」の誘発（カスミ／アジサイ／キューティ・ルピア型）は、
@@ -10376,6 +10377,30 @@ async function autoTapCost(pi,c){
     // ツインパクトは上面＝クリーチャー・下面＝呪文が通例
     paySide=j===0?"creature":"spell";
     c._twinPaid=j; // 🃏 支払った面を記録 → 効果解決時に再度聞かず、この面の効果を自動処理
+    // 🃏 支払った面に合わせて、置き場所もその場で直す。
+    //    下面（呪文）を支払ったなら解決中ゾーン、上面（クリーチャー）ならバトルゾーン。
+    //    パネルで選んだ時点で正しい場所に入るので、置き直す手間がなくなる。
+    {
+      const _Zt=zonesOf(pi);
+      const _wantR=(paySide==="spell");
+      const _bi=_Zt.battle.findIndex(x=>x.id===c.id);
+      const _ri=_Zt.resolve.findIndex(x=>x.id===c.id);
+      if(_wantR&&_bi>=0){
+        const cc=_Zt.battle.splice(_bi,1)[0];
+        cc.face=1;cc.tapped=false;cc.sideways=false;cc.buff=null;
+        _Zt.resolve.push(cc);
+        emitEvent(pi,"spell",cc);
+        if(typeof scheduleAutoResolve==="function")scheduleAutoResolve(pi,cc);
+        toast(`🃏 下面（呪文）で支払ったので、${faceNameOf(cc)} を解決中ゾーンへ移しました`);
+        renderAll();
+      }else if(!_wantR&&_ri>=0){
+        const cc=_Zt.resolve.splice(_ri,1)[0];
+        cc.face=0;cc.tapped=false;cc.sideways=false;
+        _Zt.battle.push(cc);
+        toast(`🃏 上面（クリーチャー）で支払ったので、${faceNameOf(cc)} をバトルゾーンへ移しました`);
+        renderAll();
+      }
+    }
   }
   if(cost==null)return;
   const Z=zonesOf(pi);
@@ -11158,12 +11183,12 @@ async function destroyCreature(pi,c,opts){
   if(S.expert){
     const rp=getReg(c);
     if(rp&&rp.watchFx&&rp.watchFx.length){
-      const fx=rp.watchFx.filter(w=>w.ev==="pig");
+      const fx=onceFilter(c,rp.watchFx.filter(w=>w.ev==="pig"));
       if(fx.length){
         toast(`⚡破壊された時の効果：${faceNameOf(c)}`);
         runFxList(pi,fx,c);
       }
-      const fxG=rp.watchFx.filter(w=>w.ev==="toGrave"||w.ev==="toGraveBattle"); // 破壊＝バトルゾーンから墓地へ
+      const fxG=onceFilter(c,rp.watchFx.filter(w=>w.ev==="toGrave"||w.ev==="toGraveBattle")); // 破壊＝バトルゾーンから墓地へ
       if(fxG.length){
         toast(`⚡墓地に置かれた時の効果：${faceNameOf(c)}`);
         runFxList(pi,fxG,c);
@@ -16585,7 +16610,36 @@ async function runFxList(pi,list,srcCard,inPump){
   try{stampShieldSrc(_srcLbl);}catch(e){} // 🛡 最後の効果で増えた盾にも追加元を刻む
   }finally{FX_FROM_SPELL=_prevFromSpell;FX_FROM_CRE=_prevFromCre;FX_SPELL_COST=_prevSpellCost;FX_ACTOR=_prevActor;} // 🔮 入れ子で呼ばれても元に戻す
 }
+/* 1️⃣ 各ターン1回（w.once）を、runWatchFx を通らない誘発の入口でも効かせる。
+   鍵は runWatchFx と同じ「カード個体id:イベント名:登録の並び順」。
+   破壊された時・墓地に置かれた時・攻撃する時などは、これまでこの判定を通っていなかったため、
+   「各ターン1回」に印を付けていても1ターンに何度も出ていた（ゾルザーク型）。
+   実行する効果の配列を返し、消費もここで記録する。 */
+function onceFilter(c,list){
+  const r=getReg(c);
+  const all=(r&&r.watchFx)||[];
+  const key=`${S.turn}:${S.who}`;
+  S._watchOnce=S._watchOnce||{};
+  const out=[],used=[];
+  let skipped=0;
+  for(const w of (list||[])){
+    const wi=all.indexOf(w);
+    if(w&&w.once&&wi>=0){
+      const k=`${c.id}:${w.ev}:${wi}`;
+      if(S._watchOnce[k]===key){skipped++;continue;}
+      used.push(k);
+    }
+    out.push(w);
+  }
+  for(const k of used)S._watchOnce[k]=key;
+  if(skipped)toast(`1️⃣ ${faceNameOf(c)}：各ターン1回の効果${skipped}件はこのターン使用済みのためスキップ`);
+  return out;
+}
 const fxQueue=[];let fxRunning=false;
+/* ⏸ 効果ポンプの一時停止ゲート。0より大きい間は「出た時」も誘発も溜めるだけにする。
+   アタック・チャンスで複数枚を唱える間など、「全部唱え終えてからまとめて処理する」場面で使う。
+   解除したら pumpFx() を呼び、waitFxIdle(false) で流し切ること。 */
+let FX_GATE=0;
 let fxInsertAt=null; // 🔢 深さ優先の挿入位置。処理中カードの「出た時」で新たに出たカードのCIPは、次の兄弟より先に解決させる（1枚の効果解決が終わるまで割り込ませない）
 function handesBlockedBy(owner){
   if(!S.expert)return null;
@@ -17125,7 +17179,7 @@ function enqueueFx(pi,c){
   pumpFx();
 }
 async function pumpFx(){
-  if(fxRunning)return;fxRunning=true;
+  if(fxRunning||FX_GATE>0)return;fxRunning=true;
   try{ // 🛡 例外でfxRunningが立ちっぱなしになるとEXモード全停止するため、全体をtry/finallyで保護
   try{await MOVE_TAP_CHAIN;}catch(e){}
   while(fxQueue.length){
@@ -17517,11 +17571,18 @@ async function waitFxIdle(inPump){
   // 選択に時間がかかっても絶対に後続処理を追い越させない。
   // 旧実装は約1.5秒状態が変わらないと強制的に抜けたため、選択中に次のCIP・誘発・
   // 攻撃のブレイクへ進む原因になっていた。自己待ちは呼び出し側が inPump=true で明示する。
-  while(fxRunning||fxQueue.length)await new Promise(r=>setTimeout(r,25));
-  // ⚡ 一連の効果解決が終わったので、解決中に墓地へ落ちたカードの「墓地に置かれた時」を発火（割り込まない）
-  await drainToGrave();
-  if(TRIG_PENDING.length)await drainTrig(false);
-  if(ORI_QUEUE.length)await drainOriotis(false); // ⏱ 残ったオリオティス判定（非アクティブ側）を処理
+  // 🔁 効果・誘発・墓地送りは互いを呼び合うので、全部が空になるまで繰り返す。
+  //    1周だけだと、drainTrig の中で新しく積まれた「出た時」が残ったまま先へ進み、
+  //    ブロック宣言などの次の処理に割り込まれていた。
+  for(let _g=0;_g<60;_g++){
+    while(fxRunning||fxQueue.length)await new Promise(r=>setTimeout(r,25));
+    // ⚡ 一連の効果解決が終わったので、解決中に墓地へ落ちたカードの「墓地に置かれた時」を発火（割り込まない）
+    await drainToGrave();
+    if(TRIG_PENDING.length)await drainTrig(false);
+    if(ORI_QUEUE.length)await drainOriotis(false); // ⏱ 残ったオリオティス判定（非アクティブ側）を処理
+    if(!fxRunning&&!fxQueue.length&&!TRIG_PENDING.length&&!ORI_QUEUE.length&&!TOGRAVE_PENDING.length)return;
+  }
+  logOnly("🔬 効果の処理が60周しても空になりませんでした（先へ進みます）");
 }
 
 /* ================= 攻撃・バトル ================= */
@@ -18619,7 +18680,7 @@ async function doBattle(pa,a,pd,d){
       const rw=getReg(w);
       if(!rw||!rw.watchFx||!rw.watchFx.length)return;
       if(isSealed(w)||isIgnored(w,pp))return;
-      const fx=rw.watchFx.filter(x=>x.ev==="selfWinBattle");
+      const fx=onceFilter(w,rw.watchFx.filter(x=>x.ev==="selfWinBattle"));
       if(fx.length){toast(`🏅 バトルに勝った：${faceNameOf(w)}`);await runFxList(pp,fx,w);}
     };
     if(aAlive&&!dAlive)await fireWin(pa,a);
@@ -19050,8 +19111,23 @@ async function processBroken(op,stack,label){
             const rSel=getReg(cSel);
             const twinSel=!!(rSel&&(rSel.twin||rSel.ctype==="twinpact"));
             const sfSel=(twinSel&&rSel.st)?(rSel.stFace|0):0;
-            if(sfSel!==1)mk("S・トリガー：解決中へ"+(twinSel?"（下面・呪文）":""),"resolve");
-            if(sfSel!==2)mk("S・トリガー：バトルへ"+(twinSel?"（上面・クリーチャー）":""),"battle");
+            // 🃏 ツインパクトで面が未登録（stFace無し）の時は、選んだ面をそのカードのS・トリガー面として覚える。
+            //    次からは片方のボタンだけになり、毎回面を選ばずに済む。登録から直せる。
+            const mkST=(lb,zone)=>{
+              const b=document.createElement("button");
+              b.className="btn small";b.textContent=lb;
+              b.addEventListener("click",async()=>{
+                if(twinSel&&rSel&&rSel.st&&!(rSel.stFace|0)){
+                  rSel.stFace=(zone==="resolve")?2:1;
+                  try{await persistFx();}catch(e){}
+                  toast(`🃏 ${faceNameOf(cSel)} のS・トリガー面を「${zone==="resolve"?"下面（呪文）":"上面（クリーチャー）"}」として覚えました\n次からは選ばずに済みます（登録の「S・トリガーの面」から直せます）`);
+                }
+                putMany(zone);
+              });
+              bar.appendChild(b);
+            };
+            if(sfSel!==1)mkST("S・トリガー：解決中へ"+(twinSel?"（下面・呪文）":""),"resolve");
+            if(sfSel!==2)mkST("S・トリガー：バトルへ"+(twinSel?"（上面・クリーチャー）":""),"battle");
             if(twinSel&&(sfSel===1||sfSel===2)){
               const nt=document.createElement("div");
               nt.style.cssText="font-size:11px;color:var(--muted);flex-basis:100%";
@@ -19825,7 +19901,7 @@ async function fireToGrave(pi,c,from){
   const rG=getReg(c);
   if(rG&&rG.watchFx){
     const f=from||"battle";
-    const fxG=rG.watchFx.filter(w=>w.ev==="toGrave"||(w.ev==="toGraveBattle"&&f==="battle"));
+    const fxG=onceFilter(c,rG.watchFx.filter(w=>w.ev==="toGrave"||(w.ev==="toGraveBattle"&&f==="battle")));
     if(fxG.length){toast(`⚡墓地に置かれた時の効果：${faceNameOf(c)}`);await runFxList(pi,fxG,c);}
   }
 }
@@ -20442,7 +20518,7 @@ async function execAttack(pi,id,tg){
     for(const sx of sxs){
       const rsx=getReg(sx);
       if(!rsx)continue;
-      const atkFx=(rsx.watchFx||[]).filter(w=>["selfAtk","selfAtkC","selfAtkP"].includes(w.ev)&&w.t);
+      const atkFx=onceFilter(c,(rsx.watchFx||[]).filter(w=>["selfAtk","selfAtkC","selfAtkP"].includes(w.ev)&&w.t));
       const cipFx=(rsx.faces&&rsx.faces[0]&&rsx.faces[0].length)?rsx.faces[0]:null;
       const md=modeCountFor(rsx,pi);
       if(!atkFx.length&&!cipFx&&md<=0)continue;
@@ -21013,15 +21089,26 @@ async function execAttack(pi,id,tg){
       if(chosen&&chosen.length){
         snap();
         const spells=chosen.map(i=>acs[i]).filter(Boolean);
-        for(const sp of spells){const hi=Z.hand.findIndex(x=>x.id===sp.id);if(hi>=0)Z.hand.splice(hi,1);sp.faceup=true;Z.resolve.push(sp);}
-        toast(`✨ アタック・チャンス：${spells.map(faceNameOf).join(" → ")} を唱えた（選択順に解決）`);
+        for(const sp of spells){const hi=Z.hand.findIndex(x=>x.id===sp.id);if(hi>=0)Z.hand.splice(hi,1);sp.faceup=true;}
+        toast(`✨ アタック・チャンス：${spells.map(faceNameOf).join(" → ")} を唱えた（選択順に1枚ずつ解決）`);
         renderAll();
         // 🔁 アタック・チャンスは選んだ枚数をすべて唱え終えてから、出たクリーチャーの
         //    「出た時」をまとめて処理する。1枚ずつ流すと、2枚目を唱える前に
         //    1枚目で出したクリーチャーの効果が割り込んでいた
         //    （ダーク・ルピア2枚→1枚目のネルガルザークが2枚目より先に動く）。
         //    inPump=true を渡すと runFxList の中で待たず、CIPはキューに溜まるだけになる。
+        // ⏸ 唱えている間は「出た時」も誘発も溜めるだけにする。
+        //    止めないと、1枚目で出たクリーチャーの誘発（ネルガルザーク型）が
+        //    2枚目を唱える前に走り、対象選択のパネルまで割り込んでいた。
+        FX_GATE++;
+        try{
         for(const sp of spells){
+          // 📜 1枚ずつ「解決中ゾーンへ置く → 効果を処理 → 墓地へ」。
+          //    まとめて置いたままにすると、2枚目を唱える時に1枚目がまだ墓地に無い。
+          //    ダーク・ルピア2枚なら、2枚目は1枚目を墓地から出せるのが正しい。
+          Z.resolve.push(sp);
+          emitEvent(pi,"spell",sp);
+          renderAll();
           try{fxKeyword(pi,"アタック・チャンス！",sp.name,"攻撃中に呪文を唱えた");}catch(e){}
           // 📜 アタック・チャンスは「呪文を唱える」なので、ツインパクトは下面（呪文面）を使う。
           //    これまで常に上面を走らせていたため、下面が呪文のカードで何も起きなかった。
@@ -21032,12 +21119,29 @@ async function execAttack(pi,id,tg){
             if(_fi===1)toast(`📜 ${faceNameOf(sp)}：下面（呪文）を唱えた`);
             await runFxList(pi,rs.faces[_fi],sp,true);
           }
+          // 📜 この1枚の処理が終わったので墓地へ（チャージャー等は resolveOut が行き先を決める）。
+          //    次の1枚は、この墓地の状態を見て解決される。
+          {
+            const ri=Z.resolve.findIndex(x=>x.id===sp.id);
+            if(ri>=0){
+              const done=Z.resolve.splice(ri,1)[0];
+              if(!resolveOut(Z,done)){done.faceup=true;done.tapped=false;done.sideways=false;done.rot=0;Z.grave.push(done);}
+              logOnly(`📜 ${S.players[pi].label}：《${faceNameOf(done)}》の解決が終わったので墓地へ`);
+              sfx("grave");renderAll();
+            }
+          }
         }
-        // ここで初めて、溜まっていた「出た時」をまとめて解決する
-        if(spells.length>1&&(fxQueue.length||fxRunning))
-          toast(`✨ アタック・チャンス${spells.length}枚を唱え終えました。ここから「出た時」の効果を処理します`);
+        }finally{FX_GATE=Math.max(0,FX_GATE-1);}
+        // ここで初めて、溜まっていた「出た時」と誘発をまとめて解決する。
+        // 対象の選択も破壊もハンデスも、すべてこの中で終わる。
+        if(fxQueue.length||TRIG_PENDING.length)
+          toast(`✨ アタック・チャンス${spells.length}枚を唱え終えました。ここから効果をまとめて処理します`);
+        pumpFx();
         await waitFxIdle(false);
         renderAll();
+        // 🛡 ここを抜けた時点で、アタック・チャンス由来の処理はすべて終わっている。
+        //    このあとブロック宣言 → 攻撃処理の順に進む。
+        logOnly("✨ アタック・チャンスの処理が完了（このあとブロック宣言へ）");
         const holdAC=await ask(`⏸ アタック・チャンス${spells.length}枚の処理を手動で続けますか？\n「はい」で攻撃を保留します（解決後「▶ 攻撃を再開」で続行）`);
         if(holdAC){
           c._atkFxDone=true;
@@ -23104,6 +23208,7 @@ function renderFxEditor(){
   {const e=$("fxStManaCheat");if(e)e.checked=!!FXEDIT.stManaCheat;}
   {const e=$("fxStBattleCheat");if(e)e.checked=!!FXEDIT.stBattleCheat;}
   {const e=$("fxSamuraiGen");if(e)e.checked=!!FXEDIT.samuraiGen;}
+  {const e=$("fxStFace");if(e)e.value=String(FXEDIT.stFace|0);}
   {const e=$("fxNoLeaveGearN");if(e)e.value=String(FXEDIT.noLeaveGearN||0);}
   {const e=$("fxPowInfBattle");if(e)e.checked=!!FXEDIT.powInfBattle;}
   {const e=$("fxStCipToMana");if(e)e.checked=!!FXEDIT.stCipToMana;}
@@ -25318,6 +25423,7 @@ function openFxEditor(key){
     stManaCheat:cur?!!cur.stManaCheat:false,
     stBattleCheat:cur?!!cur.stBattleCheat:false,
     samuraiGen:cur?!!cur.samuraiGen:false,
+    stFace:cur&&(+cur.stFace||0)||0,
     noLeaveGearN:cur&&(+cur.noLeaveGearN||0)||0,
     powInfBattle:cur?!!cur.powInfBattle:false,
     stCipToMana:cur?!!cur.stCipToMana:false,
@@ -25794,6 +25900,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stManaCheat:$("fxStManaCheat")?$("fxStManaCheat").checked:false,
     stBattleCheat:$("fxStBattleCheat")?$("fxStBattleCheat").checked:false,
     samuraiGen:$("fxSamuraiGen")?$("fxSamuraiGen").checked:false,
+    stFace:$("fxStFace")?(parseInt($("fxStFace").value,10)||0):0,
     noLeaveGearN:$("fxNoLeaveGearN")?(parseInt($("fxNoLeaveGearN").value,10)||0):0,
     powInfBattle:$("fxPowInfBattle")?$("fxPowInfBattle").checked:false,
     stCipToMana:$("fxStCipToMana")?$("fxStCipToMana").checked:false,
@@ -27396,6 +27503,17 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   MOVE_BLOCKED=false;
   // 🟥 デュエプレのバトルゾーン7面上限。効果の中の選択パネルから手で置く経路も、ここで必ず通す。
   //    進化は既存の進化元へ重ねるので面数を増やさない＝対象外。「踏倒:ON」なら通す。
+  // ✨ 呪文をバトルゾーンに置こうとした時は、解決中ゾーンへ回す。
+  //    呪文は解決中ゾーンで唱えるもので、バトルゾーンには存在しない。
+  //    （ツインパクトはバトルゾーン＝クリーチャー面なので対象外）
+  if(toZone==="battle"){
+    const _fSp=findCard(pFrom,fromZone,id);
+    const _rSp0=_fSp?getReg(_fSp.card):null;
+    if(_rSp0&&_rSp0.ctype==="spell"&&!_rSp0.twin){
+      toZone="resolve";
+      toast(`✨ ${faceNameOf(_fSp.card)} は呪文です。解決中ゾーンで唱えます`);
+    }
+  }
   if(toZone==="battle"&&fromZone!=="battle"&&battleSlotFull(pTo)){
     const _fb=findCard(pFrom,fromZone,id);
     const _rb=_fb?getReg(_fb.card):null;
