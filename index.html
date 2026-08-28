@@ -2472,6 +2472,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="相手のターン中、相手が召喚以外の方法でクリーチャーをバトルゾーンに出した時、そのクリーチャーを手札に戻してもよい（出た時の効果は先に誘発します）"><input type="checkbox" id="fxStBounceCheat"> ↩ 相手のターン中、相手が召喚以外で出したクリーチャーを手札に戻してもよい（オニカマス型）</label>
         <label title="相手がコストを支払わずにクリーチャーを出した時、そのクリーチャーを持ち主のマナゾーンに置く（フォーエバー・プリンセス型）。出た時の効果は先に誘発します"><input type="checkbox" id="fxStManaCheat"> 🌱 相手がコストを支払わずに出したクリーチャーを、持ち主のマナゾーンに置く（フォーエバー・プリンセス型）</label>
         <label title="相手のクリーチャーがコストを支払わずに出た時、このクリーチャーとそのクリーチャーをバトルさせてもよい（カツムゲン型）。出た時の効果は先に誘発します"><input type="checkbox" id="fxStBattleCheat"> ⚔ 相手がコストを支払わずに出したクリーチャーと、このクリーチャーをバトルさせてもよい（カツムゲン型）</label>
+        <label title="キーワード能力。出た時、手札からクロスギア1つをコストを支払わずにジェネレートしてもよい。「出た時」の効果欄の先頭に自動で足されます（効果欄には書かなくてかまいません）"><input type="checkbox" id="fxSamuraiGen"> 🗡 侍流ジェネレート（出た時、手札からクロスギア1つを無料でジェネレートしてもよい）</label>
+        <label title="このクリーチャーにクロスギアがn個以上クロスされていれば、バトルゾーンを離れない（バザガベルグ型）。0＝無効"><span style="font-size:12px;font-weight:700">⚙⚓ クロスギアが</span><input type="number" id="fxNoLeaveGearN" min="0" max="9" value="0" style="width:52px"><span style="font-size:12px;font-weight:700">個以上クロスされていれば離れない</span></label>
         <label title="バトル中だけパワーを∞として扱う（カツムゲン型）。バトル以外のパワー参照には影響しません"><input type="checkbox" id="fxPowInfBattle"> ♾ バトル中、このクリーチャーのパワーを∞にする（カツムゲン型）</label>
         <label title="どちらのプレイヤーでも、コストを支払わずにクリーチャーを出した時、そのクリーチャーを破壊します（早撃人形マグナム型）。自分が踏み倒した場合も対象です"><input type="checkbox" id="fxStKillCheat"> 💥 いずれかのプレイヤーがコストを支払わずに出したクリーチャーを破壊する（早撃人形マグナム型）</label>
         <label title="相手がコストを支払わずにクリーチャーを出した時だけ、そのクリーチャーを破壊します（自分の踏み倒しは対象外・ウソと盗みのエンターテイナー型）"><input type="checkbox" id="fxStKillCheatFoe"> 💥 相手がコストを支払わずに出したクリーチャーだけを破壊する</label>
@@ -4366,7 +4368,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.3";
+const APP_VER="v14.4";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4527,6 +4529,11 @@ function cantLeaveBattle(pi,c,quiet){
   const r=getReg(c);
   const IGN=isIgnored(c,pi);
   if(c.buff&&c.buff.noLeave){if(!quiet)toast(`⚓ ${faceNameOf(c)} はこのターン離れない！`);return true;}
+  // ⚙ クロスギアがn個以上クロスされていれば離れない（バザガベルグ型）
+  if(!IGN&&r&&+r.noLeaveGearN>0&&(c.gear?c.gear.length:0)>=+r.noLeaveGearN){
+    if(!quiet)toast(`⚙⚓ ${faceNameOf(c)} はクロスギアが${c.gear.length}つクロスされているため離れない！（${+r.noLeaveGearN}つ以上）`);
+    return true;
+  }
   if(!IGN&&r&&r.cstCond&&r.cstFx==="noLeave"&&zoneCondOk(r.cstCond,pi,c)){if(!quiet)toast(`✨ 条件常在（${r.cstCond}）：${faceNameOf(c)} は離れない！`);return true;}
   if(!IGN&&c.sfActive&&r&&r.sforceFx==="noLeave"){if(!quiet)toast(`⚓✨ シールド・フォース有効中：${faceNameOf(c)} は離れない！`);return true;}
   // 🛡✨ シールド・フォースの効果を「自分のクリーチャー全体」に配る型（叡智のW インビンシブル・ギャラクシー）
@@ -5093,6 +5100,14 @@ function linkBreakSplit(pi,reg,parts){
 /* 🃏 登録の「出た時（上面）／下面」の効果行を安全に取り出す。
    faces を持たない登録（能力が誘発だけのカードなど）があるので、必ずこれを通す。 */
 function faceFx(r,i){const a=r&&r.faces&&r.faces[i|0];return Array.isArray(a)?a:[];}
+/* 🗡 出た時に走らせる効果の一覧。登録の faces に、キーワード能力ぶんを足して返す。
+   faces そのものは書き換えない（登録エディタで開いた時に効果欄が勝手に増えないようにするため）。
+   ・侍流ジェネレート（samuraiGen）＝出た時、手札からクロスギア1つを無料でジェネレートしてもよい */
+function cipFx(r,i){
+  const a=faceFx(r,i);
+  if((i|0)===0&&r&&r.samuraiGen)return [{t:"handGearFree",n:1},...a];
+  return a;
+}
 /* 進化系タイプの共通判定。ツインパクトは上面＝クリーチャー面なので twinTop（進化/NEO進化）で判定に含める */
 const EVO_CTYPES=["evo","neoevo","starevo","charismaevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","lunatic","ultimate"];
 /* 🌟 バトルゾーンの進化元がいらない進化かどうか。
@@ -9938,6 +9953,9 @@ const FX_TYPES=[
   ["nWorldShuffle","🌐 各プレイヤーは手札と墓地をすべて山札に加えてシャッフルし、その後それぞれn枚引く（サイバー・N・ワールド型）"],
   ["deckCastSpellAll","🔮 自分の山札を見て、条件に合う呪文1枚をコストを支払わずに唱える→山札をシャッフル（条件欄＝例：コスト4以下）"],
   ["deckGearFree","⚙ 自分の山札を見て、条件に合うクロスギア1枚をコストを支払わずにジェネレートする→山札をシャッフル（条件欄＝例：コスト4以下）"],
+  ["handGearFree","⚙ 手札からクロスギア1つを、コストを支払わずにジェネレートしてもよい（任意・条件欄＝対象／侍流ジェネレートの中身）"],
+  ["gearCrossAnyFree","⚙ 自分のジェネレート済みクロスギアを、コストを支払わずに自分のクリーチャーにクロスしてもよい（枚数nまで・n未指定＝好きなだけ／バザガベルグ型）"],
+  ["breakMineThenKill","💥 自分のシールドを1つブレイクしてもよい。ブレイクした時だけ、条件に合う相手クリーチャー1体を選んで破壊する（条件欄＝例：パワー6000以下・武偉型）"],
   ["handGearCrossSelf","⚙ 手札からクロスギア1枚を任意でジェネレートする。その後、自分のクロスギア1枚をこのクリーチャーに任意で無料クロス（コットン型）"],
   ["hoganBlaster","🎰 自分の山札をシャッフルし、上から1枚を表向きにする。クリーチャーならバトルゾーンに出し、呪文ならコストを支払わずに唱える（どちらでもなければ手札へ・ホーガン・ブラスター型／条件欄で対象を絞れる）"],
   ["dartsHandes","🎯 数字をひとつ選び、相手の手札をランダムにn枚捨てさせる。捨てたカードのコストが選んだ数と同じなら、カードを1枚引く（アンラッキーダーツ型）"],
@@ -11610,7 +11628,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   "handes","peepDiscard","grantBlockerPick","deckShield","revealBottomShield","nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "exileRecruitPerZone","elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS","foeTapThenDeckBottom",
-  "drawPerElem","winDiscardDrawUntap","elemToShieldOrDeck",
+  "drawPerElem","winDiscardDrawUntap","elemToShieldOrDeck","handGearFree","gearCrossAnyFree","breakMineThenKill",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
   "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
@@ -12827,6 +12845,76 @@ async function runFxList(pi,list,srcCard,inPump){
         }
       }
       renderAll();
+    }else if(f.t==="handGearFree"){
+      // ⚙ 侍流ジェネレート：手札からクロスギア1つを、コストを支払わずにジェネレートしてもよい（任意）
+      const filtG=String(f.cond||"").trim();
+      const handG=Z.hand.filter(x=>{const rx=getReg(x);
+        return rx&&(rx.ctype==="crossgear"||rx.ctype==="evocrossgear")&&(!filtG||lockFilterOk(filtG,rx,x,pi));});
+      if(!handG.length){toast(`⚙ 手札にクロスギアがありません${filtG?`（${filtG}）`:""}`);continue;}
+      const jg=await pickCard(`⚙ 侍流ジェネレート：コストを支払わずにジェネレートするクロスギアを選択${filtG?`（${filtG}）`:""}`,handG,
+        {hint:"タップで選択　／　✕ で「ジェネレートしない」"});
+      if(jg===null){toast("（ジェネレートしなかった）");renderAll();continue;}
+      const chosenG=handG[jg], rgG=getReg(chosenG);
+      snap();
+      if(rgG&&rgG.ctype==="evocrossgear"){
+        await playEvoCrossGear(pi,"hand",chosenG.id);
+      }else{
+        const hig=Z.hand.findIndex(x=>x.id===chosenG.id);
+        if(hig>=0){
+          const g=Z.hand.splice(hig,1)[0];
+          g.faceup=true;g.tapped=false;g.sideways=false;g.buff=null;
+          Z.battle.push(g);
+          sfx("move");
+          toast(`⚙ 侍流ジェネレート：${faceNameOf(g)} をジェネレートした`);
+          logOnly(`⚙ ${S.players[pi].label}：侍流ジェネレートで《${faceNameOf(g)}》をジェネレート`);
+          try{fxShare("gear","ジェネレート！",`${S.players[pi].label}`,false,g.name,pi);}catch(e){}
+        }
+      }
+      renderAll();
+    }else if(f.t==="gearCrossAnyFree"){
+      // ⚙ バザガベルグ型：自分のクロスギアを好きな数、コストを支払わずに自分のクリーチャーにクロスしてもよい。
+      //    n>0 なら最大n個まで。空欄／0 なら好きなだけ（キャンセルで終了）。
+      const capN=(+f.n>0)?+f.n:99;
+      let doneG=0;
+      for(let i=0;i<capN;i++){
+        const freeG=Z.battle.filter(x=>{const rx=getReg(x);
+          return rx&&(rx.ctype==="crossgear"||rx.ctype==="evocrossgear")&&!x.isCross;});
+        if(!freeG.length){toast(doneG?"⚙ クロスできるクロスギアがもうありません":"⚙ クロスできるクロスギアがありません（ジェネレート済みのものが対象）");break;}
+        const hosts=Z.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
+        if(!hosts.length){toast("⚙ クロスする先のクリーチャーがいません");break;}
+        const jj=await pickCard(`⚙ 無料でクロスするクロスギアを選択（${doneG+1}個目・キャンセルで終了）`,freeG,
+          {hint:"タップで選択　／　✕ で終了"});
+        if(jj===null)break;
+        if(await crossGearTo(pi,freeG[jj].id,{free:true}))doneG++;
+        else break;
+      }
+      if(doneG)toast(`⚙ ${doneG}個のクロスギアをコストを支払わずにクロスした`);
+      renderAll();
+    }else if(f.t==="breakMineThenKill"){
+      // 💥 武偉型：自分のシールドを1つブレイクしてもよい。**ブレイクした時だけ**、
+      //    条件（f.cond・例「パワー6000以下」）に合う相手のクリーチャーを1体選んで破壊する。
+      //    ブレイクしなければ破壊は起きない（「そうしたら」）。
+      if(!Z.shield.length){toast("シールドがありません（ブレイクしない）");renderAll();continue;}
+      const optsB=Z.shield.map((x,i2)=>`盾${i2+1}${x.faceup?`（表：${faceNameOf(x)}）`:""}`);
+      const jb=await askChoice("💥 ブレイクする自分のシールドを選択（任意・ブレイクしなければ破壊も起きません）",[...optsB,"ブレイクしない"]);
+      if(jb===null||jb>=Z.shield.length){toast("（ブレイクしなかった）");renderAll();continue;}
+      await breakShields(pi,1,null,jb);
+      renderAll();
+      if(!S.vs){toast("（ソロのため相手クリーチャーの選択はスキップ）");continue;}
+      const filtB=String(f.cond||"").trim();
+      const poolB=zonesOf(op).battle.filter(x=>{
+        if(isSealed(x))return false;
+        const rx=getReg(x);
+        if(!rx||!isCreatureReg(rx))return false;
+        if(filtB&&!lockFilterOk(filtB,rx,x,pi))return false;
+        return !((rx.noChoose||momoUntouchable(x))&&!isIgnored(x,op));
+      });
+      if(!poolB.length){toast(`💥 破壊できる相手のクリーチャーがいません${filtB?`（${filtB}）`:""}`);renderAll();continue;}
+      const jk=await pickCard(`💥 破壊する相手のクリーチャーを選択${filtB?`（${filtB}）`:""}`,poolB,
+        {sub:x=>x.tapped?"タップ":"",hint:"タップで選択　／　✕ で破壊しない"});
+      if(jk===null){toast("（破壊しなかった）");renderAll();continue;}
+      await destroyWithReplace(op,poolB[jk]);
+      sfx("grave");renderAll();
     }else if(f.t==="noAtkAllTurn"){
       // ⛔ このターン、すべてのクリーチャーは攻撃できない
       snap();
@@ -17017,7 +17105,7 @@ function enqueueFx(pi,c){
   if([0,1].some(p=>zonesOf(p).battle.some(b=>b.gear&&b.gear.includes(c))))return;
   const reg=getReg(c);
   // 名前指定の能力無視は通常の faces/CIP を持たなくても、登場時に宣言が必要。
-  const hasFx=reg&&(faceFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0||reg.ignore==="name");
+  const hasFx=reg&&(cipFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0||reg.ignore==="name");
   if(!hasFx&&!(reg&&(reg.soulRaid||reg.momoKingX))&&!soulXCipFx(c).length)return;
   // ⏳ 解決中のクリーチャー能力によって生まれたCIPは、親能力を最後まで終えてから解決する。
   if(fxRunning){fxQueue.push({pi,c,reg});}
@@ -17110,13 +17198,13 @@ async function pumpFx(){
       if(c._twinPaid===0||c._twinPaid===1){pick=c._twinPaid;c._twinPaid=null;toast(`🃏 ${pick===0?"上面":"下面"}の効果を処理（支払った面）`);}
       else{
         pick=await askTwinFace(c,`《${faceNameOf(c)}》はツインパクトです。\nどちらの面の効果を処理しますか？`,
-          fxSummary(faceFx(reg,0)),fxSummary(faceFx(reg,1)),"処理しない");
+          fxSummary(cipFx(reg,0)),fxSummary(faceFx(reg,1)),"処理しない");
       }
-      if(pick===0)await runTimes(faceFx(reg,0));
+      if(pick===0)await runTimes(cipFx(reg,0));
       else if(pick===1)await runTimes(faceFx(reg,1));
-    }else if(faceFx(reg,0).length){
+    }else if(cipFx(reg,0).length){
       toast(`⚡自動処理：${faceNameOf(c)}`);
-      await runTimes(faceFx(reg,0));
+      await runTimes(cipFx(reg,0));
     }
     const md=modeCountFor(reg,pi);
     if((reg.modeN|0)>0){
@@ -17192,7 +17280,7 @@ async function manualRunCip(pi,c){
   if(!S.expert){toast("⚡ EXモードのときだけ使えます（設定でEXをONにしてください）");return;}
   if(isSealed(c)){toast(`🔒 ${faceNameOf(c)} は封印中のため能力を使えません`);return;}
   const reg=getReg(c);
-  const hasFx=reg&&(faceFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0);
+  const hasFx=reg&&(cipFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0);
   if(!hasFx&&!(reg&&(reg.soulRaid||reg.momoKingX))&&!soulXCipFx(c).length){
     toast(`《${faceNameOf(c)}》には登録された出た時（CIP）効果がありません`);return;
   }
@@ -18627,7 +18715,7 @@ async function processBroken(op,stack,label){
                 // ただし、その呪文で出たクリーチャーのCIPは enqueueFx() に積まれるだけで、
                 // 親クリーチャーの残りが終わるまで pumpFx は再入しない。
                 const rr=getReg(cc), fi=(rr&&rr.twin)?((cc.face|0)===1?1:0):0;
-                if(rr&&faceFx(rr,fi).length)await runFxList(op,faceFx(rr,fi),cc,true);
+                if(rr&&cipFx(rr,fi).length)await runFxList(op,cipFx(rr,fi),cc,true);
                 if(rr&&(rr.modeN|0)>0)await runModeChoice(op,rr,cc,true,fi);
                 const ri=Z.resolve.findIndex(x=>x.id===cc.id);
                 if(ri>=0){const done=Z.resolve.splice(ri,1)[0];resolveOut(Z,done);}
@@ -22082,7 +22170,7 @@ function fxUiPolish(){
               const c=fxUsageCounts();
               const lbT=new Map(FX_TYPES.map(([v,lb])=>[v,lb]));
               const lbE=new Map(TRIG_EVS.map(([v,lb])=>[v,lb]));
-              const KWL={blocker:"ブロッカー",slayer:"スレイヤー",atkUn:"アンタップ攻撃",cantAtk:"攻撃できない",cantAtkP:"プレイヤー攻撃不可",machf:"マッハファイター",noBlock:"ブロックされない",noAtked:"攻撃されない",noChoose:"選ばれない",gs:"G・ストライク",charger:"チャージャー",holdResolve:"解決保持",sa:"スピードアタッカー",st:"S・トリガー",jd:"ジャストダイバー",guardman:"ガードマン",escape:"エスケープ",exlife:"EXライフ",mad:"マッドネス",sback:"S・バック",sym:"シンパシー",symX:"ダブルシンパシー倍率",gzero:"G・ゼロ",bad:"B・A・D",firstRed:"最初の召喚コスト軽減",firstRedNeo:"同・NEO追加軽減",stCostM:"常在コスト軽減",stHandNeoRed:"NEO進化コスト軽減付与",rev0:"革命0トリガー",auraTapIn:"相手タップイン",stWinBattle:"バトルに勝つ",stBattleCheat:"踏み倒しにバトル",powInfBattle:"バトル中パワー∞",stAuraPow:"常在パワー付与",stAuraSA:"常在SA付与",stAuraPB:"常在PB付与",gearPow:"ギア：パワー付与",gearBlocker:"ギア：ブロッカー付与",breaks:"ブレイク数",ninja:"ニンジャ・ストライク",invade:"侵略",revchg:"革命チェンジ"};
+              const KWL={blocker:"ブロッカー",slayer:"スレイヤー",atkUn:"アンタップ攻撃",cantAtk:"攻撃できない",cantAtkP:"プレイヤー攻撃不可",machf:"マッハファイター",noBlock:"ブロックされない",noAtked:"攻撃されない",noChoose:"選ばれない",gs:"G・ストライク",charger:"チャージャー",holdResolve:"解決保持",sa:"スピードアタッカー",st:"S・トリガー",jd:"ジャストダイバー",guardman:"ガードマン",escape:"エスケープ",exlife:"EXライフ",mad:"マッドネス",sback:"S・バック",sym:"シンパシー",symX:"ダブルシンパシー倍率",gzero:"G・ゼロ",bad:"B・A・D",firstRed:"最初の召喚コスト軽減",firstRedNeo:"同・NEO追加軽減",stCostM:"常在コスト軽減",stHandNeoRed:"NEO進化コスト軽減付与",rev0:"革命0トリガー",auraTapIn:"相手タップイン",stWinBattle:"バトルに勝つ",stBattleCheat:"踏み倒しにバトル",powInfBattle:"バトル中パワー∞",samuraiGen:"侍流ジェネレート",noLeaveGearN:"クロス数で離れない",stAuraPow:"常在パワー付与",stAuraSA:"常在SA付与",stAuraPB:"常在PB付与",gearPow:"ギア：パワー付与",gearBlocker:"ギア：ブロッカー付与",breaks:"ブレイク数",ninja:"ニンジャ・ストライク",invade:"侵略",revchg:"革命チェンジ"};
               const fmt=(m,lbm,top)=>[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,top)
                 .map(([k,n])=>[k,(lbm instanceof Map?lbm.get(k):lbm[k])||k,n]);
               const pairs=[
@@ -23003,6 +23091,8 @@ function renderFxEditor(){
   {const e=$("fxStBounceCheat");if(e)e.checked=!!FXEDIT.stBounceCheat;}
   {const e=$("fxStManaCheat");if(e)e.checked=!!FXEDIT.stManaCheat;}
   {const e=$("fxStBattleCheat");if(e)e.checked=!!FXEDIT.stBattleCheat;}
+  {const e=$("fxSamuraiGen");if(e)e.checked=!!FXEDIT.samuraiGen;}
+  {const e=$("fxNoLeaveGearN");if(e)e.value=String(FXEDIT.noLeaveGearN||0);}
   {const e=$("fxPowInfBattle");if(e)e.checked=!!FXEDIT.powInfBattle;}
   {const e=$("fxStCipToMana");if(e)e.checked=!!FXEDIT.stCipToMana;}
   {const e=$("fxStNoST");if(e)e.checked=!!FXEDIT.stNoST;}
@@ -24179,6 +24269,7 @@ function parseCardText(txt,mode){
   }
   // マナ武装（数値）
   m=tSelf.match(/マナ武装\s*(\d+)/); if(m)out.set.manaArm=+m[1];
+  if(/侍流ジェネレート/.test(tSelf))out.set.samuraiGen=true;   // 🗡 キーワード能力
   // J・チェンジ（数値）：J・チェンジ〔N〕＝コストN以上のクリーチャー攻撃時に手札と入れ替え
   m=tSelf.match(/[JＪ]・?チェンジ\s*[〔〈［\[（(]?\s*(\d+)/); if(m){out.set.jchange=true;out.set.jchangeN=+m[1];}
   // キリフダッシュ（コストn）／フシギバース（コストn）
@@ -25214,6 +25305,8 @@ function openFxEditor(key){
     stBounceCheat:cur?!!cur.stBounceCheat:false,
     stManaCheat:cur?!!cur.stManaCheat:false,
     stBattleCheat:cur?!!cur.stBattleCheat:false,
+    samuraiGen:cur?!!cur.samuraiGen:false,
+    noLeaveGearN:cur&&(+cur.noLeaveGearN||0)||0,
     powInfBattle:cur?!!cur.powInfBattle:false,
     stCipToMana:cur?!!cur.stCipToMana:false,
     stNoST:cur?!!cur.stNoST:false,
@@ -25688,6 +25781,8 @@ $("fxSave").addEventListener("click",async ()=>{
     stBounceCheat:$("fxStBounceCheat")?$("fxStBounceCheat").checked:false,
     stManaCheat:$("fxStManaCheat")?$("fxStManaCheat").checked:false,
     stBattleCheat:$("fxStBattleCheat")?$("fxStBattleCheat").checked:false,
+    samuraiGen:$("fxSamuraiGen")?$("fxSamuraiGen").checked:false,
+    noLeaveGearN:$("fxNoLeaveGearN")?(parseInt($("fxNoLeaveGearN").value,10)||0):0,
     powInfBattle:$("fxPowInfBattle")?$("fxPowInfBattle").checked:false,
     stCipToMana:$("fxStCipToMana")?$("fxStCipToMana").checked:false,
     stNoST:$("fxStNoST")?$("fxStNoST").checked:false,
@@ -28203,8 +28298,18 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     logOnly(msg);
   }
   if((toZone==="battle"||toZone==="resolve")&&!_reorder){
+    // ✨ 呪文をバトルゾーンに置いてしまった時は、効果をここでは出さない。
+    //    呪文は「解決中」ゾーンで唱えるもので、バトルゾーンに置いただけでは唱えたことにならない。
+    //    ここで出してしまうと、あとから解決中へ動かした時に同じ効果が2回出る。
+    //    （ツインパクトはバトルゾーン＝クリーチャー面なので対象外）
+    const _rSp=getReg(c);
+    const _spellInBattle=toZone==="battle"&&_rSp&&_rSp.ctype==="spell"&&!_rSp.twin;
+    if(_spellInBattle){
+      toast(`✨ ${faceNameOf(c)} は呪文です。効果はまだ出していません。\n「解決中」ゾーンへ動かすと唱えられます（カードをタップ →「✨ 唱える（解決中へ）」でも移せます）`);
+      logOnly(`✨ ${S.players[pTo].label}：《${faceNameOf(c)}》がバトルゾーンに置かれました（呪文のため効果は未処理）`);
+    }
     // 🔀 公開パネルを開いている間にそこから出したカードは、出た時をパネルを閉じてから処理（入れ子の公開が混ざらないように）
-    if(RV_CIP_DEFER&&$("revealOlay").classList.contains("open"))RV_CIP_DEFER.push([pTo,c]);
+    else if(RV_CIP_DEFER&&$("revealOlay").classList.contains("open"))RV_CIP_DEFER.push([pTo,c]);
     else enqueueFx(pTo,c);
   }
   // ⚡ どこからでも墓地に置かれた時（toGrave）：バトル破壊はdestroyWithReplaceで発火するため、それ以外の墓地着地で発火
@@ -33355,6 +33460,13 @@ function openCardSheet(ctx){
       },"",true));
     }
   }
+  // ✨ 呪文をバトルゾーンに置いてしまった時の直し道。解決中へ動かすとそこで初めて効果が出る
+  //    （バトルゾーンに置いた時点では効果を出していないので、二重にはならない）
+  if(ctx.zone==="battle"&&(()=>{const rSp=getReg(c);return rSp&&rSp.ctype==="spell"&&!rSp.twin;})()){
+    box.appendChild(actBtn("✨ 唱える（解決中へ）",()=>{
+      moveCard(ctx.p,ctx.zone,ctx.id,"resolve");closeSel();closeSheet();renderAll();
+    },"primary"));
+  }
   if(ctx.zone==="battle"){
     box.appendChild(actBtn(`💥 付与：ターンの終わりに破壊${c.dieEOT?"（付与中・タップで解除）":""}`,()=>{
       snap();
@@ -33398,7 +33510,7 @@ function openCardSheet(ctx){
   // ⚡ 出た時（CIP）を手動で実行：CIPの連鎖で処理が止まった時の復旧にも使う
   if(S.expert&&(ctx.zone==="battle"||ctx.zone==="resolve")&&c.faceup&&!masked&&!isSealed(c)){
     const rC=getReg(c);
-    const hasCipReg=!!(rC&&(faceFx(rC,0).length||(rC.twin&&faceFx(rC,1).length)||(rC.modeN|0)>0||rC.soulRaid||rC.momoKingX))||soulXCipFx(c).length>0;
+    const hasCipReg=!!(rC&&(cipFx(rC,0).length||(rC.twin&&faceFx(rC,1).length)||(rC.modeN|0)>0||rC.soulRaid||rC.momoKingX))||soulXCipFx(c).length>0;
     if(hasCipReg){
       const isSp=rC&&rC.ctype==="spell";
       box.appendChild(actBtn(
