@@ -2445,6 +2445,7 @@ body.shake{animation:bodyShake .4s ease-out}
             <input type="number" id="fxStAuraPowFoe" placeholder="0" step="500" style="width:90px"></label>
           <input type="text" id="fxStAuraFiltFoe" list="raceList" placeholder="相手全体パワーの対象条件（例：サイキック／サイキック以外・空欄＝全員）" style="flex:1;min-width:170px">
           <label style="font-size:12px"><input type="checkbox" id="fxStAuraSA"> SAを与える</label>
+          <label style="font-size:12px" title="この付与はハイパーモード中だけ働く（コットピ・ルピア型）。Zラッシュで解放するまで付与しません"><input type="checkbox" id="fxStAuraHmOnly"> 付与はHM中だけ</label>
           <label style="font-size:12px"><input type="checkbox" id="fxStAuraPB"> パワード・ブレイカーを与える（パワー6000ごとに＋1枚）</label>
           <label style="font-size:12px"><input type="checkbox" id="fxStAuraOthers"> このカード自身は含まない（「自分の他の〜」型）</label>
           <input type="text" id="fxStAuraFilt" list="raceList" placeholder="対象条件（例：ドラゴン／ルピア・空欄＝クリーチャー全部）" style="flex:1;min-width:180px">
@@ -4370,7 +4371,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.15";
+const APP_VER="v14.18";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7778,7 +7779,7 @@ async function runTurnEndTriggers(cur2){
         if(tk.t==="untapAllMine"){
           const Zt=zonesOf(tk.pi);
           let n=0;
-          Zt.battle.forEach(c=>{if(c.tapped){c.tapped=false;n++;}});
+          Zt.battle.forEach(c=>{if(c.tapped&&canUntapByFx(c,true)){c.tapped=false;n++;}});
           toast(`🌙 ターン終了時（${tk.by||"効果"}）：${S.players[tk.pi].label}のクリーチャー${n}体をアンタップ`);
           renderAll();
         }else if(tk.t==="draw"){
@@ -8082,6 +8083,21 @@ async function finishNextTurn(cur){
     S.turnLock=rest;
     if(exp.length)toast(`⛔ ターン限定ロック終了：${exp.map(turnLockLabel).join("／")}`);
   }
+  // ❄ 継続フリーズ（チャクラ・デル・フィン型）：付与した側の次のターンのはじめに解除する。
+  //    解除するだけでアンタップはしない。相手は自分の次のアンタップステップで起こせるようになる。
+  {
+    const unfrz=[];
+    for(const pp of [0,1]){
+      for(const x of zonesOf(pp).battle){
+        if(x.frzHard&&(x.frzHardBy|0)===(pi|0)){
+          // 継続の間ずっとアンタップを止めていたので、ここで frozen も一緒に外す。
+          // 残すと持ち主の次のアンタップをもう1回飛ばしてしまう。
+          x.frzHard=false;x.frozen=false;delete x.frzHardBy;unfrz.push(faceNameOf(x));
+        }
+      }
+    }
+    if(unfrz.length)toast(`❄ 「アンタップしない」が終了：${unfrz.join("、")}`);
+  }
   // 数字宣言：宣言者の次のターン開始で失効
   if(S.numDecl&&S.numDecl[pi]&&S.numDecl[pi].ns&&S.numDecl[pi].ns.length){
     toast(`🔢 数字宣言の効果終了（${S.players[pi].label}：${S.numDecl[pi].ns.join("・")}）`);
@@ -8091,7 +8107,8 @@ async function finishNextTurn(cur){
   const silentCands=Z.battle.filter(c=>c.tapped&&!c.frozen&&(()=>{const r=getReg(c);return r&&r.silent;})());
   const wasTapped=new Set(Z.battle.filter(c=>c.tapped).map(c=>c.id));
   Z.battle.forEach(c=>{
-    if(c.frozen){c.frozen=false;frz.push(faceNameOf(c));}
+    if(c.frzHard){frz.push(faceNameOf(c)+"（継続）");}   // ❄ 継続フリーズは解除しない
+    else if(c.frozen){c.frozen=false;frz.push(faceNameOf(c));}
     else{
       const rc=getReg(c);
       if(rc&&rc.gimmick==="complex"&&(c.under?c.under.length:0)<8){/* COMPLEX：下7枚以下はアンタップしない */}
@@ -8350,7 +8367,7 @@ async function recollectAll(){
       for(const c of Z[z]){
         const stack=[c,...(c.under||[]),...(c.seals||[]),...(c.gear||[])];
         for(const cc of stack){
-          cc.tapped=false;cc.faceup=true;cc.sideways=false;cc.under=[];cc.seals=[];cc.gear=[];cc.rot=0;cc.face=0;cc.mark=false;cc.buff=null;cc.frozen=false;cc.jd=false;cc.gl=false;
+          cc.tapped=false;cc.faceup=true;cc.sideways=false;cc.under=[];cc.seals=[];cc.gear=[];cc.rot=0;cc.face=0;cc.mark=false;cc.buff=null;cc.frozen=false;cc.frzHard=false;cc.jd=false;cc.gl=false;
           if(LINKS.has(normName(cc.name))||P.hyList.some(e=>e.name===cc.name))Z.hyper.push(cc);
           else if(P.spList.some(e=>e.name===cc.name)){}
           else Z.deck.push(cc);
@@ -11076,6 +11093,12 @@ async function destroyCreature(pi,c,opts){
       toast(`⚓ ${faceNameOf(c)} はこのターン離れない！`);
       return;
     }
+    // ⚙⚓ クロスギアがn個以上クロスされていれば離れない（バザガベルグ型）。
+    //     v14.16まで cantLeaveBattle() の中にしか無く、破壊の経路を素通りしていた。
+    if(!IGN&&rCX&&+rCX.noLeaveGearN>0&&(c.gear?c.gear.length:0)>=+rCX.noLeaveGearN){
+      toast(`⚙⚓ ${faceNameOf(c)} はクロスギアが${c.gear.length}つクロスされているため離れない！（${+rCX.noLeaveGearN}つ以上）`);
+      return;
+    }
     // 🛡⚓ Shin-Ka Musical型：離れる時、パワーが0より大きいならかわりにとどまる（破壊も置換）
     if(c.buff&&c.buff.stayIfPow&&(+((getReg(c)||{}).power||0)+((c.buff&&c.buff.pow)||0))>0){
       toast(`⚓ ${faceNameOf(c)} はパワー0超のためバトルゾーンにとどまる！`);
@@ -12305,7 +12328,11 @@ async function runFxList(pi,list,srcCard,inPump){
         if(bi<0)continue;
         if(!made)snap();
         if(S.gameMode!=="tcg"&&TZ.shield.length>=10){toast("🛡 シールド上限（10枚）のため追加できません");break;}
-        const cc=TZ.battle.splice(bi,1)[0];
+        // 🔽 盾送りも「離れる時」なので、離場置換（真エスケープ／盾2つで身代わり／ジャオウガ型）を先に聞く
+        if(await offerTrueEscape(tp,tgt)){renderAll();continue;}
+        const bi_=TZ.battle.findIndex(x=>x.id===tgt.id);
+        if(bi_<0)continue;
+        const cc=TZ.battle.splice(bi_,1)[0];
         if(cc.under&&cc.under.length){const kids=cc.under.splice(0);kids.forEach(u=>{u.faceup=true;u.tapped=false;u.buff=null;TZ.grave.push(u);});}
         if(cc.gear&&cc.gear.length){const gs=cc.gear.splice(0);gs.forEach(g=>{g.isCross=false;g.faceup=true;g.tapped=false;TZ.battle.push(g);});}
         cc.faceup=false;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;cc.sick=false;
@@ -12830,9 +12857,12 @@ async function runFxList(pi,list,srcCard,inPump){
           const bi2=TZ2.battle.findIndex(y=>y.id===tgt.id);
           if(bi2>=0){
             if(!shieldCapOk(TZ2)){toast("🛡 シールド上限（10枚）のためシールド化できません");}
+            else if(await offerTrueEscape(tp2,tgt)){renderAll();}   // 🔽 盾送りも離場置換を先に聞く
             else{
               snap();
-              const cc=TZ2.battle.splice(bi2,1)[0];
+              const bi2_=TZ2.battle.findIndex(y=>y.id===tgt.id);
+              if(bi2_<0){renderAll();continue;}
+              const cc=TZ2.battle.splice(bi2_,1)[0];
               const _u2=(cc.under&&cc.under.length)?cc.under.splice(0):[];
               if(cc.gear&&cc.gear.length)cc.gear.splice(0).forEach(g=>gearOut(TZ2,g));
               if(cc.seals&&cc.seals.length)cc.seals.splice(0).forEach(sx=>{sx.faceup=true;TZ2.grave.push(sx);});
@@ -12924,10 +12954,20 @@ async function runFxList(pi,list,srcCard,inPump){
       //    条件（f.cond・例「パワー6000以下」）に合う相手のクリーチャーを1体選んで破壊する。
       //    ブレイクしなければ破壊は起きない（「そうしたら」）。
       if(!Z.shield.length){toast("シールドがありません（ブレイクしない）");renderAll();continue;}
+      // 💥 クロスギアのブレイク加算（バジュラズ・ソウル型）は、この「自分のシールドを1つブレイク」にも乗る。
+      //    通常の攻撃のブレイクだけに乗っていて、こちらに乗っていなかった（v14.17まで）。
+      const addB=(typeof gearBreakAddSum==="function")?gearBreakAddSum(srcCard):0;
+      const nB=Math.min(1+addB,Z.shield.length);
       const optsB=Z.shield.map((x,i2)=>`盾${i2+1}${x.faceup?`（表：${faceNameOf(x)}）`:""}`);
-      const jb=await askChoice("💥 ブレイクする自分のシールドを選択（任意・ブレイクしなければ破壊も起きません）",[...optsB,"ブレイクしない"]);
+      const jb=await askChoice(`💥 ブレイクする自分のシールドを選択（任意・ブレイクしなければ破壊も起きません）${nB>1?`\n※クロスギアの効果で${nB}枚ブレイクします`:""}`,[...optsB,"ブレイクしない"]);
       if(jb===null||jb>=Z.shield.length){toast("（ブレイクしなかった）");renderAll();continue;}
-      await breakShields(pi,1,null,jb);
+      if(nB<=1)await breakShields(pi,1,null,jb);
+      else{
+        // 選んだ盾を先頭に、足りない分は隣の盾から順に足してまとめて割る
+        const idxsB=[jb];
+        for(let i2=0;i2<Z.shield.length&&idxsB.length<nB;i2++)if(i2!==jb)idxsB.push(i2);
+        await breakShields(pi,idxsB.length,null,idxsB);
+      }
       renderAll();
       if(!S.vs){toast("（ソロのため相手クリーチャーの選択はスキップ）");continue;}
       const filtB=String(f.cond||"").trim();
@@ -13123,7 +13163,7 @@ async function runFxList(pi,list,srcCard,inPump){
       S.turnEndTasks.push({pi,t:"untapAllMine",by:srcCard?faceNameOf(srcCard):"効果"});
       toast(`🌙 このターン終了時、自分のクリーチャーをすべてアンタップします（予約）`);
     }else if(f.t==="untapAllMineNow"){
-      let un=0;for(const x of Z.battle)if(x.tapped){x.tapped=false;un++;}
+      let un=0;for(const x of Z.battle)if(x.tapped&&canUntapByFx(x,true)){x.tapped=false;un++;}
       sfx("move");renderAll();toast(`🔄 自分のクリーチャー${un}体をアンタップ`);
     }else if(f.t==="zenithSpark"){
       // 🌟 創世と終焉のゼニスパーク型：手札から最もコストの大きいカードをランダムに1枚表向きに
@@ -13251,6 +13291,8 @@ async function runFxList(pi,list,srcCard,inPump){
       //      選んだクリーチャーは次の自分のターンのはじめにアンタップしなくなる）
       {
         const frz=/フリーズ|アンタップしない/.test(String(f.cond||""));
+        // ❄ 「強フリーズ」「アンタップさせない」＝チャクラ・デル・フィン型（アンタップ効果でも起こせない）
+        const frzH=/強フリーズ|アンタップさせない/.test(String(f.cond||""));
         const picked=[];let cnt=0;
         for(let i=0;i<n;i++){
           const pool=OZ.battle.filter(x=>{const rx=getReg(x);return (!rx||isCreatureReg(rx))&&!picked.includes(x.id);});
@@ -13261,6 +13303,7 @@ async function runFxList(pi,list,srcCard,inPump){
           picked.push(t.id);
           if(!t.tapped){t.tapped=true;cnt++;}
           if(frz)t.frozen=true;
+          if(frzH){t.frzHard=true;t.frzHardBy=pi;}
           renderAll();
         }
         if(picked.length){
@@ -13512,6 +13555,8 @@ async function runFxList(pi,list,srcCard,inPump){
       // ⤵ クリーチャーをn体まで選んでタップ（両者どちらのクリーチャーでも対象）。すでにタップ中でも選べる
       {
         const frz=/フリーズ|アンタップしない/.test(String(f.cond||""));
+        // ❄ 「強フリーズ」「アンタップさせない」＝チャクラ・デル・フィン型（アンタップ効果でも起こせない）
+        const frzH=/強フリーズ|アンタップさせない/.test(String(f.cond||""));
         const picked=[];let cnt=0;
         for(let i=0;i<n;i++){
           const pool=[...zonesOf(pi).battle,...(S.vs?zonesOf(op).battle:[])].filter(x=>{
@@ -13524,6 +13569,7 @@ async function runFxList(pi,list,srcCard,inPump){
           picked.push(t.id);
           if(!t.tapped){t.tapped=true;cnt++;}
           if(frz)t.frozen=true;
+          if(frzH){t.frzHard=true;t.frzHardBy=pi;}
           renderAll();
         }
         if(picked.length){
@@ -14712,7 +14758,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const rx=getReg(x);
         if(!rx||!isCreatureReg(rx))continue;
         if(filt&&!lockFilterOk(filt,rx,x))continue;
-        if(x.tapped){x.tapped=false;x.frozen=false;cnt++;}
+        if(x.tapped&&canUntapByFx(x)){x.tapped=false;x.frozen=false;cnt++;}
       }
       if(cnt>0){sfx("ok");toast(`🔄 ${filt?filt+"を":"クリーチャーを"}${cnt}体アンタップした`);}
       else toast(`🔄 アンタップ対象なし${filt?`（${filt}）`:""}`);
@@ -15146,7 +15192,8 @@ async function runFxList(pi,list,srcCard,inPump){
     }else if(f.t==="shieldPlacedSelfMode"){
       const me=srcCard&&Z.battle.find(x=>x.id===srcCard.id);
       if(!me){toast("（誘発元は場を離れています）");continue;}
-      me.tapped=false;me.frozen=false;renderAll();
+      if(canUntapByFx(me)){me.tapped=false;me.frozen=false;}
+      renderAll();
       const md=await askChoice(`🛡 ${faceNameOf(me)}：自身をアンタップしました。次の中から1つ選ぶ`,["カードを1枚引く","相手のクリーチャー1体をタップし、次の相手のターン開始にアンタップさせない","次の自分のターンのはじめまで、このクリーチャーは離れない"]);
       if(md===0){if(Z.deck.length){const dc=Z.deck.shift();dc.faceup=true;dc.sideways=false;if(toHand(Z,dc)){markArrive(dc);bumpEv("draws",pi,1);}else toast("✋ 手札上限のため墓地へ（ドローにならない）");sfx("draw");emitEvent(pi,"draw");}}
       else if(md===1){
@@ -15371,6 +15418,8 @@ async function runFxList(pi,list,srcCard,inPump){
       // 自分のクリーチャーをn体選んでタップ。すでにタップしているクリーチャーも選べる
       {
         const frz=/フリーズ|アンタップしない/.test(String(f.cond||""));
+        // ❄ 「強フリーズ」「アンタップさせない」＝チャクラ・デル・フィン型（アンタップ効果でも起こせない）
+        const frzH=/強フリーズ|アンタップさせない/.test(String(f.cond||""));
         const picked=[];
         for(let i=0;i<n;i++){
           const pool=Z.battle.filter(x=>isCreatureReg(getReg(x))&&!picked.includes(x.id));
@@ -15381,6 +15430,7 @@ async function runFxList(pi,list,srcCard,inPump){
           picked.push(t.id);
           if(!t.tapped)t.tapped=true;
           if(frz)t.frozen=true;
+          if(frzH){t.frzHard=true;t.frzHardBy=pi;}
           sfx("tap");renderAll();
         }
         if(picked.length&&frz)toast(`❄ 選んだ${picked.length}体は次のターンのはじめにアンタップしない`);
@@ -17757,6 +17807,17 @@ function gearSlayerOn(c){
 function gearSAOn(c){
   return (c&&c.gear||[]).some(g=>{const rg=getReg(g);return rg&&rg.gearSA;});
 }
+/* ❄ 「アンタップしない」が続いているか（チャクラ・デル・フィン型）。
+   ザゼ・ゼーン型の frozen は「次のアンタップを1回飛ばす」だけなので、
+   アンタップ効果で起こせる。こちらはアンタップ効果でも起こせない。
+   付与した側の次のターンのはじめに解除する（frzHardBy がその持ち主）。 */
+function isHardFrozen(c){return !!(c&&c.frzHard);}
+/* ❄ アンタップ効果の共通判定。起こせない時は理由を出して false を返す */
+function canUntapByFx(c,quiet){
+  if(!isHardFrozen(c))return true;
+  if(!quiet)toast(`❄ ${faceNameOf(c)} はアンタップしない（アンタップする効果でも起こせません）`);
+  return false;
+}
 function gearBreakAddSum(c){
   return (c&&c.gear||[]).reduce((n,g)=>{const rg=getReg(g);return n+(rg?(+rg.gearBreakAdd||0):0);},0);
 }
@@ -17818,6 +17879,7 @@ function saGrantSource(pi,c,r){
     if(!rb||isSealed(b))continue;
     if(rb.stAllSA)return `常在：${faceNameOf(b)}`;
     if(rb.stAuraSA&&!isIgnored(b,pi)){
+      if(rb.stAuraHmOnly&&!b.hyper)continue;   // ⚡ ハイパーモード中だけ付与（Zラッシュ解放前は付与しない）
       if(rb.stAuraOthers&&b.id===c.id)continue;
       if(rb.stAuraFilt&&!(r&&lockFilterOk(rb.stAuraFilt,r,c)))continue;
       return `付与：${faceNameOf(b)}`;
@@ -17913,6 +17975,12 @@ async function offerTrueEscape(pi,c){
   if(r&&r.neverLeave&&!isIgnored(c,pi)){
     toast(`🚫 ${faceNameOf(c)} はバトルゾーンを離れない！`);
     logOnly(`🚫 ${S.players[pi].label} の《${faceNameOf(c)}》は離れない（離場を無効）`);
+    return true;
+  }
+  // ⚙⚓ クロスギアがn個以上クロスされていれば離れない（バザガベルグ型）。
+  //     手札・マナ・山札・盾送りもここで止める。
+  if(r&&+r.noLeaveGearN>0&&!isIgnored(c,pi)&&(c.gear?c.gear.length:0)>=+r.noLeaveGearN){
+    toast(`⚙⚓ ${faceNameOf(c)} はクロスギアが${c.gear.length}つクロスされているため離れない！（${+r.noLeaveGearN}つ以上）`);
     return true;
   }
   // 🔽 ジャオウガ型：離れる時、かわりに下のカードを1枚墓地に置いて場に残る
@@ -20471,7 +20539,7 @@ async function execAttack(pi,id,tg){
       const rSelf=getReg(c);
       const condSA=(rSelf&&rSelf.cstCond&&rSelf.cstFx==="sa"&&zoneCondOk(rSelf.cstCond,pi,c))||(c.hyper&&rSelf&&rSelf.hmSA);
       if(condSA)toast(`✨ 条件常在（${rSelf.cstCond}）：スピードアタッカー！`);
-      const _auraSAsrc=Z.battle.find(b=>{const rb=getReg(b);if(!rb||!rb.stAuraSA)return false;if(isSealed(b)||isIgnored(b,pi))return false;if(rb.stAuraOthers&&b.id===c.id)return false;return !rb.stAuraFilt||(rA&&lockFilterOk(rb.stAuraFilt,rA,c));});
+      const _auraSAsrc=Z.battle.find(b=>{const rb=getReg(b);if(!rb||!rb.stAuraSA)return false;if(rb.stAuraHmOnly&&!b.hyper)return false;if(isSealed(b)||isIgnored(b,pi))return false;if(rb.stAuraOthers&&b.id===c.id)return false;return !rb.stAuraFilt||(rA&&lockFilterOk(rb.stAuraFilt,rA,c));});
       const hasAllSA=condSA||(c.buff&&c.buff.sa)||Z.battle.some(b=>{const rb=getReg(b);return rb&&rb.stAllSA&&!isSealed(b);})||!!_auraSAsrc;
       if(_auraSAsrc&&c.sick&&!(rA&&rA.sa))toast(`✨ ${faceNameOf(_auraSAsrc)} の付与：${faceNameOf(c)} はスピードアタッカー！`);
       if(hasAllSA){
@@ -23000,6 +23068,7 @@ function renderFxEditor(){
   {const e=$("fxStAuraPowFoe");if(e)e.value=FXEDIT.stAuraPowFoe||"";}
   {const e=$("fxStAuraFiltFoe");if(e)e.value=FXEDIT.stAuraFiltFoe||"";}
   {const e=$("fxStAuraSA");if(e)e.checked=!!FXEDIT.stAuraSA;}
+  {const e=$("fxStAuraHmOnly");if(e)e.checked=!!FXEDIT.stAuraHmOnly;}
   {const e=$("fxStAuraPB");if(e)e.checked=!!FXEDIT.stAuraPB;}
   {const e=$("fxStAuraOthers");if(e)e.checked=!!FXEDIT.stAuraOthers;}
   {const e=$("fxStAuraFilt");if(e)e.value=FXEDIT.stAuraFilt||"";}
@@ -25131,7 +25200,7 @@ function fxKeyLabel(k){
     cstPow:"条件付きパワー強化",cstPowCond:"条件付きパワーの条件",
     firstRed:"各ターン最初の召喚軽減",firstRedF:"軽減の対象",
     cantAtkCond:"攻撃に必要な条件",stSickAll:"出たターン攻撃不可の除外対象",
-    stAuraPow:"味方へのパワー付与",stAuraSA:"味方へのSA付与",stAuraPB:"味方へのパワード・ブレイカー付与",stAuraOthers:"付与は自分以外",stAuraFilt:"付与の対象条件",
+    stAuraPow:"味方へのパワー付与",stAuraSA:"味方へのSA付与",stAuraPB:"味方へのパワード・ブレイカー付与",stAuraOthers:"付与は自分以外",stAuraHmOnly:"付与はハイパーモード中だけ",stAuraFilt:"付与の対象条件",
     pa:"パワーアタッカー",sst:"スーパー・S・トリガー",
     powPer:"数だけパワー",powPerFilt:"数だけパワーの対象",powPerZone:"数える場所",powPerWho:"数える側",powPerBattle:"バトル中限定",powPerAtk:"攻撃中限定",
     modeN:"選ぶ回数",modeFace:"選択効果を使う面",modeManual:"選択効果は効果から呼ばれた時だけ",modeOpts:"選択肢",modeAllCond:"全モード実行の条件",modeDup:"重複選択可",bakushinW:"💥爆進ダブル",
@@ -25233,6 +25302,7 @@ function openFxEditor(key){
     stAuraSA:cur?!!cur.stAuraSA:false,
     stAuraPB:cur?!!cur.stAuraPB:false,
     stAuraOthers:cur?!!cur.stAuraOthers:false,
+    stAuraHmOnly:cur?!!cur.stAuraHmOnly:false,
     stAuraFilt:cur&&cur.stAuraFilt||"",
     cantAtkP:cur?!!cur.cantAtkP:false,
     machf:cur?!!cur.machf:false,
@@ -25701,6 +25771,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stAuraPowFoe:+($("fxStAuraPowFoe")?$("fxStAuraPowFoe").value:0)||0,
     stAuraFiltFoe:($("fxStAuraFiltFoe")?$("fxStAuraFiltFoe").value.trim():""),
     stAuraSA:$("fxStAuraSA")?$("fxStAuraSA").checked:false,
+    stAuraHmOnly:$("fxStAuraHmOnly")?$("fxStAuraHmOnly").checked:false,
     stAuraPB:$("fxStAuraPB")?$("fxStAuraPB").checked:false,
     stAuraOthers:$("fxStAuraOthers")?$("fxStAuraOthers").checked:false,
     stAuraFilt:($("fxStAuraFilt")?$("fxStAuraFilt").value:"").trim(),
@@ -26359,7 +26430,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.cantAtkCond)attrs.push(`⛔ 条件を満たさないと攻撃できない（${v.cantAtkCond}）`);
     if(v.stSickAll)attrs.push(`🥶 常在：${v.stSickAll}以外は出たターン攻撃不可`);
     if(v.stShieldStG)attrs.push(`⚡ 常在：盾→手札の${v.stShieldStG}にS・トリガー付与`);
-    if(v.stAuraPow||v.stAuraSA||v.stAuraPB)attrs.push(`✨ 常在：${v.stAuraOthers?"他の":""}味方${v.stAuraFilt?`（${v.stAuraFilt}）`:""}に${[v.stAuraPow?`パワー+${v.stAuraPow}`:"",v.stAuraSA?"SA":"",v.stAuraPB?"パワード・ブレイカー":""].filter(Boolean).join("・")}を付与`);
+    if(v.stAuraPow||v.stAuraSA||v.stAuraPB)attrs.push(`✨ 常在：${v.stAuraOthers?"他の":""}味方${v.stAuraFilt?`（${v.stAuraFilt}）`:""}に${[v.stAuraPow?`パワー+${v.stAuraPow}`:"",v.stAuraSA?"SA":"",v.stAuraPB?"パワード・ブレイカー":""].filter(Boolean).join("・")}を付与${v.stAuraHmOnly?"（ハイパーモード中だけ）":""}`);
     if(v.cantAtkP)attrs.push("プレイヤー攻撃不可");
     if(v.d2)attrs.push("D2");
     if(v.seal)attrs.push(`封印${v.seal}${v.sealSummonOnly?"(召喚/侵略ZEROで解除)":""}`);
@@ -27943,7 +28014,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     //    ここを掃除していなかったため、HADESの「そのターン−9000」を受けたクリーチャーが
     //    手札やマナに戻ってから出し直された時、−9000を持ったまま出てきてパワー0で破壊されていた。
     //    （常在のように見えていた原因。下に重なっていたカードだけは以前から掃除していた）
-    c.buff=null;c.frozen=false;c.jd=false;
+    c.buff=null;c.frozen=false;c.frzHard=false;delete c.frzHardBy;c.jd=false;
     delete c._zpSkip;
   }
   c.faceup=(toZone!=="shield")?true:(fromZone==="battle"&&c.faceup);
@@ -33853,6 +33924,7 @@ function openCardSheet(ctx){
       }
       if(pick===6){
         c.frozen=!c.frozen;
+        if(!c.frozen){c.frzHard=false;delete c.frzHardBy;}   // ❄ 手動解除では継続フリーズも外す
         closeSel();renderAll();
         if(c.frozen)c.tapped=true;
         toast(c.frozen?`❄ フリーズ：${faceNameOf(c)}（タップし、次のターン アンタップしない）`:"フリーズを解除しました");
@@ -33897,6 +33969,7 @@ function openCardSheet(ctx){
     }
     box.appendChild(actBtn(c.frozen?"❄ 凍結を解除":"❄ 凍結（次のアンタップでアンタップしない）",()=>{
       c.frozen=!c.frozen;
+      if(!c.frozen){c.frzHard=false;delete c.frzHardBy;}   // ❄ 手動解除では継続フリーズも外す
       if(c.frozen)c.tapped=true;
       toast(c.frozen?`❄ ${faceNameOf(c)} を凍結（次の自分のアンタップでアンタップしません）`:`凍結を解除：${faceNameOf(c)}`);
       rerender();
@@ -34936,7 +35009,7 @@ function openCardSheet(ctx){
       continue;
     }
     mvGrid.appendChild(actBtn(label,async ()=>{
-      if(ctx.zone==="battle"&&["hand","mana","deckTop","deckBottom","exile"].includes(tz)&&(()=>{const rE=getReg(c);return rE&&(rE.trueEscape||allyGrant(ctx.p,"agTEsc")||allyGrant(ctx.p,"agTEsc2"))})()){
+      if(ctx.zone==="battle"&&["hand","mana","deckTop","deckBottom","exile","shield","shieldUp"].includes(tz)&&(()=>{const rE=getReg(c);return rE&&(rE.trueEscape||allyGrant(ctx.p,"agTEsc")||allyGrant(ctx.p,"agTEsc2"))})()){
         closeSel();closeSheet();
         if(await offerTrueEscape(ctx.p,c)){renderAll();return;}
         moveCard(ctx.p,ctx.zone,ctx.id,tz);renderAll();return;
@@ -36003,7 +36076,20 @@ function renderManaViewer(pi){
     g.appendChild(em);
   }
   Z.mana.forEach(c=>{
-    const el=vCardEl(dispName.get(faceKeyOf(c))||c.name);
+    // 💎 裏向きのマナ（水晶チャージャー型）は、一覧でも裏向きだと分かるようにする。
+    //    対戦中の相手のマナは内容を伏せる（自分のマナは中身を確認できる）。
+    const _fd=!c.faceup;
+    const _hideName=_fd&&S.vs&&pi!==(S.seat|0);
+    const el=vCardEl(_hideName?"（裏向き）":(dispName.get(faceKeyOf(c))||c.name));
+    if(_fd){
+      el.classList.add("facedown");
+      const bk=document.createElement("span");
+      bk.className="addtag";
+      bk.textContent="裏";
+      bk.title="裏向きのマナ（水晶チャージャー等）。無色1マナとして扱います";
+      el.appendChild(bk);
+      el.style.outline="2px dashed #8892a4";
+    }
     if(c.tapped)el.classList.add("mtap");
     if(S.msel.some(x=>x.id===c.id))el.classList.add("picked");
     // 🎨 このカードがマナゾーンで出す文明を色帯で表示（多色は横に並ぶ）＋0マナは明示
