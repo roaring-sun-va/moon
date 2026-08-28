@@ -4368,7 +4368,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.4";
+const APP_VER="v14.5";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -17195,7 +17195,19 @@ async function pumpFx(){
     if(reg&&reg.twin){
       // 🃏 コスト支払い時に面を選んでいれば再度聞かない（二重確認の廃止）。踏み倒し等で未選択なら従来通り確認
       let pick=null;
-      if(c._twinPaid===0||c._twinPaid===1){pick=c._twinPaid;c._twinPaid=null;toast(`🃏 ${pick===0?"上面":"下面"}の効果を処理（支払った面）`);}
+      // 🃏 いまカードがあるゾーンで面が決まる。バトルゾーン＝上面／解決中＝下面。
+      //    支払った面と食い違っていても、置いた場所を正とする
+      //    （置いた場所と違う面の効果が出るほうが分かりにくいため）。
+      const _inB=zonesOf(pi).battle.some(x=>x.id===c.id);
+      const _inR=zonesOf(pi).resolve.some(x=>x.id===c.id);
+      if(_inB||_inR){
+        pick=_inR?1:0;
+        if((c._twinPaid===0||c._twinPaid===1)&&c._twinPaid!==pick)
+          toast(`🃏 ${faceNameOf(c)}：${_inR?"解決中ゾーン":"バトルゾーン"}にあるので${pick===0?"上面":"下面"}として処理します`);
+        c._twinPaid=null;
+        c.face=pick;
+      }
+      else if(c._twinPaid===0||c._twinPaid===1){pick=c._twinPaid;c._twinPaid=null;toast(`🃏 ${pick===0?"上面":"下面"}の効果を処理（支払った面）`);}
       else{
         pick=await askTwinFace(c,`《${faceNameOf(c)}》はツインパクトです。\nどちらの面の効果を処理しますか？`,
           fxSummary(cipFx(reg,0)),fxSummary(faceFx(reg,1)),"処理しない");
@@ -28298,6 +28310,18 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     logOnly(msg);
   }
   if((toZone==="battle"||toZone==="resolve")&&!_reorder){
+    // 🃏 ツインパクトの面は、置いたゾーンで決める。
+    //    バトルゾーン＝上面（クリーチャー）／解決中＝下面（呪文）。ほかの面はそこには存在しない。
+    //    支払う面を選ぶパネルで下面を選んだままバトルゾーンへ置いても、上面として扱う。
+    {const _rT=getReg(c);
+     if(_rT&&(_rT.twin||_rT.ctype==="twinpact")){
+       const _want=(toZone==="resolve")?1:0;
+       if((c._twinPaid===0||c._twinPaid===1)&&c._twinPaid!==_want){
+         toast(`🃏 ${faceNameOf(c)}：${c._twinPaid===1?"下面（呪文）":"上面（クリーチャー）"}のコストを支払いましたが、${toZone==="resolve"?"解決中ゾーン":"バトルゾーン"}に置かれています。\n${_want===1?"下面（呪文）":"上面（クリーチャー）"}として処理します（支払ったマナは戻りません。直す時は「↩ 元に戻す」を）`);
+         c._twinPaid=null;
+       }
+       c.face=_want;
+     }}
     // ✨ 呪文をバトルゾーンに置いてしまった時は、効果をここでは出さない。
     //    呪文は「解決中」ゾーンで唱えるもので、バトルゾーンに置いただけでは唱えたことにならない。
     //    ここで出してしまうと、あとから解決中へ動かした時に同じ効果が2回出る。
@@ -33466,6 +33490,17 @@ function openCardSheet(ctx){
     box.appendChild(actBtn("✨ 唱える（解決中へ）",()=>{
       moveCard(ctx.p,ctx.zone,ctx.id,"resolve");closeSel();closeSheet();renderAll();
     },"primary"));
+  }
+  // 🃏 ツインパクトを、下面（呪文）のつもりでバトルゾーンに置いてしまった時の直し道。
+  //    上面の「出た時」がすでに処理されている場合があるので、そこは確認してから移す。
+  if(ctx.zone==="battle"&&(()=>{const rT=getReg(c);return rT&&(rT.twin||rT.ctype==="twinpact")&&rT.cost2!=null;})()){
+    box.appendChild(actBtn("✨ 下面（呪文）を唱える（解決中へ）",async()=>{
+      const rT=getReg(c);
+      const hasCip=!!(rT&&cipFx(rT,0).length);
+      if(!await ask(`《${faceNameOf(c)}》を解決中ゾーンへ移して、下面（呪文）として唱えますか？`
+        +(hasCip?`\n\n※上面（クリーチャー）の「出た時」がすでに処理されている場合、それは取り消されません。\n　取り消したい時は先に「↩ 元に戻す」を使ってください。`:"")))return;
+      moveCard(ctx.p,ctx.zone,ctx.id,"resolve");closeSel();closeSheet();renderAll();
+    }));
   }
   if(ctx.zone==="battle"){
     box.appendChild(actBtn(`💥 付与：ターンの終わりに破壊${c.dieEOT?"（付与中・タップで解除）":""}`,()=>{
