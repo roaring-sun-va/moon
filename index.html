@@ -4369,7 +4369,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.12";
+const APP_VER="v14.13";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7949,12 +7949,12 @@ async function runTurnEndTriggers(cur2){
           const hi=DZ.hand.findIndex(x=>x.id===h.id);
           DZ.hand.splice(hi,1);
           h.faceup=true;h.tapped=false;
-          DZ.battle.push(h);h._viaCheat=true;
-          markArrive(h);
-          emitEvent(def,"summon");
-          enqueueFx(def,h);
-          sfx("ok");renderAll();
-          toast(`🐲 ${faceNameOf(h)} を手札からコストを支払わずに出した！`);
+          if(cheatEnterBattle(def,h)){
+            emitEvent(def,"summon");
+            enqueueFx(def,h);
+            sfx("ok");renderAll();
+            toast(`🐲 ${faceNameOf(h)} を手札からコストを支払わずに出した！`);
+          }
           await waitFxIdle();renderAll();
         })();
       }
@@ -8226,11 +8226,11 @@ async function finishNextTurn(cur){
             toast(`🛡✨ ギャラクシールド：${faceNameOf(sc)} を唱えた（解決中へ）`);
             enqueueFx(pi,sc);
           }else{
-            Z.battle.push(sc);sc._viaCheat=true;
-            markArrive(sc);
-            emitEvent(pi,"summon");
-            enqueueFx(pi,sc);
-            toast(`🛡✨ ギャラクシールド：${faceNameOf(sc)} を召喚した`);
+            if(cheatEnterBattle(pi,sc)){
+              emitEvent(pi,"summon");
+              enqueueFx(pi,sc);
+              toast(`🛡✨ ギャラクシールド：${faceNameOf(sc)} を召喚した`);
+            }
           }
           sfx("ok");renderAll();
         }
@@ -8293,9 +8293,10 @@ async function finishNextTurn(cur){
           if(gi>=0){
             const dd=Z.grave.splice(gi,1)[0];
             dd.faceup=true;dd.tapped=false;
-            Z.battle.push(dd);dd._viaCheat=true;
-            markArrive(dd);emitEvent(pi,"summon");enqueueFx(pi,dd);
-            sfx("ok");toast(`🪦✨ ${faceNameOf(dd)} を墓地からバトルゾーンに出した`);
+            if(cheatEnterBattle(pi,dd)){
+              emitEvent(pi,"summon");enqueueFx(pi,dd);
+              sfx("ok");toast(`🪦✨ ${faceNameOf(dd)} を墓地からバトルゾーンに出した`);
+            }
           }
           renderAll();
         }
@@ -9096,11 +9097,11 @@ async function mekureidoRun(count){
   if(j!==null&&j<top.length){
     const cc=top.splice(j,1)[0];
     cc.faceup=true;cc.tapped=false;
-    Z.battle.push(cc);cc._viaCheat=true;
-    markArrive(cc);
-    emitEvent(pi,"summon");
-    enqueueFx(pi,cc);
-    toast(`🔧 ${count>=6?"ダブル・":""}メクレイド${n}！ ${cc.name} を出した`);
+    if(cheatEnterBattle(pi,cc)){
+      emitEvent(pi,"summon");
+      enqueueFx(pi,cc);
+      toast(`🔧 ${count>=6?"ダブル・":""}メクレイド${n}！ ${cc.name} を出した`);
+    }
   }
   await mekureidoRest(Z,top,pi);
   renderAll();sfx("ok");
@@ -14797,8 +14798,10 @@ async function runFxList(pi,list,srcCard,inPump){
               Z.resolve.push(sel);emitEvent(pi,"spell",sel);enqueueFx(pi,sel);
               toast(`⚡ S・トリガー無償詠唱：${faceNameOf(sel)}（解決中へ）`);
             }else{
-              Z.battle.push(sel);sel._viaCheat=true;markArrive(sel);emitEvent(pi,"summon");enqueueFx(pi,sel);
-              toast(`⚡ S・トリガー無償召喚：${faceNameOf(sel)}`);
+              if(cheatEnterBattle(pi,sel)){
+                emitEvent(pi,"summon");enqueueFx(pi,sel);
+                toast(`⚡ S・トリガー無償召喚：${faceNameOf(sel)}`);
+              }
             }
             sfx("ok");renderAll();await waitFxIdle(inPump);
           }
@@ -15071,7 +15074,7 @@ async function runFxList(pi,list,srcCard,inPump){
               }
             }
           }
-          if(!stacked){Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);played.push(cc);}
+          if(!stacked){if(cheatEnterBattle(pi,cc))played.push(cc);}
           toast(`🃏 ${faceNameOf(cc)} をバトルゾーンへ`);
           renderAll();
         }
@@ -15528,7 +15531,7 @@ async function runFxList(pi,list,srcCard,inPump){
             }
           }
         }
-        if(!sumStacked){Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);}
+        if(!sumStacked&&!cheatEnterBattle(pi,cc)){renderAll();break;}   // 🟥 7面が埋まったらここで打ち切る
         sum+=+rx.cost;put++;
         toast(`🌋 ${faceNameOf(cc)}（${rx.cost}c）を${o.zj}から出した（合計${sum}/${cap}）`);
         emitEvent(pi,"summon");enqueueFx(pi,cc); // CIPはキュー順で解決（ポンプ内なのでwaitFxIdle禁止）
@@ -15706,7 +15709,7 @@ async function runFxList(pi,list,srcCard,inPump){
       if(ok){
         // めくったカードを場に出す（CIPはこのクリーチャーの残り効果より先にキューへ）
         top.tapped=false;top.sideways=false;
-        Z.battle.push(top);top._viaCheat=true;markArrive(top);
+        if(!cheatEnterBattle(pi,top)){renderAll();return;}   // 🟥 7面上限を通す
         emitEvent(pi,"summon");
         renderAll();
         // めくったカードのCIPをこの場でインライン実行（このクリーチャーの残り効果より先・ポンプ内なのでwaitFxIdle不可）
@@ -19568,9 +19571,11 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
         toast(`↩ S・バック！ ${faceNameOf(sc)} をコストを支払わず唱えた（解決中へ）`);
         fxKeyword(op,"S・バック！",sc.name,"手札から反撃");
       }else{
-        OZ.battle.push(sc);sc._viaCheat=true;markArrive(sc);emitEvent(op,"summon");enqueueFx(op,sc);
-        toast(`↩ S・バック！ ${faceNameOf(sc)} をコストを支払わず召喚した`);
-        fxKeyword(op,"S・バック！",sc.name,"手札から反撃");
+        if(cheatEnterBattle(op,sc)){
+          emitEvent(op,"summon");enqueueFx(op,sc);
+          toast(`↩ S・バック！ ${faceNameOf(sc)} をコストを支払わず召喚した`);
+          fxKeyword(op,"S・バック！",sc.name,"手札から反撃");
+        }
       }
       sfx("ok");renderAll();await waitFxIdle();
     }
@@ -19607,8 +19612,10 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
         OZ.resolve.push(sc);emitEvent(op,"spell",sc);enqueueFx(op,sc);
         toast(`⚔ サバキZ！ ${faceNameOf(sc)} をコストを支払わず唱えた（解決中へ）`);
       }else{
-        OZ.battle.push(sc);sc._viaCheat=true;markArrive(sc);emitEvent(op,"summon");enqueueFx(op,sc);
-        toast(`⚔ サバキZ！ ${faceNameOf(sc)} をコストを支払わず召喚した`);
+        if(cheatEnterBattle(op,sc)){
+          emitEvent(op,"summon");enqueueFx(op,sc);
+          toast(`⚔ サバキZ！ ${faceNameOf(sc)} をコストを支払わず召喚した`);
+        }
       }
       logOnly(`⚔ サバキZ：${S.players[op].label} が《${faceNameOf(disc)}》を捨てて《${faceNameOf(sc)}》を使用`);
       sfx("ok");renderAll();await waitFxIdle();
@@ -19792,9 +19799,11 @@ async function offerOniEnd(){
         toast(`👹 鬼エンド！ ${faceNameOf(cc)} をコストを支払わず唱えた（解決中へ）`);
         fxKeyword(p,"鬼エンド！",cc.name,"");
       }else{
-        Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);emitEvent(p,"summon");enqueueFx(p,cc);
-        toast(`👹 鬼エンド！ ${faceNameOf(cc)} をコストを支払わず出した`);
-        fxKeyword(p,"鬼エンド！",cc.name,"");
+        if(cheatEnterBattle(p,cc)){
+          emitEvent(p,"summon");enqueueFx(p,cc);
+          toast(`👹 鬼エンド！ ${faceNameOf(cc)} をコストを支払わず出した`);
+          fxKeyword(p,"鬼エンド！",cc.name,"");
+        }
       }
       logOnly(`👹 鬼エンド：${S.players[p].label} が ${faceNameOf(cc)} をコストなしで出した`);
       sfx("ok");renderAll();
@@ -20796,8 +20805,10 @@ async function execAttack(pi,id,tg){
                   Z.resolve.push(h);emitEvent(pi,"spell",h);
                   toast(`⬛ ${faceNameOf(h)} を唱えた（解決中へ）`);
                 }else{
-                  Z.battle.push(h);h._viaCheat=true;markArrive(h);emitEvent(pi,"summon");
-                  toast(`⬛ ${faceNameOf(h)} を出した`);
+                  if(cheatEnterBattle(pi,h)){
+                    emitEvent(pi,"summon");
+                    toast(`⬛ ${faceNameOf(h)} を出した`);
+                  }
                 }
                 enqueueFx(pi,h);await waitFxIdle();
               }
@@ -20963,6 +20974,14 @@ async function execAttack(pi,id,tg){
         if(!ok){
           ok=await ask(`⤴ 革命0トリガー（${faceNameOf(h)}）\n山札の1枚目：《${faceNameOf(top)}》\n\n自動判定では「${why}」ため進化元にできません。\nこのカードを進化元にしますか？（テキストの条件で判断してください）`);
         }
+        if(ok&&battleSlotFull(op)){
+          // 🟥 進化元と革命0クリーチャーで面が1つ増えるので、7面が埋まっていれば成立しない。
+          //    めくったカードは山札の上へ戻し、革命0クリーチャーは手札へ返す。
+          top.faceup=false;top.seen=false;OZ.deck.unshift(top);
+          OZ.hand.push(h);h.faceup=true;
+          toast(`🟥 バトルゾーン上限（7体）：革命0トリガーは使えません（${faceNameOf(h)} は手札に戻します）`);
+          renderAll();continue;
+        }
         if(ok){
           OZ.battle.push(top);top._viaCheat=true;
           markArrive(top);
@@ -21040,8 +21059,7 @@ async function execAttack(pi,id,tg){
       const hi=OZ.hand.findIndex(x=>x.id===h.id);
       OZ.hand.splice(hi,1);
       h.faceup=true;h.tapped=false;
-      OZ.battle.push(h);h._viaCheat=true;
-      markArrive(h);
+      if(!cheatEnterBattle(op,h)){renderAll();continue;}   // 🟥 7面が埋まっていれば出せない
       emitEvent(op,"summon");
       enqueueFx(op,h);
       sfx("ok");renderAll();
@@ -32073,8 +32091,8 @@ async function ghostTurn(opts){
           // ⚔ 通常召喚／進化（evoフラグ時は召喚酔いなし）
           if(r&&(r.twin||r.ctype==="twinpact"))cc.face=0;
           cc.sick=o.evo?false:((S.turn>0)&&!(r&&r.sa));
-          Z.battle.push(cc);cc._viaCheat=true;
-          markArrive(cc);emitEvent(pi,"summon");enqueueFx(pi,cc);
+          if(!cheatEnterBattle(pi,cc)){renderAll();continue;}   // 🟥 7面上限を通す（直前の battleEntryOk と二重の保険）
+          emitEvent(pi,"summon");enqueueFx(pi,cc);
           if(o.evo){
             toast(`👻⤴ 進化：${faceNameOf(cc)}（コスト${o.cost}・進化元は手動で下に移してください）`);
             logOnly(`👻⤴ ゴースト：《${faceNameOf(cc)}》を進化として出した`);
@@ -34004,8 +34022,7 @@ function openCardSheet(ctx){
         f2.arr.splice(f2.idx,1);
         const cc=f2.card;
         cc.faceup=true;cc.tapped=false;
-        Z2.battle.push(cc);cc._viaCheat=true;
-        markArrive(cc);
+        if(!cheatEnterBattle(ctx.p,cc)){renderAll();return;}   // 🟥 7面上限を通す
         const pay=Math.max(0,(+rFB.fushigi||0)-tCost);
         if(S.expert&&S.autoTap&&!S.freePlay){
           let n=0;
@@ -34058,8 +34075,7 @@ function openCardSheet(ctx){
             f2.arr.splice(f2.idx,1);
             const cc=f2.card;
             cc.faceup=true;cc.tapped=false;
-            Z2.battle.push(cc);cc._viaCheat=true;
-            markArrive(cc);
+            if(!cheatEnterBattle(ctx.p,cc)){renderAll();return;}   // 🟥 7面上限を通す
             const rr=getReg(cc);
             if(S.expert&&S.autoTap&&rr&&rr.cost!=null){
               const pay=Math.max(0,rr.cost-sel.size*2);
@@ -34164,8 +34180,7 @@ function openCardSheet(ctx){
             f2.arr.splice(f2.idx,1);
             const cc=f2.card;
             cc.faceup=true;cc.tapped=false;
-            Z2.battle.push(cc);cc._viaCheat=true;
-            markArrive(cc);
+            if(!cheatEnterBattle(ctx.p,cc)){renderAll();return;}   // 🟥 7面上限を通す
             emitEvent(ctx.p,"summon");
             enqueueFx(ctx.p,cc);
           }
@@ -34189,8 +34204,7 @@ function openCardSheet(ctx){
         f2.arr.splice(f2.idx,1);
         const cc=f2.card;
         cc.faceup=true;cc.tapped=false;cc.abyss=true;cc.sick=false;
-        zonesOf(ctx.p).battle.push(cc);cc._viaCheat=true;
-        markArrive(cc);
+        if(!cheatEnterBattle(ctx.p,cc)){renderAll();return;}   // 🟥 7面上限を通す
         if(S.expert&&S.autoTap&&!S.freePlay){
           MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(ctx.p,cc)).catch(()=>{});
         }
@@ -34211,8 +34225,7 @@ function openCardSheet(ctx){
       f2.arr.splice(f2.idx,1);
       const cc=f2.card;
       cc.faceup=true;cc.tapped=false;
-      zonesOf(ctx.p).battle.push(cc);cc._viaCheat=true;
-      markArrive(cc);
+      if(!cheatEnterBattle(ctx.p,cc)){renderAll();closeSheet();closeSel();closeViewer();return;}   // 🟥 7面上限を通す
       emitEvent(ctx.p,"summon");
       enqueueFx(ctx.p,cc);
       closeSheet();closeSel();closeViewer();
@@ -37576,8 +37589,7 @@ $("btnNextTurn").addEventListener("click",async function(){
           markArrive(h);
           toast(`🌀 ${faceNameOf(h)} を効果解決ゾーンへ（唱えた・cip/呪文効果を処理）`);
         }else{
-          Zp.battle.push(h);h._viaCheat=true;
-          markArrive(h);
+          if(!cheatEnterBattle(pl,h)){renderAll();continue;}   // 🟥 7面上限を通す
           emitEvent(pl,"summon");
           toast(`🌀 ${faceNameOf(h)} を出した`);
         }
