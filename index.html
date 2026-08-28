@@ -4369,7 +4369,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.10";
+const APP_VER="v14.11";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -19118,7 +19118,10 @@ async function processBroken(op,stack,label){
             //    ※他のカードから配られたS・トリガー（ライオネル型の付与）はカード全体に付くので、
             //      面は限定せず従来どおり両方出す。
             const stOwn=!!(rSel&&(rSel.st||rSel.stWhen||rSel.stCond));
-            const sfSel=(twinSel&&stOwn)?(rSel.stFace|0):0;
+            // ⚡ 他のカードから配られたS・トリガー（ライオネル型）が乗っている間は、面を限定しない。
+            //    付与はカード全体に付くので、片面にしかS・トリガーが無い札でも両方の面を使える。
+            const stGranted=!!shieldStGrantOk(op,cSel);
+            const sfSel=(twinSel&&stOwn&&!stGranted)?(rSel.stFace|0):0;
             // 🃏 ツインパクトで面が未登録（stFace無し）の時は、選んだ面をそのカードのS・トリガー面として覚える。
             //    次からは片方のボタンだけになり、毎回面を選ばずに済む。登録から直せる。
             const mkST=(lb,zone)=>{
