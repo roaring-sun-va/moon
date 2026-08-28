@@ -4369,7 +4369,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.11";
+const APP_VER="v14.12";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -17282,7 +17282,7 @@ async function pumpFx(){
         const rsx=getReg(sx);
         if(rsx&&rsx.faces&&rsx.faces[0]&&rsx.faces[0].length){
           toast(`🔗 超魂X：${faceNameOf(c)} が下の《${faceNameOf(sx)}》の能力を発動`);
-          await runFxList(pi,rsx.faces[0],c,true);
+          await runFxList(pi,faceFx(rsx,0),c,true);
         }
         const hasManual=rsx&&(((rsx.watchFx||[]).length)||(rsx.modeN|0)>0);
         if(hasManual)toast(`🔗 超魂X：《${faceNameOf(sx)}》に攻撃時/誘発の手動能力があります（攻撃時のパネル・またはメニューから処理）`);
@@ -26535,7 +26535,10 @@ $("btnRegList").addEventListener("click",()=>{
       item.appendChild(th);
     }
     const hint=document.createElement("div");hint.className="hint";
-    hint.textContent=v.twin?`上面：${fxSummary(v.faces[0])} ／ 下面：${fxSummary(v.faces[1])}`:fxSummary(v.faces[0]);
+    // 🛡 faces が無い登録（手書きのパック等）でも一覧が落ちないようにする。
+    //    ここで例外が出ると登録一覧そのものが開けず、削除も編集もできなくなる。
+    {const _f0=faceFx(v,0),_f1=faceFx(v,1);
+     hint.textContent=v.twin?`上面：${fxSummary(_f0)} ／ 下面：${fxSummary(_f1)}`:fxSummary(_f0);}
     const row=document.createElement("div");row.className="row";
     row.appendChild(actBtn("編集",()=>{$("regOlay").classList.remove("open");openFxEditor(k);},"",true));
     row.appendChild(actBtn("削除",async ()=>{
