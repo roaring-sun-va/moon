@@ -2458,7 +2458,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <label style="font-size:12px" title="この付与はハイパーモード中だけ働く（コットピ・ルピア型）。Zラッシュで解放するまで付与しません"><input type="checkbox" id="fxStAuraHmOnly"> 付与はHM中だけ</label>
           <label style="font-size:12px"><input type="checkbox" id="fxStAuraPB"> パワード・ブレイカーを与える（パワー6000ごとに＋1枚）</label>
           <label style="font-size:12px"><input type="checkbox" id="fxStAuraOthers"> このカード自身は含まない（「自分の他の〜」型）</label>
-          <input type="text" id="fxStAuraFilt" list="raceList" placeholder="対象条件（例：ドラゴン／ルピア・空欄＝クリーチャー全部）" style="flex:1;min-width:180px">
+          <input type="text" id="fxAtkOnlyF" list="raceList" placeholder="自分はこの条件のクリーチャーでしか攻撃できない（例：コマンド｜イニシャルズ｜名前:禁断）" style="flex:1;min-width:200px"><input type="text" id="fxStAuraFilt" list="raceList" placeholder="対象条件（例：ドラゴン／ルピア・空欄＝クリーチャー全部）" style="flex:1;min-width:180px">
         </div>
         <div class="row" style="gap:6px 12px;flex-wrap:wrap;align-items:center">
           <span style="font-size:12px;font-weight:700">常在付与（自分のクリーチャー全員）：</span>
@@ -2779,7 +2779,11 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
       <div class="row" style="gap:12px">
         <label title="横向きで置き、盤面の「D」ボタンでDスイッチできます。D2フィールドは自分と相手を合わせて1枚だけなので、新しく出ると古いD2フィールドは張り替えられて墓地に置かれます"><input type="checkbox" id="fxD2"> 🅳 D2フィールド（横向きで置く・Dスイッチ可・両者合わせて1枚＝新しく出たら古い方は墓地へ）</label>
-        <label title="自分のクリーチャーがバトルゾーンを離れる時、かわりにそのクリーチャーに封印を1つ付ける（D2W禁断 ドキンダムエリア型）。Dスイッチを発動すると働かなくなります"><input type="checkbox" id="fxD2SealRep"> 🔏 離れるかわりに封印を付ける（Dスイッチ前だけ）</label>
+        <label title="自分のクリーチャーがバトルゾーンを離れる時、かわりにそのクリーチャーに封印を1つ付ける（D2W禁断 ドキンダムエリア型）。Dスイッチを発動すると働かなくなります"><input type="checkbox" id="fxSealPeelOnce"> 🔒 封印は各ターン1つだけ外せる</label>
+        <label style="display:inline-flex;align-items:center;gap:4px" title="このカードの封印を外せるコマンドの条件（例：闇｜火／コスト5以上）。空欄＝コマンドなら何でも">🔒 封印を外せる条件
+          <input type="text" id="fxSealPeelF" list="raceList" placeholder="例：闇｜火／コスト5以上" style="width:200px"></label>
+        <label title="相手のクリーチャーに付いた封印を、相手が外せなくします（最終P&#39;S封印・終焉の禁断 ドルマゲドンX型）"><input type="checkbox" id="fxSealLockFoe"> 🔒 相手は封印を外せない（最終P&#39;S封印）</label>
+        <label><input type="checkbox" id="fxD2SealRep"> 🔏 離れるかわりに封印を付ける（Dスイッチ前だけ）</label>
       </div>
       <div class="row">
         <span style="font-size:12px;font-weight:700">封印の数（禁断カード用）</span>
@@ -4387,7 +4391,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.38";
+const APP_VER="v14.41";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5504,6 +5508,9 @@ function applyFlipSeal(pi,c){
   }catch(e){}
 }
 function putSealsOn(pi,c,n){
+  // 🚫 このカードには封印を付けられない（終焉の禁断 ドルマゲドンX型）
+  {const r0=getReg(c);
+   if(r0&&r0.noSeal){toast(`🚫 ${faceNameOf(c)} に封印は付けられません`);return 0;}}
   const Z=zonesOf(pi);
   c.seals=c.seals||[];
   let put=0;
@@ -5525,6 +5532,21 @@ async function afterSealPeeled(owner,c,times){
   const r=getReg(c);
   if(!r||r.gimmick!=="dorma")return;
   for(let i=0;i<(times|0);i++)await dormaChoice(owner,c);
+  // 🔥 禁断爆発：封印が1つもなくなったら、そのまま裏（爆発後）へ裏返す。
+  //    以前は「右の🔄で解放できます」と案内するだけで手動だった（2026-08-29 に自動化）。
+  if(!c.seals||!c.seals.length){
+    const lk=LINKS.get(normName(c.name));
+    if(lk&&lk.length>1&&(c.face|0)===0){
+      c.face=1;c.tapped=false;c.rot=0;
+      try{sfx("flip");}catch(e){}
+      try{fxKeyword(owner,"禁断爆発！",faceNameOf(c),"封印がすべて外れた");}catch(e){}
+      toast(`🔥 禁断爆発！ ${faceNameOf(c)} に裏返った`);
+      logOnly(`🔥 ${S.players[owner].label}：禁断爆発 → ${faceNameOf(c)}`);
+      markArrive(c);
+      enqueueFx(owner,c);
+      renderAll();
+    }
+  }
 }
 /* 🔓 封印を1つ外して墓地へ。 */
 function sealPeelOne(owner,c,quiet){
@@ -8729,7 +8751,7 @@ async function offerSealPeel(actor){
     const cmdCivs=cardCivsOf(cmd);
     if(!cmdCivs.length)continue;
     const match=(sealCard,sealedCre)=>{let sc=cardCivsOf(sealCard);if(!sc.length)sc=cardCivsOf(sealedCre);return sc.some(cv=>cmdCivs.includes(cv));};
-    const sealed=[];
+    let sealed=[];
     // 反応対象は、そのコマンドを出したプレイヤー自身の封印クリーチャーのみ
     for(const pp of [actor]){
       for(const sc of zonesOf(pp).battle){
@@ -8742,11 +8764,35 @@ async function offerSealPeel(actor){
     }
     if(!sealed.length)continue;
     let methodOk=true;
+    // 🔒 封印を外せるコマンドの条件（sealPeelF・例「コマンド／闇｜火／コスト5以上」）。
+    {
+      const rCmd=getReg(cmd);
+      sealed=sealed.filter(o=>{
+        const rr=getReg(o.sc);
+        if(!rr||!rr.sealPeelF)return true;
+        if(rCmd&&lockFilterOk(String(rr.sealPeelF),rCmd,cmd))return true;
+        toast(`🔒 ${faceNameOf(o.sc)} の封印は「${rr.sealPeelF}」でしか外せません（${faceNameOf(cmd)} は対象外）`);
+        return false;
+      });
+      if(!sealed.length)continue;
+    }
     if(sealed.some(o=>o.summonOnly)){
       const mj=await askChoice(`🔓 コマンド《${faceNameOf(cmd)}》が出ました。\nこのコマンドは「召喚（通常召喚／S・トリガー）」または「侵略ZERO」で出ましたか？\n（ドルマゲドンX型の封印はこの場合のみ外せます）`,["はい（召喚／侵略ZERO）","いいえ（踏み倒し等）"]);
       methodOk=(mj===0);
     }
-    const cand=sealed.filter(o=>!o.summonOnly||methodOk);
+    let cand=sealed.filter(o=>!o.summonOnly||methodOk);
+    // 🔒 「各ターン1つだけ」外せる登録（ドルマゲドン型）。同じターンに2つ目は出さない。
+    cand=cand.filter(o=>{
+      const rr=getReg(o.sc);
+      if(!rr||!rr.sealPeelOncePerTurn)return true;
+      const key=`${o.sc.id}:${S.turn}:${S.who}`;
+      S._sealPeeledTurn=S._sealPeeledTurn||{};
+      if(S._sealPeeledTurn[key]){
+        toast(`🔒 ${faceNameOf(o.sc)} の封印は、このターンもう外せません（各ターン1つだけ）`);
+        return false;
+      }
+      return true;
+    });
     if(!cand.length)continue;
     const civLbl=cmdCivs.map(c=>CIV_JP_SEAL[c]||c).join("・");
     const labels=cand.map(o=>`《${faceNameOf(o.sc)}》の封印を1つ外す（${S.players[o.owner].label}・残${o.sc.seals.length}）`);
@@ -8754,6 +8800,11 @@ async function offerSealPeel(actor){
     if(j===null||j>=cand.length)continue;
     const pick=cand[j];
     snap();
+    {const rr=getReg(pick.sc);
+     if(rr&&rr.sealPeelOncePerTurn){
+       S._sealPeeledTurn=S._sealPeeledTurn||{};
+       S._sealPeeledTurn[`${pick.sc.id}:${S.turn}:${S.who}`]=1;
+     }}
     const seal=pick.sc.seals.splice(pick.sealIdx,1)[0];
     seal.faceup=true;zonesOf(pick.owner).grave.push(seal);
     sfx("grave");
@@ -20594,6 +20645,21 @@ async function startAttack(pi,id){
       toast(`⛔ ${faceNameOf(c)} は攻撃できない（条件未達：${rA.cantAtkCond}）`);
       return;
     }
+    // ⛔ 常在「自分は〔対象〕でしか攻撃できない」（ドルマゲドン型）。
+    //    自分の盤面（フィールド等も含む）に atkOnlyF を持つカードがあれば、その条件に合う
+    //    クリーチャーしか攻撃を始められない。
+    {
+      let onlySrc=null,onlyF="";
+      for(const b of zonesOf(pi).battle){
+        const rb=getReg(b);
+        if(!rb||!rb.atkOnlyF||isSealed(b)||isIgnored(b,pi))continue;
+        onlySrc=b;onlyF=String(rb.atkOnlyF);break;
+      }
+      if(onlySrc&&!(rA&&lockFilterOk(onlyF,rA,c))){
+        toast(`⛔ ${faceNameOf(onlySrc)} の効果：${onlyF} でしか攻撃できません（${faceNameOf(c)} は対象外）`);
+        return;
+      }
+    }
     // 👹 鬼エンド：クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいれば、
     //    手札の鬼エンド持ちをコストを支払わずに出せる（両者が持てる。マナの文明条件も確認）
     await offerOniEnd();
@@ -23746,6 +23812,10 @@ function renderFxEditor(){
   $("fxCantAtkP").checked=!!FXEDIT.cantAtkP;
   $("fxMachF").checked=!!FXEDIT.machf;
   {const e=$("fxStAuraMach");if(e)e.checked=!!FXEDIT.stAuraMach;}
+  {const e=$("fxAtkOnlyF");if(e)e.value=FXEDIT.atkOnlyF||"";}
+  {const e=$("fxSealPeelOnce");if(e)e.checked=!!FXEDIT.sealPeelOncePerTurn;}
+  {const e=$("fxSealPeelF");if(e)e.value=FXEDIT.sealPeelF||"";}
+  {const e=$("fxSealLockFoe");if(e)e.checked=!!FXEDIT.sealLockFoe;}
   {const e=$("fxStAuraEsc");if(e)e.checked=!!FXEDIT.stAuraEsc;}
   {const e=$("fxJoeGrant");if(e)e.value=FXEDIT.joeGrant||0;}
   {const e=$("fxJoeGrantF");if(e)e.value=FXEDIT.joeGrantF||"";}
@@ -25991,6 +26061,10 @@ function openFxEditor(key){
     cantAtkP:cur?!!cur.cantAtkP:false,
     machf:cur?!!cur.machf:false,
     stAuraMach:cur?!!cur.stAuraMach:false,
+    atkOnlyF:cur&&cur.atkOnlyF||"",
+    sealPeelOncePerTurn:cur?!!cur.sealPeelOncePerTurn:false,
+    sealPeelF:cur&&cur.sealPeelF||"",
+    sealLockFoe:cur?!!cur.sealLockFoe:false,
     stAuraEsc:cur?!!cur.stAuraEsc:false,
     joeGrant:cur?(+cur.joeGrant||0):0,
     joeGrantF:cur&&cur.joeGrantF||"",
@@ -26475,6 +26549,10 @@ $("fxSave").addEventListener("click",async ()=>{
     cantAtkP:$("fxCantAtkP").checked,
     machf:$("fxMachF").checked,
     stAuraMach:$("fxStAuraMach")?$("fxStAuraMach").checked:false,
+    atkOnlyF:$("fxAtkOnlyF")?$("fxAtkOnlyF").value.trim():"",
+    sealPeelOncePerTurn:$("fxSealPeelOnce")?$("fxSealPeelOnce").checked:false,
+    sealPeelF:$("fxSealPeelF")?$("fxSealPeelF").value.trim():"",
+    sealLockFoe:$("fxSealLockFoe")?$("fxSealLockFoe").checked:false,
     stAuraEsc:$("fxStAuraEsc")?$("fxStAuraEsc").checked:false,
     joeGrant:$("fxJoeGrant")?(+$("fxJoeGrant").value||0):0,
     joeGrantF:$("fxJoeGrantF")?$("fxJoeGrantF").value.trim():"",
@@ -30435,6 +30513,18 @@ function cardEl(pi,zone,c){
         closeSheet();closeSel();
         const Zs=zonesOf(pi);
         if(c.seals&&c.seals.length){
+          // 🔒 最終P'S封印：相手の盤面にこれを持つカードがあれば、こちらの封印は外せない
+          {
+            const foe=pi===0?1:0;
+            const lockSrc=(S.vs?zonesOf(foe).battle:[]).find(b=>{
+              const rb=getReg(b);
+              return rb&&rb.sealLockFoe&&!isSealed(b)&&!isIgnored(b,foe);
+            });
+            if(lockSrc){
+              toast(`🔒 最終P'S封印：${faceNameOf(lockSrc)} があるため、${faceNameOf(c)} の封印は外せません`);
+              return;
+            }
+          }
           if(!await ask(`🔓 ${faceNameOf(c)} の封印を1つ外しますか？（いま${c.seals.length}個）`))return;
           snap();
           sealPeelOne(pi,c);
