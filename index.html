@@ -595,7 +595,15 @@ body.ld-peeking .olay{padding-bottom:158px}
   color:var(--muted);list-style:none;user-select:none}
 #deckToolsFold>summary::-webkit-details-marker{display:none}
 #deckToolsFold[open]>summary{color:var(--ink)}
-#deckBox{max-width:min(1100px,96vw)}
+/* ⚙ 設定の節（v14.54）。長い1本のリストをやめ、畳める節に分けた */
+.setSect{border:1px solid var(--line);border-radius:10px;background:#0b0f18;margin:2px 0}
+.setSect>summary{cursor:pointer;padding:10px 12px;font-size:13px;font-weight:900;
+  color:var(--ink);list-style:none;user-select:none;display:flex;align-items:center;gap:6px}
+.setSect>summary::-webkit-details-marker{display:none}
+.setSect>summary::before{content:"▸";color:var(--muted);transition:transform .15s}
+.setSect[open]>summary::before{transform:rotate(90deg)}
+.setSect .setSectBody{padding:0 12px 10px}
+#deckBox{max-width:min(1100px,96vw);min-height:min(88dvh,860px)}
 /* 📊 デッキの文明・タイプ内訳（v14.52・コスト帯とセットで見る） */
 #deckStats{display:flex;flex-wrap:wrap;gap:5px 10px;margin-top:5px;font-size:11.5px;font-weight:800}
 #deckStats:empty{display:none}
@@ -603,7 +611,13 @@ body.ld-peeking .olay{padding-bottom:158px}
 #deckStats .ds-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
 #deckStats .ds-sep{color:#3f4d68}
 #deckStats .ds-mut{color:var(--muted)}
-#sleeveOlay .panelbox{max-width:720px;min-height:min(72dvh,620px)}
+@media(max-width:520px){
+  #deckGrid{grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:5px}
+  .dg-cap{font-size:9px;padding:2px 3px}
+  .dg-n{min-width:16px;height:16px;font-size:10px;line-height:16px;border-radius:8px}
+  .dg-ops button{font-size:12px;padding:3px 0}
+}
+#sleeveOlay .panelbox{max-width:720px}
 #cardMgrBox{max-width:760px}
 /* 🖼 デッキリストの画像表示（v14.51・DMOのデッキ一覧の形）
    文字欄（deckText）が正のデータ。グリッドはそれを描いた鏡で、＋−は文字欄を書き換える */
@@ -688,6 +702,7 @@ body.ld-peeking .olay{padding-bottom:158px}
   mix-blend-mode:screen}
 #splashBolts path.fire{animation:spBolt .7s ease-out forwards}
 #splashBolts path.arc{animation:spArc .34s ease-out forwards}
+#splashBolts path.travel{transition:stroke-dashoffset .14s ease-in}
 #splashBolts path.thin.glow{stroke-width:4.5}
 #splashBolts path.thin.core{stroke-width:1}
 @keyframes spBolt{0%{opacity:0}12%{opacity:.9}30%{opacity:.5}46%{opacity:.85}100%{opacity:0}}
@@ -1578,10 +1593,7 @@ body.shake{animation:bodyShake .4s ease-out}
     </section>
     <!-- 🃏 デッキ作成をデッキに特化する（v14.50）。
      登録・画像・スリーブは☰メニューからも開けるので、ここでは畳んでおく -->
-    <div class="row" style="margin-top:8px">
-      <button class="btn small" id="btnOpenCardMgr">🗂 カード管理（登録・画像）</button>
-      <button class="btn small" id="btnOpenSleeve">🎴 スリーブ・プレマ</button>
-    </div>
+    
     <div class="row" style="justify-content:flex-end">
       <button class="btn" id="btnCloseDeck">閉じる</button>
     </div>
@@ -1603,14 +1615,20 @@ body.shake{animation:bodyShake .4s ease-out}
     </div>
     <div class="row"><button class="btn small primary" id="btnTutorial" style="flex:1">📖 はじめての方へ（使い方チュートリアル）</button></div>
     <div class="row"><button class="btn small" id="btnHelp" style="flex:1">❓ 使い方・条件式リファレンス</button></div>
-    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="起動した時に、雷の表紙を出します。タップで飛ばせます">
+    
+    <details class="setSect"><summary>🖥 画面・ログの見た目</summary><div class="setSectBody">
+<div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="起動した時に、雷の表紙を出します。タップで飛ばせます">
       <input type="checkbox" id="setSplash"> ⚡ 起動時に表紙を出す</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="盤面の右下に、ログを開く丸ボタンを浮かべます。スマホ・iPadで片手で出し入れしやすくなります"><input type="checkbox" id="optLogFab" checked> 📜 ログを開く丸ボタンを盤面に浮かべる（スマホ・iPad向け）</label></div>
     <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="丸ボタンが「ランダム捨て」などゾーンのボタンに重なる時、自動で上や横へよけます。丸ボタンは指でつまんで好きな場所へ動かすこともできます"><input type="checkbox" id="optLogFabAvoid" checked> 🚧 丸ボタンがゾーンのボタンに重なる時は自動でよける（つまんで移動も可）</label><button class="btn small ghost" id="btnLogFabReset" title="手で動かした丸ボタンの位置を、右下の既定の場所に戻します">↺ 丸ボタンの位置を戻す</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの見出しをつかんで、好きな場所へ動かせます。右下・左下の隅をつかむと大きさ（幅と高さ）を変えられます。位置と大きさは次回も覚えています"><input type="checkbox" id="optLogDrag" checked> ✋ ログの見出しをつかんで移動する（隅のつかみ手で大きさ変更）</label><button class="btn small ghost" id="btnLogBoxReset" title="自由に動かしたログの位置と大きさを、既定（右上・幅340px）に戻します">↺ ログの位置と大きさを戻す</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="画面の右端から左へ払うとログが開き、右へ払うと閉じます。カードのドラッグと当たる場合はオフにしてください"><input type="checkbox" id="optLogSwipe" checked> ➡ 画面の右端から左へ払ってログを開く（右へ払って閉じる）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="確認パネルや効果パネルが開いている間も、ログを手前に重ねて表示します。パネルの操作が隠れて邪魔な場合はオフにしてください"><input type="checkbox" id="optLogOverPanel" checked> 🪟 確認パネルが開いている間もログを手前に表示する</label></div>
-    <div class="row" style="flex-direction:column;align-items:flex-start;gap:2px">
+    
+    </div></details>
+
+    <details class="setSect"><summary>🃏 盤面・演出</summary><div class="setSectBody">
+<div class="row" style="flex-direction:column;align-items:flex-start;gap:2px">
       <label style="font-size:12px;display:inline-flex;align-items:center;gap:6px">💠 マナゾーンの文明表示：
         <select id="optManaCiv" style="width:auto;font-size:12px">
           <option value="pie">マナ山の円グラフ（スマホ向け・既定）</option>
@@ -1653,11 +1671,19 @@ body.shake{animation:bodyShake .4s ease-out}
       <span id="bgmState" style="font-size:11px;color:var(--muted)">未登録</span>
     </div>
     <section>
-      <h3>サウンド</h3>
+      
+    </div></details>
+
+    <details class="setSect"><summary>🔊 サウンド</summary><div class="setSectBody">
+
       <div class="row"><button class="btn small" id="btnSound">🔊 効果音：ON</button></div>
     </section>
     <section>
-      <h3>対戦設定</h3>
+      
+    </div></details>
+
+    <details class="setSect"><summary>⚔ 対戦設定・オンライン</summary><div class="setSectBody">
+
       <div class="row">
         <span style="font-size:12px;font-weight:700">ルール</span>
         <select id="setMode" style="width:auto;flex:1">
@@ -1845,7 +1871,11 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="hint">変更は次回起動時から反映します。iPhoneで「高速表示」にすると画像数によってはSafariが再読み込みするため、通常は「自動」がおすすめです。</div>
     </section>
     <section>
-      <h3>データの書き出し / 読み込み（端末間の引っ越し用）</h3>
+      
+    </div></details>
+
+    <details class="setSect"><summary>💾 データの書き出し / 読み込み</summary><div class="setSectBody">
+
       <div class="row">
         <button class="btn small" id="btnExport">📤 書き出し</button>
         <button class="btn small" id="btnImport">📥 読み込み</button>
@@ -1854,7 +1884,11 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="hint">デッキ・効果登録・多面カード・カード名・スリーブ設定（＋任意で画像）を1つのファイルに保存します。AirDropやiCloud Driveで他の端末に送り、読み込んでください。</div>
     </section>
     <section>
-      <h3>ショートカット / メモ</h3>
+      
+    </div></details>
+
+    <details class="setSect"><summary>⌨ ショートカット / メモ</summary><div class="setSectBody">
+
       <div class="hint">
         ⌘Z / Ctrl+Z：1手戻る<br>
         ⌘ / Ctrl＋クリック：複数選択（PC）<br>
@@ -1862,7 +1896,9 @@ body.shake{animation:bodyShake .4s ease-out}
         攻撃中の効果処理は、画面上部のバナーから「攻撃再開/中止」を選べます
       </div>
     </section>
-    <div class="row" style="justify-content:flex-end">
+    
+    </div></details>
+<div class="row" style="justify-content:flex-end">
       <button class="btn" id="btnCloseSettings">閉じる</button>
     </div>
   </div>
@@ -4965,7 +5001,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.53";
+const APP_VER="v14.54";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -27128,7 +27164,7 @@ function fxBackToSettings(){
     const f=FX_RETURN;FX_RETURN=null;
     try{f();return;}catch(e){console.warn("fxReturn",e);}
   }
-  openDeckPanel();
+  // 🔙 戻り先の指定が無ければ対戦盤面へ（v14.54・雷鳴神さん指示。デッキ編成には戻さない）
 }
 /* 名前辞書を一覧・検索するダイアログ（どのカードが固有対応済みか確認できる） */
 async function showNamedList(){
@@ -27771,15 +27807,15 @@ $("btnFxReg").addEventListener("click",async ()=>{
     // 🔙 閉じたら「効果を登録するカードを選ぶ」の一覧へ戻す（デッキパネルには戻さない）
     FX_RETURN=()=>{$("btnFxReg").click();};
     openFxEditor(k);
-  }else openDeckPanel();
+  } // 選ばず閉じたら対戦盤面へ（デッキ編成には戻さない）
 });
 $("btnLinkReg").addEventListener("click",async ()=>{
   if(!dispName.size){toast("先に画像を登録してください");return;}
   $("deckOlay").classList.remove("open");
   const k1=await pickImage("多面カード：1面目を選ぶ","デッキ/超次元登録に使う名前の面（表）を選んでください");
-  if(!k1){openDeckPanel();return;}
+  if(!k1)return; // 閉じたら盤面へ
   const k2=await pickImage("多面カード：2面目を選ぶ",`1面目：${dispName.get(k1)||k1}　→ 裏面（覚醒/龍解/禁断解放/卍誕後など）を選んでください`);
-  if(!k2){openDeckPanel();return;}
+  if(!k2)return; // 閉じたら盤面へ
   const faces=[k1,k2];
   const add3=await askChoice("3面目（3D龍解など）を追加しますか？",["追加する","2面で保存"]);
   if(add3===0){
@@ -27811,7 +27847,7 @@ function openCardCivSearch(){
   const civBar=document.createElement("div");civBar.style.cssText="display:flex;gap:5px;flex-wrap:wrap";
   const inp=document.createElement("input");inp.type="text";inp.placeholder="名前・種族で絞り込み（任意）";inp.style.cssText="width:100%;box-sizing:border-box;font-size:13px;padding:7px";
   const list=document.createElement("div");
-  list.style.cssText="overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:7px;min-height:200px;align-content:start;padding:2px";
+  list.style.cssText="overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;min-height:220px;align-content:start;padding:2px";
   const foot=document.createElement("div");foot.style.cssText="font-size:11px;color:var(--muted,#8a93a8)";
   const civMatch=v=>{
     if(multi&&!(v.civs&&v.civs.length>=2))return false;
@@ -27862,10 +27898,11 @@ function openCardCivSearch(){
     //    デッキリストの画像表示（.dg-tile）と同じ見た目。タップで1枚追加
     for(const [nm,v] of rows.slice(0,300)){
       const k=normName(nm);
-      const tile=document.createElement("button");
-      tile.type="button";
+      // ⚠ button だと中の絵の高さが潰れる環境があった（v14.54でdivに変更）
+      const tile=document.createElement("div");
       tile.className="dg-tile";
-      tile.style.cssText="padding:0;cursor:pointer;font-family:inherit;text-align:left";
+      tile.style.cursor="pointer";
+      tile.setAttribute("role","button");
       const im=document.createElement("div");im.className="dg-img";
       const url=imgURL.has(k)?imgURL.get(k):null;
       if(url)im.style.backgroundImage=`url("${url}")`;
@@ -39978,8 +40015,6 @@ function openSleevePanel(){$("sleeveOlay").classList.add("open");}
   DP_LOADAFTER=true;
   openDeckPick("deckSelect","🃏 編成するデッキを選ぶ");
 });}
-{const b=document.getElementById("btnOpenCardMgr");if(b)b.addEventListener("click",openCardMgr);}
-{const b=document.getElementById("btnOpenSleeve");if(b)b.addEventListener("click",openSleevePanel);}
 {const b=document.getElementById("cardMgrClose");if(b)b.addEventListener("click",()=>$("cardMgrOlay").classList.remove("open"));}
 {const b=document.getElementById("sleeveClose");if(b)b.addEventListener("click",()=>$("sleeveOlay").classList.remove("open"));}
 $("cardMgrOlay").addEventListener("click",e=>{if(e.target===$("cardMgrOlay"))$("cardMgrOlay").classList.remove("open");});
@@ -43123,8 +43158,9 @@ function splashCurveD(x0,y0,x1,y1,wob){
   d+=` L${e[0].toFixed(1)},${e[1].toFixed(1)}`;
   return d;
 }
-/* にじむ外側と芯の2本を同じ形で重ねて描き、寿命が来たら消す。thin=細いアーク */
-function splashDraw(d,cls,life,thin){
+/* にじむ外側と芯の2本を同じ形で重ねて描き、寿命が来たら消す。
+   thin=細いアーク／travel=上から描き進む動き */
+function splashDraw(d,cls,life,thin,travel){
   const svg=document.getElementById("splashBolts");
   if(!svg)return;
   for(const k of ["glow","core"]){
@@ -43133,23 +43169,32 @@ function splashDraw(d,cls,life,thin){
     p.classList.add(k,cls);
     if(thin)p.classList.add("thin");
     svg.appendChild(p);
+    if(travel){
+      try{
+        const L=p.getTotalLength();
+        p.style.strokeDasharray=String(L);
+        p.style.strokeDashoffset=String(L);
+        p.classList.add("travel");
+        requestAnimationFrame(()=>{try{p.style.strokeDashoffset="0";}catch(e){}});
+      }catch(e){}
+    }
     SPLASH_TM.push(setTimeout(()=>{try{p.remove();}catch(e){}},life));
   }
 }
-/* 大きなアーク：画面を横切ってうねる。落雷ではなく、写真のような「走る電流」 */
+/* ⚡ 上から地面へ「走って」落ちる（v14.54）。
+   横にうねる長い線は蛇に見えてカッコ悪かった。縦に落とし、
+   線が上から描き進む動き（stroke-dashoffset）で勢いを出す */
 function splashStrike(){
   const sp=document.getElementById("splash");
   if(!sp||sp.classList.contains("out"))return;
-  const fromLeft=Math.random()<0.5;
-  const y0=40+Math.random()*200, y1=40+Math.random()*200;
-  const d=splashCurveD(fromLeft?-20:420,y0,fromLeft?420:-20,y1,120);
-  splashDraw(d,"fire",700,false);
-  // 寄り添う細いアークを1〜2本（写真の「束になって走る」感じ）
-  const nb=1+(Math.random()<0.5?1:0);
-  for(let b=0;b<nb;b++){
-    const dy=(Math.random()-0.5)*36;
-    splashDraw(splashCurveD(fromLeft?-20:420,y0+dy,fromLeft?420:-20,y1+dy,90),"fire",560,true);
-  }
+  const x0=60+Math.random()*280;
+  const x1=x0+(Math.random()-0.5)*130;
+  const d=splashCurveD(x0,-12,x1,306,95);
+  splashDraw(d,"fire",640,false,true);
+  // 途中から枝を1本、細く短く
+  const bx=(x0+x1)/2+(Math.random()-0.5)*60;
+  const by=90+Math.random()*120;
+  splashDraw(splashCurveD(bx,by,bx+(Math.random()<0.5?-1:1)*(40+Math.random()*50),by+50+Math.random()*70,40),"fire",520,true,true);
   sp.classList.add("flash");
   SPLASH_TM.push(setTimeout(()=>{try{sp.classList.remove("flash");}catch(e){}},200));
 }
