@@ -545,7 +545,48 @@ body.ld-peeking .olay{padding-bottom:158px}
 .olSteps>summary{cursor:pointer;font-size:11.5px;font-weight:800;color:var(--muted);
   list-style:none;padding:4px 0;user-select:none}
 .olSteps>summary::-webkit-details-marker{display:none}
+/* 🖼 対戦開始の看板に出すデッキ表紙（v14.49）。DMOの対戦相手カードと同じ役割 */
+.stDeckPrev{position:relative;width:100%;height:84px;border-radius:9px;overflow:hidden;
+  background:#0d1119 center/cover no-repeat;border:1px solid var(--line)}
+.stDeckPrev:empty::after{content:"デッキ未選択";position:absolute;inset:0;display:flex;
+  align-items:center;justify-content:center;color:#3f4d68;font-size:11px;font-weight:800}
+.stDeckPrev .sdp-cap{position:absolute;left:0;right:0;bottom:0;padding:3px 7px;
+  background:linear-gradient(180deg,transparent,rgba(3,5,10,.88) 55%);
+  font-size:11px;font-weight:900;color:#fff;text-shadow:0 1px 3px #000;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stDeckPrev .sdp-sub{font-size:9.5px;font-weight:800;color:#b9c6de}
+@media(min-width:760px){.stDeckPrev{height:110px}}
 #stMetaRow{margin-top:8px;align-items:center;flex-wrap:wrap}
+/* ☰ メニュー（v14.49） */
+#navDrawer{position:fixed;inset:0;z-index:9600;display:none}
+#navDrawer.open{display:block}
+#navScrim{position:absolute;inset:0;background:rgba(2,4,10,.6)}
+#navBody{position:absolute;left:0;top:0;bottom:0;width:min(80vw,300px);
+  background:#0b0f18;border-right:1px solid var(--line);box-shadow:6px 0 30px rgba(0,0,0,.6);
+  display:flex;flex-direction:column;transform:translateX(-102%);transition:transform .18s ease;
+  padding-bottom:env(safe-area-inset-bottom)}
+#navDrawer.open #navBody{transform:translateX(0)}
+.nav-head{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 14px;font-weight:900;font-size:15px;color:var(--accent);
+  border-bottom:1px solid var(--line);flex:0 0 auto}
+.nav-head button{background:none;border:none;color:var(--muted);font-size:16px;
+  font-weight:900;cursor:pointer;padding:2px 6px}
+#navItems{flex:1;overflow:auto;padding:6px 0}
+.nav-sect{padding:10px 14px 3px;font-size:10.5px;font-weight:900;color:#5b6b8c;letter-spacing:.12em}
+.nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:none;border:none;color:var(--ink);font-family:inherit;font-size:13.5px;
+  font-weight:800;padding:11px 14px;cursor:pointer}
+.nav-item:active{background:rgba(245,197,66,.12)}
+.nav-item .ni-ic{flex:0 0 22px;text-align:center}
+.nav-item .ni-sub{display:block;font-size:10.5px;font-weight:700;color:var(--muted);margin-top:1px}
+.nav-foot{flex:0 0 auto;padding:9px 14px;font-size:10px;font-weight:800;color:#3c4f75;
+  border-top:1px solid var(--line)}
+#deckZonesFold{border:1px solid var(--line);border-radius:10px;background:#0b0f18;
+  padding:0 8px 8px;margin-top:6px}
+#deckZonesFold>summary{cursor:pointer;padding:9px 3px;font-size:12px;font-weight:900;
+  color:var(--muted);list-style:none;user-select:none}
+#deckZonesFold>summary::-webkit-details-marker{display:none}
+#deckZonesFold[open]>summary{color:var(--ink)}
 #olScore{font-size:12.5px;font-weight:800;flex:1;text-align:center;min-width:90px}
 @media(max-width:430px){
   #stVsGrid{gap:5px}
@@ -596,6 +637,11 @@ body.ld-peeking .olay{padding-bottom:158px}
   filter:drop-shadow(0 0 5px #7dd3ff) drop-shadow(0 0 14px #2f6bff)}
 #splashBolts path.fire{animation:spBolt .52s ease-out forwards}
 #splashBolts path.arc{animation:spArc .34s ease-out forwards}
+#splashBolts path.thin.glow{stroke-width:3.5}
+#splashBolts path.thin.core{stroke-width:1.1}
+#splashBolts circle.hit{fill:#eaf8ff;filter:drop-shadow(0 0 8px #7dd3ff) drop-shadow(0 0 20px #2f6bff);
+  animation:spHit .48s ease-out forwards}
+@keyframes spHit{0%{opacity:1;r:3}100%{opacity:0;r:26}}
 @keyframes spBolt{0%{opacity:0}6%{opacity:1}20%{opacity:.25}32%{opacity:1}55%{opacity:.55}100%{opacity:0}}
 @keyframes spArc{0%{opacity:0}15%{opacity:.9}100%{opacity:0}}
 /* 💠 ロゴの後ろで脈打つエネルギーの核 */
@@ -1378,6 +1424,7 @@ body.shake{animation:bodyShake .4s ease-out}
 </div>
 
 <div id="topbar">
+  <button class="btn small ghost" id="btnMenu" title="メニュー">☰</button>
   <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span><span class="verchip" id="appVer" title="読み込み中">読込中…</span></h1>
   <div id="topScroll">
     <span id="turnBadge">ターン 0</span>
@@ -1387,6 +1434,17 @@ body.shake{animation:bodyShake .4s ease-out}
     <button class="btn small" id="btnFlip" style="display:none">↕ 反転</button>
   </div>
   <button class="btn small ghost" id="btnSettings">⚙</button>
+</div>
+
+<!-- ☰ メニュー（v14.49）。DMOの左メニューに相当。
+     各項目は既存のボタンを押すのと同じ動きをする（配線の付け替えはしない）。 -->
+<div id="navDrawer" aria-hidden="true">
+  <div id="navScrim"></div>
+  <nav id="navBody">
+    <div class="nav-head">⚡ DM Re:Vault <button id="navClose" title="閉じる">✕</button></div>
+    <div id="navItems"></div>
+    <div class="nav-foot" id="navVer"></div>
+  </nav>
 </div>
 
 <div id="board"></div>
@@ -1438,10 +1496,14 @@ body.shake{animation:bodyShake .4s ease-out}
         <span style="font-size:11px;color:var(--muted)">登録済みカードから選んで上のメインデッキ欄に追加</span>
       </div>
       <div id="costCurve" style="margin:2px 0 6px"></div>
+      <!-- 使わないことが多いゾーンは畳んでおく（中身があれば開いた状態で出る） -->
+    <details id="deckZonesFold">
+      <summary>▸ そのほかのゾーン（超GR・超次元・特殊・ゲーム外）</summary>
       <textarea id="grText" style="min-height:52px" placeholder="超GRゾーン12枚（不要なら空欄）"></textarea>
       <textarea id="hyText" style="min-height:52px" placeholder="超次元ゾーン8枚（不要なら空欄）"></textarea>
       <textarea id="spText" style="min-height:52px" placeholder="特殊カード（禁断/零龍など。ゲーム開始時に場に出ます。1行1枚）"></textarea>
       <textarea id="exText" style="min-height:52px" placeholder="ゲーム外ゾーン（ゲーム開始時からゲーム外に置くカード。1行1種、枚数自由）"></textarea>
+    </details>
       <div class="row">
         <button class="btn small" id="btnBuilder">🖼 画像から組む</button>
         <button class="btn small ghost" id="btnNewDeck">🆕 新規</button>
@@ -1883,6 +1945,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="stSide me">
         <div class="stSideHead"><span class="stSeat">P1</span>自分</div>
         <select id="stDeck0"></select>
+        <div class="stDeckPrev" id="stPrev0" title="選んだデッキの表紙"></div>
         <button class="btn small" id="stPick0">🖼 一覧から選ぶ</button>
         <input type="text" id="stName0" placeholder="名前（P1）" class="stNameIn">
       </div>
@@ -1911,6 +1974,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="stSide foe">
         <div class="stSideHead"><span class="stSeat">P2</span>相手</div>
         <select id="stDeck1"></select>
+        <div class="stDeckPrev" id="stPrev1" title="選んだデッキの表紙"></div>
         <button class="btn small" id="stPick1">🖼 一覧から選ぶ</button>
         <input type="text" id="stName1" placeholder="名前（P2）" class="stNameIn">
       </div>
@@ -4821,7 +4885,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.48";
+const APP_VER="v14.49";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -38839,7 +38903,7 @@ async function editDeckByName(name){
   $("deckListOlay").classList.remove("open");
   $("deckPickOlay").classList.remove("open");
   $("startOlay").classList.remove("open");
-  $("deckOlay").classList.add("open");
+  showDeckOlay();
   bSeed();bSetMode("main");reopenBuilder();
   const disp=name.includes("/")?name.slice(name.indexOf("/")+1):name;
   toast(`🧩 「${disp}」を編成します（閉じると編集欄に反映されます）`);
@@ -39004,6 +39068,7 @@ async function openStartOlay(){
   $("stName1").value=S.players[1].label==="P2"?"":S.players[1].label;
   $("startOlay").classList.add("open");
   try{syncStFirstSeg();}catch(e){}
+  try{refreshStPrev(0);refreshStPrev(1);}catch(e){}
 }
 function applyPlayerName(pi,v){
   const nm=(v||"").trim()||(pi?"P2":"P1");
@@ -39023,15 +39088,62 @@ $("stDeck0").addEventListener("change",async ()=>{
   setPlayerDeck(0,n,d);
   if(db)await idbPut("misc","lastDeck",n);
   toast(`自分のデッキ：${n}`);
+  try{refreshStPrev(0);}catch(e){}
 });
 $("stDeck1").addEventListener("change",async ()=>{
   const n=$("stDeck1").value;
-  if(!n){S.players[1]={...S.players[1],deckName:"",mainList:[],grList:[],hyList:[],spList:[],exList:[],zones:emptyZones()};renderAll();return;}
+  if(!n){S.players[1]={...S.players[1],deckName:"",mainList:[],grList:[],hyList:[],spList:[],exList:[],zones:emptyZones()};renderAll();try{refreshStPrev(1);}catch(e){}return;}
   const d=await getDeck(n);if(!d)return;
   setPlayerDeck(1,n,d);
   if(db)await idbPut("misc","lastDeckOpp",n);
   toast(S.vs?`相手デッキ：${n}`:`相手デッキ：${n}（「対戦」ONで配られます）`);
+  try{refreshStPrev(1);}catch(e){}
 });
+/* 🖼 対戦開始の看板に、選んだデッキの表紙を出す（v14.49）
+   デッキ一覧と同じ決め方：🖼表紙で選んだ絵 ＞ 画像がある一番コストの高いカード。
+   1つのデッキしか見ないので、一覧のように全デッキを読み込んだりはしない */
+async function stDeckPrevInfo(name){
+  if(!name)return null;
+  let d=null;try{d=await getDeck(name);}catch(e){}
+  if(!d)return null;
+  const main=d.main||[];
+  let total=0,key=null,keyCost=-1;
+  for(const it of main){
+    total+=(+it.count||0);
+    const k=normName(it.name);
+    const r=FXDB.get(k);
+    const cost=(r&&r.cost!=null&&!isNaN(+r.cost))?+r.cost:-1;
+    if(imgURL.has(k)&&cost>keyCost){key=k;keyCost=cost;}
+  }
+  if(d.cover&&imgURL.has(d.cover))key=d.cover;
+  return {imgKey:key,total};
+}
+async function refreshStPrev(pi){
+  const box=document.getElementById("stPrev"+pi);
+  if(!box)return;
+  const name=($("stDeck"+pi)&&$("stDeck"+pi).value)||"";
+  const info=await stDeckPrevInfo(name);
+  box.textContent="";
+  box.style.backgroundImage="";
+  if(!info)return; // :empty のまま＝「デッキ未選択」が出る
+  const url=info.imgKey?imgURL.get(info.imgKey):null;
+  if(url)box.style.backgroundImage=`url("${url}")`;
+  const cap=document.createElement("div");
+  cap.className="sdp-cap";
+  cap.textContent=name.includes("/")?name.split("/").slice(1).join("/"):name;
+  const sub=document.createElement("span");
+  sub.className="sdp-sub";
+  sub.textContent=`　${info.total}枚`;
+  cap.appendChild(sub);
+  box.appendChild(cap);
+  // 画像がまだ読み込み中なら、少し待って描き直す（imgURL は遅延読み）
+  if(info.imgKey&&!url){
+    setTimeout(()=>{try{
+      const u2=imgURL.get(info.imgKey);
+      if(u2)box.style.backgroundImage=`url("${u2}")`;
+    }catch(e){}},700);
+  }
+}
 /* ⚔ 先行の見た目ボタンと select#stFirst を同期する（v14.47）。
    読み取り側（startGame）は今までどおり select の値を見るので、配線は変えない */
 function syncStFirstSeg(){
@@ -39516,13 +39628,79 @@ function clearDeckEditor(){
   $("deckStatus").textContent="";
   renderCostCurve();
 }
+/* 🃏 デッキ作成を開く時は必ずここを通す（v14.49）。
+   畳んだゾーン欄（超GR・超次元・特殊・ゲーム外）に中身があれば開いた状態にする。
+   値の書き込みが同じタスク内で続くことがあるので、1拍おいて見る */
+function syncDeckZonesFold(){
+  const f=document.getElementById("deckZonesFold");
+  if(!f)return;
+  const has=["grText","hyText","spText","exText"].some(id=>{const e=$(id);return e&&e.value.trim();});
+  if(has)f.open=true;
+}
+function showDeckOlay(){
+  $("deckOlay").classList.add("open");
+  setTimeout(()=>{try{syncDeckZonesFold();}catch(e){}},0);
+}
 function openDeckPanel(){
   if(!DECK_DIRTY)clearDeckEditor();
-  $("deckOlay").classList.add("open");
+  showDeckOlay();
   refreshDeckSelects();
   renderCostCurve();
 }
 $("btnSettings").addEventListener("click",openSettings);
+/* ☰ メニュー（v14.49）。項目は既存のボタンを押すのと同じ。
+   ボタンを押せば元のガード（未保存の確認・画像未登録の案内など）もそのまま働く */
+const NAV_ITEMS=[
+  ["対戦",[
+    ["⚔","対戦開始／再試合","デッキを選んで開始","btnStart"],
+  ]],
+  ["デッキ",[
+    ["🃏","デッキ作成","組む・編集する","btnDeckMenu"],
+    ["📋","デッキ一覧","持っているデッキを見る","btnDeckList"],
+  ]],
+  ["カード登録",[
+    ["⚡","カード効果を登録","自動処理の設定","btnFxReg"],
+    ["🔁","多面カードを登録","ツインパクト・裏面など","btnLinkReg"],
+    ["📚","登録一覧","登録済みカードを見る","btnRegList"],
+    ["🖼","画像を登録","カード画像の取り込み","btnPickImages"],
+  ]],
+  ["データ・その他",[
+    ["📤","バックアップ／書き出し","デッキ・登録・設定の控え","btnExport"],
+    ["📖","使い方チュートリアル","はじめての方へ","btnTutorial"],
+    ["❓","条件式リファレンス","効果登録の書き方","btnHelp"],
+    ["⚙","設定","表示・操作・演出","btnSettings"],
+  ]],
+];
+function buildNavDrawer(){
+  const box=document.getElementById("navItems");
+  if(!box||box.childElementCount)return;
+  for(const [sect,items] of NAV_ITEMS){
+    const h=document.createElement("div");h.className="nav-sect";h.textContent=sect;
+    box.appendChild(h);
+    for(const [ic,label,sub,btnId] of items){
+      const b=document.createElement("button");
+      b.type="button";b.className="nav-item";
+      const i1=document.createElement("span");i1.className="ni-ic";i1.textContent=ic;
+      const i2=document.createElement("span");i2.textContent=label;
+      const i3=document.createElement("span");i3.className="ni-sub";i3.textContent=sub;
+      i2.appendChild(i3);
+      b.appendChild(i1);b.appendChild(i2);
+      b.addEventListener("click",()=>{
+        closeNavDrawer();
+        const t=document.getElementById(btnId);
+        if(t)t.click();
+        else toast("この項目は今の画面では使えません");
+      });
+      box.appendChild(b);
+    }
+  }
+  const v=document.getElementById("navVer");if(v)v.textContent=APP_VER;
+}
+function openNavDrawer(){buildNavDrawer();document.getElementById("navDrawer").classList.add("open");}
+function closeNavDrawer(){const d=document.getElementById("navDrawer");if(d)d.classList.remove("open");}
+$("btnMenu").addEventListener("click",openNavDrawer);
+document.getElementById("navScrim").addEventListener("click",closeNavDrawer);
+document.getElementById("navClose").addEventListener("click",closeNavDrawer);
 $("btnCloseSettings").addEventListener("click",()=>$("settingsOlay").classList.remove("open"));
 $("settingsOlay").addEventListener("click",e=>{if(e.target===$("settingsOlay"))$("settingsOlay").classList.remove("open");});
 ["deckText","grText","hyText","spText","exText"].forEach(id=>{const el=$(id);if(el)el.addEventListener("input",markDeckDirty);});
@@ -42599,38 +42777,36 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
    ・「次から出さない」は設定に置く（misc/splashOff）
    ・動きを抑える設定の端末では稲妻を出さず、静止画にする */
 let SPLASH_TM=[];
-/* ⚡ 稲妻の線を再帰で割ってギザギザにする。segs に [x0,y0,x1,y1] を積む */
-function splashBoltSegs(x0,y0,x1,y1,jag,depth,segs){
-  if(depth<=0){segs.push([x0,y0,x1,y1]);return;}
-  const mx=(x0+x1)/2+(Math.random()-0.5)*jag;
-  const my=(y0+y1)/2+(Math.random()-0.5)*jag;
-  splashBoltSegs(x0,y0,mx,my,jag*0.55,depth-1,segs);
-  splashBoltSegs(mx,my,x1,y1,jag*0.55,depth-1,segs);
-  if(Math.random()<0.28){ // 途中から枝を伸ばす
-    const ang=Math.atan2(y1-y0,x1-x0)+(Math.random()<0.5?-1:1)*(0.5+Math.random()*0.7);
-    const len=18+Math.random()*34;
-    splashBoltSegs(mx,my,mx+Math.cos(ang)*len,my+Math.sin(ang)*len,jag*0.4,Math.max(0,depth-2),segs);
+/* ⚡ 稲妻（v14.49 作り直し）
+   前の作りは、線分を1本ずつ別のパスで描いていた。丸い線端とぼかしが
+   線分の数だけ重なり、毛羽立った落書きに見えていた（ダサさの正体）。
+   → 中点変位で「1本のつながった折れ線」を作り、本線と枝を分けて描く。 */
+function splashJitterLine(x0,y0,x1,y1,steps,rough){
+  let pts=[[x0,y0],[x1,y1]];
+  let off=rough;
+  for(let st=0;st<steps;st++){
+    const next=[pts[0]];
+    for(let k=1;k<pts.length;k++){
+      const a=pts[k-1],b=pts[k];
+      next.push([(a[0]+b[0])/2+(Math.random()-0.5)*off,
+                 (a[1]+b[1])/2+(Math.random()-0.5)*off*0.35], b); // 縦の乱れは弱く＝落ちる方向は保つ
+    }
+    pts=next;off*=0.5;
   }
+  return pts;
 }
-function splashSegsToD(segs){
-  return segs.map(s=>`M${s[0].toFixed(1)},${s[1].toFixed(1)} L${s[2].toFixed(1)},${s[3].toFixed(1)}`).join(" ");
+function splashPolyD(pts){
+  return "M"+pts.map(pt=>pt[0].toFixed(1)+","+pt[1].toFixed(1)).join(" L");
 }
-/* 空から地面まで落ちる本体の稲妻 */
-function splashBoltPath(){
-  const x0=30+Math.random()*340;
-  const x1=x0+(Math.random()-0.5)*160;
-  const segs=[];
-  splashBoltSegs(x0,-8,x1,300,72,5,segs);
-  return splashSegsToD(segs);
-}
-/* にじむ外側と芯の2本を同じ形で重ねて描き、寿命が来たら消す */
-function splashDraw(d,cls,life){
+/* にじむ外側と芯の2本を同じ形で重ねて描き、寿命が来たら消す。thin=枝用の細い線 */
+function splashDraw(d,cls,life,thin){
   const svg=document.getElementById("splashBolts");
   if(!svg)return;
   for(const k of ["glow","core"]){
     const p=document.createElementNS("http://www.w3.org/2000/svg","path");
     p.setAttribute("d",d);
     p.classList.add(k,cls);
+    if(thin)p.classList.add("thin");
     svg.appendChild(p);
     SPLASH_TM.push(setTimeout(()=>{try{p.remove();}catch(e){}},life));
   }
@@ -42638,8 +42814,30 @@ function splashDraw(d,cls,life){
 function splashStrike(){
   const sp=document.getElementById("splash");
   if(!sp||sp.classList.contains("out"))return;
-  const n=1+(Math.random()<0.6?1:0)+(Math.random()<0.25?1:0); // 1〜3本同時
-  for(let i=0;i<n;i++)splashDraw(splashBoltPath(),"fire",620);
+  // 本線：上から下まで1本
+  const x0=40+Math.random()*320;
+  const x1=x0+(Math.random()-0.5)*120;
+  const main=splashJitterLine(x0,-8,x1,296,6,110);
+  splashDraw(splashPolyD(main),"fire",640,false);
+  // 枝：本線の途中から1〜3本、細く短く
+  const nb=1+Math.floor(Math.random()*3);
+  for(let b=0;b<nb;b++){
+    const p0=main[6+Math.floor(Math.random()*Math.max(1,main.length-18))];
+    if(!p0)continue;
+    const dx=(Math.random()<0.5?-1:1)*(30+Math.random()*60);
+    const br=splashJitterLine(p0[0],p0[1],p0[0]+dx,p0[1]+40+Math.random()*70,4,40);
+    splashDraw(splashPolyD(br),"fire",520,true);
+  }
+  // 着地点の光
+  try{
+    const svg=document.getElementById("splashBolts");
+    const end=main[main.length-1];
+    const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    c.setAttribute("cx",end[0].toFixed(1));c.setAttribute("cy","296");c.setAttribute("r","3");
+    c.classList.add("hit");
+    svg.appendChild(c);
+    SPLASH_TM.push(setTimeout(()=>{try{c.remove();}catch(e){}},480));
+  }catch(e){}
   sp.classList.add("flash");
   SPLASH_TM.push(setTimeout(()=>{try{sp.classList.remove("flash");}catch(e){}},230));
 }
@@ -42648,9 +42846,8 @@ function splashArc(){
   const sp=document.getElementById("splash");
   if(!sp||sp.classList.contains("out"))return;
   const cx=200+(Math.random()-0.5)*200, cy=150+(Math.random()-0.5)*80;
-  const segs=[];
-  splashBoltSegs(cx,cy,cx+(Math.random()-0.5)*70,cy+(Math.random()-0.5)*46,18,3,segs);
-  splashDraw(splashSegsToD(segs),"arc",380);
+  const br=splashJitterLine(cx,cy,cx+(Math.random()-0.5)*80,cy+(Math.random()-0.5)*50,4,26);
+  splashDraw(splashPolyD(br),"arc",380,true);
 }
 function splashClose(){
   const sp=document.getElementById("splash");
