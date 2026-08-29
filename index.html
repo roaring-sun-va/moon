@@ -621,13 +621,14 @@ body.ld-peeking .olay{padding-bottom:158px}
 #cardMgrBox{max-width:760px}
 /* 🖼 デッキリストの画像表示（v14.51・DMOのデッキ一覧の形）
    文字欄（deckText）が正のデータ。グリッドはそれを描いた鏡で、＋−は文字欄を書き換える */
-#deckGrid{display:none;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:7px;
+#deckGrid{display:none;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;
   max-height:46dvh;overflow:auto;padding:2px}
 #deckGrid.show{display:grid}
 #deckViewSeg .btn.on{background:linear-gradient(180deg,var(--accent),#d9a520);color:#241a00}
 .dg-tile{position:relative;border:1px solid var(--line);border-radius:9px;overflow:hidden;
   background:#0d1119;display:flex;flex-direction:column}
-.dg-img{position:relative;width:100%;aspect-ratio:5/7;background:center 20%/cover no-repeat #131a28}
+.dg-img{position:relative;width:100%;aspect-ratio:5/7;min-height:96px;
+  background:center 20%/cover no-repeat #131a28}
 .dg-img.noimg::after{content:"画像なし";position:absolute;inset:0;display:flex;align-items:center;
   justify-content:center;color:#3f4d68;font-size:10px;font-weight:800}
 .dg-n{position:absolute;top:3px;right:3px;min-width:20px;height:20px;border-radius:10px;
@@ -703,6 +704,10 @@ body.ld-peeking .olay{padding-bottom:158px}
 #splashBolts path.fire{animation:spBolt .7s ease-out forwards}
 #splashBolts path.arc{animation:spArc .34s ease-out forwards}
 #splashBolts path.travel{transition:stroke-dashoffset .14s ease-in}
+#splashBolts circle.hit{fill:#eaf8ff;mix-blend-mode:screen;
+  filter:drop-shadow(0 0 10px #7dd3ff) drop-shadow(0 0 24px #2f6bff);
+  animation:spHit .5s ease-out forwards}
+@keyframes spHit{0%{opacity:.95;r:3}100%{opacity:0;r:30}}
 #splashBolts path.thin.glow{stroke-width:4.5}
 #splashBolts path.thin.core{stroke-width:1}
 @keyframes spBolt{0%{opacity:0}12%{opacity:.9}30%{opacity:.5}46%{opacity:.85}100%{opacity:0}}
@@ -5001,7 +5006,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.54";
+const APP_VER="v14.55";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -27847,7 +27852,7 @@ function openCardCivSearch(){
   const civBar=document.createElement("div");civBar.style.cssText="display:flex;gap:5px;flex-wrap:wrap";
   const inp=document.createElement("input");inp.type="text";inp.placeholder="名前・種族で絞り込み（任意）";inp.style.cssText="width:100%;box-sizing:border-box;font-size:13px;padding:7px";
   const list=document.createElement("div");
-  list.style.cssText="overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;min-height:220px;align-content:start;padding:2px";
+  list.style.cssText="overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;min-height:240px;align-content:start;padding:2px";
   const foot=document.createElement("div");foot.style.cssText="font-size:11px;color:var(--muted,#8a93a8)";
   const civMatch=v=>{
     if(multi&&!(v.civs&&v.civs.length>=2))return false;
@@ -27904,6 +27909,10 @@ function openCardCivSearch(){
       tile.style.cursor="pointer";
       tile.setAttribute("role","button");
       const im=document.createElement("div");im.className="dg-img";
+      // ⚠ aspect-ratio がこのダイアログでは効かない環境があった（v14.55）。
+      //    高さ0＋padding-top:140% は幅から必ず高さが出る（背景はpadding領域にも描かれる）
+      im.style.height="0";
+      im.style.paddingTop="140%";
       const url=imgURL.has(k)?imgURL.get(k):null;
       if(url)im.style.backgroundImage=`url("${url}")`;
       else im.classList.add("noimg");
@@ -43195,6 +43204,17 @@ function splashStrike(){
   const bx=(x0+x1)/2+(Math.random()-0.5)*60;
   const by=90+Math.random()*120;
   splashDraw(splashCurveD(bx,by,bx+(Math.random()<0.5?-1:1)*(40+Math.random()*50),by+50+Math.random()*70,40),"fire",520,true,true);
+  // ⚡ 二段目：同じ道をもう一度細く走らせる（本物の雷の再放電）
+  SPLASH_TM.push(setTimeout(()=>{splashDraw(d,"fire",300,true,false);},120));
+  // 💥 着弾の光
+  try{
+    const svg=document.getElementById("splashBolts");
+    const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    c.setAttribute("cx",x1.toFixed(1));c.setAttribute("cy","294");c.setAttribute("r","3");
+    c.classList.add("hit");
+    svg.appendChild(c);
+    SPLASH_TM.push(setTimeout(()=>{try{c.remove();}catch(e){}},520));
+  }catch(e){}
   sp.classList.add("flash");
   SPLASH_TM.push(setTimeout(()=>{try{sp.classList.remove("flash");}catch(e){}},200));
 }
