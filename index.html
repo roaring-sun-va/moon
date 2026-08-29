@@ -2433,7 +2433,11 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="graveAddMine">自分の墓地にカードが置かれた時（その一連の処理が終わってから）</option>
             <option value="selfAtkEnd">このクリーチャーの攻撃の終わりに</option>
             <option value="atkPlayerThrough">相手プレイヤーへの攻撃がブロックされずに通った後</option>
+            <option value="allyEnter">自分のクリーチャーがバトルゾーンに出た時</option>
           </select>
+          <input type="text" id="fxAwakenFilt" placeholder="出たクリーチャーの条件（例：ブロッカー／コスト4以上）" title="「自分のクリーチャーが出た時」を選んだ場合に、出たクリーチャーを絞ります。／＝AND、｜＝OR" style="font-size:12px;width:230px">
+          <label style="font-size:12px" title="自分のターン中に出た時だけ裏返ります（ループ覚醒でよく使います）"><input type="checkbox" id="fxAwakenMyTurn"> 自分のターン中だけ</label>
+          <label style="font-size:12px" title="裏返ったあとの面にもこれを入れておくと、条件を満たすたびに表と裏を行き来します（時空の戦猫ヤヌス型のループ覚醒）"><input type="checkbox" id="fxAwakenLoop"> ループ覚醒（表へも戻す）</label>
           <input type="text" id="fxAwakenCond" placeholder="条件式（例：バトル:パワー6000以上>=1・空欄=無条件）" title="このタイミングで条件を満たしていれば、多面登録の次の面に自動で裏返ります" style="flex:1;min-width:200px">
         </div>
         <label title="このカード自身をマナゾーンに置く時、タップして置きます（多色カードや、テキストに『マナゾーンに置く時、このカードはタップして置く』とあるカード）"><input type="checkbox" id="fxManaTapInSelf"> ⤵ このカードはマナゾーンにタップして置く（自分自身）</label>
@@ -2765,6 +2769,7 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
       <div class="row" style="gap:12px">
         <label title="横向きで置き、盤面の「D」ボタンでDスイッチできます。D2フィールドは自分と相手を合わせて1枚だけなので、新しく出ると古いD2フィールドは張り替えられて墓地に置かれます"><input type="checkbox" id="fxD2"> 🅳 D2フィールド（横向きで置く・Dスイッチ可・両者合わせて1枚＝新しく出たら古い方は墓地へ）</label>
+        <label title="自分のクリーチャーがバトルゾーンを離れる時、かわりにそのクリーチャーに封印を1つ付ける（D2W禁断 ドキンダムエリア型）。Dスイッチを発動すると働かなくなります"><input type="checkbox" id="fxD2SealRep"> 🔏 離れるかわりに封印を付ける（Dスイッチ前だけ）</label>
       </div>
       <div class="row">
         <span style="font-size:12px;font-weight:700">封印の数（禁断カード用）</span>
@@ -4372,7 +4377,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.20";
+const APP_VER="v14.29";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5305,7 +5310,7 @@ function checkGraveAwaken(){
 /* 🔄 覚醒の自動判定。
    awakenEv＝判定するタイミング（turnStartMine／turnStartAny／turnEndMine／turnEndOpp／turnEndAny／selfAtkEnd 等）
    awakenCond＝条件式（空欄なら無条件で裏返る）。表の面（face=0）でだけ判定する。 */
-async function checkAwaken(pi,ev){
+async function checkAwaken(pi,ev,trigCard){
   try{
     if(!S.expert)return;
     const want=[ev];
@@ -5321,10 +5326,23 @@ async function checkAwaken(pi,ev){
         // 「自分のターン開始時」は持ち主のターンだけ、「各ターンの開始時」は誰のターンでも
         if(r.awakenEv==="turnStartMine"&&side!==pi)continue;
         if(!want.includes(r.awakenEv))continue;
-        if((c.face|0)!==0)continue;                 // すでに覚醒済み
+        // 🔁 ループ覚醒（時空の戦猫ヤヌス型）：裏の面にも覚醒が登録されていれば、表へ戻せる。
+        //    ふつうの覚醒は表の面（face=0）でだけ判定する。
+        const _loop=!!r.awakenLoop;
+        if((c.face|0)!==0&&!_loop)continue;          // すでに覚醒済み
+        const _toFace=((c.face|0)===0)?1:0;
         if(isSealed(c)||isIgnored(c,side))continue;
         const lk=LINKS.get(normName(c.name));
         if(!lk||lk.length<2)continue;
+        // ⏳ 「自分のターン中」だけ働く覚醒（ループ覚醒でよく使う）
+        if(r.awakenMyTurn&&S.who!==side)continue;
+        // 🎯 出たクリーチャーを条件で絞る（マティーニ型「ブロッカーを持つコスト4以上」など）
+        const filt=String(r.awakenFilt||"").trim();
+        if(filt){
+          if(!trigCard)continue;
+          const rt=getReg(trigCard);
+          if(!rt||!lockFilterOk(filt,rt,trigCard,side))continue;
+        }
         const cond=String(r.awakenCond||"").trim();
         if(cond&&!zoneCondOk(cond,side,c))continue;
         if(!Zs.battle.some(x=>x.id===c.id))continue;
@@ -5382,7 +5400,7 @@ async function checkAwaken(pi,ev){
           try{fxShare("awake","メテオバーン！",`${S.players[side].label}　下のカード${kids.length}枚`,true,c.name,side);}catch(e){}
           logOnly(`☄ メテオバーン覚醒：${faceNameOf(c)} の下のカード${kids.length}枚を墓地へ`);
         }
-        c.face=1;c.tapped=false;
+        c.face=_toFace;c.tapped=false;
         markArrive(c,{flip:true});   // 🔄 覚醒＝裏返っただけ（出たわけではない）
         sfx("flip");renderAll();
         try{offerHyperCall(side,`自分の《${faceNameOf(c)}》が覚醒しました`);}catch(e){}   // 🌌 超時空ストームG・XX 型
@@ -5392,6 +5410,9 @@ async function checkAwaken(pi,ev){
         applyFlipSeal(side,c);   // 🔏 裏返った時の封印
         emitEvent(side,"summon");
         enqueueFx(side,c);
+        // 🔄 「このクリーチャーに覚醒した時」＝裏返ってこの面になった時だけ動く誘発。
+        //    超次元から直接この面で出した時は発動しない（出た時の効果とは別）。
+        runWatchFx(side,"onAwake",c);
       }
     }
   }catch(e){}
@@ -8099,6 +8120,11 @@ async function finishNextTurn(cur){
     }
     if(unfrz.length)toast(`❄ 「アンタップしない」が終了：${unfrz.join("、")}`);
   }
+  // 🚫 「マナ超過のクリーチャーは山札の下へ」のロックは、かけた側の次のターン開始で切れる
+  if(S._bigCreLock&&(S._bigCreLock.by|0)===(pi|0)&&(S.turn|0)>(S._bigCreLock.setTurn|0)){
+    S._bigCreLock=null;
+    toast("🚫 「マナより大きいコストのクリーチャーは山札の下へ」が終了しました");
+  }
   // 数字宣言：宣言者の次のターン開始で失効
   if(S.numDecl&&S.numDecl[pi]&&S.numDecl[pi].ns&&S.numDecl[pi].ns.length){
     toast(`🔢 数字宣言の効果終了（${S.players[pi].label}：${S.numDecl[pi].ns.join("・")}）`);
@@ -8535,8 +8561,14 @@ function runWatchFx(pi,type,trigCard){
   //    他のクリーチャーが離れた時にも反応してしまう。誘発元が渡されていればその1枚だけを対象にする。
   //    （離れ終わって盤面にいなくても、誘発は離れた時点で確定しているので解決する）
   const SELF_ONLY_EV=new Set(["selfLeave","selfBlock"]);
+  // 🪦 墓地にいる間に働く誘発（黒神龍グールジェネレイド型）。
+  //    `graveOnly:true` の付いた誘発だけが対象なので、ふつうの登録は今までどおり盤面だけを見る。
+  const _grave=zonesOf(pi).grave.filter(x=>{
+    const rx=getReg(x);
+    return rx&&(rx.watchFx||[]).some(w=>w&&w.graveOnly&&w.ev===type);
+  });
   const _scan=(SELF_ONLY_EV.has(type)&&trigCard)?[trigCard]
-    :((S.gameMode!=="tcg")?[...zonesOf(pi).battle].reverse():zonesOf(pi).battle);
+    :[...((S.gameMode!=="tcg")?[...zonesOf(pi).battle].reverse():zonesOf(pi).battle),..._grave];
   for(const c of _scan){
     const r=getReg(c);
     if(r&&r.watchFx&&r.watchFx.length){
@@ -8845,6 +8877,28 @@ function emitEvent(actor,type,card){
   if(type==="summon"&&_sumCre){
     // ⚡ 自分のクリーチャーが出た時（allyEnter）：出た側のバトルゾーンの誘発を確認（ソロでも動く）
     runWatchFx(actor,"allyEnter",eventCard);
+    // 🚫 堅珠ノ正裁Z型：相手が「自身のマナの枚数より大きいコスト」のクリーチャーを出したら山札の一番下へ
+    try{
+      const bl=S._bigCreLock;
+      if(bl&&eventCard&&(bl.by|0)!==(actor|0)){
+        const Za=zonesOf(actor);
+        const ra=getReg(eventCard);
+        const cst=(ra&&ra.cost!=null&&!isNaN(+ra.cost))?+ra.cost:null;
+        if(cst!=null&&cst>Za.mana.length&&Za.battle.some(x=>x.id===eventCard.id)){
+          const bi3=Za.battle.findIndex(x=>x.id===eventCard.id);
+          const cc3=Za.battle.splice(bi3,1)[0];
+          if(cc3.under&&cc3.under.length)cc3.under.splice(0).forEach(u=>{u.faceup=true;Za.grave.push(u);});
+          if(cc3.gear&&cc3.gear.length)cc3.gear.splice(0).forEach(gg=>gearOut(Za,gg));
+          cc3.faceup=false;cc3.seen=false;cc3.tapped=false;cc3.sideways=false;cc3.rot=0;cc3.buff=null;cc3.face=0;
+          Za.deck.push(cc3);
+          toast(`🚫 ${faceNameOf(cc3)} はコスト${cst}（マナ${Za.mana.length}枚）を超えるため、山札の一番下へ`);
+          logOnly(`🚫 ${S.players[actor].label}：《${faceNameOf(cc3)}》はマナ超過のため山札の一番下へ`);
+          renderAll();
+        }
+      }
+    }catch(e){}
+    // 🔄 「自分のクリーチャーが出た時」に裏返るサイキック（マティーニ型／ループ覚醒のヤヌス型）
+    if(eventCard)enqueueWatchJob(async()=>{await checkAwaken(actor,"allyEnter",eventCard);});
     // 🌌 出たのがサイキックなら、超次元ゾーンから呼べるカードを確認する（超時空ストームG・XX 型）
     try{
       const _rp=eventCard&&getReg(eventCard);
@@ -9806,6 +9860,9 @@ const FX_TYPES=[
   ["turnLock","⛔ ターン限定ロックを設定（実行時に対象/種別/条件/期間を指定・5000VT後半効果型）"],
   ["oppCreLimitNext","🚫 次の相手のターン、相手はクリーチャーをn体しか出せない（キャンベロ型・体数制限ロック・n＝相手が出せる体数）"],
   ["foeAtkLockP","⚔ 今バトルゾーンにいる相手クリーチャーは、次の自分のターン開始時までプレイヤーを攻撃できない（ドギラゴールデン型・後から出た分は対象外）"],
+  ["foeBigCreToDeck","🚫 次の自分のターン開始時まで、相手が自身のマナの枚数より大きいコストのクリーチャーを出した時、相手はそれを自身の山札の一番下に置く（堅珠ノ正裁Z型）"],
+  ["nextSpellCostDown","💸 このターン、自分が次に手札から唱える呪文のコストをn少なくする（0以下にはならない・煌メク聖戦 絶十型）"],
+  ["deckTopToShieldStack","🛡 自分の山札の上からn枚を、自分のシールド1つの上に表向きにして置く（盾の枚数は増えない・煌メク聖戦 絶十型）"],
   ["foeNoSpell","🚫 相手は次の自分のターン終了時まで呪文を唱えられない（唱えた側の次ターンまで・条件欄でコスト等指定可・空欄＝全呪文）"],
   ["lockFoeAtkP","🚫 相手クリーチャーをn体まで選び、次の自分のターン開始時までプレイヤーを攻撃できなくする"],
   ["lockFoeAtkBlock","🚫 相手クリーチャーをn体まで選び、次の自分のターン開始時まで攻撃もブロックもできなくする"],
@@ -9815,6 +9872,7 @@ const FX_TYPES=[
   ["peekShieldDeckBottom","🛡📚 相手（またはいずれか）のシールドを1つ見る→山札の一番下に置かせてもよい。そうした場合、そのプレイヤーは山札の上から1枚目をシールド化（ガチャンコ ミニロボ3号型）"],
   ["handPlayFree","✋⚡ 自分の手札から条件に合うカードを1枚、コストを支払わずに実行してもよい（クリーチャー→召喚／呪文→詠唱。S・トリガーは不要。条件欄で種族やコストを指定：例「魔導具／コスト3以下」・堕呪 ザフィヴォ型）"],
   ["dSwitchOn","🅳 このカードのDスイッチを発動する（横向きを反転・すでに発動済みなら何もしない）"],
+  ["mySealsToGrave","🔏→🪦 自分のクリーチャーに付いている封印をすべて墓地に置く（D2W禁断 ドキンダムエリア型）"],
   ["dSwitchOff","🅳 このカードのDスイッチを戻す（元の向きへ）"],
   ["destroyThis","💀 このクリーチャー自身を破壊する（黒神龍クランキーヴィーン型・すでに離れていたら何もしない）"],
   ["extraTurnSelf","⏭ このターンの後に、自分のターンを追加する（勝利龍装 クラッシュ\"覇道\" 型）"],
@@ -9847,6 +9905,7 @@ const FX_TYPES=[
   ["manaRecruitLess","🌱 自分のマナ枚数よりコストが小さい非進化クリーチャーを1体、マナから出す（ダグラジャパニカン型）"],
   ["foeToShield","🛡 相手のクリーチャーをn体、裏向きの新しいシールドにする（条件欄でコスト等指定・爆進オリジナル・チューニング型）"],
   ["deckCastSpell","🔮 山札の上からn枚を見て、条件に合う呪文1枚をコストを支払わず唱えてよい→残りをランダムに山札の下（トユケテラス型・条件欄で文明/コスト指定）"],
+  ["deckTopToGrave1","👀🪦 山札の上からn枚を見て、その中の1枚を墓地に置く。残りはランダムな順番で山札の一番下へ（スラッシュ・チャージャー型）"],
   ["deckTopToHand","👀 山札の上からn枚を見て、その中の条件に合うカード1枚を公開して手札に加えてもよい→残りをランダムな順番で山札の一番下（未来設計図型・条件欄で対象を指定・登録に must を付けると「加える」の強制になる）"],
   ["deckTopSplitSHM","🌸 山札の上からn枚を見て、1枚をシールド化→1枚を手札→残りをマナへ（超開花妖精アジサイ！型）"],
   ["exileRecruitPerZone","🌺 自分の指定ゾーンの〔対象〕n枚につき、ゲーム外から指定カード1枚を出す（条件欄：ゾーン:対象→出すカード名。例「マナ:スノーフェアリー→超開花妖精ハイドロジア」）"],
@@ -9875,6 +9934,7 @@ const FX_TYPES=[
   ["selfShieldMove","自分のシールドをn枚、墓地/マナ/手札へ（行き先は実行時選択：ジャドク丸型／条件欄に「手札」「マナ」「墓地」と書くと行き先を固定・シールドを選んで手札に戻すコダマンマ型に使える）"],
   ["shieldToHandNoST","🛡→✋ 自分のシールドをn枚選んで手札に加える（そのS・トリガーは使えない・トライガード・チャージャー型）"],
   ["selfDiscard","自分の手札からn枚選んで捨てる（バレッドゥ型：捨て終わるまで解決が完了しない）"],
+  ["selfDiscardDrawNow","🗑✋ 自分の手札をn枚捨てて、その後カードを（条件欄の枚数だけ）引く（勇愛の天秤型・条件欄が空なら捨てた枚数と同じだけ引く）"],
   ["selfDiscardEndDraw","自分の手札を1枚捨てたら、ターン終了時にn枚引く（バルーン・チュリス型）"],
   ["foeTapThenDeckBottom","⤵⚖ 相手のクリーチャーを1体選んでタップする。そのコストが相手の最大マナ以上なら、そのまま山札の下へ（神託アイドル！コットン型・条件欄に「より大きい」でTCG版の判定に）"],
   ["peek","相手の手札を見る"],
@@ -9934,6 +9994,7 @@ const FX_TYPES=[
   ["graveViewMy","自分の墓地を見る（一覧表示）"],
   ["randMove","ランダムでn枚選んで移動（実行時に対象ゾーンと行き先を選択・デッドソード型）"],
   ["flip","この多面カードを裏返す（次の面へ・チャクラ/ディアスZ型・確認あり）"],
+  ["graveToShield","🪦→🛡 自分の墓地から条件に合うカードをn枚選び、シールドゾーンに加える（裏向き・条件欄で対象を指定：例 コマンド）"],
   ["handShieldUp","手札から1枚選んで表向きにシールド化（サッヴァーク型・任意/新規盾or重ねるを選択）"],
   ["deckShield","🛡 自分の山札の上からn枚を裏向きでシールドゾーンに加える（シールド追加・シールド化）"],
   ["deckShieldUp","🛡 自分の山札の上からn枚を【表向き】でシールドゾーンに加える（ボルシャック・カクメイジン型）"],
@@ -10006,6 +10067,7 @@ const FX_TYPES=[
   ["manaAllCreatureBattleNoEnterFx","🌏 自分はマナから好きな数→相手は非進化/非NEOをランダムに上限まで出す（登場で起こる効果・ルールは無視／デュエプレ轟破天型）"],
   ["tapToggle","⤵🔄 クリーチャーをn体まで選び、アンタップしていればタップ、タップしていればアンタップする（両者どちらでも・逆転王女プリン型）"],
   ["selfToShield","🛡 この呪文（またはこのカード）自身を裏向きのシールドにする（スローリー・チェーン型）"],
+  ["grantTurnPick","✨ そのターン、自分のクリーチャーをn体選び、能力を与える（条件欄に「スピードアタッカー」「パワーアタッカー+2000」等を「／」区切りで・ヤヌスグレンオー型）"],
   ["grantTurnAll","✨ そのターン、自分のクリーチャーすべてに能力を与える（条件欄に「スレイヤー」「スピードアタッカー」「破壊時マナ」「ブロッカー」「パワー+3000」などを「／」区切りで・鎧亜の咆哮キリュー・ジルヴェス型）"],
   ["noAtkAllTurn","⛔ このターン、すべてのクリーチャーは攻撃できない（両プレイヤー・スローリー・チェーン型）"],
   ["killThenPsyOut","💀 自分の他のクリーチャーを好きな数（n体まで）破壊し、破壊した数だけ超次元ゾーンからサイキック・クリーチャーを出す（条件欄＝出す対象・例：コスト6以下・ザビ・ミラ型）"],
@@ -10514,6 +10576,17 @@ async function autoTapCost(pi,c){
         // ここで return せず、下の軽減 → 文明下限 → 最終マナタップへ流す
       }
     }
+  }
+  // 💸 「次に手札から唱える呪文のコスト−n」（煌メク聖戦 絶十型）。同じターンの1回だけ使える。
+  if(paySide!=="creature"&&cost>0&&S._nextSpellRed
+     &&(S._nextSpellRed.by|0)===(pi|0)&&(S._nextSpellRed.turn|0)===(S.turn|0)){
+    const rd=+S._nextSpellRed.n||0;
+    if(rd>0){
+      const before2=cost;
+      cost=Math.max(0,cost-rd);
+      if(cost<before2)toast(`💸 呪文コスト−${before2-cost}（残り${cost}）`);
+    }
+    S._nextSpellRed=null;   // 使い切り
   }
   {
     let dd=(paySide==="creature")?dddDiscount(r,pi):0;
@@ -13003,6 +13076,34 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("flip");renderAll();
       toast("⛔ このターン、すべてのクリーチャーは攻撃できません");
       logOnly("⛔ このターン、すべてのクリーチャーは攻撃できない");
+    }else if(f.t==="grantTurnPick"){
+      // ✨ 自分のクリーチャーをn体選び、そのターンだけ能力を与える（ヤヌスグレンオー型）
+      const toksP=String(f.cond||"").split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
+      if(!toksP.length){toast("✨ 与える能力が指定されていません（条件欄に「スピードアタッカー／パワーアタッカー+2000」等）");continue;}
+      const doneP=[];
+      for(let i=0;i<n;i++){
+        const poolP=Z.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&!doneP.includes(x.id);});
+        if(!poolP.length){toast("対象のクリーチャーがいません");break;}
+        const jP=poolP.length===1?0:await pickCard(`✨ 能力を与えるクリーチャーを選択（${i+1}/${n}）`,poolP,{sub:x=>toksP.join("・")});
+        if(jP===null)break;
+        const x=poolP[jP];
+        if(!doneP.length)snap();
+        doneP.push(x.id);
+        x.buff=x.buff||{};
+        const keysP=[];
+        for(const t2 of toksP){
+          if(/スレイヤー/.test(t2)){x.buff.slayer=true;keysP.push("slayer");}
+          else if(/スピードアタッカー|SA/i.test(t2)){x.buff.sa=true;x.sick=false;keysP.push("sa");}
+          else if(/ブロッカー/.test(t2)){x.buff.blocker=true;keysP.push("blocker");}
+          else if(/^パワーアタッカー\+?(\d+)/.test(t2)){const v=+t2.match(/(\d+)/)[1];x.buff.pa=(x.buff.pa||0)+v;keysP.push("pa");}
+          else if(/^パワー\+?(\d+)/.test(t2)){const v=+t2.match(/(\d+)/)[1];x.buff.pow=(x.buff.pow||0)+v;keysP.push("pow");}
+          else if(/アンタップ.*攻撃|攻撃できる/.test(t2)){x.buff.attackUntapped=true;keysP.push("attackUntapped");}
+        }
+        if(keysP.length)markBuffTurn(x,keysP);
+        toast(`✨ ${faceNameOf(x)} に「${toksP.join("・")}」を与えた（このターン）`);
+      }
+      if(doneP.length){sfx("ok");logOnly(`✨ ${S.players[pi].label}：${doneP.length}体に「${toksP.join("・")}」を付与（このターン）`);}
+      renderAll();
     }else if(f.t==="grantTurnAll"){
       // ✨ そのターン、自分のクリーチャーすべてに能力を与える（キリュー・ジルヴェス型）
       const toks=String(f.cond||"").split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
@@ -14009,6 +14110,24 @@ async function runFxList(pi,list,srcCard,inPump){
         }
       }
       sfx("grave");renderAll();
+    }else if(f.t==="selfDiscardDrawNow"){
+      // 🗑✋ 自分の手札をn枚捨てて、その後まとめて引く（勇愛の天秤型）
+      let dsc=0;
+      for(let i=0;i<n;i++){
+        if(!Z.hand.length){toast("手札がありません");break;}
+        if(!dsc)snap();
+        const jd=Z.hand.length===1?0:await pickCard(`🗑 捨てるカードを選択（${i+1}/${n}）`,Z.hand,{});
+        if(jd===null)break;
+        const cd=Z.hand.splice(jd,1)[0];
+        cd.faceup=true;Z.grave.push(cd);dsc++;
+        afterHandDiscard(pi,cd,pi);
+      }
+      if(dsc){
+        const want=(f.cond&&!isNaN(+f.cond))?+f.cond:dsc;
+        toast(`🗑 手札を${dsc}枚捨てた`);
+        draw(pi,want);
+        renderAll();
+      }
     }else if(f.t==="selfDiscardEndDraw"){
       if(!Z.hand.length){toast("手札がありません");continue;}
       const j=await pickCard("🗑 捨てるカードを1枚選択（捨てたらターン終了時にドロー）",Z.hand,{hint:"キャンセルで捨てない"});
@@ -14405,6 +14524,38 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       sfx("ok");renderAll();
       toast(`⚔ ${srcCard?faceNameOf(srcCard):"効果"}：相手のクリーチャー${cnt}体は次の自分のターンまでプレイヤーを攻撃できない（今バトルゾーンにいる分のみ・後から出た分は対象外）`);
+    }else if(f.t==="foeBigCreToDeck"){
+      // 🚫 相手が「自身のマナの枚数より大きいコスト」のクリーチャーを出したら、山札の一番下へ。
+      //    自分の次のターン開始時に切れる（S._bigCreLock に持ち主を覚えておく）。
+      S._bigCreLock={by:pi,setTurn:S.turn|0};
+      toast(`🚫 次の自分のターン開始時まで：相手が自身のマナより大きいコストのクリーチャーを出すと、山札の一番下へ`);
+      logOnly(`🚫 ${S.players[pi].label}：相手の「マナ超過コスト」のクリーチャーを山札の下へ送るロックをかけた`);
+      renderAll();
+    }else if(f.t==="nextSpellCostDown"){
+      // 💸 このターン、次に手札から唱える呪文のコストを n 少なくする（1回だけ・0以下にならない）
+      S._nextSpellRed={by:pi,n:(+n||0),turn:S.turn|0};
+      toast(`💸 このターン、次に手札から唱える呪文のコスト−${n}`);
+      renderAll();
+    }else if(f.t==="deckTopToShieldStack"){
+      // 🛡 山札の上からn枚を、自分のシールド1つの上に表向きで置く（盾の枚数は増えない）
+      if(!Z.shield.length){toast("🛡 シールドが無いため置けません");renderAll();continue;}
+      let putS=0;
+      for(let i=0;i<n;i++){
+        if(!Z.deck.length){toast("山札がありません");break;}
+        if(!putS)snap();
+        const idxS=(Z.shield.length===1)?0:await askChoice(`🛡 どのシールドの上に置きますか（${i+1}/${n}）`,
+          Z.shield.map((x,i2)=>`盾${i2+1}${x.faceup?`（表：${faceNameOf(x)}）`:""}`));
+        if(idxS===null)break;
+        const topS=Z.deck.shift();
+        const oldS=Z.shield[idxS];
+        topS.faceup=true;topS.tapped=false;topS.sideways=false;topS.rot=0;topS.mark=false;
+        topS.under=[oldS,...(oldS.under?oldS.under.splice(0):[])];
+        Z.shield[idxS]=topS;
+        putS++;
+        toast(`🛡 ${faceNameOf(topS)} をシールド${idxS+1}の上に表向きで置いた`);
+      }
+      if(putS){sfx("flip");logOnly(`🛡 ${S.players[pi].label}：山札の上${putS}枚をシールドの上に表向きで置いた`);}
+      renderAll();
     }else if(f.t==="foeNoSpell"){
       // 🚫 相手は次の自分（唱えた側）のターン終了時まで呪文を唱えられない。f.cond＝対象条件（コストN以下等・空欄＝全呪文）。
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
@@ -14478,6 +14629,23 @@ async function runFxList(pi,list,srcCard,inPump){
       else if(!rep)toast(`↩ 戻す対象なし${filt?`（${filt}）`:""}`);
       if(rep)toast(`♻ ${rep}体は離場置換で場に残った`);
       renderAll();
+    }else if(f.t==="deckTopToGrave1"){
+      // 👀🪦 山札の上からn枚を見て、1枚を墓地に置き、残りをランダムな順番で山札の一番下へ
+      const seenD=Z.deck.splice(0,Math.min(n,Z.deck.length));
+      if(!seenD.length){toast("山札がありません");renderAll();continue;}
+      snap();
+      const jD=seenD.length===1?0:await pickCard(`🪦 墓地に置くカードを選択（${seenD.length}枚から1枚）`,seenD,{});
+      if(jD!==null){
+        const cd=seenD.splice(jD,1)[0];
+        cd.faceup=true;cd.tapped=false;
+        Z.grave.push(cd);
+        toast(`🪦 ${faceNameOf(cd)} を墓地に置いた`);
+      }
+      // 残りはランダムな順番で山札の一番下へ
+      for(let i=seenD.length-1;i>0;i--){const j2=Math.floor(Math.random()*(i+1));[seenD[i],seenD[j2]]=[seenD[j2],seenD[i]];}
+      seenD.forEach(x=>{x.faceup=false;x.seen=false;Z.deck.push(x);});
+      if(seenD.length)toast(`🔀 残り${seenD.length}枚をランダムな順番で山札の一番下へ`);
+      sfx("move");renderAll();
     }else if(f.t==="deckTopToHand"){
       // 👀 山札の上からn枚を見て、1枚を公開して手札へ（任意）。残りはランダムな順番で山札の一番下へ。
       const filtTH=String(f.cond||"").trim();
@@ -15230,6 +15398,18 @@ async function runFxList(pi,list,srcCard,inPump){
         if(pool.length){const j=pool.length===1?0:await pickCard("タップしてフリーズする相手のクリーチャー",pool);if(j!==null){pool[j].tapped=true;pool[j].frozen=true;}}
       }else if(md===2){me.buff=me.buff||{};me.buff.noLeave=true;markBuffNext(me,["noLeave"],pi);}
       renderAll();
+    }else if(f.t==="mySealsToGrave"){
+      // 🔏→🪦 自分のクリーチャーに付いている封印をすべて墓地へ（D2W禁断 ドキンダムエリア型）
+      let gv=0;
+      for(const x of Z.battle){
+        if(!x.seals||!x.seals.length)continue;
+        x.seals.splice(0).forEach(sx=>{sx.faceup=true;sx.tapped=false;Z.grave.push(sx);gv++;});
+      }
+      if(gv){
+        sfx("grave");renderAll();
+        toast(`🔏→🪦 自分の封印${gv}個をすべて墓地に置いた`);
+        logOnly(`🔏 ${S.players[pi].label}：自分の封印${gv}個を墓地へ`);
+      }else toast("🔏 自分に封印はありません");
     }else if(f.t==="dSwitchOn"||f.t==="dSwitchOff"){
       // 🅳 Dスイッチの向きを効果から切り替える（確認パネルのあと自動で反転させたい時に使う）
       const meD=srcCard&&[0,1].map(pp=>zonesOf(pp).battle.find(x=>x.id===srcCard.id)).find(Boolean);
@@ -16389,6 +16569,35 @@ async function runFxList(pi,list,srcCard,inPump){
       shuffle(Z.deck); // 🔀 v10.30：sortによる乱数シャッフルは偏るためFisher–Yates（shuffle）に統一
       toast("山札をシャッフルした");
       sfx("draw");
+    }else if(f.t==="graveToShield"){
+      // 🪦→🛡 自分の墓地から条件に合うカードを選び、シールドゾーンへ（裏向き）
+      const placedG=[];
+      for(let i=0;i<n;i++){
+        const poolG=Z.grave.filter(x=>{
+          const rx=getReg(x);
+          if(f.cond&&!(rx&&lockFilterOk(String(f.cond),rx,x,pi)))return false;
+          return true;
+        });
+        if(!poolG.length){toast(placedG.length?"🪦 これ以上、条件に合うカードがありません":"🪦 墓地に条件に合うカードがありません");break;}
+        if(!shieldCapOk(Z)){toast("🛡 シールド上限（10枚）のため加えられません");break;}
+        const jG=await pickCard(`🪦→🛡 シールドに加えるカードを選択（${i+1}/${n}${f.cond?`・${f.cond}`:""}）`,poolG,{});
+        if(jG===null)break;
+        const cg=poolG[jG];
+        const gi2=Z.grave.findIndex(x=>x.id===cg.id);
+        if(gi2<0)break;
+        if(!placedG.length)snap();
+        Z.grave.splice(gi2,1);
+        cg.faceup=false;cg.tapped=false;cg.mark=S.turn>0;
+        Z.shield.push(cg);
+        placedG.push(cg);
+      }
+      if(placedG.length){
+        await notifyShieldPlaced(pi,placedG);   // 🛡「盾が置かれた時」へ通知
+        sfx("flip");
+        toast(`🪦→🛡 墓地から${placedG.length}枚をシールドゾーンへ（裏向き）`);
+        logOnly(`🪦 ${S.players[pi].label}：墓地から${placedG.length}枚をシールド化`);
+      }
+      renderAll();
     }else if(f.t==="handShieldUp"){
       if(!Z.hand.length){toast("手札がありません");continue;}
       const j=await askChoice(`🛡✨ 手札から表向きにシールド化するカードを選択（任意）`,
@@ -17881,6 +18090,17 @@ function gearSAOn(c){
    ザゼ・ゼーン型の frozen は「次のアンタップを1回飛ばす」だけなので、
    アンタップ効果で起こせる。こちらはアンタップ効果でも起こせない。
    付与した側の次のターンのはじめに解除する（frzHardBy がその持ち主）。 */
+/* 🔏 自分のバトルゾーンに「離れるかわりに封印を付ける」D2フィールドがあるか
+   （D2W禁断 ドキンダムエリア型）。Dスイッチを発動した後は働かない。 */
+function sealRepSourceOf(pi){
+  try{
+    if(!S.expert)return null;
+    return zonesOf(pi).battle.find(x=>{
+      const rx=getReg(x);
+      return rx&&rx.d2SealRep&&!x.dSw&&!isSealed(x)&&!isIgnored(x,pi);
+    })||null;
+  }catch(e){return null;}
+}
 function isHardFrozen(c){return !!(c&&c.frzHard);}
 /* ❄ アンタップ効果の共通判定。起こせない時は理由を出して false を返す */
 function canUntapByFx(c,quiet){
@@ -18052,6 +18272,27 @@ async function offerTrueEscape(pi,c){
   if(r&&+r.noLeaveGearN>0&&!isIgnored(c,pi)&&(c.gear?c.gear.length:0)>=+r.noLeaveGearN){
     toast(`⚙⚓ ${faceNameOf(c)} はクロスギアが${c.gear.length}つクロスされているため離れない！（${+r.noLeaveGearN}つ以上）`);
     return true;
+  }
+  // 🔏 D2W禁断 ドキンダムエリア型：自分のクリーチャーが離れる時、
+  //     かわりにそのクリーチャーに封印を1つ付けて場に残す。
+  {
+    const d2=sealRepSourceOf(pi);
+    if(d2&&!isIgnored(c,pi)&&(typeof canSeal!=="function"||canSeal(pi,c))){
+      const Zs2=zonesOf(pi);
+      if(!Zs2.deck.length){
+        toast(`🔏 ${faceNameOf(d2)}：山札が無いため封印を付けられません`);
+      }else{
+        const sc=Zs2.deck.shift();
+        sc.faceup=false;sc.tapped=false;sc.sideways=false;sc.seen=false;sc.mark=false;
+        c.seals=c.seals||[];
+        c.seals.push(sc);
+        toast(`🔏 ${faceNameOf(d2)}：${faceNameOf(c)} は離れるかわりに封印が1つ付いた（封印${c.seals.length}個）`);
+        logOnly(`🔏 ${S.players[pi].label}：《${faceNameOf(c)}》は離れるかわりに封印（${faceNameOf(d2)}）`);
+        sfx("flip");renderAll();
+        if(S.vs&&!Zs2.deck.length)declareWin(pi===0?1:0,`山札破壊：${S.players[pi].label} の山札が0枚`);
+        return true;
+      }
+    }
   }
   // 🔽 ジャオウガ型：離れる時、かわりに下のカードを1枚墓地に置いて場に残る
   //    （マナ送り・バウンス・盾送り・山札送りなど、破壊以外の離場もここで置き換える）
@@ -18346,6 +18587,10 @@ async function destroyWithReplace(pi,c){
       const _own=!!r.trueEscape;
       opts.push(["tescape",`🛡 真・エスケープ（かわりにシールドを2枚手札に加えて場に残る）${_own?"":"／付与"}`,_own?1:2]);
     }
+    // 🔏 D2W禁断 ドキンダムエリア型：離れるかわりに封印を1つ付けて場に残る
+    if(sealRepSourceOf(pi)&&Z.deck.length&&(typeof canSeal!=="function"||canSeal(pi,c))){
+      opts.push(["sealrep","🔏 かわりに封印を1つ付けて場に残る（D2フィールド）",3]);
+    }
     // 🛡 盾2つで身代わり：盾が2枚以上ある時だけ選べる（1枚では使えない）
     else if(allyGrant(pi,"agTEsc2")&&Z.shield.length>=2){
       opts.push(["tescape2","🛡 シールドを2つ手札に加えて場に残る／付与",2]);
@@ -18444,7 +18689,20 @@ async function destroyWithReplace(pi,c){
           }
           toast(`🛡 真・エスケープ！ シールドを${take}枚手札に加え、${faceNameOf(c)} は場に残った`);
           sfx("flip");renderAll();return true;
-        }else if(kind==="tescape2"){
+        }else if(kind==="sealrep"){
+      // 🔏 離れるかわりに封印を1つ付ける（D2W禁断 ドキンダムエリア型）
+      if(!Z.deck.length){toast("🔏 山札が無いため封印を付けられません");return false;}
+      snap();
+      const sc=Z.deck.shift();
+      sc.faceup=false;sc.tapped=false;sc.sideways=false;sc.seen=false;sc.mark=false;
+      c.seals=c.seals||[];
+      c.seals.push(sc);
+      toast(`🔏 ${faceNameOf(c)} は破壊されるかわりに封印が1つ付いた（封印${c.seals.length}個）`);
+      logOnly(`🔏 ${S.players[pi].label}：《${faceNameOf(c)}》は破壊されるかわりに封印`);
+      sfx("flip");renderAll();
+      if(S.vs&&!Z.deck.length)declareWin(pi===0?1:0,`山札破壊：${S.players[pi].label} の山札が0枚`);
+      return true;
+    }else if(kind==="tescape2"){
       // 🛡 盾2つで身代わり（エバーラストのマナ武装5型）。2枚に満たなければ選べないようにしてある。
       if(Z.shield.length<2){toast("🛡 シールドが2つないため、身代わりにできません");return false;}
       snap();
@@ -18707,6 +18965,22 @@ function resolveOut(Z,o){
   if(o._resolveToBottom){
     delete o._resolveToBottom;o.faceup=false;o.seen=false;o.sideways=false;o.rot=0;Z.deck.push(o);
     return true;
+  }
+  // 🏵 裁きの紋章：唱えた後、墓地に置くかわりに自分のシールド1つの上に表向きにして置く。
+  //    置いたカードがその盾の一番上になり、元の盾はその下に重なる（盾が離れる時は一緒に動く）。
+  if(rg&&rg.monsho){
+    const pi0=S.players.findIndex(P=>P.zones===Z);
+    if(Z.shield.length){
+      const idx=(Z.shield.length===1)?0:(typeof MONSHO_PICK==="function"?MONSHO_PICK(Z):0);
+      const old0=Z.shield[idx];
+      o.faceup=true;o.tapped=false;o.sideways=false;o.rot=0;o.mark=false;
+      o.under=[old0,...(old0.under?old0.under.splice(0):[])];
+      Z.shield[idx]=o;
+      toast(`🏵 裁きの紋章：${faceNameOf(o)} をシールド${idx+1}の上に表向きで置いた`);
+      if(pi0>=0)logOnly(`🏵 ${S.players[pi0].label}：《${faceNameOf(o)}》を裁きの紋章としてシールドの上へ`);
+      return true;
+    }
+    toast(`🏵 裁きの紋章：シールドが無いため ${faceNameOf(o)} は墓地へ`);
   }
   if(rg&&rg.charger){
     if(isCrystalChargerReg(rg)){o.faceup=false;o.seen=false;o._crystalMana=true;}
@@ -22183,6 +22457,7 @@ const TRIG_EVS=[
   ["gachinkoShown","🎲 ガチンコ・ジャッジでこのカードを見せた時（逆転王女プリン型）"],
   ["foeToGrave","⚰ 相手のカードがどこからでも墓地に置かれた時（偽りの王 ヴィルヘルム型／条件欄で対象を絞れる）"],
   ["myHandDiscarded","🗑 相手の効果で自分の手札が捨てられた時（墓守の鐘ベルリン型）"],
+  ["onAwake","🔄 このクリーチャーに覚醒した時（裏返ってこの面になった時だけ。超次元から直接出した時は発動しない）"],
   ["foeHandDiscarded","🗑 相手が自身の手札を捨てた時（ジェニー・ジェーン型・自分の効果で捨てさせた時も含む）"],
 ];
 function fxTrigRowEl(i){
@@ -23386,6 +23661,9 @@ function renderFxEditor(){
   {const e=$("fxGrantDSFilt");if(e)e.value=FXEDIT.grantDSFilt||"";}
   $("fxStManaTap").checked=!!FXEDIT.stManaTap;
   {const e=$("fxAwakenEv");if(e)e.value=FXEDIT.awakenEv||"";}
+  {const e=$("fxAwakenFilt");if(e)e.value=FXEDIT.awakenFilt||"";}
+  {const e=$("fxAwakenMyTurn");if(e)e.checked=!!FXEDIT.awakenMyTurn;}
+  {const e=$("fxAwakenLoop");if(e)e.checked=!!FXEDIT.awakenLoop;}
   {const e=$("fxAwakenCond");if(e)e.value=FXEDIT.awakenCond||"";}
   {const e=$("fxManaTapInSelf");if(e)e.checked=!!FXEDIT.manaTapInSelf;}
   {const e=$("fxStKillCheat");if(e)e.checked=!!FXEDIT.stKillCheat;}
@@ -23505,6 +23783,7 @@ function renderFxEditor(){
     tl.appendChild(h);
   }
   $("fxD2").checked=!!FXEDIT.d2;
+  {const e=$("fxD2SealRep");if(e)e.checked=!!FXEDIT.d2SealRep;}
   $("fxSeal").value=FXEDIT.seal||0;
   $("fxSealSummonOnly").checked=!!FXEDIT.sealSummonOnly;
   $("fxLunaTarget").value=FXEDIT.lunaTarget||"";
@@ -25567,6 +25846,9 @@ function openFxEditor(key){
     grantDSFilt:cur&&cur.grantDSFilt||"",
     stManaTap:cur?!!cur.stManaTap:false,
     awakenEv:cur&&cur.awakenEv||"",
+    awakenFilt:cur&&cur.awakenFilt||"",
+    awakenMyTurn:cur?!!cur.awakenMyTurn:false,
+    awakenLoop:cur?!!cur.awakenLoop:false,
     awakenCond:cur&&cur.awakenCond||"",
     stNoDeckPeek:cur?!!cur.stNoDeckPeek:false,
     loseIfNotBattle:cur?!!cur.loseIfNotBattle:false,
@@ -25702,6 +25984,7 @@ function openFxEditor(key){
     seibaF:cur&&cur.seibaF||"",
     watchFx:cur&&cur.watchFx?cur.watchFx.map(x=>({...x})):[],
     d2:cur?!!cur.d2:false,
+    d2SealRep:cur?!!cur.d2SealRep:false,
     seal:cur&&cur.seal||0,
     sealSummonOnly:cur?!!cur.sealSummonOnly:false,
     lunaTarget:cur&&cur.lunaTarget||"",
@@ -26086,6 +26369,9 @@ $("fxSave").addEventListener("click",async ()=>{
     grantDSFilt:$("fxGrantDSFilt")?$("fxGrantDSFilt").value.trim():"",
     stManaTap:$("fxStManaTap").checked,
     awakenEv:$("fxAwakenEv")?$("fxAwakenEv").value:"",
+    awakenFilt:$("fxAwakenFilt")?$("fxAwakenFilt").value.trim():"",
+    awakenMyTurn:$("fxAwakenMyTurn")?$("fxAwakenMyTurn").checked:false,
+    awakenLoop:$("fxAwakenLoop")?$("fxAwakenLoop").checked:false,
     awakenCond:$("fxAwakenCond")?$("fxAwakenCond").value.trim():"",
     manaTapInSelf:$("fxManaTapInSelf")?$("fxManaTapInSelf").checked:false,
     stKillCheat:$("fxStKillCheat")?$("fxStKillCheat").checked:false,
@@ -26183,6 +26469,7 @@ $("fxSave").addEventListener("click",async ()=>{
     seibaF:$("fxSeibaF").value.trim(),
     watchFx:FXEDIT.watchFx,
     d2:$("fxD2").checked,
+    d2SealRep:$("fxD2SealRep")?$("fxD2SealRep").checked:false,
     seal:Math.max(0,parseInt($("fxSeal").value,10)||0),
     sealSummonOnly:$("fxSealSummonOnly").checked,
     lunaTarget:$("fxLunaTarget").value.trim(),
@@ -26650,7 +26937,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.jbig1)attrs.push("ジョラゴン・ビッグ1");
     if(v.grantDS)attrs.push(`手札にシンパシー付与${v.grantDSFilt?`（対象：${v.grantDSFilt}）`:""}`);
     if(v.stManaTap)attrs.push("常在：相手マナはタップイン");
-    if(v.awakenEv)attrs.push(`覚醒：${v.awakenCond||"無条件"}`);
+    if(v.awakenEv)attrs.push(`覚醒：${v.awakenCond||v.awakenFilt||"無条件"}${v.awakenEv==="allyEnter"?"（味方が出た時）":""}${v.awakenMyTurn?"／自分のターン中":""}${v.awakenLoop?"／ループ覚醒":""}`);
     if(v.stNoDeckPeek)attrs.push("常在：誰も山札を見られない");
     if(v.loseIfNotBattle)attrs.push("☠ 場を離れたら敗北");
     if(v.sealSelfOnFlip)attrs.push(`🔏 自分に封印${v.sealSelfOnFlip}個`);
