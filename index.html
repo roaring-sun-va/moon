@@ -498,6 +498,79 @@ body.ld-peeking .olay{padding-bottom:158px}
 }
 @media(max-width:900px){#fxNowChip{font-size:11px;padding:5px 10px;max-width:80vw}}
 #fxNowChip.show{display:block}
+/* ⚡ 起動の表紙（v14.46）。画像を使わないので起動は重くならない */
+#splash{position:fixed;inset:0;z-index:99999;background:#04060c;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:opacity .45s ease}
+#splash.out{opacity:0;pointer-events:none}
+#splashSky{position:absolute;inset:0;
+  background:
+    radial-gradient(120% 70% at 50% 8%, rgba(90,140,255,.16), transparent 60%),
+    radial-gradient(90% 60% at 50% 100%, rgba(245,197,66,.07), transparent 60%),
+    #04060c}
+/* 奥へ伸びる床。線を斜めに引いて遠近感を出す */
+#splashGrid{position:absolute;left:-50%;right:-50%;bottom:-10%;height:55%;
+  background-image:
+    repeating-linear-gradient(90deg,rgba(120,170,255,.20) 0 1px,transparent 1px 68px),
+    repeating-linear-gradient(0deg,rgba(120,170,255,.16) 0 1px,transparent 1px 46px);
+  transform:perspective(300px) rotateX(72deg);transform-origin:50% 100%;
+  mask-image:linear-gradient(to top,#000 8%,transparent 92%);
+  -webkit-mask-image:linear-gradient(to top,#000 8%,transparent 92%)}
+#splashBolts{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#splashBolts path{fill:none;stroke:#cfe3ff;stroke-width:1.5;stroke-linecap:round;
+  stroke-linejoin:round;filter:drop-shadow(0 0 6px #7fb0ff) drop-shadow(0 0 16px #4f7fd8);
+  opacity:0}
+#splashBolts path.fire{animation:spBolt .38s ease-out}
+@keyframes spBolt{0%{opacity:0}8%{opacity:1}22%{opacity:.35}36%{opacity:1}100%{opacity:0}}
+#splashLogo{position:relative;text-align:center;user-select:none}
+#splashLogo .sp-mark{font-size:52px;line-height:1;filter:drop-shadow(0 0 18px #f5c542)}
+#splashLogo .sp-name{margin-top:6px;font-size:clamp(34px,9vw,64px);font-weight:900;
+  letter-spacing:.04em;
+  background:linear-gradient(180deg,#fff3c4,#f5c542 45%,#b9891a);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  text-shadow:0 0 26px rgba(245,197,66,.35)}
+#splashLogo .sp-sub{margin-top:8px;font-size:clamp(11px,3vw,14px);font-weight:800;
+  color:#9fb4d8;letter-spacing:.18em}
+#splash.flash #splashLogo{animation:spShake .22s ease-out}
+@keyframes spShake{
+  0%{transform:translate(0,0)}25%{transform:translate(-2px,1px)}
+  50%{transform:translate(2px,-1px)}75%{transform:translate(-1px,-1px)}
+  100%{transform:translate(0,0)}}
+#splash.flash::after{content:"";position:absolute;inset:0;background:#dbe9ff;
+  opacity:.30;pointer-events:none;animation:spFlash .18s ease-out}
+@keyframes spFlash{from{opacity:.45}to{opacity:0}}
+#splashVer{position:absolute;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));
+  font-size:10px;font-weight:800;color:#41506b;letter-spacing:.12em}
+#splashSkip{position:absolute;left:0;right:0;bottom:calc(46px + env(safe-area-inset-bottom));
+  text-align:center;font-size:11.5px;font-weight:800;color:#6f83a6;letter-spacing:.1em;
+  animation:spPulse 1.8s ease-in-out infinite}
+@keyframes spPulse{0%,100%{opacity:.45}50%{opacity:1}}
+@media (prefers-reduced-motion: reduce){
+  #splashBolts path.fire,#splash.flash #splashLogo,#splash.flash::after,#splashSkip{animation:none}
+  #splash.flash::after{opacity:0}
+}
+/* ⏳ 効果スタック（待機中の誘発）。ログの中に間借りする。
+   何も待っていない時は出さないので、盤面の場所を取らない。 */
+#ldStack{display:none;flex-direction:column;gap:3px;padding:6px 8px;margin:0 6px 4px;
+  background:rgba(180,107,255,.10);border:1px solid rgba(180,107,255,.45);border-radius:9px;
+  font-size:11.5px;line-height:1.45;max-height:26dvh;overflow:auto}
+#ldStack.show{display:flex}
+#ldStack .lds-head{font-weight:900;color:#d9a8ff;letter-spacing:.03em}
+#ldStack .lds-row{display:flex;gap:6px;align-items:baseline;
+  border-left:3px solid var(--line);padding-left:6px}
+#ldStack .lds-row.me{border-left-color:#5aa9ff}
+#ldStack .lds-row.foe{border-left-color:#ff7b7b}
+#ldStack .lds-n{flex:0 0 auto;font-weight:900;color:var(--muted);font-variant-numeric:tabular-nums}
+#ldStack .lds-nm{font-weight:800;color:var(--text);word-break:break-word}
+#ldStack .lds-ev{color:var(--muted)}
+#ldStack .lds-note{color:#ffcf6a;font-weight:800}
+/* 📜 待機中の件数を丸ボタンに出す */
+#logFab{position:relative}
+#logFab .fab-badge{
+  position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;
+  background:#b46bff;color:#fff;border-radius:9px;font-size:11px;font-weight:900;
+  line-height:18px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.5);display:none}
+#logFab .fab-badge.show{display:block}
 #evoBar{
   position:fixed;left:50%;transform:translateX(-50%);
   bottom:calc(66px + env(safe-area-inset-bottom));z-index:640;
@@ -1186,6 +1259,21 @@ body.shake{animation:bodyShake .4s ease-out}
 </head>
 <body>
 
+<!-- ⚡ 起動時の表紙。画像は使わず SVG と CSS だけで出す。
+     タップで即終了。設定で出さないようにもできる。動きを抑える設定の端末では静止画。 -->
+<div id="splash" aria-hidden="true">
+  <div id="splashSky"></div>
+  <div id="splashGrid"></div>
+  <svg id="splashBolts" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true"></svg>
+  <div id="splashLogo">
+    <div class="sp-mark">⚡</div>
+    <div class="sp-name">DM Re:Vault</div>
+    <div class="sp-sub">デュエル・マスターズ　一人回し＆対戦</div>
+  </div>
+  <div id="splashVer"></div>
+  <div id="splashSkip">タップで開始</div>
+</div>
+
 <div id="topbar">
   <h1><span class="logo">⚡</span><span class="wm"> DM Re:Vault</span><span class="verchip" id="appVer" title="読み込み中">読込中…</span></h1>
   <div id="topScroll">
@@ -1337,8 +1425,20 @@ body.shake{animation:bodyShake .4s ease-out}
 <div class="olay" id="settingsOlay">
   <div class="panelbox">
     <h2>⚙ 設定 <span class="verchip" id="setVer" style="font-size:11px">v10.15</span></h2>
+    <!-- ⚖ ファンコンテンツ表記。動画・生放送に映るので出しておく -->
+    <div style="font-size:10.5px;line-height:1.6;color:var(--muted);background:#0d1119;
+      border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-bottom:8px">
+      DM Re:Vault は非公式のファンコンテンツです。株式会社タカラトミーおよび
+      Wizards of the Coast 社とは関係がなく、承認・後援を受けていません。<br>
+      <span style="font-style:italic">Unofficial Fan Content. Not approved/endorsed by Wizards.
+      Portions of the materials used are property of Wizards of the Coast.
+      ©Wizards of the Coast LLC.</span><br>
+      カード画像の権利はそれぞれの権利者に帰属します。このツールは販売・配布を行いません。
+    </div>
     <div class="row"><button class="btn small primary" id="btnTutorial" style="flex:1">📖 はじめての方へ（使い方チュートリアル）</button></div>
     <div class="row"><button class="btn small" id="btnHelp" style="flex:1">❓ 使い方・条件式リファレンス</button></div>
+    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="起動した時に、雷の表紙を出します。タップで飛ばせます">
+      <input type="checkbox" id="setSplash"> ⚡ 起動時に表紙を出す</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="盤面の右下に、ログを開く丸ボタンを浮かべます。スマホ・iPadで片手で出し入れしやすくなります"><input type="checkbox" id="optLogFab" checked> 📜 ログを開く丸ボタンを盤面に浮かべる（スマホ・iPad向け）</label></div>
     <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="丸ボタンが「ランダム捨て」などゾーンのボタンに重なる時、自動で上や横へよけます。丸ボタンは指でつまんで好きな場所へ動かすこともできます"><input type="checkbox" id="optLogFabAvoid" checked> 🚧 丸ボタンがゾーンのボタンに重なる時は自動でよける（つまんで移動も可）</label><button class="btn small ghost" id="btnLogFabReset" title="手で動かした丸ボタンの位置を、右下の既定の場所に戻します">↺ 丸ボタンの位置を戻す</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの見出しをつかんで、好きな場所へ動かせます。右下・左下の隅をつかむと大きさ（幅と高さ）を変えられます。位置と大きさは次回も覚えています"><input type="checkbox" id="optLogDrag" checked> ✋ ログの見出しをつかんで移動する（隅のつかみ手で大きさ変更）</label><button class="btn small ghost" id="btnLogBoxReset" title="自由に動かしたログの位置と大きさを、既定（右上・幅340px）に戻します">↺ ログの位置と大きさを戻す</button></div>
@@ -2969,6 +3069,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <button class="btn small ghost" id="ldFull" title="全画面のログを開く">⛶</button>
     <button class="btn small ghost" id="ldClose" title="ログを閉じる">✕</button>
   </div>
+  <div class="ld-stack" id="ldStack"></div>
   <div class="ld-chips" id="ldChips"></div>
   <div class="ld-body" id="ldBody"></div>
   <div class="ld-grip" id="ldGrip" title="ドラッグでログの大きさを変える（右下・左下）"></div>
@@ -3054,6 +3155,7 @@ function logPush(m,opt){
   LOG_SEQ++; // 📜 件数は600で打ち止めになるので、描き残しの判定には通し番号を使う
   if(typeof olSendLog==="function"){try{olSendLog(e);}catch(err){}}
   if(typeof scheduleLogDock==="function")scheduleLogDock();
+  if(typeof scheduleFxStack==="function")try{scheduleFxStack();}catch(e){}
 }
 /* 🔒 自分だけが中身を知っている記録（山札を非公開で見た・サーチで手札に加えた等）。
    pub には相手に見せる文（カード名を含まない「処理だけ」の文）を渡す。 */
@@ -3390,9 +3492,106 @@ function buildLogChips(box,onChange){
 /* 📜 ログドック（盤面を見ながら読める小窓）の描画。新しい行が下に積まれ、自動で最新までスクロール */
 var LOG_SEQ=0;    // ログを積んだ通し番号（logPushより前でも参照できるようvar）
 let _ldSeen=-1;   // 最後に描画した時点の通し番号（閉じている間は-1に戻す）
+/* ⏳ 効果スタック（v14.46）
+   待機中の誘発・出た時・墓地に置かれた時を「解決される順」に並べて返す。
+   DMO の効果スタックと同じ役割。ただし盤面に場所が無いので、ログの中に間借りする。
+   何も待っていない時は空を返し、枠ごと消える。 */
+function fxStackRows(){
+  const rows=[];
+  try{
+    // 1. いま処理しているカード
+    if(typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)
+      rows.push({pi:FX_NOW_PI|0,name:faceNameOf(FX_NOW_CARD),ev:"処理中",now:true});
+    // 2. 出た時（CIP）の待ち行列
+    for(const q of fxQueue)rows.push({pi:q.pi|0,name:faceNameOf(q.c),ev:"出た時"});
+    // 3. 誘発の待ち行列（解決順に並べ替えたもの）
+    if(typeof TRIG_PENDING!=="undefined"&&TRIG_PENDING.length){
+      let ord=TRIG_PENDING.map((t,i)=>({t,i}));
+      if(S.gameMode!=="tcg"){
+        ord.sort((a,b)=>{
+          const ka=[(S.who===a.t.pi)?0:1,trigRank(a.t.ev),-trigPos(a.t),a.i];
+          const kb=[(S.who===b.t.pi)?0:1,trigRank(b.t.ev),-trigPos(b.t),b.i];
+          for(let k=0;k<4;k++)if(ka[k]!==kb[k])return ka[k]-kb[k];
+          return 0;
+        });
+      }
+      for(const x of ord)rows.push({pi:x.t.pi|0,name:faceNameOf(x.t.c),ev:evLabel(x.t.ev)});
+    }
+    // 4. 墓地に置かれた時（ゾルザーク型）
+    if(typeof TOGRAVE_PENDING!=="undefined")
+      for(const g of TOGRAVE_PENDING)rows.push({pi:g.pi|0,name:faceNameOf(g.c),ev:"墓地に置かれた時"});
+    // 5. オリオティス判定
+    if(typeof ORI_QUEUE!=="undefined"&&ORI_QUEUE.length)
+      rows.push({pi:S.who|0,name:`オリオティス判定 ${ORI_QUEUE.length}件`,ev:"待機"});
+  }catch(e){}
+  return rows;
+}
+/* 誘発の ev を画面の言葉に直す。TRIG_EVS の説明文の頭だけを使う */
+function evLabel(ev){
+  if(!ev)return "誘発";
+  try{
+    const hit=(typeof TRIG_EVS!=="undefined")?TRIG_EVS.find(x=>x[0]===ev):null;
+    if(hit)return String(hit[1]).replace(/^[^ぁ-んァ-ヶ一-龠]+/,"").split(/[（(]/)[0].trim()||ev;
+  }catch(e){}
+  return ev;
+}
+/* ⏳ ログの中の効果スタックを描き直す。中身が無ければ枠ごと隠す */
+function renderFxStack(){
+  const el=document.getElementById("ldStack");
+  if(!el)return;
+  const rows=fxStackRows();
+  if(!rows.length){el.classList.remove("show");el.textContent="";return;}
+  el.textContent="";
+  const h=document.createElement("div");
+  h.className="lds-head";
+  h.textContent=`⏳ 効果スタック（${rows.length}件・上から解決）`;
+  el.appendChild(h);
+  rows.forEach((r,i)=>{
+    const d=document.createElement("div");
+    d.className="lds-row "+(r.pi===(S.seat|0)?"me":"foe");
+    const n=document.createElement("span");n.className="lds-n";n.textContent=`${i+1}.`;
+    const nm=document.createElement("span");nm.className="lds-nm";nm.textContent=r.name;
+    const ev=document.createElement("span");ev.className="lds-ev";ev.textContent=r.ev;
+    d.appendChild(n);d.appendChild(nm);d.appendChild(ev);
+    if(r.now){const b=document.createElement("span");b.className="lds-note";b.textContent="◀ いまここ";d.appendChild(b);}
+    el.appendChild(d);
+  });
+  // 止まっている時は理由も出す（🚑 を押す前に原因が分かるように）
+  try{
+    const w=fxWaitState();
+    if(w.fxRunning||w.toGrave||w.trig){
+      const f=document.createElement("div");
+      f.className="lds-ev";f.style.marginTop="2px";
+      f.textContent=`（${fxWaitLabel()}）`;
+      el.appendChild(f);
+    }
+  }catch(e){}
+  el.classList.add("show");
+}
+/* 📜 待機件数を丸ボタンに出す。ログを開いていなくても「何か待っている」が分かる */
+function syncStackBadge(){
+  const fab=document.getElementById("logFab");
+  if(!fab)return;
+  let b=fab.querySelector(".fab-badge");
+  if(!b){b=document.createElement("span");b.className="fab-badge";fab.appendChild(b);}
+  const n=fxStackRows().length;
+  b.textContent=n>99?"99+":String(n);
+  b.classList.toggle("show",n>0);
+}
+/* ⏳ 盤面が動くたびに軽く呼ぶ。描き直しは間引く */
+let _fsTm=null;
+function scheduleFxStack(){
+  if(_fsTm)return;
+  _fsTm=setTimeout(()=>{
+    _fsTm=null;
+    try{syncStackBadge();}catch(e){}
+    try{if(document.getElementById("logDock").classList.contains("show"))renderFxStack();}catch(e){}
+  },140);
+}
 function renderLogDock(){
   const d=document.getElementById("logDock");
-  if(!d||!d.classList.contains("show")){_ldSeen=-1;return;}
+  if(!d||!d.classList.contains("show")){_ldSeen=-1;try{syncStackBadge();}catch(e){}return;}
+  try{renderFxStack();}catch(e){console.warn("fxStack",e);}
   const body=document.getElementById("ldBody");
   const chips=document.getElementById("ldChips");
   if(!body||!chips)return;
@@ -4205,6 +4404,73 @@ function askMultiChoice(msg,options){return _serialDlg(ASK_GATE,()=>new Promise(
   none.onclick=()=>{$("askOlay").classList.remove("open");res([]);};box.appendChild(none);
   refresh();$("askOlay").classList.add("open");
 }));}
+/* 🔎 検索用の正規化（v14.46）
+   ひらがな・カタカナ・全角半角・大文字小文字・中黒/スペースの違いを吸収する。
+   さらに、かなをローマ字に開いたものも併せて持ち、ローマ字入力でも当たるようにする。
+   （「ぼるめてうす」「borumeteusu」どちらでも《ボルメテウス》に当たる） */
+function kataToHira(t){return String(t||"").replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60));}
+const ROMA_TBL=[
+  ["きゃ","kya"],["きゅ","kyu"],["きょ","kyo"],["しゃ","sha"],["しゅ","shu"],["しょ","sho"],
+  ["ちゃ","cha"],["ちゅ","chu"],["ちょ","cho"],["にゃ","nya"],["にゅ","nyu"],["にょ","nyo"],
+  ["ひゃ","hya"],["ひゅ","hyu"],["ひょ","hyo"],["みゃ","mya"],["みゅ","myu"],["みょ","myo"],
+  ["りゃ","rya"],["りゅ","ryu"],["りょ","ryo"],["ぎゃ","gya"],["ぎゅ","gyu"],["ぎょ","gyo"],
+  ["じゃ","ja"],["じゅ","ju"],["じょ","jo"],["びゃ","bya"],["びゅ","byu"],["びょ","byo"],
+  ["ぴゃ","pya"],["ぴゅ","pyu"],["ぴょ","pyo"],["ふぁ","fa"],["ふぃ","fi"],["ふぇ","fe"],["ふぉ","fo"],
+  ["う゛ぁ","va"],["う゛ぃ","vi"],["う゛ぇ","ve"],["う゛ぉ","vo"],["でぃ","di"],["てぃ","ti"],["でゅ","dyu"],
+  ["あ","a"],["い","i"],["う","u"],["え","e"],["お","o"],
+  ["か","ka"],["き","ki"],["く","ku"],["け","ke"],["こ","ko"],
+  ["さ","sa"],["し","shi"],["す","su"],["せ","se"],["そ","so"],
+  ["た","ta"],["ち","chi"],["つ","tsu"],["て","te"],["と","to"],
+  ["な","na"],["に","ni"],["ぬ","nu"],["ね","ne"],["の","no"],
+  ["は","ha"],["ひ","hi"],["ふ","fu"],["へ","he"],["ほ","ho"],
+  ["ま","ma"],["み","mi"],["む","mu"],["め","me"],["も","mo"],
+  ["や","ya"],["ゆ","yu"],["よ","yo"],
+  ["ら","ra"],["り","ri"],["る","ru"],["れ","re"],["ろ","ro"],
+  ["わ","wa"],["を","o"],["ん","n"],
+  ["が","ga"],["ぎ","gi"],["ぐ","gu"],["げ","ge"],["ご","go"],
+  ["ざ","za"],["じ","ji"],["ず","zu"],["ぜ","ze"],["ぞ","zo"],
+  ["だ","da"],["ぢ","ji"],["づ","zu"],["で","de"],["ど","do"],
+  ["ば","ba"],["び","bi"],["ぶ","bu"],["べ","be"],["ぼ","bo"],
+  ["ぱ","pa"],["ぴ","pi"],["ぷ","pu"],["ぺ","pe"],["ぽ","po"],
+  ["ぁ","a"],["ぃ","i"],["ぅ","u"],["ぇ","e"],["ぉ","o"],
+  ["ゃ","ya"],["ゅ","yu"],["ょ","yo"],["ー",""],
+];
+function kanaToRoma(t){
+  let h=kataToHira(t),out="";
+  for(let i=0;i<h.length;){
+    if(h[i]==="っ"){ // 促音は次の子音を重ねる
+      let j=i+1,nx="";
+      for(const [k,v] of ROMA_TBL){if(h.startsWith(k,j)){nx=v;break;}}
+      out+=nx?nx[0]:"";i++;continue;
+    }
+    let hit=null;
+    for(const [k,v] of ROMA_TBL){if(h.startsWith(k,i)){hit=[k,v];break;}}
+    if(hit){out+=hit[1];i+=hit[0].length;}
+    else{out+=h[i];i++;}
+  }
+  return out;
+}
+function searchNorm(t){
+  return String(t||"").normalize("NFKC")
+    .replace(/[\s\u3000・･、,，。\.\-ー－‐~〜]/g,"")
+    .toLowerCase();
+}
+/* 検索文字列 q が text に当たるか。かな・カナ・ローマ字のどれでも当たる */
+function qHit(text,q){
+  if(!q)return true;
+  const t=String(text||"");
+  const nq=searchNorm(q), nt=searchNorm(t);
+  if(!nq)return true;
+  if(nt.includes(nq))return true;
+  const ht=searchNorm(kataToHira(t)), hq=searchNorm(kataToHira(q));
+  if(ht.includes(hq))return true;
+  // ローマ字入力（かなをローマ字に開いて比べる）
+  const rt=searchNorm(kanaToRoma(t));
+  if(rt&&rt.includes(nq))return true;
+  const rq=searchNorm(kanaToRoma(q));
+  if(rq&&rt&&rt.includes(rq))return true;
+  return false;
+}
 function normName(s){
   return (s||"").normalize("NFC")
     .replace(/[《》\u300E\u300F"']/g,"")
@@ -4306,7 +4572,7 @@ const S={
   multi:false, sel:null, msel:[],
   extra:[0,0],
   gameMode:"dmps", autoTap:false, noUntapMana:false, tapMultiMana:true, civWarn:true,
-  imageLoadMode:"auto",
+  imageLoadMode:"auto", splashOff:false,
 };
 /* 🖼 登録画像の管理（Safariのメモリ対策）
    これまでは起動時に登録画像すべてぶんの一時URLを作っていたため、枚数が増えると
@@ -4326,13 +4592,41 @@ const imgURL=(()=>{
   const known=new Set(); // IndexedDBに存在するキー。画像本体は必要になるまで読まない
   const blobs=new Map(); // キー→画像データ
   const urls=new Map();  // キー→一時URL（求められた分だけ作る）
+  const used=new Map();  // キー→最後に使った順番（古いものから捨てるため）
+  let useSeq=0, bytes=0;
   const loading=new Set(),queue=[];let active=0,renderTimer=null;
+  /* 🧠 メモリの上限（v14.44）
+     これまで、一度でも画面に出した画像は blobs に載りっぱなしだった。
+     読み込みを遅くしただけで、長い対戦のうちに全部載ってしまう作りで、
+     墓地やマナの一覧のように一度に何十枚も出す場面で一気に増える。
+     iPhoneで「メモリの使用量が多すぎたため再読み込みされました」が出るのはこれ。
+     → 合計サイズと枚数に上限を設け、古いものから捨てる。
+     捨てても IndexedDB には残っているので、必要になればまた読み直すだけ。
+     画面に出ているものは毎回の描画で触られるので、捨てられるのは画面外のものになる。 */
+  const capBytes=()=>imageLoadingIsLazy()?96*1048576:512*1048576;
+  const capCount=()=>imageLoadingIsLazy()?260:2000;
   const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));urls.delete(k);}};
+  const forget=k=>{const b=blobs.get(k);if(b)bytes-=(b.size|0);drop(k);blobs.delete(k);used.delete(k);};
+  const put=(k,b)=>{
+    if(blobs.has(k))forget(k);
+    blobs.set(k,b);bytes+=(b&&b.size|0);used.set(k,++useSeq);
+    trim();
+  };
+  const trim=()=>{
+    const cb=capBytes(),cn=capCount();
+    if(bytes<=cb&&blobs.size<=cn)return;
+    // 使った順に並べて、古いほうから上限に収まるまで捨てる
+    const order=[...used.entries()].sort((a,b)=>a[1]-b[1]);
+    for(const [k] of order){
+      if(bytes<=cb&&blobs.size<=cn)break;
+      forget(k);
+    }
+  };
   const redraw=()=>{if(renderTimer)return;renderTimer=setTimeout(()=>{renderTimer=null;try{renderAll();}catch(e){}try{refreshLazyImages();}catch(e){}},180);};
   const pump=()=>{
     while(active<12&&queue.length){
       const k=queue.shift();active++;
-      idbGet("images",k).then(b=>{if(b&&known.has(k))blobs.set(k,b);}).finally(()=>{active--;loading.delete(k);redraw();pump();});
+      idbGet("images",k).then(b=>{if(b&&known.has(k))put(k,b);}).finally(()=>{active--;loading.delete(k);redraw();pump();});
     }
   };
   const request=k=>{
@@ -4349,28 +4643,32 @@ const imgURL=(()=>{
     keys(){return known.keys();},
     get(k){
       if(!blobs.has(k)){request(k);return undefined;}
+      used.set(k,++useSeq);   // 画面に出ているものほど新しくなり、捨てられにくくなる
       let u=urls.get(k);
       if(!u){u=URL.createObjectURL(blobs.get(k));urls.set(k,u);}
       return u;
     },
     addKey(k){known.add(k);return api;},
-    setBlob(k,b){known.add(k);drop(k);blobs.set(k,b);return api;},
+    setBlob(k,b){known.add(k);put(k,b);return api;},
     set(k,b){return api.setBlob(k,b);},
-    getBlob(k){return blobs.get(k);},
+    getBlob(k){if(blobs.has(k))used.set(k,++useSeq);return blobs.get(k);},
     preloadAll(){
       if(!db)return Promise.resolve();
       return new Promise(resolve=>{
         try{
           const req=db.transaction("images","readonly").objectStore("images").openCursor();
-          req.onsuccess=e=>{const c=e.target.result;if(c){if(known.has(c.key))blobs.set(c.key,c.value);c.continue();}else resolve();};
+          req.onsuccess=e=>{const c=e.target.result;if(c){if(known.has(c.key))put(c.key,c.value);c.continue();}else resolve();};
           req.onerror=()=>resolve();
         }catch(e){resolve();}
       });
     },
-    delete(k){known.delete(k);loading.delete(k);drop(k);return blobs.delete(k);},
-    clear(){known.clear();loading.clear();queue.length=0;urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();blobs.clear();},
-    forEach(fn){blobs.forEach((b,k)=>fn(api.get(k),k));},
-    liveCount(){return urls.size;}, // 実際に一時URLを作った枚数（メモリの目安）
+    delete(k){known.delete(k);loading.delete(k);forget(k);return true;},
+    clear(){known.clear();loading.clear();queue.length=0;urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();blobs.clear();used.clear();bytes=0;},
+    forEach(fn){[...blobs.keys()].forEach(k=>fn(api.get(k),k));},
+    liveCount(){return urls.size;},        // 実際に一時URLを作った枚数
+    memCount(){return blobs.size;},        // メモリに載っている枚数
+    memBytes(){return bytes;},             // メモリに載っている合計サイズ
+    memCap(){return {bytes:capBytes(),count:capCount()};},
   };
   return api;
 })();
@@ -4391,7 +4689,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.41";
+const APP_VER="v14.46";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -4479,7 +4777,14 @@ try{
     _v.style.cursor="pointer";
     _v.title="タップ：最新版の確認・キャッシュを消して再取得";
     _v.addEventListener("click",async ()=>{
-      const j=await askChoice(`⚡ DM Re:Vault ${APP_VER}\n表示が古い／盤面がおかしい時はここから直せます。`,
+      // 🧠 いまメモリに載っている画像の量。iPhoneの突然の再読み込みを追う手がかりになる
+      let _mem="";
+      try{
+        const cap=imgURL.memCap();
+        _mem=`\n🖼 画像：メモリ ${imgURL.memCount()}枚／約${(imgURL.memBytes()/1048576).toFixed(0)}MB`
+            +`（上限 ${cap.count}枚・${Math.round(cap.bytes/1048576)}MB）　登録 ${imgURL.size}枚`;
+      }catch(e){}
+      const j=await askChoice(`⚡ DM Re:Vault ${APP_VER}${_mem}\n表示が古い／盤面がおかしい時はここから直せます。`,
         ["🔄 最新版を取得（キャッシュを削除して再読み込み）","🚑 表示設定を初期化して再読み込み","閉じる"]);
       if(j===0)await forceUpdateApp();
       else if(j===1)await resetViewSettings();
@@ -7591,7 +7896,10 @@ function togglePause(){
    確認にはブラウザ標準のconfirmを使う（アプリ内のask()自体が詰まっている可能性があるため）。 */
 function emergencyUnstick(){
   const qn=fxQueue.length;
-  if(!window.confirm(`🚑 処理リセットを実行しますか？\n\n・効果処理のロック／確認待ちをすべて解除します\n・開いている確認パネルは閉じます（未回答の選択は中断されます）\n・盤面のカードは変わりません${qn?`\n・待機中の効果 ${qn}件は解除後に順番に処理されます`:""}\n\n※通常のプレイ中に押しても害はありませんが、処理が詰まった時専用です`))return;
+  let _st="";
+  try{_st=`\n\n【いま待っているもの】\n${fxWaitLabel()}`;}catch(e){}
+  try{logOnly(`🚑 処理リセット：${fxWaitLabel()}`);}catch(e){}
+  if(!window.confirm(`🚑 処理リセットを実行しますか？${_st}\n\n・効果処理のロック／確認待ちをすべて解除します\n・開いている確認パネルは閉じます（未回答の選択は中断されます）\n・盤面のカードは変わりません${qn?`\n・待機中の効果 ${qn}件は解除後に順番に処理されます`:""}\n\n※通常のプレイ中に押しても害はありませんが、処理が詰まった時専用です`))return;
   try{
     // 効果処理エンジンのロック解除
     fxRunning=false;fxInsertAt=null;FX_HOLD=false;
@@ -7608,6 +7916,9 @@ function emergencyUnstick(){
       const e=document.getElementById(id);if(e)e.classList.remove("open");
     }
     try{closeSheet();}catch(e){}
+    // 👁「盤面を見る」で隠したままのパネルの控えも捨てる（残すと死んだパネルに戻ってしまう）
+    try{peekReset();}catch(e){}
+    try{setFxNow(0,null);scheduleFxStack();}catch(e){}
     // 攻撃バナー・再開ボタン・重ね置き待ち・ハイライトを解除
     try{$("fxBanner").classList.remove("show");}catch(e){}
     try{setFxNowChip("");}catch(e){}
@@ -11896,6 +12207,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
 const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+  "graveToShield",
   "manaPlusPerZone","destroyWeakerPick","manaAllWeaker","exileToGrave","handToManaBreakPlus","deckTopShieldRestMana","foeDeckBottomOverMaxMana",
   "handes","peepDiscard","grantBlockerPick","deckShield","revealBottomShield","nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "exileRecruitPerZone","elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS","foeTapThenDeckBottom",
@@ -15764,7 +16076,7 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!meD){toast("💀 対象のクリーチャーはもうバトルゾーンにいません");continue;}
       toast(`💀 ${faceNameOf(meD)} を破壊します`);
       await destroyCreature(pi,meD);
-      await drainToGrave();
+      await drainToGrave(inPump);
       renderAll();
     }else if(f.t==="foeTapThenDeckBottom"){
       if(!S.vs){toast("（ソロのため相手クリーチャーの選択はスキップ）");continue;}
@@ -17893,7 +18205,8 @@ async function pumpFx(){
     HILITE_ID=c.id;renderAll(); // 🔶 処理中のカードを黄色ハイライト
     // ⚡ どのカードの効果を処理中か常時表示（同時に複数体出た時に取り違えないように・残り待機数も出す）
     {const _bi=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
-     setFxNowChip(`⚡ 処理中：${faceNameOf(c)}${_bi>=0?`（左から${_bi+1}体目）`:""}${fxQueue.length?`／あと${fxQueue.length}体待機`:""}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`);}
+     setFxNowChip(`⚡ 処理中：${faceNameOf(c)}${_bi>=0?`（左から${_bi+1}体目）`:""}${fxQueue.length?`／あと${fxQueue.length}体待機`:""}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`);
+     setFxNow(pi,c);}
     // 🚯 名前宣言は「場に出た瞬間」ではなく、このカードのCIP解決順が来た時だけ聞く。
     // これにより、キリコ等の親効果の途中や別カードの選択中には割り込まない。
     await askIgnoreNameOnBattleEntry(pi,c);
@@ -18022,13 +18335,16 @@ async function pumpFx(){
     }
     // ⚡ このカードの解決が完全に終わったので、解決中に墓地へ落ちたカードの「墓地に置かれた時」を発火（割り込まない）
     if(HILITE_ID===c.id){HILITE_ID=null;renderAll();} // 🔶 処理完了でハイライト解除
-    await drainToGrave();
+    setFxNow(pi,null);
+    await drainToGrave(true);   // ⚠ ここは pumpFx の中。inPump=true を渡さないと自分を待って固まる
     // ⏱ APNAP：出した側がターンプレイヤーの場合、キューが空（＝全CIP解決後）になってからオリオティス判定
     if(!fxQueue.length){if(TRIG_PENDING.length)await drainTrig(false);if(ORI_QUEUE.length)await drainOriotis(false);}
   }
   }catch(e){console.error("pumpFx error:",e);toast("⚠ 効果処理中にエラーが発生しました（処理を再開できます）");}
   finally{fxRunning=false;fxInsertAt=null;}
   setFxNowChip(""); // ⚡ 処理中バッジを消す
+  setFxNow(0,null);
+  try{scheduleFxStack();}catch(e){}
   if(fxQueue.length)pumpFx(); // エラーで中断しても残りのキューを処理
 }
 /* ⚡ 手動CIP：カードのパネルから「出た時（CIP）を使う」。
@@ -18266,7 +18582,16 @@ async function waitFxIdle(inPump){
   //    1周だけだと、drainTrig の中で新しく積まれた「出た時」が残ったまま先へ進み、
   //    ブロック宣言などの次の処理に割り込まれていた。
   for(let _g=0;_g<60;_g++){
-    while(fxRunning||fxQueue.length)await new Promise(r=>setTimeout(r,25));
+    // 🔬 止まっていることを黙って抱えない（v14.45）
+    //    以前は「効果の処理が終わるまで」を無言で待ち続けるだけだったので、
+    //    詰まっても画面には何も出ず、🚑 を押すまで原因が分からなかった。
+    //    選択パネルの回答待ちは正常なので、パネルが開いている間は数えない。
+    let _spin=0;
+    while(fxRunning||fxQueue.length){
+      await new Promise(r=>setTimeout(r,25));
+      if(dlgOpenNow()){_spin=0;continue;}   // 回答待ちは正常。人を急かさない
+      if(++_spin===320)fxStallNotice();     // 約8秒 進まなければ知らせる
+    }
     // ⚡ 一連の効果解決が終わったので、解決中に墓地へ落ちたカードの「墓地に置かれた時」を発火（割り込まない）
     await drainToGrave();
     if(TRIG_PENDING.length)await drainTrig(false);
@@ -20565,6 +20890,9 @@ function cycleFloatSize(el,key){
 }
 function hideAtkBanner(){$("fxBanner").classList.remove("show");}
 /* ⚡ いま処理しているカードを画面上部に表示（複数体が同時に出た時の取り違え防止）。msg省略で非表示 */
+/* ⚡ いま処理しているカード（効果スタックの「いまここ」に使う） */
+let FX_NOW_CARD=null, FX_NOW_PI=0;
+function setFxNow(pi,c){FX_NOW_PI=pi|0;FX_NOW_CARD=c||null;try{scheduleFxStack();}catch(e){}}
 function setFxNowChip(msg){
   const e=document.getElementById("fxNowChip");if(!e)return;
   if(!msg){e.classList.remove("show");e.textContent="";return;}
@@ -20759,13 +21087,18 @@ async function startAttack(pi,id){
 }
 /* ⚡ カードが「どこからでも墓地に置かれた時（toGrave）」の誘発を発火する共通ヘルパ。
    moveCardXを通らない直接の墓地送り（mill＝山札→墓地など）でも呼ぶ。srcCardを渡すのでrunMode等も動く。 */
-async function fireToGrave(pi,c,from){
+async function fireToGrave(pi,c,from,inPump){
   if(!S.expert||!c)return;
   const rG=getReg(c);
   if(rG&&rG.watchFx){
     const f=from||"battle";
     const fxG=onceFilter(c,rG.watchFx.filter(w=>w.ev==="toGrave"||(w.ev==="toGraveBattle"&&f==="battle")));
-    if(fxG.length){toast(`⚡墓地に置かれた時の効果：${faceNameOf(c)}`);await runFxList(pi,fxG,c);}
+    // ⚠ inPump を必ず渡すこと（v14.45）。
+    //    pumpFx の中から呼ばれた時に inPump=false のまま流すと、この中の効果が
+    //    waitFxIdle(false) で「効果処理が終わるまで」を待ち、その効果処理とは
+    //    自分を呼んでいる pumpFx 自身なので、永久に返らなくなる。
+    //    （ゾルザークの墓地誘発 → チョイワ・ルピア蘇生 → 墓地肥やしで2枚目のゾルザークが落ちる、で発生した）
+    if(fxG.length){toast(`⚡墓地に置かれた時の効果：${faceNameOf(c)}`);await runFxList(pi,fxG,c,inPump);}
   }
 }
 /* 🌀 オリオティス判定キュー（APNAP対応）：
@@ -20853,6 +21186,7 @@ async function drainTrig(activeOnly,skipAlly){
       }
       toast(`⚡誘発処理：${faceNameOf(t.c)}`);
       setFxNowChip(`⚡ 誘発処理：${faceNameOf(t.c)}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`); // ⏳ 残りの待機誘発を解決順で表示
+      setFxNow(t.pi,t.c);
       const _prevTrig=FX_TRIG;FX_TRIG=t.trigCard||null;
       try{await runFxList(t.pi,t.fx,t.c,fxRunning);}
       finally{FX_TRIG=_prevTrig;}
@@ -20965,7 +21299,57 @@ function queueToGrave(pi,c,from){
 /* ⚡ 解決の順番は「出したカード自身の出た時 → 盤面の『自分のクリーチャーが出た時』 → 墓地に置かれた時」。
    盤面側の誘発が待っている間は、墓地の誘発（ゾルザーク型）を先に流さないための待ち数。 */
 var ALLY_WAIT=0; // 宣言より前の関数からも参照するためvar
-async function drainToGrave(){
+/* 🔬 いま何を待っているかの覚書（v14.45）
+   処理が詰まった時、画面からは何も分からず🚑を押すしかなかった。
+   ここを見れば「誰が誰を待っているか」が分かる。テストからも使う。 */
+function fxWaitState(){
+  return {
+    fxRunning:!!fxRunning, fxQueue:fxQueue.length, FX_GATE:FX_GATE,
+    ALLY_WAIT:ALLY_WAIT,
+    toGrave:TOGRAVE_PENDING.length, toGraveDraining:!!TOGRAVE_DRAINING,
+    trig:(typeof TRIG_PENDING!=="undefined")?TRIG_PENDING.length:0,
+    trigDraining:(typeof TRIG_DRAINING!=="undefined")?!!TRIG_DRAINING:false,
+    ori:(typeof ORI_QUEUE!=="undefined")?ORI_QUEUE.length:0,
+    fxHold:(typeof FX_HOLD!=="undefined")?!!FX_HOLD:false,
+  };
+}
+function fxWaitLabel(){
+  const w=fxWaitState();
+  const p=[];
+  if(w.fxRunning)p.push("効果を処理中");
+  if(w.fxQueue)p.push(`出た時 待ち ${w.fxQueue}件`);
+  if(w.FX_GATE)p.push(`効果の一時停止 ${w.FX_GATE}`);
+  if(w.ALLY_WAIT)p.push(`出た時の誘発 待ち ${w.ALLY_WAIT}`);
+  if(w.toGrave)p.push(`墓地に置かれた時 待ち ${w.toGrave}件${w.toGraveDraining?"（処理中）":""}`);
+  if(w.trig)p.push(`誘発 待ち ${w.trig}件${w.trigDraining?"（処理中）":""}`);
+  if(w.ori)p.push(`オリオティス 待ち ${w.ori}件`);
+  if(w.fxHold)p.push("攻撃を保留中");
+  return p.join(" ／ ")||"待っているものはありません";
+}
+/* 👁 いま回答待ちのパネルが開いているか。開いている間の待ちは「詰まり」ではない */
+function dlgOpenNow(){
+  try{
+    if(typeof PEEK_STACK!=="undefined"&&PEEK_STACK.length)return true; // 盤面を見るために隠しているだけ
+    for(const id of ["askOlay","viewerOlay","breakOlay","revealOlay"]){
+      const e=document.getElementById(id);
+      if(e&&e.classList.contains("open"))return true;
+    }
+  }catch(e){}
+  return false;
+}
+/* ⚠ 処理が進んでいないことを1回だけ知らせる。勝手に打ち切らない（追い越しの事故を避ける） */
+let FX_STALL_AT=0;
+function fxStallNotice(){
+  const now=Date.now();
+  if(now-FX_STALL_AT<20000)return;   // 20秒に1回まで
+  FX_STALL_AT=now;
+  try{
+    const lb=fxWaitLabel();
+    toast(`⚠ 効果の処理が進んでいません（${lb}）。動かない時は 🚑 処理リセット を押してください`);
+    logOnly(`🔬 処理が止まっています：${lb}`);
+  }catch(e){}
+}
+async function drainToGrave(inPump){
   if(ALLY_WAIT>0)return; // 盤面の「自分のクリーチャーが出た時」を先に処理する
   if(TOGRAVE_DRAINING)return;
   TOGRAVE_DRAINING=true;
@@ -20973,7 +21357,7 @@ async function drainToGrave(){
     let guard=0;
     while(TOGRAVE_PENDING.length&&guard++<60){
       const {pi,c,from}=TOGRAVE_PENDING.shift();
-      await fireToGrave(pi,c,from);
+      await fireToGrave(pi,c,from,inPump);
     }
   }finally{TOGRAVE_DRAINING=false;}
 }
@@ -26355,6 +26739,16 @@ function openFxEditor(key){
     noUntap:cur?!!cur.noUntap:false,
     graveReviveN:cur&&+cur.graveReviveN||0,
     noSeal:cur?!!cur.noSeal:false,
+    // 🩹 v14.42：ここに無いと、そのカードをエディタで開いて保存し直した瞬間に設定が消える。
+    //    check.js の fx-editor-default が抜けを拾う。
+    auraTapInPow:cur?!!cur.auraTapInPow:false,
+    castToDeck:cur?!!cur.castToDeck:false,
+    rev0Evo:cur?!!cur.rev0Evo:false,
+    rev0EvoF:cur&&cur.rev0EvoF||"",
+    shFlipRep:cur?!!cur.shFlipRep:false,
+    shFlipRepF:cur&&cur.shFlipRepF||"",
+    gearHostDeadDraw:cur&&+cur.gearHostDeadDraw||0,
+    handDestroyN:cur&&+cur.handDestroyN||0,
     stNoHandes:cur?!!cur.stNoHandes:false,
     libWin:cur?!!cur.libWin:false,
     petensy:cur?!!cur.petensy:false,
@@ -27153,7 +27547,7 @@ function openCardCivSearch(){
     list.innerHTML="";
     const rows=[...FXDB.entries()]
       .map(([k,v])=>[dispName.get(k)||k,v])
-      .filter(([nm,v])=>civMatch(v)&&(!q||String(nm).toLowerCase().includes(q)||(v.races&&String(v.races).toLowerCase().includes(q))))
+      .filter(([nm,v])=>civMatch(v)&&(!q||qHit(nm,q)||(v.races&&qHit(String(v.races),q))))
       .sort((a,b)=>((a[1].cost??99)-(b[1].cost??99))||String(a[0]).localeCompare(String(b[0]),"ja"));
     foot.textContent=`${rows.length}件${sel.size?`（文明：${[...sel].map(c=>CV[c][0]).join("+")}）`:""}${multi?"・多色のみ":""}`;
     if(!rows.length){const d=document.createElement("div");d.style.cssText="font-size:12px;color:var(--muted,#8a93a8);padding:8px";d.textContent="該当なし";list.appendChild(d);return;}
@@ -27542,7 +27936,7 @@ async function bulkTagRace(){
     g.innerHTML="";
     for(const [k,v] of entries){
       const nm=dispName.get(k)||k;
-      if(filter&&!String(nm).toLowerCase().includes(filter))continue;
+      if(filter&&!qHit(nm,filter))continue;
       const el=vCardEl(nm);
       el.style.position="relative";
       if(has(v)){
@@ -33499,7 +33893,7 @@ function pickFxKeysPanel(){
     ol.appendChild(grid);
     const shown=()=>{
       const q=sIn.value.trim().toLowerCase();
-      return keys.filter(k=>!q||String(nameOf(k)).toLowerCase().includes(q));
+      return keys.filter(k=>!q||qHit(nameOf(k),q));
     };
     const draw=()=>{
       grid.innerHTML="";
@@ -38655,12 +39049,41 @@ window.addEventListener("keydown",e=>{
     if(e.shiftKey)redo();else undo();
   }
 });
-let PEEK=null;
-$("askPeek").addEventListener("click",()=>{
-  $("askOlay").classList.remove("open");
-  PEEK="askOlay";
-  $("peekChip").classList.add("show");
-});
+/* 👁 「盤面を見る」で一時的に隠したパネルの控え（v14.44）
+   以前は1つしか覚えられず、隠している間に別のパネルが開いて
+   そちらでも「盤面を見る」を押すと、先に隠したパネルが行方不明になっていた。
+   そのパネルの回答待ちは永遠に返らないので、確認パネルの順番待ちが詰まり、
+   🚑 処理リセットを押すまで何も進まなくなる。
+   → 積み重ねにして、新しいものから順に戻せるようにする。 */
+let PEEK=null;   // 互換のため残す（いちばん新しく隠したもの）
+const PEEK_STACK=[];
+function peekHide(olayId){
+  const e=document.getElementById(olayId);
+  if(!e)return;
+  e.classList.remove("open");
+  if(!PEEK_STACK.includes(olayId))PEEK_STACK.push(olayId);
+  PEEK=PEEK_STACK[PEEK_STACK.length-1];
+  peekChipSync();
+}
+function peekRestore(){
+  const id=PEEK_STACK.pop()||PEEK;
+  PEEK=PEEK_STACK[PEEK_STACK.length-1]||null;
+  if(id){const e=document.getElementById(id);if(e)e.classList.add("open");}
+  peekChipSync();
+}
+/* 隠しているパネルの数をボタンに出す。0件なら引っ込める */
+function peekChipSync(){
+  const c=document.getElementById("peekChip");
+  if(!c)return;
+  const n=PEEK_STACK.length;
+  c.textContent=n>1?`📋 パネルに戻る（${n}）`:"📋 パネルに戻る";
+  c.classList.toggle("show",n>0);
+}
+/* 🚑 処理リセットから呼ぶ。隠したままのパネルの控えも捨てる */
+function peekReset(){
+  PEEK_STACK.length=0;PEEK=null;peekChipSync();
+}
+$("askPeek").addEventListener("click",()=>{peekHide("askOlay");});
 $("askCopy").addEventListener("click",async()=>{
   const txt=$("askMsg").textContent||"";
   if(!txt){toast("コピーする文章がありません");return;}
@@ -38672,19 +39095,9 @@ $("askCopy").addEventListener("click",async()=>{
     toast(ok?"📋 文章をコピーしました":"コピーできませんでした（文章を長押しで選択してください）");
   }
 });
-$("bkPeek").addEventListener("click",()=>{
-  $("breakOlay").classList.remove("open");
-  PEEK="breakOlay";
-  $("peekChip").classList.add("show");
-});
-$("peekChip").addEventListener("click",()=>{
-  if(PEEK)$(PEEK).classList.add("open");
-  PEEK=null;
-  $("peekChip").classList.remove("show");
-});
-{const fp=document.getElementById("fxPeek");if(fp)fp.addEventListener("click",()=>{
-  $("fxOlay").classList.remove("open");PEEK="fxOlay";$("peekChip").classList.add("show");
-});}
+$("bkPeek").addEventListener("click",()=>{peekHide("breakOlay");});
+$("peekChip").addEventListener("click",()=>{peekRestore();});
+{const fp=document.getElementById("fxPeek");if(fp)fp.addEventListener("click",()=>{peekHide("fxOlay");});}
 /* 👁/◀ 確認パネルの左上ボタン。
    対戦中は「盤面を見る」（一時的に隠して盤面を確認）、
    デッキ編成やデッキ画面から開いたデッキ一覧では「編成に戻る／デッキ画面に戻る」にする。 */
@@ -38724,18 +39137,19 @@ try{applySafeArea();}catch(e){}
     else closeViewer();
     return;
   }
-  $("viewerOlay").classList.remove("open");PEEK="viewerOlay";$("peekChip").classList.add("show");
+  peekHide("viewerOlay");
 });}
 window.syncRvPeek=()=>{
   const p=document.getElementById("rvPeek");if(!p)return;
   p.style.display=((typeof S!=="undefined"&&S&&(S.turn|0)>0))?"":"none";
 };
 {const rp=document.getElementById("rvPeek");if(rp)rp.addEventListener("click",()=>{
-  $("revealOlay").classList.remove("open");PEEK="revealOlay";$("peekChip").classList.add("show");
+  peekHide("revealOlay");
 });}
 
 /* ================= settings ================= */
 function openSettings(){
+  {const e=$("setSplash");if(e)e.checked=!S.splashOff;}
   $("setMode").value=S.gameMode||"dmps";
   $("setAutoTap").checked=!!S.autoTap;
   $("setSheetPos").value=S.sheetPos||"right";
@@ -39615,6 +40029,55 @@ async function storageStatus(){
     return `（このサイトの使用量 約${mb(x.usage)}MB／割当上限 約${mb(x.quota)}MB）`;
   }catch(e){return "";}
 }
+/* 🔒 保存領域の永続化（v14.43）
+   これを一度通しておかないと、端末の空き容量が減った時に
+   ブラウザがこのサイトの IndexedDB を「消してよいもの」として削除しうる。
+   画像を数百MB持っているので、消えると登録ごと失われる。
+   ・ホーム画面に追加済みなら、たいてい黙って許可される
+   ・断られても動作は変わらない（次の起動でまた試す）
+   ・結果は misc/storagePersisted に残し、成功したら二度と呼ばない */
+async function ensurePersistentStorage(){
+  try{
+    if(!navigator.storage||!navigator.storage.persist)return null;
+    if(db&&await idbGet("misc","storagePersisted"))return true;
+    if(navigator.storage.persisted&&await navigator.storage.persisted()){
+      if(db)await idbPut("misc","storagePersisted",true);
+      return true;
+    }
+    const ok=await navigator.storage.persist();
+    if(ok&&db)await idbPut("misc","storagePersisted",true);
+    return ok;
+  }catch(e){return null;}
+}
+/* 💾 バックアップの催促（v14.43）
+   最後に書き出してから BACKUP_WARN_DAYS 日たっていたら、起動時に一度だけ知らせる。
+   ・一度出したら、その日はもう出さない（起動のたびに出ると読み飛ばされるため）
+   ・書き出しに成功した時刻は noteBackupDone() が記録する
+   ・対戦中は出さない */
+const BACKUP_WARN_DAYS=14;
+async function noteBackupDone(){
+  try{ if(db)await idbPut("misc","lastBackupAt",Date.now()); }catch(e){}
+}
+async function backupReminder(){
+  try{
+    if(!db)return;
+    if(typeof swInGame==="function"&&swInGame())return;
+    const today=new Date().toISOString().slice(0,10);
+    if(await idbGet("misc","backupWarnShown")===today)return;
+    const last=await idbGet("misc","lastBackupAt");
+    const decks=await deckNames();
+    if(!decks.length&&!FXDB.size)return;          // 何も入っていない端末では出さない
+    if(last==null){
+      // 一度も書き出していない。初回だけ知らせて、以後は日数で数える
+      await idbPut("misc","lastBackupAt",Date.now());
+      return;
+    }
+    const days=Math.floor((Date.now()-(+last||0))/86400000);
+    if(days<BACKUP_WARN_DAYS)return;
+    await idbPut("misc","backupWarnShown",today);
+    toast(`💾 最後のバックアップから${days}日たっています。📤 → 全体のバックアップ で控えを取っておくと安心です`);
+  }catch(e){}
+}
 async function restoreBackupZipImages(ctx){
   await backupWakeStart();
   const list=ctx.manifest.images,totalBytes=list.reduce((n,x)=>n+(+x.size||0),0),started=Date.now();
@@ -39711,10 +40174,12 @@ $("btnExport").addEventListener("click",async ()=>{
     const label=imageMode==="transfer"?"transfer-HQ":"original";
     downloadBlob(blob,`dmps-backup-${day}-${label}.dmrv.zip`);
     toast(`書き出しました（${imageMode==="transfer"?"高画質・軽量":"元画像のまま"}／画像${keys.length}枚・${Math.max(1,Math.round(blob.size/1024/1024))}MB）`);
+    await noteBackupDone();
   }else{
     const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
     downloadBlob(blob,`dmps-backup-${day}.json`);
     toast("画像なし軽量バックアップを書き出しました");
+    await noteBackupDone();
   }
 });
 $("btnImport").addEventListener("click",()=>$("importInput").click());
@@ -40453,6 +40918,11 @@ $("setBgmVol").addEventListener("input",async ()=>{
   if(BGM)BGM.volume=S.bgmVol/100;
   if(db)await idbPut("misc","bgmVol",S.bgmVol);
 });
+{const e=$("setSplash");if(e)e.addEventListener("change",async ()=>{
+  S.splashOff=!e.checked;
+  if(db)await idbPut("misc","splashOff",S.splashOff);
+  toast(S.splashOff?"⚡ 起動時の表紙：出さない":"⚡ 起動時の表紙：出す（次の起動から）");
+});}
 $("setAnim").addEventListener("change",async ()=>{
   S.anim=$("setAnim").checked;
   if(db)await idbPut("misc","anim",S.anim);
@@ -41977,9 +42447,72 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
     });
   });
 }
+/* ⚡ 起動の表紙（v14.46）
+   ・画像は使わない（SVGとCSSだけ）。起動を重くしないため
+   ・タップで即終了。3.4秒で自動的に閉じる
+   ・「次から出さない」は設定に置く（misc/splashOff）
+   ・動きを抑える設定の端末では稲妻を出さず、静止画にする */
+let SPLASH_TM=[];
+function splashBoltPath(){
+  // 上から下へ、折れながら落ちる線を毎回作る
+  const x0=40+Math.random()*320;
+  let x=x0,y=0,d=`M${x.toFixed(1)},0`;
+  const branches=[];
+  while(y<300){
+    y+=14+Math.random()*26;
+    x+=(Math.random()-0.5)*46;
+    d+=` L${x.toFixed(1)},${Math.min(300,y).toFixed(1)}`;
+    if(Math.random()<0.22&&y<230){
+      const bx=x+(Math.random()-0.5)*70, by=y+22+Math.random()*34;
+      branches.push(`M${x.toFixed(1)},${y.toFixed(1)} L${bx.toFixed(1)},${by.toFixed(1)}`);
+    }
+  }
+  return [d,...branches];
+}
+function splashStrike(){
+  const svg=document.getElementById("splashBolts"),sp=document.getElementById("splash");
+  if(!svg||!sp||sp.classList.contains("out"))return;
+  svg.textContent="";
+  for(const d of splashBoltPath()){
+    const p=document.createElementNS("http://www.w3.org/2000/svg","path");
+    p.setAttribute("d",d);p.classList.add("fire");
+    svg.appendChild(p);
+  }
+  sp.classList.add("flash");
+  SPLASH_TM.push(setTimeout(()=>{try{sp.classList.remove("flash");}catch(e){}},240));
+}
+function splashClose(){
+  const sp=document.getElementById("splash");
+  if(!sp||sp.classList.contains("out"))return;
+  for(const t of SPLASH_TM)clearTimeout(t);
+  SPLASH_TM=[];
+  sp.classList.add("out");
+  setTimeout(()=>{try{sp.remove();}catch(e){}},500);
+}
+function splashRun(off){
+  const sp=document.getElementById("splash");
+  if(!sp)return;
+  if(off){sp.remove();return;}
+  {const v=document.getElementById("splashVer");if(v)v.textContent=APP_VER;}
+  sp.addEventListener("click",splashClose,{once:false});
+  let reduce=false;
+  try{reduce=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
+  if(!reduce){
+    // 不規則な間隔で落とす。同じ間隔で続くと機械っぽく見える
+    let t=260;
+    for(let i=0;i<5;i++){
+      SPLASH_TM.push(setTimeout(splashStrike,t));
+      t+=380+Math.random()*620;
+    }
+  }
+  SPLASH_TM.push(setTimeout(splashClose,3400));
+}
 (async function init(){
   db=await openDB();
+  // ⚡ 表紙は設定を読んでから。読めない時は出す側に倒す
+  try{splashRun(db?await idbGet("misc","splashOff"):false);}catch(e){try{splashRun(false);}catch(e2){}}
   {const ilm=db?await idbGet("misc","imageLoadMode"):null;if(ilm)S.imageLoadMode=ilm;}
+  {const so=db?await idbGet("misc","splashOff"):null;if(so!=null)S.splashOff=!!so;}
   const nm=db?await idbGet("misc","nameMap"):null;
   if(nm)for(const [k,v] of Object.entries(nm))dispName.set(k,v);
   await loadArtKeys();   // 🎴 スリーブ・プレマ用の印
@@ -42184,6 +42717,10 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   setTimeout(checkBoardHealth,400);
   // 💾 前回が途中で切れていたら（Safariのメモリ落ち・不意のリロードなど）盤面の復帰を提案
   try{ if(typeof autoSaveOfferRestore==="function")await autoSaveOfferRestore(); }catch(e){ console.warn(e); }
+  // 🔒 保存領域を永続化しておく（空き容量が減った時に消されないようにする）
+  try{ await ensurePersistentStorage(); }catch(e){ console.warn(e); }
+  // 💾 バックアップから日がたっていたら、起動時に一度だけ知らせる
+  setTimeout(()=>{ backupReminder().catch(()=>{}); },3000);
 })();
 </script>
 </body>
