@@ -499,7 +499,19 @@ body.ld-peeking .olay{padding-bottom:158px}
 @media(max-width:900px){#fxNowChip{font-size:11px;padding:5px 10px;max-width:80vw}}
 #fxNowChip.show{display:block}
 /* ⚔ 対戦開始パネル（v14.47）。自分=青／相手=赤の2枚看板 */
-#stVsGrid{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:stretch;margin-top:4px}
+#stVsGrid{display:grid;gap:8px;align-items:stretch;margin-top:4px;
+  grid-template-columns:1fr 1fr;
+  grid-template-areas:"me foe" "center center"}
+.stSide.me{grid-area:me}
+.stSide.foe{grid-area:foe}
+#stCenter{grid-area:center;display:flex;flex-direction:column;gap:8px;min-width:0}
+#stPickRow{margin-top:0}
+/* 🖥 広い画面では、DMOの一人回し設定と同じ「自分｜設定｜相手」の3カラムにする */
+@media(min-width:760px){
+  #stBox{max-width:880px}
+  #stVsGrid{grid-template-columns:1fr 1.15fr 1fr;grid-template-areas:"me center foe"}
+  #stCenter{justify-content:center;padding:0 4px}
+}
 .stSide{border:1px solid;border-radius:12px;padding:9px;min-width:0;display:flex;flex-direction:column;gap:7px}
 .stSide.me{border-color:rgba(90,169,255,.55);background:linear-gradient(180deg,rgba(90,169,255,.12),rgba(13,17,25,.65))}
 .stSide.foe{border-color:rgba(255,123,123,.5);background:linear-gradient(180deg,rgba(255,123,123,.10),rgba(13,17,25,.65))}
@@ -511,16 +523,17 @@ body.ld-peeking .olay{padding-bottom:158px}
 .stSide .btn{width:100%}
 .stNameIn{width:100%;min-width:0;box-sizing:border-box;background:#0d1119;color:var(--ink);
   border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px}
-#stVsMark{align-self:center;font-size:15px;font-weight:900;font-style:italic;color:var(--accent);
-  text-shadow:0 0 12px rgba(245,197,66,.5);padding:0 1px}
-#stFirstRow{display:flex;align-items:center;gap:8px;margin-top:10px}
+#stVsMark{text-align:center;font-size:14px;font-weight:900;font-style:italic;color:var(--accent);
+  text-shadow:0 0 12px rgba(245,197,66,.5)}
+@media(max-width:759px){#stVsMark{display:none}} /* 狭い画面では場所をとらない（看板の色で分かる） */
+#stFirstRow{display:flex;align-items:center;gap:8px;margin-top:0}
 .stLbl{font-size:12px;font-weight:800;color:var(--muted);flex:0 0 auto}
 #stFirstSeg{display:flex;flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 #stFirstSeg button{flex:1;min-width:0;background:#0d1119;color:var(--muted);border:none;
   padding:9px 2px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
 #stFirstSeg button+button{border-left:1px solid var(--line)}
 #stFirstSeg button.on{background:linear-gradient(180deg,var(--accent),#d9a520);color:#241a00}
-#stRandom{width:100%;margin-top:10px;font-size:15px;padding:12px 10px;
+#stRandom{width:100%;margin-top:0;font-size:15px;padding:12px 10px;
   box-shadow:0 4px 20px rgba(245,197,66,.28)}
 #olFold{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:#0b0f18}
 #olFold>summary{cursor:pointer;padding:9px 11px;font-size:12.5px;font-weight:900;
@@ -635,7 +648,11 @@ body.ld-peeking .olay{padding-bottom:158px}
   background:rgba(180,107,255,.10);border:1px solid rgba(180,107,255,.45);border-radius:9px;
   font-size:11.5px;line-height:1.45;max-height:26dvh;overflow:auto}
 #ldStack.show{display:flex}
-#ldStack .lds-head{font-weight:900;color:#d9a8ff;letter-spacing:.03em}
+#ldStack .lds-head{font-weight:900;color:#d9a8ff;letter-spacing:.03em;
+  display:flex;align-items:center;justify-content:space-between;gap:6px}
+#ldStack .lds-size{flex:0 0 auto;background:rgba(180,107,255,.16);color:#d9a8ff;
+  border:1px solid rgba(180,107,255,.5);border-radius:7px;padding:1px 8px;
+  font-size:10.5px;font-weight:900;cursor:pointer;font-family:inherit}
 #ldStack .lds-row{display:flex;gap:6px;align-items:baseline;
   border-left:3px solid var(--line);padding-left:6px}
 #ldStack .lds-row.me{border-left-color:#5aa9ff}
@@ -1869,32 +1886,34 @@ body.shake{animation:bodyShake .4s ease-out}
         <button class="btn small" id="stPick0">🖼 一覧から選ぶ</button>
         <input type="text" id="stName0" placeholder="名前（P1）" class="stNameIn">
       </div>
-      <div id="stVsMark">VS</div>
+      <div id="stCenter">
+        <div id="stVsMark">VS</div>
+        <div id="stFirstRow">
+          <span class="stLbl">先行</span>
+          <div id="stFirstSeg">
+            <button type="button" data-v="p1">P1 先行</button>
+            <button type="button" data-v="random">🎲 ランダム</button>
+            <button type="button" data-v="p2">P2 先行</button>
+          </div>
+          <!-- 実体はこのselect。見た目のボタンと同期する（既存の読み取りコードは触らない） -->
+          <select id="stFirst" style="display:none">
+            <option value="random">ランダム（P1/P2）</option>
+            <option value="p1">P1が先行</option>
+            <option value="p2">P2が先行</option>
+          </select>
+        </div>
+        <button class="btn primary" id="stRandom">▶ ランダムで開始（初手5・盾5）</button>
+        <div class="row" id="stPickRow">
+          <button class="btn" id="stPick" style="flex:1">初手だけ選ぶ</button>
+          <button class="btn" id="stPickFull" style="flex:1">初手+盾を選ぶ</button>
+        </div>
+      </div>
       <div class="stSide foe">
         <div class="stSideHead"><span class="stSeat">P2</span>相手</div>
         <select id="stDeck1"></select>
         <button class="btn small" id="stPick1">🖼 一覧から選ぶ</button>
         <input type="text" id="stName1" placeholder="名前（P2）" class="stNameIn">
       </div>
-    </div>
-    <div id="stFirstRow">
-      <span class="stLbl">先行</span>
-      <div id="stFirstSeg">
-        <button type="button" data-v="p1">P1 先行</button>
-        <button type="button" data-v="random">🎲 ランダム</button>
-        <button type="button" data-v="p2">P2 先行</button>
-      </div>
-      <!-- 実体はこのselect。見た目のボタンと同期する（既存の読み取りコードは触らない） -->
-      <select id="stFirst" style="display:none">
-        <option value="random">ランダム（P1/P2）</option>
-        <option value="p1">P1が先行</option>
-        <option value="p2">P2が先行</option>
-      </select>
-    </div>
-    <button class="btn primary" id="stRandom">▶ ランダムで開始（初手5・盾5）</button>
-    <div class="row" style="margin-top:6px">
-      <button class="btn" id="stPick" style="flex:1">初手だけ選ぶ</button>
-      <button class="btn" id="stPickFull" style="flex:1">初手+盾を選ぶ</button>
     </div>
     <!-- 🌐 オンラインは普段たたんでおく。接続すると自動で開く -->
     <details id="olFold">
@@ -3630,6 +3649,15 @@ function evLabel(ev){
   }catch(e){}
   return ev;
 }
+/* ⏳ 効果スタックの高さ（v14.48）。小・中・大をタップで切り替え、次に開いた時も同じ大きさ */
+let LD_STACK_SIZE=1;
+const LD_STACK_MAX=["11dvh","26dvh","46dvh"];
+const LD_STACK_LB=["小","中","大"];
+async function cycleLdStackSize(){
+  LD_STACK_SIZE=(LD_STACK_SIZE+1)%LD_STACK_MAX.length;
+  try{if(db)await idbPut("misc","ldStackSize",LD_STACK_SIZE);}catch(e){}
+  try{renderFxStack();}catch(e){}
+}
 /* ⏳ ログの中の効果スタックを描き直す。中身が無ければ枠ごと隠す */
 function renderFxStack(){
   const el=document.getElementById("ldStack");
@@ -3637,9 +3665,18 @@ function renderFxStack(){
   const rows=fxStackRows();
   if(!rows.length){el.classList.remove("show");el.textContent="";return;}
   el.textContent="";
+  el.style.maxHeight=LD_STACK_MAX[LD_STACK_SIZE]||"26dvh";
   const h=document.createElement("div");
   h.className="lds-head";
-  h.textContent=`⏳ 効果スタック（${rows.length}件・上から解決）`;
+  const ht=document.createElement("span");
+  ht.textContent=`⏳ 効果スタック（${rows.length}件・上から解決）`;
+  const hz=document.createElement("button");
+  hz.className="lds-size";
+  hz.type="button";
+  hz.textContent=`▤ ${LD_STACK_LB[LD_STACK_SIZE]||"中"}`;
+  hz.title="効果スタックの高さを切り替え（小 → 中 → 大）";
+  hz.addEventListener("click",ev=>{ev.stopPropagation();cycleLdStackSize();});
+  h.appendChild(ht);h.appendChild(hz);
   el.appendChild(h);
   rows.forEach((r,i)=>{
     const d=document.createElement("div");
@@ -4784,7 +4821,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.47";
+const APP_VER="v14.48";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -42653,6 +42690,8 @@ function splashRun(off){
   try{splashRun(db?await idbGet("misc","splashOff"):false);}catch(e){try{splashRun(false);}catch(e2){}}
   {const ilm=db?await idbGet("misc","imageLoadMode"):null;if(ilm)S.imageLoadMode=ilm;}
   {const so=db?await idbGet("misc","splashOff"):null;if(so!=null)S.splashOff=!!so;}
+  {const z=db?await idbGet("misc","ldStackSize"):null;
+   if(z!=null)LD_STACK_SIZE=Math.max(0,Math.min(2,(+z)||0));}
   const nm=db?await idbGet("misc","nameMap"):null;
   if(nm)for(const [k,v] of Object.entries(nm))dispName.set(k,v);
   await loadArtKeys();   // 🎴 スリーブ・プレマ用の印
