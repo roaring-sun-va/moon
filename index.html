@@ -563,6 +563,7 @@ body.ld-peeking .olay{padding-bottom:158px}
 #navDrawer.open{display:block}
 #navScrim{position:absolute;inset:0;background:rgba(2,4,10,.6)}
 #navBody{position:absolute;left:0;top:0;bottom:0;width:min(80vw,300px);
+  padding-top:env(safe-area-inset-top);
   background:#0b0f18;border-right:1px solid var(--line);box-shadow:6px 0 30px rgba(0,0,0,.6);
   display:flex;flex-direction:column;transform:translateX(-102%);transition:transform .18s ease;
   padding-bottom:env(safe-area-inset-bottom)}
@@ -602,6 +603,8 @@ body.ld-peeking .olay{padding-bottom:158px}
 #deckStats .ds-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
 #deckStats .ds-sep{color:#3f4d68}
 #deckStats .ds-mut{color:var(--muted)}
+#sleeveOlay .panelbox{max-width:720px;min-height:min(72dvh,620px)}
+#cardMgrBox{max-width:760px}
 /* 🖼 デッキリストの画像表示（v14.51・DMOのデッキ一覧の形）
    文字欄（deckText）が正のデータ。グリッドはそれを描いた鏡で、＋−は文字欄を書き換える */
 #deckGrid{display:none;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:7px;
@@ -1527,7 +1530,8 @@ body.shake{animation:bodyShake .4s ease-out}
       <h3>デッキ</h3>
       <div class="row">
         <select id="deckSelect" style="flex:1"></select>
-        <button class="btn small" id="btnLoadDeck">編集欄へ</button>
+        <button class="btn small" id="btnPickDeckSel" title="表紙つきの一覧から選んで、そのまま編集欄に読み込みます">🖼 一覧</button>
+      <button class="btn small" id="btnLoadDeck">編集欄へ</button>
         <button class="btn small" id="btnViewDeck">🖼 見る</button>
         <button class="btn small warn" id="btnDeleteDeck">削除</button>
       </div>
@@ -2027,8 +2031,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div id="stCenter">
         <div id="stVsMark">VS</div>
         <div id="stFirstRow">
-          <span class="stLbl">先行</span>
-          <div id="stFirstSeg">
+              <div id="stFirstSeg">
             <button type="button" data-v="p1">P1 先行</button>
             <button type="button" data-v="random">🎲 ランダム</button>
             <button type="button" data-v="p2">P2 先行</button>
@@ -4962,7 +4965,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.52";
+const APP_VER="v14.53";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -27803,11 +27806,12 @@ function openCardCivSearch(){
   const wrap=document.createElement("div");
   wrap.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:12px";
   const box=document.createElement("div");
-  box.style.cssText="background:var(--panel,#131a2a);border:1px solid var(--line,#334);border-radius:12px;max-width:620px;width:100%;max-height:86dvh;display:flex;flex-direction:column;padding:10px;gap:8px";
+  box.style.cssText="background:var(--panel,#131a2a);border:1px solid var(--line,#334);border-radius:12px;max-width:840px;width:100%;max-height:90dvh;display:flex;flex-direction:column;padding:10px;gap:8px";
   const ttl=document.createElement("div");ttl.style.cssText="font-weight:700;font-size:14px";ttl.textContent="🔍 カード検索 → タップでデッキに1枚追加（文明・コストで絞れます）";
   const civBar=document.createElement("div");civBar.style.cssText="display:flex;gap:5px;flex-wrap:wrap";
   const inp=document.createElement("input");inp.type="text";inp.placeholder="名前・種族で絞り込み（任意）";inp.style.cssText="width:100%;box-sizing:border-box;font-size:13px;padding:7px";
-  const list=document.createElement("div");list.style.cssText="overflow:auto;flex:1;display:flex;flex-direction:column;gap:2px;min-height:160px";
+  const list=document.createElement("div");
+  list.style.cssText="overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:7px;min-height:200px;align-content:start;padding:2px";
   const foot=document.createElement("div");foot.style.cssText="font-size:11px;color:var(--muted,#8a93a8)";
   const civMatch=v=>{
     if(multi&&!(v.civs&&v.civs.length>=2))return false;
@@ -27853,22 +27857,37 @@ function openCardCivSearch(){
       .filter(([nm,v])=>civMatch(v)&&costMatch(v)&&(!q||qHit(nm,q)||(v.races&&qHit(String(v.races),q))))
       .sort((a,b)=>((a[1].cost??99)-(b[1].cost??99))||String(a[0]).localeCompare(String(b[0]),"ja"));
     foot.textContent=`${rows.length}件${sel.size?`（文明：${[...sel].map(c=>CV[c][0]).join("+")}）`:""}${selCost.size?`・コスト${[...selCost].join(",")}`:""}${multi?"・多色のみ":""}`;
-    if(!rows.length){const d=document.createElement("div");d.style.cssText="font-size:12px;color:var(--muted,#8a93a8);padding:8px";d.textContent="該当なし";list.appendChild(d);return;}
-    for(const [nm,v] of rows.slice(0,400)){
-      const b=document.createElement("button");
-      b.type="button";
-      b.style.cssText="text-align:left;font-size:12px;line-height:1.4;padding:6px 9px;border:1px solid var(--line,#334);border-radius:8px;background:transparent;color:var(--ink,#dde3f0);cursor:pointer;display:flex;justify-content:space-between;gap:8px";
-      const civTxt=(v.civs||[]).map(c=>`<span style="color:${(CV[c]||['',''])[1]}">${(CV[c]||[c])[0]}</span>`).join("");
-      b.innerHTML=`<span>${nm}</span><span style="flex:0 0 auto;color:var(--muted,#8a93a8)">${civTxt} ${v.cost!=null?`コスト${v.cost}`:""} ${CT[v.ctype]||""}</span>`;
-      b.onclick=()=>{
+    if(!rows.length){const d=document.createElement("div");d.style.cssText="font-size:12px;color:var(--muted,#8a93a8);padding:8px;grid-column:1/-1";d.textContent="該当なし";list.appendChild(d);return;}
+    // 🖼 カード画像のタイルで並べる（v14.53・雷鳴神さん依頼）。
+    //    デッキリストの画像表示（.dg-tile）と同じ見た目。タップで1枚追加
+    for(const [nm,v] of rows.slice(0,300)){
+      const k=normName(nm);
+      const tile=document.createElement("button");
+      tile.type="button";
+      tile.className="dg-tile";
+      tile.style.cssText="padding:0;cursor:pointer;font-family:inherit;text-align:left";
+      const im=document.createElement("div");im.className="dg-img";
+      const url=imgURL.has(k)?imgURL.get(k):null;
+      if(url)im.style.backgroundImage=`url("${url}")`;
+      else im.classList.add("noimg");
+      if(v.cost!=null){
+        const cb=document.createElement("div");cb.className="dg-n";cb.textContent=v.cost;
+        cb.title="コスト";im.appendChild(cb);
+      }
+      tile.appendChild(im);
+      const cap=document.createElement("div");cap.className="dg-cap";
+      const civTxt=(v.civs||[]).map(c=>(CV[c]||[c])[0]).join("");
+      cap.textContent=nm;cap.title=`${nm}　${civTxt}　${CT[v.ctype]||""}`;
+      tile.appendChild(cap);
+      tile.onclick=()=>{
         const ta=$("deckText");
         const line=`1 ${nm}`;
         ta.value=(ta.value&&!ta.value.endsWith("\n")?ta.value+"\n":ta.value)+line+"\n";
         ta.dispatchEvent(new Event("input",{bubbles:true}));
-        b.style.background="#26314d";
+        tile.style.outline="2px solid var(--accent,#f5c542)";
         toast(`＋ ${nm} をデッキ欄に追加`);
       };
-      list.appendChild(b);
+      list.appendChild(tile);
     }
   };
   for(const [id,[lb,col]] of Object.entries(CV)){
@@ -39046,6 +39065,7 @@ let DP_FOLDER="__all__";   // 📁 デッキ選択で今しぼり込んでいる
    対戦開始から開いた時（stDeck0 / stDeck1）だけ、対戦開始を開き直す。 */
 /* 🃏 選んだデッキ名を <select> に反映する。
    一覧を開いたあとにデッキが増えた場合など、選択肢に無い名前でも取りこぼさないよう補う。 */
+let DP_LOADAFTER=false; // 🃏 デッキ編成の「🖼 一覧」から来た時、選んだら編集欄に読み込む
 function dpApply(name){
   const sel=$(DP_TARGET);
   if(!sel)return;
@@ -39054,6 +39074,11 @@ function dpApply(name){
   }
   sel.value=name||"";
   sel.dispatchEvent(new Event("change"));
+  if(DP_TARGET==="deckSelect"&&DP_LOADAFTER&&name){
+    DP_LOADAFTER=false;
+    closeDeckPick();
+    const b=$("btnLoadDeck");if(b)b.click(); // 未保存の確認などのガードもそのまま働く
+  }
 }
 function closeDeckPick(){
   $("deckPickOlay").classList.remove("open");
@@ -39907,8 +39932,7 @@ const NAV_ITEMS=[
     ["📥","画像を登録","ファイルから取り込み","btnPickImages"],
   ]],
   ["見た目",[
-    ["🎴","スリーブ（カード裏面）","裏面の絵を変える","@sleeve"],
-    ["🀄","プレイマット","盤面の背景を変える","@mat"],
+    ["🎴","スリーブ・プレイマット","裏面の絵と盤面の背景","@sleeve"],
   ]],
   ["データ・その他",[
     ["📤","バックアップ／書き出し","デッキ・登録・設定の控え","btnExport"],
@@ -39919,12 +39943,6 @@ const NAV_ITEMS=[
 const NAV_ACTIONS={
   cardmgr(){openCardMgr();},
   sleeve(){openSleevePanel();},
-  mat(){ // 同じパネルのプレイマット欄へ
-    openSleevePanel();
-    setTimeout(()=>{try{
-      const e=document.getElementById("setMatWho");if(e)e.scrollIntoView({block:"center",behavior:"smooth"});
-    }catch(e){}},80);
-  },
 };
 function buildNavDrawer(){
   const box=document.getElementById("navItems");
@@ -39956,6 +39974,10 @@ function openNavDrawer(){buildNavDrawer();document.getElementById("navDrawer").c
 function closeNavDrawer(){const d=document.getElementById("navDrawer");if(d)d.classList.remove("open");}
 function openCardMgr(){$("cardMgrOlay").classList.add("open");}
 function openSleevePanel(){$("sleeveOlay").classList.add("open");}
+{const b=document.getElementById("btnPickDeckSel");if(b)b.addEventListener("click",()=>{
+  DP_LOADAFTER=true;
+  openDeckPick("deckSelect","🃏 編成するデッキを選ぶ");
+});}
 {const b=document.getElementById("btnOpenCardMgr");if(b)b.addEventListener("click",openCardMgr);}
 {const b=document.getElementById("btnOpenSleeve");if(b)b.addEventListener("click",openSleevePanel);}
 {const b=document.getElementById("cardMgrClose");if(b)b.addEventListener("click",()=>$("cardMgrOlay").classList.remove("open"));}
@@ -43155,8 +43177,18 @@ function splashRun(off){
   let reduce=false;
   try{reduce=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
   if(!reduce){
-    // ⚡ 描いた雷は出さない（v14.52・雷鳴神さん指示で全廃）。
-    //    雷は写真に写っているものだけ。splashStrike/splashArc は使わず残置
+    // ⚡ アークは「あった方が躍動感が出る」（v14.53・雷鳴神さん）。
+    //    写真が主役なので、柔らかい線を少なめに走らせる
+    let t=520;
+    for(let i=0;i<3;i++){
+      SPLASH_TM.push(setTimeout(splashStrike,t));
+      t+=700+Math.random()*700;
+    }
+    let a=300;
+    for(let i=0;i<7;i++){
+      SPLASH_TM.push(setTimeout(splashArc,a));
+      a+=340+Math.random()*380;
+    }
   }
   SPLASH_TM.push(setTimeout(splashClose,3400));
 }
