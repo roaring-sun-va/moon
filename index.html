@@ -498,56 +498,136 @@ body.ld-peeking .olay{padding-bottom:158px}
 }
 @media(max-width:900px){#fxNowChip{font-size:11px;padding:5px 10px;max-width:80vw}}
 #fxNowChip.show{display:block}
-/* ⚡ 起動の表紙（v14.46）。画像を使わないので起動は重くならない */
-#splash{position:fixed;inset:0;z-index:99999;background:#04060c;overflow:hidden;
+/* ⚔ 対戦開始パネル（v14.47）。自分=青／相手=赤の2枚看板 */
+#stVsGrid{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:stretch;margin-top:4px}
+.stSide{border:1px solid;border-radius:12px;padding:9px;min-width:0;display:flex;flex-direction:column;gap:7px}
+.stSide.me{border-color:rgba(90,169,255,.55);background:linear-gradient(180deg,rgba(90,169,255,.12),rgba(13,17,25,.65))}
+.stSide.foe{border-color:rgba(255,123,123,.5);background:linear-gradient(180deg,rgba(255,123,123,.10),rgba(13,17,25,.65))}
+.stSideHead{font-size:11px;font-weight:900;color:var(--muted);letter-spacing:.06em;display:flex;align-items:center;gap:6px}
+.stSeat{font-size:10px;font-weight:900;padding:1px 8px;border-radius:8px;color:#fff}
+.stSide.me .stSeat{background:#1d4ed8;box-shadow:0 0 8px rgba(90,169,255,.45)}
+.stSide.foe .stSeat{background:#b91c1c;box-shadow:0 0 8px rgba(255,123,123,.4)}
+.stSide select{width:100%;min-width:0}
+.stSide .btn{width:100%}
+.stNameIn{width:100%;min-width:0;box-sizing:border-box;background:#0d1119;color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px}
+#stVsMark{align-self:center;font-size:15px;font-weight:900;font-style:italic;color:var(--accent);
+  text-shadow:0 0 12px rgba(245,197,66,.5);padding:0 1px}
+#stFirstRow{display:flex;align-items:center;gap:8px;margin-top:10px}
+.stLbl{font-size:12px;font-weight:800;color:var(--muted);flex:0 0 auto}
+#stFirstSeg{display:flex;flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+#stFirstSeg button{flex:1;min-width:0;background:#0d1119;color:var(--muted);border:none;
+  padding:9px 2px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
+#stFirstSeg button+button{border-left:1px solid var(--line)}
+#stFirstSeg button.on{background:linear-gradient(180deg,var(--accent),#d9a520);color:#241a00}
+#stRandom{width:100%;margin-top:10px;font-size:15px;padding:12px 10px;
+  box-shadow:0 4px 20px rgba(245,197,66,.28)}
+#olFold{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:#0b0f18}
+#olFold>summary{cursor:pointer;padding:9px 11px;font-size:12.5px;font-weight:900;
+  list-style:none;display:flex;align-items:center;gap:7px;color:var(--ink);user-select:none}
+#olFold>summary::-webkit-details-marker{display:none}
+#olFold>summary::before{content:"▸";color:var(--muted);transition:transform .15s;flex:0 0 auto}
+#olFold[open]>summary::before{transform:rotate(90deg)}
+#olFold .olFoldBody{padding:0 10px 10px}
+.olSteps>summary{cursor:pointer;font-size:11.5px;font-weight:800;color:var(--muted);
+  list-style:none;padding:4px 0;user-select:none}
+.olSteps>summary::-webkit-details-marker{display:none}
+#stMetaRow{margin-top:8px;align-items:center;flex-wrap:wrap}
+#olScore{font-size:12.5px;font-weight:800;flex:1;text-align:center;min-width:90px}
+@media(max-width:430px){
+  #stVsGrid{gap:5px}
+  .stSide{padding:7px;gap:6px}
+  #stVsMark{font-size:12px}
+  #stFirstSeg button{font-size:11px;padding:8px 1px}
+}
+/* ⚡ 起動の表紙（v14.47・青い雷）。画像を使わないので起動は重くならない */
+#splash{position:fixed;inset:0;z-index:99999;background:#02040a;overflow:hidden;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
-  transition:opacity .45s ease}
+  transition:opacity .5s ease}
 #splash.out{opacity:0;pointer-events:none}
-#splashSky{position:absolute;inset:0;
-  background:
-    radial-gradient(120% 70% at 50% 8%, rgba(90,140,255,.16), transparent 60%),
-    radial-gradient(90% 60% at 50% 100%, rgba(245,197,66,.07), transparent 60%),
-    #04060c}
-/* 奥へ伸びる床。線を斜めに引いて遠近感を出す */
-#splashGrid{position:absolute;left:-50%;right:-50%;bottom:-10%;height:55%;
+#splashSky{position:absolute;inset:0;background:
+  radial-gradient(130% 90% at 50% 115%, rgba(37,99,235,.20), transparent 55%),
+  radial-gradient(100% 70% at 50% -10%, rgba(56,189,248,.09), transparent 60%),
+  radial-gradient(60% 45% at 50% 46%, rgba(56,120,248,.13), transparent 70%),
+  #02040a}
+/* 🌫 漂うプラズマ雲。参考画像の「面で光る」感じはこれで出す */
+.spCloud{position:absolute;width:60vmax;height:60vmax;border-radius:50%;filter:blur(58px);
+  opacity:.55;mix-blend-mode:screen;pointer-events:none;will-change:transform}
+#spCloudA{left:-18vmax;top:-24vmax;
+  background:radial-gradient(circle,rgba(41,121,255,.36),transparent 62%);
+  animation:spDriftA 9s ease-in-out infinite alternate}
+#spCloudB{right:-22vmax;bottom:-26vmax;
+  background:radial-gradient(circle,rgba(125,211,252,.28),transparent 60%);
+  animation:spDriftB 11s ease-in-out infinite alternate}
+#spCloudC{left:30%;top:18%;width:44vmax;height:44vmax;
+  background:radial-gradient(circle,rgba(129,80,255,.20),transparent 65%);
+  animation:spDriftC 13s ease-in-out infinite alternate}
+@keyframes spDriftA{from{transform:translate(0,0) scale(1)}to{transform:translate(6vmax,4vmax) scale(1.12)}}
+@keyframes spDriftB{from{transform:translate(0,0) scale(1.08)}to{transform:translate(-5vmax,-5vmax) scale(1)}}
+@keyframes spDriftC{from{transform:translate(0,0)}to{transform:translate(-6vmax,5vmax)}}
+/* 🛣 奥へ流れ続ける床。止まった床より速度感が出る */
+#splashGrid{position:absolute;left:-60%;right:-60%;bottom:-12%;height:58%;
   background-image:
-    repeating-linear-gradient(90deg,rgba(120,170,255,.20) 0 1px,transparent 1px 68px),
-    repeating-linear-gradient(0deg,rgba(120,170,255,.16) 0 1px,transparent 1px 46px);
-  transform:perspective(300px) rotateX(72deg);transform-origin:50% 100%;
-  mask-image:linear-gradient(to top,#000 8%,transparent 92%);
-  -webkit-mask-image:linear-gradient(to top,#000 8%,transparent 92%)}
+    repeating-linear-gradient(90deg,rgba(96,165,250,.26) 0 1px,transparent 1px 64px),
+    repeating-linear-gradient(0deg,rgba(96,165,250,.20) 0 1px,transparent 1px 44px);
+  transform:perspective(320px) rotateX(74deg);transform-origin:50% 100%;
+  animation:spGridMove 2.4s linear infinite;
+  mask-image:linear-gradient(to top,#000 6%,transparent 88%);
+  -webkit-mask-image:linear-gradient(to top,#000 6%,transparent 88%)}
+@keyframes spGridMove{from{background-position:0 0,0 0}to{background-position:0 0,0 44px}}
+/* ⚡ 稲妻。にじむ外側（glow）と芯（core）の2本を重ねて描く */
 #splashBolts{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-#splashBolts path{fill:none;stroke:#cfe3ff;stroke-width:1.5;stroke-linecap:round;
-  stroke-linejoin:round;filter:drop-shadow(0 0 6px #7fb0ff) drop-shadow(0 0 16px #4f7fd8);
-  opacity:0}
-#splashBolts path.fire{animation:spBolt .38s ease-out}
-@keyframes spBolt{0%{opacity:0}8%{opacity:1}22%{opacity:.35}36%{opacity:1}100%{opacity:0}}
+#splashBolts path{fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+#splashBolts path.glow{stroke:#3b82f6;stroke-width:7;filter:blur(4px)}
+#splashBolts path.core{stroke:#eaf8ff;stroke-width:1.8;
+  filter:drop-shadow(0 0 5px #7dd3ff) drop-shadow(0 0 14px #2f6bff)}
+#splashBolts path.fire{animation:spBolt .52s ease-out forwards}
+#splashBolts path.arc{animation:spArc .34s ease-out forwards}
+@keyframes spBolt{0%{opacity:0}6%{opacity:1}20%{opacity:.25}32%{opacity:1}55%{opacity:.55}100%{opacity:0}}
+@keyframes spArc{0%{opacity:0}15%{opacity:.9}100%{opacity:0}}
+/* 💠 ロゴの後ろで脈打つエネルギーの核 */
+#splashCore{position:absolute;left:50%;top:50%;width:78vmin;height:78vmin;
+  transform:translate(-50%,-54%);border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(125,211,252,.20) 0%,rgba(37,99,235,.10) 34%,transparent 62%);
+  animation:spCore 2.4s ease-in-out infinite}
+@keyframes spCore{0%,100%{opacity:.75;transform:translate(-50%,-54%) scale(1)}
+  50%{opacity:1;transform:translate(-50%,-54%) scale(1.06)}}
 #splashLogo{position:relative;text-align:center;user-select:none}
-#splashLogo .sp-mark{font-size:52px;line-height:1;filter:drop-shadow(0 0 18px #f5c542)}
-#splashLogo .sp-name{margin-top:6px;font-size:clamp(34px,9vw,64px);font-weight:900;
-  letter-spacing:.04em;
-  background:linear-gradient(180deg,#fff3c4,#f5c542 45%,#b9891a);
+#splashLogo .sp-mark{font-size:54px;line-height:1;
+  filter:drop-shadow(0 0 14px #7dd3ff) drop-shadow(0 0 30px #2f6bff)}
+#splashLogo .sp-name{margin-top:4px;font-size:clamp(36px,10vw,72px);font-weight:900;
+  letter-spacing:.05em;
+  background:linear-gradient(180deg,#ffffff 8%,#cfeaff 40%,#7db6f5 68%,#3f6fd8 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
-  text-shadow:0 0 26px rgba(245,197,66,.35)}
-#splashLogo .sp-sub{margin-top:8px;font-size:clamp(11px,3vw,14px);font-weight:800;
-  color:#9fb4d8;letter-spacing:.18em}
-#splash.flash #splashLogo{animation:spShake .22s ease-out}
-@keyframes spShake{
-  0%{transform:translate(0,0)}25%{transform:translate(-2px,1px)}
-  50%{transform:translate(2px,-1px)}75%{transform:translate(-1px,-1px)}
-  100%{transform:translate(0,0)}}
-#splash.flash::after{content:"";position:absolute;inset:0;background:#dbe9ff;
-  opacity:.30;pointer-events:none;animation:spFlash .18s ease-out}
-@keyframes spFlash{from{opacity:.45}to{opacity:0}}
+  filter:drop-shadow(0 0 12px rgba(125,211,252,.55)) drop-shadow(0 2px 24px rgba(47,107,255,.45))}
+#splashLogo .sp-line{margin:10px auto 0;height:2px;width:min(72vw,420px);
+  background:linear-gradient(90deg,transparent,#7dd3ff 30%,#fff 50%,#7dd3ff 70%,transparent);
+  box-shadow:0 0 12px #7dd3ff;animation:spLinePulse 2s ease-in-out infinite}
+@keyframes spLinePulse{0%,100%{opacity:.5}50%{opacity:1}}
+#splashLogo .sp-sub{margin-top:9px;font-size:clamp(11px,3vw,14px);font-weight:800;
+  color:#8fb3e8;letter-spacing:.26em}
+#splash.flash #splashLogo{animation:spShake .2s ease-out}
+@keyframes spShake{0%{transform:translate(0,0)}25%{transform:translate(-2px,2px)}
+  50%{transform:translate(3px,-1px)}75%{transform:translate(-1px,-2px)}100%{transform:translate(0,0)}}
+#splash.flash::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(90% 90% at 50% 40%,rgba(214,235,255,.55),rgba(59,130,246,.18) 55%,transparent 80%);
+  animation:spFlash .22s ease-out forwards}
+@keyframes spFlash{from{opacity:.9}to{opacity:0}}
+/* 端をしめる */
+#splashVig{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 100% at 50% 50%,transparent 55%,rgba(0,0,0,.6) 100%)}
 #splashVer{position:absolute;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));
-  font-size:10px;font-weight:800;color:#41506b;letter-spacing:.12em}
+  font-size:10px;font-weight:800;color:#3c4f75;letter-spacing:.12em}
 #splashSkip{position:absolute;left:0;right:0;bottom:calc(46px + env(safe-area-inset-bottom));
-  text-align:center;font-size:11.5px;font-weight:800;color:#6f83a6;letter-spacing:.1em;
+  text-align:center;font-size:11.5px;font-weight:800;color:#6f88b3;letter-spacing:.1em;
   animation:spPulse 1.8s ease-in-out infinite}
-@keyframes spPulse{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes spPulse{0%,100%{opacity:.4}50%{opacity:1}}
 @media (prefers-reduced-motion: reduce){
-  #splashBolts path.fire,#splash.flash #splashLogo,#splash.flash::after,#splashSkip{animation:none}
+  #splashBolts path,.spCloud,#splashGrid,#splashCore,#splashLogo .sp-line,#splashSkip,
+  #splash.flash #splashLogo,#splash.flash::after{animation:none}
   #splash.flash::after{opacity:0}
+  #splashBolts path.fire,#splashBolts path.arc{opacity:.5}
+}
 }
 /* ⏳ 効果スタック（待機中の誘発）。ログの中に間借りする。
    何も待っていない時は出さないので、盤面の場所を取らない。 */
@@ -1263,13 +1343,19 @@ body.shake{animation:bodyShake .4s ease-out}
      タップで即終了。設定で出さないようにもできる。動きを抑える設定の端末では静止画。 -->
 <div id="splash" aria-hidden="true">
   <div id="splashSky"></div>
+  <div class="spCloud" id="spCloudA"></div>
+  <div class="spCloud" id="spCloudB"></div>
+  <div class="spCloud" id="spCloudC"></div>
   <div id="splashGrid"></div>
+  <div id="splashCore"></div>
   <svg id="splashBolts" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true"></svg>
   <div id="splashLogo">
     <div class="sp-mark">⚡</div>
     <div class="sp-name">DM Re:Vault</div>
-    <div class="sp-sub">デュエル・マスターズ　一人回し＆対戦</div>
+    <div class="sp-line"></div>
+    <div class="sp-sub">DUEL MASTERS　一人回し＆対戦</div>
   </div>
+  <div id="splashVig"></div>
   <div id="splashVer"></div>
   <div id="splashSkip">タップで開始</div>
 </div>
@@ -1773,70 +1859,79 @@ body.shake{animation:bodyShake .4s ease-out}
 </div>
 
 <div class="olay" id="startOlay">
-  <div class="panelbox">
-    <h2>対戦開始</h2>
-    <div class="row" style="margin-top:0">
-      <span style="font-size:12px;color:var(--muted);width:44px">自分</span>
-      <select id="stDeck0" style="flex:1"></select>
-      <button class="btn small" id="stPick0">🖼 一覧</button>
+  <div class="panelbox" id="stBox">
+    <h2>⚔ 対戦開始</h2>
+    <!-- 🃏 自分と相手を左右に並べる（自分=青／相手=赤。効果スタックと同じ色分け） -->
+    <div id="stVsGrid">
+      <div class="stSide me">
+        <div class="stSideHead"><span class="stSeat">P1</span>自分</div>
+        <select id="stDeck0"></select>
+        <button class="btn small" id="stPick0">🖼 一覧から選ぶ</button>
+        <input type="text" id="stName0" placeholder="名前（P1）" class="stNameIn">
+      </div>
+      <div id="stVsMark">VS</div>
+      <div class="stSide foe">
+        <div class="stSideHead"><span class="stSeat">P2</span>相手</div>
+        <select id="stDeck1"></select>
+        <button class="btn small" id="stPick1">🖼 一覧から選ぶ</button>
+        <input type="text" id="stName1" placeholder="名前（P2）" class="stNameIn">
+      </div>
     </div>
-    <div class="row">
-      <span style="font-size:12px;color:var(--muted);width:44px">相手</span>
-      <select id="stDeck1" style="flex:1"></select>
-      <button class="btn small" id="stPick1">🖼 一覧</button>
-    </div>
-    <div class="row">
-      <span style="font-size:12px;color:var(--muted);width:44px">名前</span>
-      <input type="text" id="stName0" placeholder="P1の名前" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
-      <input type="text" id="stName1" placeholder="P2の名前" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
-    </div>
-    <div class="row">
-      <span style="font-size:12px;color:var(--muted);width:44px">先行</span>
-      <select id="stFirst" style="flex:1">
+    <div id="stFirstRow">
+      <span class="stLbl">先行</span>
+      <div id="stFirstSeg">
+        <button type="button" data-v="p1">P1 先行</button>
+        <button type="button" data-v="random">🎲 ランダム</button>
+        <button type="button" data-v="p2">P2 先行</button>
+      </div>
+      <!-- 実体はこのselect。見た目のボタンと同期する（既存の読み取りコードは触らない） -->
+      <select id="stFirst" style="display:none">
         <option value="random">ランダム（P1/P2）</option>
         <option value="p1">P1が先行</option>
         <option value="p2">P2が先行</option>
       </select>
     </div>
-    <div class="hint">初手・シールドの決め方を選んでください。</div>
-    <section style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
-      <h3 style="margin:0 0 6px;font-size:13px">🌐 友達と遊ぶ（オンライン・ベータ）</h3>
-      <div class="row">
-        <input type="text" id="olPass" placeholder="合言葉（友達と同じ言葉）" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px">
-      </div>
-      <div class="row">
-        <button class="btn small primary" id="olHost">部屋を作る（ホスト）</button>
-        <button class="btn small" id="olJoin">部屋に入る（ゲスト）</button>
-        <button class="btn small ghost" id="olLeave" style="display:none">切断</button>
-      </div>
-      <div class="row">
-        <button class="btn small" id="olDeckSend">📤 自分のデッキを相手に送る</button>
-        <button class="btn small" id="olFxShare">📦 カード登録の受け渡し</button>
-      </div>
-      <div class="row">
-        <button class="btn small warn" id="olResign">🏳 投了</button>
-        <span id="olScore" style="font-size:13px;font-weight:800;flex:1;text-align:center"></span>
-        <button class="btn small ghost" id="olScoreReset">戦績リセット</button>
-      </div>
-      <div class="row">
-        <button class="btn small" id="mdPanelBtn" title="人間の判断（マナチャージ・召喚・攻撃・ブロック）を記録し、ゴーストの判断に反映します。書き出し／読み込みで仲間のデータと統合できます">📊 対戦データ（ゴースト学習用）</button>
-      </div>
-      <div class="hint" id="olStatus">未接続。ホストが部屋を作る→ゲストが同じ合言葉で入る→ホストがデッキを選んで対戦開始すると、盤面が自動同期されます。</div>
-      <div class="hint" style="border-left:3px solid var(--accent);padding-left:8px">
-        <b>ゲストのデッキを使う場合の手順</b><br>
-        ① ゲストが「📤 自分のデッキを相手に送る」を押す<br>
-        ② ホストの端末にそのデッキが保存される<br>
-        ③ ホストが P1・P2 それぞれのデッキを選んで「対戦開始」<br>
-        対戦開始を押した側が両方のデッキを用意して盤面を作り、それがそのまま相手に同期されます。
-        （盤面はホスト側のデータで作られるため、ゲストが自分の端末でデッキを選んでも反映されません）
-      </div>
-    </section>
-    <div class="row">
-      <button class="btn primary" id="stRandom" style="flex:1 1 100%">ランダムで開始（初手5・盾5）</button>
-      <button class="btn" id="stPick" style="flex:1 1 47%">初手だけ選ぶ</button>
-      <button class="btn" id="stPickFull" style="flex:1 1 47%">初手+盾を選ぶ</button>
+    <button class="btn primary" id="stRandom">▶ ランダムで開始（初手5・盾5）</button>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="stPick" style="flex:1">初手だけ選ぶ</button>
+      <button class="btn" id="stPickFull" style="flex:1">初手+盾を選ぶ</button>
     </div>
-    <div class="row" style="justify-content:flex-end"><button class="btn small ghost" id="stCancel">キャンセル</button></div>
+    <!-- 🌐 オンラインは普段たたんでおく。接続すると自動で開く -->
+    <details id="olFold">
+      <summary>🌐 友達と遊ぶ（オンライン・ベータ）</summary>
+      <div class="olFoldBody">
+        <div class="row" style="margin-top:0">
+          <input type="text" id="olPass" placeholder="合言葉（友達と同じ言葉）" style="flex:1;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px">
+        </div>
+        <div class="row">
+          <button class="btn small primary" id="olHost">部屋を作る（ホスト）</button>
+          <button class="btn small" id="olJoin">部屋に入る（ゲスト）</button>
+          <button class="btn small ghost" id="olLeave" style="display:none">切断</button>
+        </div>
+        <div class="row">
+          <button class="btn small" id="olDeckSend">📤 自分のデッキを相手に送る</button>
+          <button class="btn small" id="olFxShare">📦 カード登録の受け渡し</button>
+        </div>
+        <div class="hint" id="olStatus">未接続。ホストが部屋を作る→ゲストが同じ合言葉で入る→ホストがデッキを選んで対戦開始すると、盤面が自動同期されます。</div>
+        <details class="olSteps">
+          <summary>❓ ゲストのデッキを使う場合の手順</summary>
+          <div class="hint" style="border-left:3px solid var(--accent);padding-left:8px;margin-top:6px">
+            ① ゲストが「📤 自分のデッキを相手に送る」を押す<br>
+            ② ホストの端末にそのデッキが保存される<br>
+            ③ ホストが P1・P2 それぞれのデッキを選んで「対戦開始」<br>
+            対戦開始を押した側が両方のデッキを用意して盤面を作り、それがそのまま相手に同期されます。
+            （盤面はホスト側のデータで作られるため、ゲストが自分の端末でデッキを選んでも反映されません）
+          </div>
+        </details>
+      </div>
+    </details>
+    <div class="row" id="stMetaRow">
+      <button class="btn small warn" id="olResign">🏳 投了</button>
+      <span id="olScore"></span>
+      <button class="btn small ghost" id="olScoreReset">戦績リセット</button>
+      <button class="btn small ghost" id="mdPanelBtn" title="人間の判断（マナチャージ・召喚・攻撃・ブロック）を記録し、ゴーストの判断に反映します。書き出し／読み込みで仲間のデータと統合できます">📊 対戦データ</button>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:4px"><button class="btn small ghost" id="stCancel">キャンセル</button></div>
   </div>
 </div>
 
@@ -4689,7 +4784,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.46";
+const APP_VER="v14.47";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -32045,6 +32140,7 @@ function setupConn(conn){
   });
   conn.on("open",()=>{
     $("olLeave").style.display="";
+    {const f=document.getElementById("olFold");if(f)f.open=true;} // 接続中はオンライン欄を開いておく
     if(ONLINE.role==="guest"){
       S.seat=1;S.who=1;
       buildBoards();
@@ -38870,6 +38966,7 @@ async function openStartOlay(){
   $("stName0").value=S.players[0].label==="P1"?"":S.players[0].label;
   $("stName1").value=S.players[1].label==="P2"?"":S.players[1].label;
   $("startOlay").classList.add("open");
+  try{syncStFirstSeg();}catch(e){}
 }
 function applyPlayerName(pi,v){
   const nm=(v||"").trim()||(pi?"P2":"P1");
@@ -38898,6 +38995,18 @@ $("stDeck1").addEventListener("change",async ()=>{
   if(db)await idbPut("misc","lastDeckOpp",n);
   toast(S.vs?`相手デッキ：${n}`:`相手デッキ：${n}（「対戦」ONで配られます）`);
 });
+/* ⚔ 先行の見た目ボタンと select#stFirst を同期する（v14.47）。
+   読み取り側（startGame）は今までどおり select の値を見るので、配線は変えない */
+function syncStFirstSeg(){
+  const sel=$("stFirst"),seg=document.getElementById("stFirstSeg");
+  if(!sel||!seg)return;
+  seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.v===sel.value));
+}
+{const seg=document.getElementById("stFirstSeg");
+ if(seg)seg.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+   $("stFirst").value=b.dataset.v;syncStFirstSeg();sfx("tap");
+ }));
+ syncStFirstSeg();}
 $("stRandom").addEventListener("click",()=>{
   if(!S.players[0].mainList.length){toast("自分のデッキを選択してください");return;}
   $("startOlay").classList.remove("open");startGame(null);
@@ -42447,39 +42556,64 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
     });
   });
 }
-/* ⚡ 起動の表紙（v14.46）
+/* ⚡ 起動の表紙（v14.47・青い雷）
    ・画像は使わない（SVGとCSSだけ）。起動を重くしないため
    ・タップで即終了。3.4秒で自動的に閉じる
    ・「次から出さない」は設定に置く（misc/splashOff）
    ・動きを抑える設定の端末では稲妻を出さず、静止画にする */
 let SPLASH_TM=[];
-function splashBoltPath(){
-  // 上から下へ、折れながら落ちる線を毎回作る
-  const x0=40+Math.random()*320;
-  let x=x0,y=0,d=`M${x.toFixed(1)},0`;
-  const branches=[];
-  while(y<300){
-    y+=14+Math.random()*26;
-    x+=(Math.random()-0.5)*46;
-    d+=` L${x.toFixed(1)},${Math.min(300,y).toFixed(1)}`;
-    if(Math.random()<0.22&&y<230){
-      const bx=x+(Math.random()-0.5)*70, by=y+22+Math.random()*34;
-      branches.push(`M${x.toFixed(1)},${y.toFixed(1)} L${bx.toFixed(1)},${by.toFixed(1)}`);
-    }
+/* ⚡ 稲妻の線を再帰で割ってギザギザにする。segs に [x0,y0,x1,y1] を積む */
+function splashBoltSegs(x0,y0,x1,y1,jag,depth,segs){
+  if(depth<=0){segs.push([x0,y0,x1,y1]);return;}
+  const mx=(x0+x1)/2+(Math.random()-0.5)*jag;
+  const my=(y0+y1)/2+(Math.random()-0.5)*jag;
+  splashBoltSegs(x0,y0,mx,my,jag*0.55,depth-1,segs);
+  splashBoltSegs(mx,my,x1,y1,jag*0.55,depth-1,segs);
+  if(Math.random()<0.28){ // 途中から枝を伸ばす
+    const ang=Math.atan2(y1-y0,x1-x0)+(Math.random()<0.5?-1:1)*(0.5+Math.random()*0.7);
+    const len=18+Math.random()*34;
+    splashBoltSegs(mx,my,mx+Math.cos(ang)*len,my+Math.sin(ang)*len,jag*0.4,Math.max(0,depth-2),segs);
   }
-  return [d,...branches];
+}
+function splashSegsToD(segs){
+  return segs.map(s=>`M${s[0].toFixed(1)},${s[1].toFixed(1)} L${s[2].toFixed(1)},${s[3].toFixed(1)}`).join(" ");
+}
+/* 空から地面まで落ちる本体の稲妻 */
+function splashBoltPath(){
+  const x0=30+Math.random()*340;
+  const x1=x0+(Math.random()-0.5)*160;
+  const segs=[];
+  splashBoltSegs(x0,-8,x1,300,72,5,segs);
+  return splashSegsToD(segs);
+}
+/* にじむ外側と芯の2本を同じ形で重ねて描き、寿命が来たら消す */
+function splashDraw(d,cls,life){
+  const svg=document.getElementById("splashBolts");
+  if(!svg)return;
+  for(const k of ["glow","core"]){
+    const p=document.createElementNS("http://www.w3.org/2000/svg","path");
+    p.setAttribute("d",d);
+    p.classList.add(k,cls);
+    svg.appendChild(p);
+    SPLASH_TM.push(setTimeout(()=>{try{p.remove();}catch(e){}},life));
+  }
 }
 function splashStrike(){
-  const svg=document.getElementById("splashBolts"),sp=document.getElementById("splash");
-  if(!svg||!sp||sp.classList.contains("out"))return;
-  svg.textContent="";
-  for(const d of splashBoltPath()){
-    const p=document.createElementNS("http://www.w3.org/2000/svg","path");
-    p.setAttribute("d",d);p.classList.add("fire");
-    svg.appendChild(p);
-  }
+  const sp=document.getElementById("splash");
+  if(!sp||sp.classList.contains("out"))return;
+  const n=1+(Math.random()<0.6?1:0)+(Math.random()<0.25?1:0); // 1〜3本同時
+  for(let i=0;i<n;i++)splashDraw(splashBoltPath(),"fire",620);
   sp.classList.add("flash");
-  SPLASH_TM.push(setTimeout(()=>{try{sp.classList.remove("flash");}catch(e){}},240));
+  SPLASH_TM.push(setTimeout(()=>{try{sp.classList.remove("flash");}catch(e){}},230));
+}
+/* ロゴのまわりでパチッと走る小さな火花。大きい雷の合間を埋める */
+function splashArc(){
+  const sp=document.getElementById("splash");
+  if(!sp||sp.classList.contains("out"))return;
+  const cx=200+(Math.random()-0.5)*200, cy=150+(Math.random()-0.5)*80;
+  const segs=[];
+  splashBoltSegs(cx,cy,cx+(Math.random()-0.5)*70,cy+(Math.random()-0.5)*46,18,3,segs);
+  splashDraw(splashSegsToD(segs),"arc",380);
 }
 function splashClose(){
   const sp=document.getElementById("splash");
@@ -42487,7 +42621,7 @@ function splashClose(){
   for(const t of SPLASH_TM)clearTimeout(t);
   SPLASH_TM=[];
   sp.classList.add("out");
-  setTimeout(()=>{try{sp.remove();}catch(e){}},500);
+  setTimeout(()=>{try{sp.remove();}catch(e){}},520);
 }
 function splashRun(off){
   const sp=document.getElementById("splash");
@@ -42498,11 +42632,17 @@ function splashRun(off){
   let reduce=false;
   try{reduce=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
   if(!reduce){
-    // 不規則な間隔で落とす。同じ間隔で続くと機械っぽく見える
-    let t=260;
+    // 大きい雷：不規則な間隔で落とす。等間隔だと機械っぽく見える
+    let t=240;
     for(let i=0;i<5;i++){
       SPLASH_TM.push(setTimeout(splashStrike,t));
-      t+=380+Math.random()*620;
+      t+=420+Math.random()*640;
+    }
+    // 小さな火花：合間を埋めるように走らせる
+    let a=380;
+    for(let i=0;i<8;i++){
+      SPLASH_TM.push(setTimeout(splashArc,a));
+      a+=300+Math.random()*520;
     }
   }
   SPLASH_TM.push(setTimeout(splashClose,3400));
