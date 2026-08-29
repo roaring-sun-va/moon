@@ -2355,7 +2355,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="text" id="fxPsyLinkMap" placeholder="合体後の名前の表：龍神メタル＝ヘヴィ・メタル／龍神メタル＋破壊神デス＝ヘヴィ・デス・メタル" title="リンクした相手の顔ぶれごとに、合体後のカード名を指定します。並び順はこの名前を「・」で区切った順になります" style="flex:1;min-width:220px">
         <input type="text" id="fxPsyLinkTo" placeholder="リンク後のカード名（空欄＝名前連結）" style="flex:1;min-width:170px">
         <label><input type="checkbox" id="fxPsyLinkW"> リンク後は横向き</label>
-        <label><input type="checkbox" id="fxBAD"> B・A・D（コスト2軽減で召喚できる。そうしたらターンの終わりに破壊）</label>
+        <label><input type="number" id="fxBadDiscard" style="width:70px" min="0" placeholder="0"> 💢 B・A・D・S（このコストぶん軽減して実行できる。そうしたら手札を1枚捨てる。0＝なし）</label>
+        <label title="B・A・D：コスト2軽減で召喚できる。そうしたらターンの終わりに破壊されます"><input type="checkbox" id="fxBAD"> B・A・D（コスト2軽減で召喚できる。そうしたらターンの終わりに破壊）</label>
         <label><input type="checkbox" id="fxBadBrand"> マスターB・A・D（−2＋このターン召喚した他の火のクリーチャー×−2。使ったらターンの終わりに自分のクリーチャー1体破壊・コスト0以下にならない）</label>
         <input type="text" id="fxAtkChance" list="raceList" placeholder="アタック・チャンス対象（種族/名前・呪文に登録・空欄=なし）" style="flex:1;min-width:170px">
         <span style="font-size:12px;font-weight:700">2回攻撃</span>
@@ -4381,7 +4382,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.35";
+const APP_VER="v14.37";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10798,6 +10799,29 @@ async function autoTapCost(pi,c){
       cost-=dec;
       c.badMark=true;
       toast(`💢 B・A・D：−${dec}（残り${cost}）／ターンの終わりに破壊`);
+    }
+  }
+  // 💢 B・A・D・S：コストをn少なくして実行できる。そうしたら自分の手札を1枚捨てる。
+  //    （ふつうの B・A・D と違い「ターンの終わりに破壊」ではない。ビックバンフレア／"必駆"蛮触礼亞型）
+  if(+r.badDiscard>0&&cost>=1){
+    const decS=Math.min(+r.badDiscard,cost);
+    const yes=await ask(`💢 B・A・D・S${+r.badDiscard}（${faceNameOf(c)}）\nコスト${decS}軽減で実行しますか？\n（そうしたら自分の手札を1枚捨てます）`);
+    if(yes){
+      cost-=decS;
+      toast(`💢 B・A・D・S：−${decS}（残り${cost}）／手札を1枚捨てます`);
+      const hd=Z.hand.filter(x=>x.id!==c.id);
+      if(!hd.length)toast("💢 捨てる手札がありません（そのまま実行します）");
+      else{
+        const j=await pickCard("💢 B・A・D・S：捨てる手札を1枚選択",hd);
+        const tgt=(j==null||j>=hd.length)?hd[0]:hd[j];
+        const hi=Z.hand.findIndex(x=>x.id===tgt.id);
+        if(hi>=0){
+          const dc=Z.hand.splice(hi,1)[0];dc.faceup=true;Z.grave.push(dc);
+          if(typeof afterHandDiscard==="function")afterHandDiscard(pi,dc,pi);
+          sfx("grave");renderAll();
+          toast(`🗑 ${faceNameOf(dc)} を捨てた`);
+        }
+      }
     }
   }
   // マスターB・A・D：−2＋このターン召喚した他の火のクリーチャー×−2（0以下にならない・ターン終わりに自分の1体破壊）
@@ -23903,6 +23927,7 @@ function renderFxEditor(){
   $("fxSTCond").value=FXEDIT.stCond||"";
   $("fxFieldKind").value=FXEDIT.fieldKind||"";
   $("fxBAD").checked=!!FXEDIT.bad;
+  {const e=$("fxBadDiscard");if(e)e.value=FXEDIT.badDiscard||0;}
   $("fxBadBrand").checked=!!FXEDIT.badBrand;
   $("fxGGG").value=FXEDIT.ggg||"";
   $("fxGGGGrp").value=FXEDIT.gggGrp||"";
@@ -26090,6 +26115,7 @@ function openFxEditor(key){
     stCond:cur&&cur.stCond||"",
     fieldKind:cur&&cur.fieldKind||"",
     bad:cur?!!cur.bad:false,
+    badDiscard:cur?(+cur.badDiscard||0):0,
     badBrand:cur?!!cur.badBrand:false,
     ggg:cur&&cur.ggg||"",
     gggGrp:cur&&cur.gggGrp||"",
@@ -26615,6 +26641,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stCond:$("fxSTCond").value.trim(),
     fieldKind:$("fxFieldKind").value||"",
     bad:$("fxBAD").checked,
+    badDiscard:$("fxBadDiscard")?(+$("fxBadDiscard").value||0):0,
     badBrand:$("fxBadBrand").checked,
     ggg:$("fxGGG").value||"",
     gggGrp:$("fxGGGGrp").value.trim(),
@@ -26944,7 +26971,8 @@ $("btnFxReg").addEventListener("click",async ()=>{
   $("deckOlay").classList.remove("open");
   const k=await pickImage("効果を登録するカードを選ぶ","タップしたカードの効果エディタが開きます");
   if(k){
-    FX_RETURN=()=>{$("btnRegList").click();};   // 📚 閉じたら効果登録の一覧へ戻す（デッキパネルには戻さない）
+    // 🔙 閉じたら「効果を登録するカードを選ぶ」の一覧へ戻す（デッキパネルには戻さない）
+    FX_RETURN=()=>{$("btnFxReg").click();};
     openFxEditor(k);
   }else openDeckPanel();
 });
