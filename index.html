@@ -2517,9 +2517,14 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このカードは、多面登録の2面目（裏面）としても手札から召喚できます（大獄の封殺ディアス Z 型）。表の面に入れてください"><input type="checkbox" id="fxCastAsBack"> 🃏 手札から裏面としても召喚できる</label>
         <label title="自分のクリーチャーに「スレイヤー」を与えます（熊田すず型）。「このカード自身は含まない」「付与の対象条件」は上のパワー付与の欄と共通です"><input type="checkbox" id="fxStAuraSlayer"> 🗡 常在：味方に「スレイヤー」を与える</label>
         <label title="自分のクリーチャーに「ブロッカー」を与えます（滝川るる＆ラフルル型）。「このカード自身は含まない」「付与の対象条件」は上のパワー付与の欄と共通です"><input type="checkbox" id="fxStAuraBlocker"> 🛡 常在：味方に「ブロッカー」を与える</label>
+        <label title="自分のクリーチャーに「マッハファイター」を与えます（対象条件は上のパワー付与の欄と共通）"><input type="checkbox" id="fxStAuraMach"> ⚡ 常在：味方に「マッハファイター」を与える</label>
+        <label title="自分のクリーチャーに「エスケープ」を与えます（対象条件は上のパワー付与の欄と共通）"><input type="checkbox" id="fxStAuraEsc"> ⚓ 常在：味方に「エスケープ」を与える</label>
         <label title="バトル中、自分のハンター1体につきパワー+1000（自身がハンターなら自身も数えます）。バトルの時だけで、除去のパワー参照には効きません"><input type="checkbox" id="fxHunting"> 🏹 ハンティング</label>
         <label style="display:flex;align-items:center;gap:4px" title="J・O・E N：召喚する時、コストをN少なくしてもよい。そうした場合、このターンの終わりに山札の一番下に置き、カードを1枚引きます。0＝なし">🃏 J・O・E
           <input type="number" id="fxJoe" style="width:70px" placeholder="0" min="0"></label>
+        <label style="display:flex;align-items:center;gap:4px" title="自分の手札にあるカードに「J・O・E N」を与えます（ドンドド・ドラ息子型）。右の欄で対象を絞れます">🃏 J・O・E を与える
+          <input type="number" id="fxJoeGrant" style="width:70px" placeholder="0" min="0">
+          <input type="text" id="fxJoeGrantF" list="raceList" placeholder="対象（例：火／ジョーカーズ）" style="width:190px"></label>
         <label title="自分のシールドがブレイクされる時、そのシールドを見て、手札に加えるかわりに墓地に置いてもよい。そうした場合、超次元ゾーンからそのカードと同じコストのサイキック・クリーチャーを出します（ガイアール・カイザー型）"><input type="checkbox" id="fxBrkPsyOut"> 🌌 ブレイクされた盾を墓地に置いて、超次元から同コストを出す</label>
         <input type="text" id="fxBrkPsyOutFilt" list="raceList" placeholder="↑ 出せるサイキックの条件（例：ハンター・空欄＝すべて）" style="flex:1;min-width:180px">
         <input type="text" id="fxLinkBreakHyper" placeholder="↑ そのうち超次元ゾーンに戻すカード名（「／」区切り・例：勝利のガイアール・カイザー）" style="flex:1;min-width:220px">
@@ -4382,7 +4387,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.37";
+const APP_VER="v14.38";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8322,6 +8327,7 @@ async function finishNextTurn(cur){
         }
       }
     }
+    S._turnBreaks=[0,0];                     // 💥 このターンのブレイク数をリセット
     await checkAwaken(pi,"turnStartMine");   // 🔄 覚醒（ターン開始時）
     // 🪦 ドレッド・ブラッド型：自分のターン開始時、墓地にあるこのカードは、自分のクリーチャーn体を破壊して墓地から出せる（任意）
     const gRev=Z.grave.filter(c=>{const r=getReg(c);return r&&(+r.graveReviveN>0);});
@@ -10847,8 +10853,20 @@ async function autoTapCost(pi,c){
   }
   // 🃏 J・O・E N：召喚する時、コストをN少なくしてもよい。
   //    そうした場合、このターンの終わりに山札の一番下へ置き、カードを1枚引く。
-  if((+r.joe||0)>0&&cost>0&&!c._viaCheat&&paySide==="creature"){
-    const nJ=+r.joe||0;
+  // 🃏 他のカードから J・O・E を与えられている？（joeGrant＋joeGrantF・ドンドド・ドラ息子型）
+  const _joeGrant=(()=>{
+    let mx=0;
+    for(const b of Z.battle){
+      const rb=getReg(b);
+      if(!rb||!(+rb.joeGrant>0)||isSealed(b)||isIgnored(b,pi))continue;
+      if(rb.joeGrantF&&!lockFilterOk(rb.joeGrantF,r,c))continue;
+      mx=Math.max(mx,+rb.joeGrant);
+    }
+    return mx;
+  })();
+  const _joeN=Math.max(+r.joe||0,_joeGrant);
+  if(_joeN>0&&cost>0&&!c._viaCheat&&paySide==="creature"){
+    const nJ=_joeN;   // 🃏 自前の J・O・E と、他のカードから与えられた分の大きいほう
     const useJ=await ask(`🃏 J・O・E${nJ}（${faceNameOf(c)}）\nコストを${nJ}少なくして召喚しますか？\n（そうした場合、このターンの終わりにこのクリーチャーを山札の一番下に置き、カードを1枚引きます）`);
     if(useJ){
       cost=Math.max(0,cost-nJ);
@@ -18861,7 +18879,15 @@ async function destroyWithReplace(pi,c){
   if(S.expert&&r){
     // 🔁 破壊置換の候補を収集（3列目=wiki優先度カテゴリ：1=①自身の能力／2=②「与える」常在で付与／3=③バトルゾーンの他のカード）
     const opts=[];
-    if(Z.shield.length&&(r.escape||allyGrant(pi,"agEsc"))){
+    // ⚓ 常在でエスケープを与えられている？（stAuraEsc＋stAuraFilt・ドギラゴン王道型）
+    const _auraEsc=zonesOf(pi).battle.some(b=>{
+      const rb=getReg(b);
+      if(!rb||!rb.stAuraEsc||isSealed(b)||isIgnored(b,pi))return false;
+      if(rb.stAuraOthers&&b.id===c.id)return false;
+      if(rb.stAuraFilt&&!(r&&lockFilterOk(rb.stAuraFilt,r,c)))return false;
+      return true;
+    });
+    if(Z.shield.length&&(r.escape||_auraEsc||allyGrant(pi,"agEsc"))){
       const _own=!!r.escape;
       opts.push(["escape",`🛡 エスケープ（盾を1枚手札に加えて、場に残る）${_own?"":"／付与"}`,_own?1:2]);
     }
@@ -20602,7 +20628,18 @@ async function startAttack(pi,id){
   const op=pi===0?1:0, OZ=zonesOf(op);
   const reg=getReg(c);
   const attackerPower=await effPower(c,true,false);
-  const atkAll=!!(reg&&(reg.atkUn||reg.machf))||!!(c.buff&&c.buff.attackUntapped);
+  // ⚡ 常在でマッハファイターを与えられている？（stAuraMach＋stAuraFilt・ドギラゴン王道型）
+  const _auraMach=(()=>{
+    for(const b of zonesOf(pi).battle){
+      const rb=getReg(b);
+      if(!rb||!rb.stAuraMach||isSealed(b)||isIgnored(b,pi))continue;
+      if(rb.stAuraOthers&&b.id===c.id)continue;
+      if(rb.stAuraFilt&&!(reg&&lockFilterOk(rb.stAuraFilt,reg,c)))continue;
+      return true;
+    }
+    return false;
+  })();
+  const atkAll=!!(reg&&(reg.atkUn||reg.machf))||_auraMach||!!(c.buff&&c.buff.attackUntapped);
   const targets=[];
   if(S.noAtkTurn&&S.noAtkTurn.on&&S.noAtkTurn.key===`${S.turn}`){
     toast("⛔ このターン、すべてのクリーチャーは攻撃できません");
@@ -23708,6 +23745,10 @@ function renderFxEditor(){
   {const e=$("fxStAuraFilt");if(e)e.value=FXEDIT.stAuraFilt||"";}
   $("fxCantAtkP").checked=!!FXEDIT.cantAtkP;
   $("fxMachF").checked=!!FXEDIT.machf;
+  {const e=$("fxStAuraMach");if(e)e.checked=!!FXEDIT.stAuraMach;}
+  {const e=$("fxStAuraEsc");if(e)e.checked=!!FXEDIT.stAuraEsc;}
+  {const e=$("fxJoeGrant");if(e)e.value=FXEDIT.joeGrant||0;}
+  {const e=$("fxJoeGrantF");if(e)e.value=FXEDIT.joeGrantF||"";}
   $("fxNoBlock").checked=!!FXEDIT.noBlock;
   {const e=$("fxFlying");if(e)e.checked=!!FXEDIT.flying;}
   {const e=$("fxKaijo");if(e)e.checked=!!FXEDIT.kaijo;}
@@ -25949,6 +25990,10 @@ function openFxEditor(key){
     stAuraFilt:cur&&cur.stAuraFilt||"",
     cantAtkP:cur?!!cur.cantAtkP:false,
     machf:cur?!!cur.machf:false,
+    stAuraMach:cur?!!cur.stAuraMach:false,
+    stAuraEsc:cur?!!cur.stAuraEsc:false,
+    joeGrant:cur?(+cur.joeGrant||0):0,
+    joeGrantF:cur&&cur.joeGrantF||"",
     noBlock:cur?!!cur.noBlock:false,
     flying:cur?!!cur.flying:false,
     kaijo:cur?!!cur.kaijo:false,
@@ -26429,6 +26474,10 @@ $("fxSave").addEventListener("click",async ()=>{
     stAuraFilt:($("fxStAuraFilt")?$("fxStAuraFilt").value:"").trim(),
     cantAtkP:$("fxCantAtkP").checked,
     machf:$("fxMachF").checked,
+    stAuraMach:$("fxStAuraMach")?$("fxStAuraMach").checked:false,
+    stAuraEsc:$("fxStAuraEsc")?$("fxStAuraEsc").checked:false,
+    joeGrant:$("fxJoeGrant")?(+$("fxJoeGrant").value||0):0,
+    joeGrantF:$("fxJoeGrantF")?$("fxJoeGrantF").value.trim():"",
     noBlock:$("fxNoBlock").checked,
     flying:$("fxFlying")?$("fxFlying").checked:false,
     kaijo:$("fxKaijo")?$("fxKaijo").checked:false,
@@ -32019,7 +32068,11 @@ function bumpEv(key,pi,d=1){
   try{
     if(pi!=null&&typeof checkAwaken==="function"){
       if(key==="manaAccel")setTimeout(()=>{checkAwaken(pi,"manaAddMine");},0);
-      if(key==="breaks")setTimeout(()=>{checkAwaken(pi,"shieldBrokeMine");},0);
+      if(key==="breaks"){
+        S._turnBreaks=S._turnBreaks||[0,0];
+        S._turnBreaks[pi]=(S._turnBreaks[pi]||0)+(+d||0);
+        setTimeout(()=>{checkAwaken(pi,"shieldBrokeMine");},0);
+      }
     }
   }catch(e){}
   if(!MATCH_EV||pi==null||(typeof REPLAY!=="undefined"&&REPLAY.on))return;
@@ -40873,10 +40926,13 @@ function zoneCondOk(expr,pi,selfCard){
     };
     return terms.every(t=>{
       // 💥 「ブレイク数」＝そのプレイヤーがこれまでにブレイクした枚数（MATCH_EV の集計を見る）
-      {const mBk=t.match(/^(相手の?)?ブレイク数(>=|<=|=)(\d+)$/);
+      {const mBk=t.match(/^(相手の?)?(?:このターンの?)?ブレイク数(>=|<=|=)(\d+)$/);
        if(mBk){
          const who=mBk[1]?op2:pi;
-         const cnt=(typeof MATCH_EV!=="undefined"&&MATCH_EV&&MATCH_EV.breaks)?(MATCH_EV.breaks[who]||0):0;
+         const _turnOnly=/このターン/.test(t);
+         const cnt=_turnOnly
+           ? ((S._turnBreaks&&S._turnBreaks[who])||0)
+           : ((typeof MATCH_EV!=="undefined"&&MATCH_EV&&MATCH_EV.breaks)?(MATCH_EV.breaks[who]||0):0);
          const nb=+mBk[3];
          return mBk[2]==="<="?cnt<=nb:mBk[2]==="="?cnt===nb:cnt>=nb;
        }}
