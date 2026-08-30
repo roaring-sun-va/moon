@@ -565,9 +565,17 @@ body.ld-peeking .olay{padding-bottom:158px}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stDeckPrev .sdp-sub{font-size:9.5px;font-weight:800;color:#b9c6de}
 @media(min-width:760px){.stDeckPrev{height:110px}}
-/* 🖼 デッキ作成の表紙だけは大きいまま（対戦開始の看板は元の大きさに戻す・v14.66） */
-@media(min-width:760px){#dkPrev{height:220px}}
-@media(min-width:1100px){#dkPrev{height:260px}}
+/* 🖼 デッキ作成の表紙は行の左の小さなタイルにする（v14.70）。
+   大きな看板は場所を取りすぎた。位置調整はタイルのタップで開く。 */
+#deckHeadRow{align-items:center;gap:6px;flex-wrap:wrap}
+#deckHeadRow #dkPrev{flex:0 0 auto;width:104px;height:56px;margin:0;cursor:pointer}
+#deckHeadRow #dkPrev .sdp-cap{display:none}   /* 名前は隣のトグルに出ているので重ねない */
+#deckHeadRow #dkPrev:empty::after{content:"表紙";font-size:10px}
+#deckHeadRow .btn.small{padding:6px 8px;font-size:11.5px;flex:0 0 auto}
+@media(max-width:640px){
+  #deckHeadRow #dkPrev{width:88px;height:50px}
+  #deckHeadRow .btn.small{padding:6px 6px;font-size:11px}
+}
 #stMetaRow{margin-top:8px;align-items:center;flex-wrap:wrap}
 /* ☰ メニュー（v14.49） */
 #navDrawer{position:fixed;inset:0;z-index:9600;display:none}
@@ -616,8 +624,20 @@ body.ld-peeking .olay{padding-bottom:158px}
 .setSect .setSectBody{padding:0 12px 10px}
 /* 👁 盤面で見ながら調整（v14.57）。設定を画面下の小窓にして、上の盤面は触れる */
 #settingsOlay.peek{align-items:flex-end;background:transparent;pointer-events:none}
-#settingsOlay.peek .panelbox{pointer-events:auto;max-height:44dvh;overflow:auto;
+#settingsOlay.peek{padding-top:0!important}
+/* ⚠ !important が要る。スマホ用の `.olay>.panelbox{max-height:…!important}`（@media 640px）が
+   あとから当たって小窓にならなかった（v14.69で判明）。!important 同士なら詳細度でこちらが勝つ。 */
+#settingsOlay.peek>.panelbox{pointer-events:auto;overflow:auto;
+  max-height:min(44dvh, calc(100dvh - var(--safetop,0px) - var(--safebot,0px) - 10px))!important;
   box-shadow:0 -8px 40px rgba(0,0,0,.7);border-color:var(--accent)}
+/* 小窓の間は説明文・注意書きを畳んで、調整する項目だけを見せる */
+#settingsOlay.peek #setLegal,
+#settingsOlay.peek #btnTutorial,
+#settingsOlay.peek #btnHelp,
+#settingsOlay.peek>.panelbox .hint{display:none}
+#settingsOlay.peek>.panelbox>h2{font-size:13px}
+/* 開いている折りたたみだけ残す（閉じている見出しの行で小窓が埋まらないように） */
+#settingsOlay.peek>.panelbox .setSect:not([open]){display:none}
 #deckBox{max-width:min(1100px,96vw);min-height:min(88dvh,860px)}
 /* 📊 デッキの文明・タイプ内訳（v14.52・コスト帯とセットで見る） */
 #deckStats{display:flex;flex-wrap:wrap;gap:5px 10px;margin-top:5px;font-size:11.5px;font-weight:800}
@@ -805,13 +825,21 @@ body.ld-peeking .olay{padding-bottom:158px}
   align-items:start;flex:0 0 auto;min-width:0;
   border-left:3px solid var(--line);border-radius:0 7px 7px 0;
   padding:3px 6px 4px;background:rgba(255,255,255,.03)}
+/* 🎴 絵札つきの行は「番号｜絵札｜文字」の3列（v14.69） */
+#ldStack .lds-row.hasimg{grid-template-columns:auto auto minmax(0,1fr)}
 #ldStack .lds-row.me{border-left-color:#5aa9ff}
 #ldStack .lds-row.foe{border-left-color:#ff7b7b}
 #ldStack .lds-row.now{background:rgba(255,207,106,.13);border-left-color:#ffcf6a}
-#ldStack .lds-n{grid-column:1;grid-row:1/span 2;align-self:center;
+#ldStack .lds-n{grid-column:1;grid-row:1/-1;align-self:center;
   font-weight:900;color:var(--muted);font-variant-numeric:tabular-nums;min-width:15px}
+#ldStack .lds-img{grid-column:2;grid-row:1/-1;align-self:center;
+  height:38px;width:auto;border-radius:4px;cursor:zoom-in;
+  box-shadow:0 1px 3px rgba(0,0,0,.5);flex:0 0 auto}
 #ldStack .lds-nm{grid-column:2;font-weight:800;color:var(--text);
   min-width:0;overflow-wrap:anywhere;word-break:normal;line-height:1.35}
+#ldStack .lds-row.hasimg .lds-nm,
+#ldStack .lds-row.hasimg .lds-ev,
+#ldStack .lds-row.hasimg .lds-note{grid-column:3}
 #ldStack .lds-ev{grid-column:2;color:var(--muted);font-size:11px;min-width:0;overflow-wrap:anywhere}
 #ldStack .lds-note{grid-column:2;color:#ffcf6a;font-weight:900;font-size:11px}
 #ldStack .lds-foot{color:var(--muted);font-size:11px;flex:0 0 auto}
@@ -821,6 +849,7 @@ body.ld-peeking .olay{padding-bottom:158px}
   #ldStack .lds-row{padding:4px 7px 5px}
   #ldStack .lds-nm{font-size:12.5px;line-height:1.4}
   #ldStack .lds-ev,#ldStack .lds-note{font-size:11.5px}
+  #ldStack .lds-img{height:44px}
 }
 /* 📜 待機中の件数を丸ボタンに出す。
    ⚠ ここに「relative での position 上書き」を書かないこと（v14.68で削除）。
@@ -999,6 +1028,16 @@ body.vs .pboard.cmw{flex:1 1 0;min-height:0}
   #barScroll .bar-extra{display:none}
   #bottombar.more-open .bar-extra{display:inline-block}
   #btnNextTurn{flex:0 0 auto;min-width:104px;padding:11px 12px;font-size:14px}
+}
+/* 📱 スマホは上下の帯をもう一段細くして、そのぶん盤面に回す（v14.69・雷鳴神さん依頼）。
+   ボタンの高さは指で押せる範囲（36px前後）を保つ。 */
+@media (max-width:520px){
+  #topbar{padding:3px 8px;padding-top:max(3px, env(safe-area-inset-top));gap:5px}
+  #bottombar{gap:4px;padding:3px 6px calc(3px + env(safe-area-inset-bottom))}
+  #bottombar .btn.small{font-size:11px;padding:5px 7px}
+  #btnNextTurn{min-width:96px;padding:8px 10px;font-size:13.5px}
+  #board{padding:2px 4px 1px;gap:3px}
+  body.vs #board{gap:2px}
 }
 
 #sheet{
@@ -1598,14 +1637,16 @@ body.shake{animation:bodyShake .4s ease-out}
     <h2>🃏 デッキ作成</h2>
     <section>
       <h3>デッキ</h3>
-      <div class="row">
-        <select id="deckSelect" style="flex:1"></select>
-        <button class="btn small" id="btnPickDeckSel" title="表紙つきの一覧から選んで、そのまま編集欄に読み込みます">🖼 一覧</button>
-      <button class="btn small" id="btnLoadDeck">編集欄へ</button>
-        <button class="btn small" id="btnViewDeck">🖼 見る</button>
+      <!-- 🖼 表紙は行の左の小さなタイルに（v14.70・雷鳴神さん依頼）。
+           タップで上下位置の調整。大きな看板はやめて、1行に収める -->
+      <div class="row" id="deckHeadRow">
+        <div class="stDeckPrev" id="dkPrev" title="選択中デッキの表紙（タップで上下位置を調整）"></div>
+        <select id="deckSelect" style="flex:1;min-width:0"></select>
+        <button class="btn small" id="btnPickDeckSel" title="表紙つきの一覧から選んで、そのまま編集欄に読み込みます">🗂 一覧</button>
+        <button class="btn small" id="btnLoadDeck">✏ 編集欄へ</button>
+        <button class="btn small" id="btnViewDeck" title="デッキの中身を画像で見る">👁 見る</button>
         <button class="btn small warn" id="btnDeleteDeck">削除</button>
       </div>
-    <div class="stDeckPrev" id="dkPrev" style="margin-top:6px" title="選択中デッキの表紙"></div>
       <div id="editingBanner" style="display:none;background:#2a1a4a;border:1px solid #7b4bd6;border-radius:8px;padding:6px 10px;margin-bottom:6px;font-size:12px">
         <span style="color:#c9a8ff">✏️ 編集中：</span><b id="editingName">—</b><span id="dirtyMark" style="color:#f59e0b;margin-left:8px"></span>
       </div>
@@ -1659,7 +1700,7 @@ body.shake{animation:bodyShake .4s ease-out}
   <div class="panelbox">
     <h2>⚙ 設定 <span class="verchip" id="setVer" style="font-size:11px">v10.15</span></h2>
     <!-- ⚖ ファンコンテンツ表記。動画・生放送に映るので出しておく -->
-    <div style="font-size:10.5px;line-height:1.6;color:var(--muted);background:#0d1119;
+    <div id="setLegal" style="font-size:10.5px;line-height:1.6;color:var(--muted);background:#0d1119;
       border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-bottom:8px">
       DM Re:Vault は非公式のファンコンテンツです。株式会社タカラトミーおよび
       Wizards of the Coast 社とは関係がなく、承認・後援を受けていません。<br>
@@ -2124,19 +2165,6 @@ body.shake{animation:bodyShake .4s ease-out}
 </div>
 
 <!-- 👁 全公開（v14.60・生放送向け）。表示だけを変える。ゲームの処理には影響しない -->
-<div class="olay" id="openZoneOlay">
-  <div class="panelbox">
-    <h2>👁 見せる非公開領域を選ぶ</h2>
-    <div class="hint">選んだゾーンは、相手のものでも表向きに見えるようになります。
-      <b>見た目だけ</b>が変わり、ゲームの処理・S・トリガーの判定・オンラインの同期には影響しません。
-      生放送や振り返りで使ってください。</div>
-    <div class="row" id="ozRow"></div>
-    <div class="row"><button class="btn small" id="ozAll" style="flex:1">すべて公開</button>
-      <button class="btn small" id="ozNone" style="flex:1">すべて隠す</button></div>
-    <div class="row" style="justify-content:flex-end"><button class="btn small ghost" id="ozClose">閉じる</button></div>
-  </div>
-</div>
-
 <div class="olay" id="startOlay">
   <div class="panelbox" id="stBox">
     <h2>⚔ 対戦開始</h2>
@@ -2179,7 +2207,17 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
     </div>
     <!-- 🌐 オンラインは普段たたんでおく。接続すると自動で開く -->
-    <details id="olFold">
+    <details class="setSect" id="ozSect">
+        <summary>👁 見せる非公開領域（生放送向け）</summary>
+        <div class="hint">選んだゾーンは、相手のものでも表向きに見えるようになります。<b>見た目だけ</b>が変わり、
+          ゲームの処理・S・トリガーの判定・オンラインの同期には影響しません。
+          ※山札を公開しても、盤面の山札は「山（枚数）」のままです。表向きになるのは
+          「… 山札」で開いた一覧と、効果でめくれて見える時のカードです。</div>
+        <div class="row" id="ozRow"></div>
+        <div class="row"><button type="button" class="btn small" id="ozAll" style="flex:1">すべて公開</button>
+          <button type="button" class="btn small" id="ozNone" style="flex:1">すべて隠す</button></div>
+      </details>
+      <details id="olFold">
       <summary>🌐 友達と遊ぶ（オンライン・ベータ）</summary>
       <div class="olFoldBody">
         <div class="row" style="margin-top:0">
@@ -3342,7 +3380,8 @@ body.shake{animation:bodyShake .4s ease-out}
 
 <div class="olay" id="regOlay">
   <div class="panelbox">
-    <h2>登録一覧</h2>
+    <h2 style="display:flex;align-items:center;gap:8px">登録一覧
+      <button type="button" class="btn small ghost" id="regCloseTop" title="閉じる" style="margin-left:auto">✕ 閉じる</button></h2>
     <div class="row" style="position:sticky;top:0;z-index:5;background:var(--panel,#131a2a);padding:6px 0;margin:0">
       <input type="text" id="regSearch" placeholder="🔎 カード名・能力で検索（スペース区切りでAND・例：侵略 SA）" style="flex:1;min-width:180px;background:#0d1119;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px">
       <button type="button" class="btn small" id="regNamedBtn" style="white-space:nowrap">⭐ 固有辞書</button>
@@ -3881,6 +3920,7 @@ function fxStackRows(){
       rows.push({pi:FX_NOW_PI|0,name:faceNameOf(FX_NOW_CARD),ev:"処理中",now:true});
     // 2. 出た時（CIP）の待ち行列
     for(const q of fxQueue)rows.push({pi:q.pi|0,name:faceNameOf(q.c),ev:"出た時"});
+    // ※ 絵札は下の renderFxStack で name から引く（logImgKey と同じ仕組み）
     // 3. 誘発の待ち行列（解決順に並べ替えたもの）
     if(typeof TRIG_PENDING!=="undefined"&&TRIG_PENDING.length){
       let ord=TRIG_PENDING.map((t,i)=>({t,i}));
@@ -3912,12 +3952,24 @@ function evLabel(ev){
   }catch(e){}
   return ev;
 }
-/* ⏳ 効果スタックの高さ（v14.48）。小・中・大をタップで切り替え、次に開いた時も同じ大きさ */
+/* ⏳ 効果スタックの高さ（v14.48／v14.69で割合方式）。小・中・大をタップで切り替え、次に開いた時も同じ大きさ。
+   ⚠ dvh で指定すると、ログの箱自体の高さ（スマホは max-height:44dvh）を超えられず、
+      「中」と「大」が同じ見た目になっていた。箱の内側の高さに対する割合で決める。 */
 let LD_STACK_SIZE=1;
-const LD_STACK_MAX=["11dvh","26dvh","46dvh"];
+const LD_STACK_RATIO=[0.24,0.46,0.80];
+const LD_STACK_MAX=["11dvh","26dvh","46dvh"];   // 予備（ログの箱の高さが測れない時だけ使う）
 const LD_STACK_LB=["小","中","大"];
+function ldStackMaxPx(){
+  try{
+    const d=document.getElementById("logDock");
+    const h=d?d.getBoundingClientRect().height:0;
+    const r=LD_STACK_RATIO[LD_STACK_SIZE]!=null?LD_STACK_RATIO[LD_STACK_SIZE]:0.46;
+    if(h>60)return Math.round(h*r)+"px";
+  }catch(e){}
+  return LD_STACK_MAX[LD_STACK_SIZE]||"26dvh";
+}
 async function cycleLdStackSize(){
-  LD_STACK_SIZE=(LD_STACK_SIZE+1)%LD_STACK_MAX.length;
+  LD_STACK_SIZE=(LD_STACK_SIZE+1)%LD_STACK_RATIO.length;
   try{if(db)await idbPut("misc","ldStackSize",LD_STACK_SIZE);}catch(e){}
   try{renderFxStack();}catch(e){}
 }
@@ -3928,7 +3980,7 @@ function renderFxStack(){
   const rows=fxStackRows();
   if(!rows.length){el.classList.remove("show");el.textContent="";return;}
   el.textContent="";
-  el.style.maxHeight=LD_STACK_MAX[LD_STACK_SIZE]||"26dvh";
+  el.style.maxHeight=ldStackMaxPx();
   const h=document.createElement("div");
   h.className="lds-head";
   const ht=document.createElement("span");
@@ -3945,7 +3997,20 @@ function renderFxStack(){
     const d=document.createElement("div");
     d.className="lds-row "+(r.pi===(S.seat|0)?"me":"foe")+(r.now?" now":"");
     const n=document.createElement("span");n.className="lds-n";n.textContent=`${i+1}`;
+    // 🎴 絵札を添える（v14.69・ログと同じ仕組みで名前から画像を引く）。タップで拡大。
+    let k=null;
+    try{k=logImgKey(r.name);}catch(e){}
+    const u=k?safeImgURL(k):"";
+    if(u){
+      const im=document.createElement("img");
+      im.className="lds-img";im.src=u;im.draggable=false;im.loading="lazy";
+      im.title=`《${r.name}》（タップで拡大）`;
+      im.addEventListener("click",ev2=>{ev2.stopPropagation();try{showBigCardImage(k,r.name);}catch(e){}});
+      d.appendChild(im);
+      d.classList.add("hasimg");
+    }
     const nm=document.createElement("span");nm.className="lds-nm";nm.textContent=r.name;
+    if(k){nm.style.cursor="zoom-in";nm.addEventListener("click",ev2=>{ev2.stopPropagation();try{showBigCardImage(k,r.name);}catch(e){}});}
     // 誘発名とどちら側かを1行にまとめる（自分/相手が色だけだと小さい画面で分かりにくい）
     const ev=document.createElement("span");ev.className="lds-ev";
     ev.textContent=`${r.pi===(S.seat|0)?"自分":"相手"}／${r.ev}`;
@@ -5107,7 +5172,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.68";
+const APP_VER="v14.71";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6548,7 +6613,11 @@ async function playEvoCreature(p,zone,id){
     evc1._viaCheat=false;markArrive(evc1);
     closeSel();sfx("move");renderAll();
     toast(`⤴ 超無限進化：${srcs.map(x=>faceNameOf(x)).join("＋")} の上に ${faceNameOf(evc1)}（合計コスト ${srcs.reduce((a,x)=>{const r=getReg(x);return a+((r&&+r.cost)||0);},0)}）`);
-    try{fxShare("evo","超無限進化！",`${S.players[p].label}　${srcs.length}体の上に`,true,evc1.name,p);}catch(e){}
+    try{
+      const _r1=getReg(evc1);const _bn=(_r1&&_r1.evoBaseN|0)||1;
+      const _t1=_bn===3?"進化GV！":_bn===2?"進化GW！":_bn>3?`進化（${_bn}体）！`:"超無限進化！";
+      fxShare("evo",_t1,`${S.players[p].label}　${srcs.length}体の上に`,true,evc1.name,p);
+    }catch(e){}
     LAST_ARRIVED=evc1;emitEvent(p,"summon");enqueueFx(p,evc1);
     return;
   }
@@ -7017,7 +7086,8 @@ function fxBanner(kind,title,sub,big,cardName,side){
 
     const b=document.createElement("div");
     b.className="revFxBanner"+(big?" big":"");
-    b.style.cssText="max-width:94vw;pointer-events:none;color:"+st.bd+";"
+    // 👆 タップで消せる（v14.71・雷鳴神さん依頼。長く感じた時に自分で片づけられる）
+    b.style.cssText="max-width:94vw;pointer-events:auto;cursor:pointer;color:"+st.bd+";"
       +`background:linear-gradient(105deg,${st.bg} 0%, rgba(0,0,0,.92) 58%, ${st.bg} 100%);`
       +`border-left:${big?7:5}px solid ${st.bd};border-right:${big?7:5}px solid ${st.bd};`
       +`border-radius:6px;padding:${big?"14px 30px":"9px 22px"};`
@@ -7103,6 +7173,14 @@ function fxBanner(kind,title,sub,big,cardName,side){
     }
     b.appendChild(row);
     L.appendChild(b);
+    // 👆 タップ＝すぐ消す（v14.71）。誤タップで盤面を触らないよう、伝播は止める
+    b.title="タップで消す";
+    b.addEventListener("click",ev=>{
+      ev.stopPropagation();
+      if(b._gone)return;b._gone=true;
+      b.style.transition="opacity .12s";b.style.opacity="0";
+      setTimeout(()=>{try{b.remove();}catch(e){}},120);
+    });
 
     // 大きな出来事は、画面を光らせて斜めに切り裂く
     if(big){
@@ -8015,10 +8093,22 @@ async function reorderDeck(src,tgt,allNames){
   await saveDeckOrder();
   if(DECK_SORT!=="manual")await saveDeckSort("manual");
 }
-async function saveDeck(name,main,gr,hy,sp,ex,cover){
+async function saveDeck(name,main,gr,hy,sp,ex,cover,coverY){
   await loadDeckOrder();
   markDeckCreated(name);
-  if(db)await idbPut("decks",name,{main,gr,hy,sp,ex,cover:cover||null});else memDecks.set(name,{main,gr,hy,sp,ex,cover:cover||null});
+  // 🖼 coverY＝表紙の上下位置（0=上端〜100=下端。null=既定の20%）。
+  //    渡されなかった時（undefined）は、前の値を消さずに引き継ぐ。
+  //    既存の呼び出しは7引数のままで良く、位置は「🖼表紙」からだけ書き換わる。
+  if(coverY===undefined){
+    try{const prev=await getDeck(name);coverY=(prev&&prev.coverY!=null)?prev.coverY:null;}catch(e){coverY=null;}
+  }
+  const cy=(coverY==null||isNaN(+coverY))?null:Math.max(0,Math.min(100,Math.round(+coverY)));
+  if(db)await idbPut("decks",name,{main,gr,hy,sp,ex,cover:cover||null,coverY:cy});else memDecks.set(name,{main,gr,hy,sp,ex,cover:cover||null,coverY:cy});
+}
+/* 🖼 表紙の上下位置をCSSの background-position に直す */
+function deckCoverPos(d){
+  const y=(d&&d.coverY!=null&&!isNaN(+d.coverY))?Math.max(0,Math.min(100,+d.coverY)):20;
+  return `50% ${y}%`;
 }
 async function getDeck(name){return db?await idbGet("decks",name):memDecks.get(name);}
 async function deckNames(){return db?await idbKeys("decks"):Array.from(memDecks.keys());}
@@ -11338,7 +11428,8 @@ async function autoTapCost(pi,c){
         [`G・ゼロで召喚（コスト0）`,`通常コスト（${cost}）で召喚`]);
       if(j===0){
         toast(`🆓 G・ゼロ：${faceNameOf(c)} をコストを支払わずに召喚`);
-        fxKeyword(pi,"G・ゼロ！",c.name,"コストを支払わずに召喚");
+        // ✨ 破壊◯体などの条件で出るカード（ネルガルザーク型）は「特殊召喚！」の演出にする（v14.71）
+        fxKeyword(pi,(/破壊/.test(gz)?"特殊召喚！":"G・ゼロ！"),c.name,"コストを支払わずに召喚");
         logOnly(`🆓 G・ゼロ：${S.players[pi].label} が ${faceNameOf(c)} をコストなしで召喚`);
         if(paySide==="creature")noteSummonTurn(pi,c);
         return;
@@ -28594,6 +28685,7 @@ $("btnRegList").addEventListener("click",()=>{
   {const nb=document.getElementById("regNamedBtn");if(nb)nb.onclick=showNamedList;}
 });
 $("regClose").addEventListener("click",()=>$("regOlay").classList.remove("open"));
+$("regCloseTop").addEventListener("click",()=>$("regOlay").classList.remove("open"));
 /* 種族を複数カードにまとめて付与（例：魔導具）。呪文/タマシード等に種族欄を1枚ずつ書く手間を省く */
 async function bulkTagRace(){
   if(!FXDB.size){toast("登録カードがありません");return;}
@@ -34454,7 +34546,9 @@ function showFxDiffPanel(){
   const order={new:0,newer:1,unknown:2,old:3,same:4};
   keys.sort((a,b)=>(order[clsOf(a)]-order[clsOf(b)])||String(dispName.get(a)||a).localeCompare(String(dispName.get(b)||b),"ja"));
   const ol=document.createElement("div");
-  ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:995;display:flex;flex-direction:column;padding:12px;gap:8px";
+  // 📱 この画面は .olay を使わない独自の作りなので、セーフエリア（時計・電波の帯）を自前で避ける
+  ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:995;display:flex;flex-direction:column;gap:8px;"
+    +"padding:max(12px, var(--safetop,0px)) 12px max(12px, var(--safebot,0px))";
   const head=document.createElement("div");
   head.style.cssText="color:#fff;font-weight:900;font-size:15px;line-height:1.5";
   const cnt=c0=>keys.filter(k=>clsOf(k)===c0).length;
@@ -34559,7 +34653,9 @@ function pickFxKeysPanel(){
     sortKeys();
     const pick=new Set();
     const ol=document.createElement("div");
-    ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:996;display:flex;flex-direction:column;padding:12px;gap:8px";
+    // 📱 セーフエリア（時計・電波の帯）を自前で避ける。上に食い込んで見出しが読めなかった（v14.69）
+    ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:996;display:flex;flex-direction:column;gap:8px;"
+      +"padding:max(12px, var(--safetop,0px)) 12px max(12px, var(--safebot,0px))";
     const head=document.createElement("div");
     head.style.cssText="color:#fff;font-weight:900;font-size:15px;line-height:1.5";
     head.textContent="📦 送るカードを選ぶ";
@@ -34589,7 +34685,14 @@ function pickFxKeysPanel(){
     cnt.style.cssText="color:#fbbf24;font-size:13px;font-weight:800";
     ol.appendChild(cnt);
     const grid=document.createElement("div");
-    grid.style.cssText="flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(140px,18vw,190px),1fr));grid-auto-rows:max-content;gap:10px;align-content:start";
+    // 🖼 タイルの幅（v14.71）：スマホ（520px以下）は画面幅から計算して4列前後の小タイル、
+    //    PCは従来どおり縦長の大型表示（add30.js が見張っている形をそのまま使う）。
+    const _tw=Math.max(84,Math.round(window.innerWidth/4)-14);
+    const _cols=(window.innerWidth<=520)
+      ? `repeat(auto-fill,minmax(${_tw}px,1fr))`
+      : "repeat(auto-fill,minmax(clamp(140px,18vw,190px),1fr))";
+    grid.style.cssText="flex:1;min-height:0;overflow:auto;display:grid;grid-auto-rows:max-content;gap:8px;align-content:start;"
+      +`grid-template-columns:${_cols}`;
     ol.appendChild(grid);
     const shown=()=>{
       const q=sIn.value.trim().toLowerCase();
@@ -34613,7 +34716,7 @@ function pickFxKeysPanel(){
         else{const t2=document.createElement("div");t2.style.cssText="font-size:11px;color:#6b7686;padding:0 6px;text-align:center";t2.textContent="画像なし";art.appendChild(t2);}
         el.appendChild(art);
         const nm=document.createElement("div");
-        nm.style.cssText="padding:5px 7px;font-size:12px;font-weight:700;color:#e6ecf7;line-height:1.3;word-break:break-word";
+        nm.style.cssText="padding:4px 5px;font-size:11px;font-weight:700;color:#e6ecf7;line-height:1.25;word-break:break-word";
         nm.textContent=nameOf(k);
         el.appendChild(nm);
         if(on){
@@ -34673,7 +34776,8 @@ $("olFxShare").addEventListener("click",async ()=>{
     const names=[...d.main,...(d.gr||[]),...(d.hy||[]),...(d.sp||[]),...(d.ex||[])].map(e=>e.name);
     keys=fxShareKeys("deck",names);label=`デッキ「${n}」で使うカード`;
     // 🖼 表紙（cover）も一緒に送る。相手の端末でも同じ絵が出る
-    _sendDeckObj={name:n,deck:{main:d.main,gr:d.gr||[],hy:d.hy||[],sp:d.sp||[],ex:d.ex||[],cover:d.cover||null}};
+    // ⚠ cover は末尾に置くこと（backup.js の「④送る側が表紙を入れている」が cover:d.cover||null} の形を見ている）
+    _sendDeckObj={name:n,deck:{main:d.main,gr:d.gr||[],hy:d.hy||[],sp:d.sp||[],ex:d.ex||[],coverY:(d.coverY!=null?d.coverY:null),cover:d.cover||null}};
   }else{keys=fxShareKeys("recent");label="直近1週間の効果更新分";}
   if(!keys.length){toast("送る対象のカード登録がありません");return;}
   if(!await ask(`📤 カード登録 ${keys.length}件を送信します（${label}）\nよろしいですか？`))return;
@@ -38447,6 +38551,9 @@ function openImageManager(){
   $("vTitle").textContent=`登録画像の管理（${imgURL.size}枚）`;
   $("vHint").textContent="画像をタップ → 名前の変更 / 削除ができます。検索は名前のほか文明（光水闇火自然無色）でも絞れます。";
   $("vOk").style.display="none";$("vStatus").textContent="";
+  // ✖ 閉じたら盤面へ戻す（v14.71）。デッキの「👁見る」が設定した戻り先が残っていると
+  //    閉じた時にデッキ編成パネルが開いてしまうため、ここで上書きし、閉じたら既定に戻す。
+  $("vCancel").onclick=()=>{try{closeViewer();}catch(e){$("viewerOlay").classList.remove("open");}$("vCancel").onclick=defaultVCancel;};
   const search=$("vSearch");search.style.display="";search.value="";
   const g=$("vGrid");
   let mgrSelMode=false;
@@ -39340,11 +39447,65 @@ async function fillStartDecks(){
 const CIV_DOT={light:"#fde68a",water:"#7dd3fc",dark:"#a78bfa",fire:"#fca5a5",nature:"#86efac",zero:"#e5e7eb"};
 /* 🖼 デッキの絵（表紙）は `d.cover`（normNameのキー）に一本化する。
    デッキ一覧の「🖼 表紙」でも、対戦開始のデッキ選択の「🖼 絵」でも同じ場所を書き換える。 */
-async function saveDeckCover(deckName,imgKey){
+async function saveDeckCover(deckName,imgKey,coverY){
   const d=await getDeck(deckName);
   if(!d)return false;
-  await saveDeck(deckName,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],imgKey||null);
+  await saveDeck(deckName,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],imgKey||null,coverY);
   return true;
+}
+/* 🖼 表紙の上下位置をスライダーで決める小さなパネル（v14.70）。
+   決めた位置は「デッキ作成の表紙タイル」「対戦開始の看板」「デッキ一覧のタイル」の全部に効く。
+   戻り値：0〜100（決定）／null（既定の20%に戻す）／undefined（やめた＝変更しない） */
+function adjustCoverY(imgKey,cur){
+  return new Promise(res=>{
+    const url=imgURL.get(imgKey);
+    if(!url){toast("この表紙は画像が読み込まれていません");res(undefined);return;}
+    let y=(cur!=null&&!isNaN(+cur))?Math.max(0,Math.min(100,+cur)):20;
+    const ol=document.createElement("div");
+    ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:997;display:flex;align-items:center;justify-content:center;"
+      +"padding:max(12px, var(--safetop,0px)) 12px max(12px, var(--safebot,0px))";
+    const box=document.createElement("div");
+    box.style.cssText="background:var(--panel,#131a2a);border:1px solid var(--line,#334);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;width:min(560px,96vw)";
+    const ttl=document.createElement("div");
+    ttl.style.cssText="font-weight:900;font-size:14px";
+    ttl.textContent="🖼 表紙の位置を調整";
+    box.appendChild(ttl);
+    // 見本は表紙タイルと同じ横長の枠。スライダーを動かすとその場で動く
+    const prev=document.createElement("div");
+    prev.className="stDeckPrev";
+    prev.style.cssText="height:150px;margin:0";
+    prev.style.backgroundImage=`url("${url}")`;
+    const apply=()=>{prev.style.backgroundPosition=`50% ${y}%`;lb.textContent=`上下位置：${y}%${y===20?"（既定）":""}`;};
+    box.appendChild(prev);
+    const lb=document.createElement("div");
+    lb.style.cssText="font-size:12px;font-weight:800;color:var(--muted)";
+    box.appendChild(lb);
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;align-items:center;gap:8px";
+    const up=document.createElement("span");up.textContent="上";up.style.cssText="font-size:12px;color:var(--muted);font-weight:800";
+    const rg=document.createElement("input");
+    rg.type="range";rg.min="0";rg.max="100";rg.step="1";rg.value=String(y);
+    rg.style.cssText="flex:1";
+    rg.addEventListener("input",()=>{y=+rg.value;apply();});
+    const dn=document.createElement("span");dn.textContent="下";dn.style.cssText="font-size:12px;color:var(--muted);font-weight:800";
+    row.appendChild(up);row.appendChild(rg);row.appendChild(dn);
+    box.appendChild(row);
+    const hint=document.createElement("div");
+    hint.className="hint";
+    hint.textContent="カードの見せたい部分（顔など）が枠に入るように上下を動かします。デッキ作成の表紙・対戦開始の看板・デッキ一覧のタイルすべてに同じ位置で出ます。";
+    box.appendChild(hint);
+    const foot=document.createElement("div");
+    foot.style.cssText="display:flex;gap:8px;justify-content:flex-end";
+    const mk=(t,cls,fn)=>{const b=document.createElement("button");b.className="btn small "+cls;b.textContent=t;b.addEventListener("click",fn);foot.appendChild(b);return b;};
+    mk("やめる","ghost",()=>{ol.remove();res(undefined);});
+    mk("↺ 既定に戻す","",()=>{ol.remove();res(null);});
+    mk("この位置にする","primary",()=>{ol.remove();res(y);});
+    box.appendChild(foot);
+    ol.appendChild(box);
+    ol.addEventListener("click",e=>{if(e.target===ol){ol.remove();res(undefined);}});
+    document.body.appendChild(ol);
+    apply();
+  });
 }
 async function deckPickCards(){
   await loadDeckOrder();
@@ -39381,7 +39542,7 @@ async function deckPickCards(){
       imgKey=d.cover;hasImg=true;
       key=dispName.get(d.cover)||d.cover;
     }
-    out.push({name:n,key,imgKey,hasImg,total,civs:[...civs],
+    out.push({name:n,key,imgKey,hasImg,total,pos:deckCoverPos(d),civs:[...civs],
       gr:((d&&d.gr)||[]).reduce((a,x)=>a+(+x.count||0),0),
       hy:((d&&d.hy)||[]).reduce((a,x)=>a+(+x.count||0),0)});
   }
@@ -39433,8 +39594,21 @@ async function pickDeckCover(deckName,after){
   const j=await pickCard(`🖼 「${deckName}」の表紙にするカードを選ぶ`,cards,
     {sub:(c,i)=>i===0?"おまかせ":(imgURL.has(normName(c.name))?"":"画像なし")});
   if(j===null)return;
-  await saveDeckCover(deckName,j===0?null:normName(cards[j].name));
-  toast(j===0?`🖼 「${deckName}」の表紙を自動に戻しました`:`🖼 「${deckName}」の表紙を《${cards[j].name}》にしました`);
+  if(j===0){
+    await saveDeckCover(deckName,null,null);   // 自動に戻す時は位置も既定へ
+    toast(`🖼 「${deckName}」の表紙を自動に戻しました`);
+  }else{
+    const key=normName(cards[j].name);
+    // 🖼 選んだあとに上下位置も決められる（v14.70・カードによって顔の位置が違うため）
+    let cy;
+    if(imgURL.has(key)){
+      const d0=await getDeck(deckName);
+      cy=await adjustCoverY(key,(d0&&d0.coverY!=null)?d0.coverY:20);
+      if(cy===undefined)cy=(d0&&d0.coverY!=null)?d0.coverY:null;   // やめた＝位置は変えない
+    }
+    await saveDeckCover(deckName,key,cy);
+    toast(`🖼 「${deckName}」の表紙を《${cards[j].name}》にしました`);
+  }
   if(typeof after==="function")await after();
 }
 let DP_TARGET=null;
@@ -39531,7 +39705,7 @@ async function openDeckPick(selId,title){
       el.className="dpCard"+(dk.name===cur?" cur":"");
       el.title=dk.name;
       const url=(dk.hasImg&&dk.imgKey)?imgURL.get(dk.imgKey):null;
-      if(url)el.style.backgroundImage=`url("${url}")`;
+      if(url){el.style.backgroundImage=`url("${url}")`;el.style.backgroundPosition=dk.pos||"";}
       else{
         const p2=document.createElement("div");p2.className="dpNo";
         p2.textContent=dk.key?`${dk.key}\n（画像未登録）`:"カードなし";
@@ -39640,7 +39814,7 @@ async function stDeckPrevInfo(name){
     if(imgURL.has(k)&&cost>keyCost){key=k;keyCost=cost;}
   }
   if(d.cover&&imgURL.has(d.cover))key=d.cover;
-  return {imgKey:key,total};
+  return {imgKey:key,total,pos:deckCoverPos(d)};
 }
 async function refreshStPrev(pi){
   const box=document.getElementById("stPrev"+pi);
@@ -39652,6 +39826,7 @@ async function refreshStPrev(pi){
   if(!info)return; // :empty のまま＝「デッキ未選択」が出る
   const url=info.imgKey?imgURL.get(info.imgKey):null;
   if(url)box.style.backgroundImage=`url("${url}")`;
+  box.style.backgroundPosition=info.pos||"";   // 🖼 表紙の上下位置（デッキごと）
   const cap=document.createElement("div");
   cap.className="sdp-cap";
   cap.textContent=name.includes("/")?name.split("/").slice(1).join("/"):name;
@@ -40197,6 +40372,7 @@ async function refreshDkPrev(){
   if(!info)return;
   const url=info.imgKey?imgURL.get(info.imgKey):null;
   if(url)box.style.backgroundImage=`url("${url}")`;
+  box.style.backgroundPosition=info.pos||"";   // 🖼 表紙の上下位置（デッキごと）
   const cap=document.createElement("div");
   cap.className="sdp-cap";
   cap.textContent=name;
@@ -40335,7 +40511,16 @@ function applyDgSize(px){
    const ol=$("settingsOlay");
    const on=ol.classList.toggle("peek");
    b.textContent=on?"👁 盤面で見ながら調整：ON（押すと元の大きさに）":"👁 盤面で見ながら調整（設定を下に小さく）";
-   if(on)toast("設定を下の小窓にしました。盤面を触りながら調整できます");
+   if(on){
+     // 👁 小窓では「開いている折りたたみ」だけを見せる（v14.69）。
+     //    押した本人がいる🃏盤面・演出だけを開き、ほかは畳んで、その節の頭まで送る。
+     try{
+       const own=b.closest(".setSect");
+       ol.querySelectorAll(".setSect").forEach(d=>{if(d!==own)d.open=false;});
+       if(own){own.open=true;setTimeout(()=>{try{own.scrollIntoView({block:"start"});}catch(e){}},0);}
+     }catch(e){}
+     toast("設定を下の小窓にしました。盤面を触りながら調整できます（他の折りたたみは畳みました）");
+   }
  });}
 // 設定を閉じたら小窓モードも解除しておく
 {const c=$("btnCloseSettings");
@@ -40364,9 +40549,9 @@ const NAV_ITEMS=[
   ]],
   ["見た目",[
     ["🎴","スリーブ・プレイマット","裏面の絵と盤面の背景","@sleeve"],
-    ["👁","見せる非公開領域","手札・盾・山札を公開（生放送向け）","@openzone"],
   ]],
   ["データ・その他",[
+    ["📥","読み込み","パック・画像・バックアップを取り込み","btnImport"],
     ["📤","バックアップ／書き出し","デッキ・登録・設定の控え","btnExport"],
     ["⚙","設定","表示・操作・演出（使い方・リファレンスもここ）","btnSettings"],
   ]],
@@ -40388,8 +40573,7 @@ function buildNavDrawer(){
       b.type="button";b.className="nav-item";
       const i1=document.createElement("span");i1.className="ni-ic";i1.textContent=ic;
       const i2=document.createElement("span");i2.textContent=label;
-      const i3=document.createElement("span");i3.className="ni-sub";i3.textContent=sub;
-      i2.appendChild(i3);
+      // 📝 サブ説明は出さない（v14.71・雷鳴神さん依頼。データは残すが描かない）
       b.appendChild(i1);b.appendChild(i2);
       b.addEventListener("click",()=>{
         closeNavDrawer();
@@ -40434,8 +40618,16 @@ function renderOzRow(){
     box.appendChild(b);
   }
 }
-function openOzPanel(){renderOzRow();$("openZoneOlay").classList.add("open");}
-{const b=document.getElementById("ozClose");if(b)b.addEventListener("click",()=>$("openZoneOlay").classList.remove("open"));}
+/* 👁 v14.71：専用パネルをやめ、対戦開始パネルの折りたたみに統合した */
+function openOzPanel(){
+  renderOzRow();
+  $("startOlay").classList.add("open");
+  try{refreshStPrev(0);refreshStPrev(1);}catch(e){}
+  const d=document.getElementById("ozSect");
+  if(d){d.open=true;setTimeout(()=>{try{d.scrollIntoView({block:"center"});}catch(e){}},0);}
+}
+{const d=document.getElementById("ozSect");
+ if(d)d.addEventListener("toggle",()=>{if(d.open)try{renderOzRow();}catch(e){}});}
 {const b=document.getElementById("ozAll");if(b)b.addEventListener("click",async ()=>{
    for(const [k] of OZ_ITEMS)S.openZones[k]=true;
    try{if(db)await idbPut("misc","openZones",JSON.stringify(S.openZones));}catch(e){}
@@ -40444,7 +40636,6 @@ function openOzPanel(){renderOzRow();$("openZoneOlay").classList.add("open");}
    for(const [k] of OZ_ITEMS)S.openZones[k]=false;
    try{if(db)await idbPut("misc","openZones",JSON.stringify(S.openZones));}catch(e){}
    renderOzRow();renderAll();});}
-$("openZoneOlay").addEventListener("click",e=>{if(e.target===$("openZoneOlay"))$("openZoneOlay").classList.remove("open");});
 $("btnMenu").addEventListener("click",openNavDrawer);
 document.getElementById("navScrim").addEventListener("click",closeNavDrawer);
 document.getElementById("navClose").addEventListener("click",closeNavDrawer);
@@ -40727,6 +40918,23 @@ async function openDeckListViewer(name){
  if(bi)bi.addEventListener("click",()=>setDeckView("img",true));
  if(bt)bt.addEventListener("click",()=>setDeckView("text",true));}
 $("deckSelect").addEventListener("change",()=>{try{refreshDkPrev();}catch(e){}});
+/* 🖼 表紙タイルのタップ＝上下位置の調整（v14.70）。表紙のカード自体を変えるのは「🖼表紙」から */
+{const p=document.getElementById("dkPrev");
+ if(p)p.addEventListener("click",async ()=>{
+   const name=($("deckSelect")&&$("deckSelect").value)||"";
+   if(!name){toast("先にデッキを選んでください");return;}
+   const info=await stDeckPrevInfo(name);
+   if(!info||!info.imgKey){toast("このデッキには表紙の画像がありません（🖼表紙はデッキ一覧から選べます）");return;}
+   const d=await getDeck(name);
+   const cy=await adjustCoverY(info.imgKey,(d&&d.coverY!=null)?d.coverY:20);
+   if(cy===undefined)return;
+   // 表紙カードが「自動」のままでも、調整したらそのカードを表紙として固定する
+   // （自動のままだと高コストカードの追加で絵が入れ替わり、位置がずれるため）
+   await saveDeckCover(name,(d&&d.cover)||info.imgKey,cy);
+   toast(cy===null?"🖼 表紙の位置を既定に戻しました":`🖼 表紙の位置を保存しました（${cy}%）`);
+   try{refreshDkPrev();}catch(e){}
+   try{refreshStPrev(0);refreshStPrev(1);}catch(e){}
+ });}
 $("btnViewDeck").addEventListener("click",()=>openDeckListViewer($("deckSelect").value));
 $("btnDeleteDeck").addEventListener("click",async ()=>{
   const name=$("deckSelect").value;
@@ -41308,7 +41516,7 @@ $("importInput").addEventListener("change",async e=>{
         }
       }
       const dk=data.deck;
-      await saveDeck(nm,dk.main||[],dk.gr||[],dk.hy||[],dk.sp||[],dk.ex||[],dk.cover);
+      await saveDeck(nm,dk.main||[],dk.gr||[],dk.hy||[],dk.sp||[],dk.ex||[],dk.cover,dk.coverY!=null?dk.coverY:null);
       await loadAllImages();
       await refreshDeckSelects();
       renderAll();sfx("ok");
@@ -41346,7 +41554,7 @@ $("importInput").addEventListener("change",async e=>{
         }
         existing.add(nm);
         const dk=entry.deck;
-        await saveDeck(nm,dk.main||[],dk.gr||[],dk.hy||[],dk.sp||[],dk.ex||[],dk.cover);
+        await saveDeck(nm,dk.main||[],dk.gr||[],dk.hy||[],dk.sp||[],dk.ex||[],dk.cover,dk.coverY!=null?dk.coverY:null);
         saved++;
       }
       await loadAllImages();
@@ -41379,7 +41587,7 @@ $("importInput").addEventListener("change",async e=>{
     if(!data||!data.decks){toast("バックアップファイルではありません");return;}
     if(!await ask("このファイルの内容を読み込みます。\n同名のデッキ・登録は上書きされます。よろしいですか？"))return;
     // 🖼 表紙（cover）と超次元（ex）を落とさない。古いバックアップ（v5以前）には無いので null になるだけ
-    for(const [n,d] of Object.entries(data.decks||{}))await saveDeck(n,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover||null);
+    for(const [n,d] of Object.entries(data.decks||{}))await saveDeck(n,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover||null,d.coverY!=null?d.coverY:null);
     // 🗂 並び順を引き継ぐ。こちらにしか無いデッキは消さず、読んだ順のあとろに残す
     await mergeDeckOrder(data);
     if(Array.isArray(data.artKeys)){
@@ -41709,7 +41917,7 @@ async function renderDeckList(){
         }
         ck=best;
       }
-      if(ck)nm.style.backgroundImage=`url("${imgURL.get(ck)}")`;
+      if(ck){nm.style.backgroundImage=`url("${imgURL.get(ck)}")`;nm.style.backgroundPosition=deckCoverPos(d);}
     }
     const civs=new Set();
     for(const it of (d.main||[])){const r2=FXDB.get(normName(it.name));if(r2&&r2.civs)r2.civs.forEach(v=>civs.add(v));}
