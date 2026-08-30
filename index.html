@@ -3019,7 +3019,13 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxLibWin"> 常在：自分の山札が0枚になったら、負けるかわりに勝利する（シャコガイル型）</label>
         <label><input type="checkbox" id="fxPetensy"> 相手のターンの終わりに、そのターン クリーチャーが3体以上出ていれば、手札からコストを支払わずに使える（ペテンシー型）</label>
         <label><input type="checkbox" id="fxCostFloor1"> コストは0にならない（軽減してもコスト1以上・ゼロ文明でも）</label>
-        <label title="相手のターン中、相手が召喚以外の方法でクリーチャーをバトルゾーンに出した時、そのクリーチャーを手札に戻してもよい（出た時の効果は先に誘発します）"><input type="checkbox" id="fxStBounceCheat"> ↩ 相手のターン中、相手が召喚以外で出したクリーチャーを手札に戻してもよい（オニカマス型）</label>
+        <label title="相手のターン中、相手が召喚以外の方法でクリーチャーをバトルゾーンに出した時、そのクリーチャーを行き先に送ってもよい（置換ではないので、出た時の効果は先に誘発します）"><input type="checkbox" id="fxStBounceCheat"> ↩ 相手のターン中、相手が召喚以外で出したクリーチャーを送る（オニカマス／ポクチンちん型）</label>
+        <select id="fxStBounceCheatTo" style="width:auto;flex:0 0 150px" title="送り先。置換ではないので、出た時の効果は先に誘発します">
+          <option value="hand">→ 手札（オニカマス型）</option>
+          <option value="deckBottom">→ 山札の一番下（ポクチンちん型）</option>
+          <option value="grave">→ 墓地</option>
+          <option value="mana">→ マナゾーン</option>
+        </select>
         <label title="相手がコストを支払わずにクリーチャーを出した時、そのクリーチャーを持ち主のマナゾーンに置く（フォーエバー・プリンセス型）。出た時の効果は先に誘発します"><input type="checkbox" id="fxStManaCheat"> 🌱 相手がコストを支払わずに出したクリーチャーを、持ち主のマナゾーンに置く（フォーエバー・プリンセス型）</label>
         <label title="相手のクリーチャーがコストを支払わずに出た時、このクリーチャーとそのクリーチャーをバトルさせてもよい（カツムゲン型）。出た時の効果は先に誘発します"><input type="checkbox" id="fxStBattleCheat"> ⚔ 相手がコストを支払わずに出したクリーチャーと、このクリーチャーをバトルさせてもよい（カツムゲン型）</label>
         <label title="キーワード能力。出た時、手札からクロスギア1つをコストを支払わずにジェネレートしてもよい。「出た時」の効果欄の先頭に自動で足されます（効果欄には書かなくてかまいません）"><input type="checkbox" id="fxSamuraiGen"> 🗡 侍流ジェネレート（出た時、手札からクロスギア1つを無料でジェネレートしてもよい）</label>
@@ -3395,6 +3401,7 @@ body.shake{animation:bodyShake .4s ease-out}
     </section>
     <div class="row" id="fxFootBar" style="justify-content:flex-end">
       <button class="btn small warn" id="fxDelete">登録を削除</button>
+      <button class="btn small" id="fxTryNow" title="いま編集している「出た時」の効果を、この盤面でそのまま実行してみます。登録は保存されません（試すだけ）。試したあとは「↩ 戻る」で盤面を元に戻せます">🧪 いまの盤面で試す</button>
       <button class="btn small ghost" id="fxCancel">閉じる</button>
       <button class="btn primary small" id="fxSave">保存</button>
     </div>
@@ -4794,8 +4801,20 @@ let PICK_GATE=UI_GATE;        // pickCard / pickCards（ask系と同時に開か
 let VIEWER_BROWSE=false;
 /* 👁 いま開いているカードのシートが「閲覧専用」か。これが true の間はロックを外さない */
 let SHEET_VIEW_ONLY=false;
+/* 🚦 パネルは1つずつしか開けない（直列化）。前のパネルが閉じていないと順番待ちになるが、
+   無言で待つと「ボタンを押しても反応しない」ように見える（オンライン接続中に多い）。
+   0.6秒たっても順番が来ない時は、待っていることを知らせる（v14.79）。 */
+let DLG_WAITING=0;
 async function _serialDlg(acquire,open){
-  const release=await acquire();
+  const ticket=acquire();
+  let told=false;
+  const timer=setTimeout(()=>{
+    told=true;DLG_WAITING++;
+    try{toast("⏳ 前のパネルの処理が終わるのを待っています…\n（開いたままのパネルを閉じるか、下の 🚑 で処理をリセットできます）");}catch(e){}
+  },600);
+  const release=await ticket;
+  clearTimeout(timer);
+  if(told){DLG_WAITING=Math.max(0,DLG_WAITING-1);try{toast("▶ 順番が来ました");}catch(e){}}
   try{ return await open(); }
   finally{ release(); }
 }
@@ -5202,7 +5221,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.78";
+const APP_VER="v14.80";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5569,20 +5588,26 @@ function queueCheatWatchers(pTo,c){
             const live=zonesOf(foeN).battle.find(x=>x.id===_kid&&!isSealed(x)&&!isIgnored(x,foeN));
             if(!live)return;                                   // 出た時の効果でオニカマスが離れていたら発動しない
             if(!zonesOf(pTo).battle.some(x=>x.id===c.id))return; // 出たクリーチャーが既に場を離れていたら何もしない
+            const _toK=(getReg(live)||{}).stBounceCheatTo||"hand";
+            const _toLb={hand:"手札に戻す",deckBottom:"山札の一番下に置く",grave:"墓地に置く",mana:"マナゾーンに置く"}[_toK]||"手札に戻す";
             const j=await askChoice(`↩ ${S.players[foeN].label} の《${faceNameOf(live)}》\n（相手のターン中・相手が召喚以外で出したクリーチャーだけが対象）\n\n${S.players[pTo].label} が出した《${faceNameOf(c)}》は【召喚】でしたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝そのまま。侵略・革命チェンジ・蘇生・トリガー出しは召喚以外）`,
-              ["召喚で出した（そのまま）","召喚以外だった → 手札に戻す","召喚以外だが戻さない"]);
+              ["召喚で出した（そのまま）",`召喚以外だった → ${_toLb}`,"召喚以外だが送らない"]);
             if(j!==1)return;
             const ZB=zonesOf(pTo);
             const bi=ZB.battle.findIndex(x=>x.id===c.id);
             if(bi<0)return;
             snap();
-            leaveBattleCleanup(ZB,c,"hand"); // 装備・封印・重なっていたカードを整理
+            leaveBattleCleanup(ZB,c,_toK==="deckBottom"?"deck":_toK); // 装備・封印・重なっていたカードを整理
             ZB.battle.splice(bi,1);
-            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.faceup=true;c.mark=false;
-            if(typeof toHand==="function")toHand(ZB,c);else ZB.hand.push(c);
+            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.mark=false;
+            if(_toK==="deckBottom"){c.faceup=false;c.seen=true;ZB.deck.push(c);}
+            else if(_toK==="grave"){c.faceup=true;ZB.grave.push(c);}
+            else if(_toK==="mana"){c.faceup=true;manaTapIn(c,pTo);ZB.mana.push(c);}
+            else{c.faceup=true;if(typeof toHand==="function")toHand(ZB,c);else ZB.hand.push(c);}
+            const _toLb2={hand:"手札",deckBottom:"山札の一番下",grave:"墓地",mana:"マナゾーン"}[_toK]||"手札";
             sfx("move");renderAll();
-            toast(`↩ ${faceNameOf(live)}：${faceNameOf(c)} を手札に戻した`);
-            logOnly(`↩ ${S.players[foeN].label} の《${faceNameOf(live)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》を手札へ（召喚以外で出たため）`);
+            toast(`↩ ${faceNameOf(live)}：${faceNameOf(c)} を${_toLb2}へ`);
+            logOnly(`↩ ${S.players[foeN].label} の《${faceNameOf(live)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》を${_toLb2}へ（召喚以外で出たため・置換ではないので出た時の効果は先に解決済み）`);
           });
         }
       }
@@ -9518,10 +9543,30 @@ function runWatchFx(pi,type,trigCard){
             const _diag=(why)=>{if(type==="allyEnter"&&trigCard.id===c.id)toast(`💡 ${faceNameOf(c)} の「${evLb}」誘発は不発：条件「${cnd}」${why}。自身にも反応させるには条件欄を見直してください（種族の登録漏れ等）`);};
             // ＆区切りで「対象条件＆ゾーン条件式」を併用可（例：ブロッカー＆手札<=9）。ゾーン式はゾーン名で始まる項・ターン項
             const _parts=cnd.split(/[＆&]/).map(x=>x.trim()).filter(Boolean);
-            const _isExpr=p2=>/^(?:相手|自分の?)?(?:マナ|墓地(?:合計)?|手札|盾(?:合計)?|シールド|バトル(?:マナ)?|山札)/.test(p2)||/^(?:自分|相手)の?ターン$/.test(p2)||/鬼タイム|鬼エンド|革命\d/.test(p2);
-            const _exprs=_parts.filter(_isExpr), _filts=_parts.filter(p2=>!_isExpr(p2));
-            if(_parts.length>1||_exprs.length){
+            /* 🧩 条件欄は3種類を「＆」でいくつでも混ぜられる（v14.79）：
+                 ① 対象条件（例：ドラゴン）＝出たカード／唱えた呪文が合うか
+                 ② ゾーン条件式（例：手札<=9）＝盤面の数え上げ
+                 ③ ゾーン持ち物（例：マナ:ドラゴン）＝そのゾーンに合うカードがあるか  ←今回追加
+               ③ は「マナにドラゴンがある時だけ誘発」のように書ける。
+               効果側の条件欄（何を戻すか）とは別物なので、両方に書いてよい。 */
+            const _isHas=p2=>/^(?:(?:相手|自分)の?)?(?:マナ|墓地|手札|盾|シールド|バトル|山札|超次元|GR|墓地合計)\s*[:：]/.test(p2);
+            const _isExpr=p2=>!_isHas(p2)&&(/^(?:相手|自分の?)?(?:マナ|墓地(?:合計)?|手札|盾(?:合計)?|シールド|バトル(?:マナ)?|山札)/.test(p2)||/^(?:自分|相手)の?ターン$/.test(p2)||/鬼タイム|鬼エンド|革命\d/.test(p2));
+            const _hasOk=p2=>{
+              const m=p2.match(/^(?:(相手|自分)の?)?(マナ|墓地|手札|盾|シールド|バトル|山札|超次元|GR)\s*[:：]\s*(.*)$/);
+              if(!m)return true;
+              const zp=(m[1]==="相手")?(S.vs?1-pi:pi):pi;
+              const zk={"マナ":"mana","墓地":"grave","手札":"hand","盾":"shield","シールド":"shield","バトル":"battle","山札":"deck","超次元":"hyper","GR":"gr"}[m[2]];
+              const flt=(m[3]||"").trim();
+              try{
+                const arr=(zonesOf(zp)||{})[zk]||[];
+                return arr.some(x=>!flt||lockFilterOk(flt,getReg(x),x));
+              }catch(e){return true;}
+            };
+            const _hases=_parts.filter(_isHas);
+            const _exprs=_parts.filter(_isExpr), _filts=_parts.filter(p2=>!_isExpr(p2)&&!_isHas(p2));
+            if(_parts.length>1||_exprs.length||_hases.length){
               if(_exprs.length&&!zoneCondOk(_exprs.join("＆"),pi)){_diag("のゾーン条件を満たしていません");return;}
+              for(const h2 of _hases){if(!_hasOk(h2)){_diag(`の「${h2}」にあてはまるカードがありません`);return;}}
               if(_filts.length){const rt=getReg(trigCard);if(!lockFilterOk(_filts.join("／"),rt,trigCard)){_diag(type==="allyEnter"?"に出たカード（自身）が合いません":"に唱えた呪文が合いません");return;}}
             }else{
               if(/[<>=]|以上|以下/.test(cnd)){if(!zoneCondOk(cnd,pi)){_diag("のゾーン条件を満たしていません");return;}}
@@ -10849,7 +10894,7 @@ const FX_TYPES=[
   ["deckTopSplitSHM","🌸 山札の上からn枚を見て、1枚をシールド化→1枚を手札→残りをマナへ（超開花妖精アジサイ！型）"],
   ["exileRecruitPerZone","🌺 自分の指定ゾーンの〔対象〕n枚につき、ゲーム外から指定カード1枚を出す（条件欄：ゾーン:対象→出すカード名。例「マナ:スノーフェアリー→超開花妖精ハイドロジア」）"],
   ["exileRecruitPerBattle","🌺【旧互換】自分のバトルゾーンの〔対象〕n枚につき、ゲーム外から指定カード1枚を出す"],
-  ["graveToDeckAll","🔀 自分の墓地のカードをすべて山札に加えてシャッフル"],
+  ["graveToDeckAll","🔀 墓地のカードをすべて山札に加えてシャッフル（条件欄が空で対戦中なら、どちらのプレイヤーか選ぶ／「自分」「相手」で固定・ポクチンちん型）"],
   ["foeGraveTopCostToDeck","🔀 相手の墓地から、コストの大きい順にn枚を山札に戻してシャッフル（同じコストが複数あればランダムに選ぶ・条件欄で対象を絞れる・ゼーハー型）"],
   ["suspenseReveal","🃏 相手のシールドn枚と手札n枚をランダムに公開→その中の呪文を好きな数コストを支払わず唱える→公開カードはすべて墓地へ（サスペンス型）"],
   ["sumRecruit","🌋 〔ゾーン〕から好きな数のクリーチャーをコスト合計n以下で選んでバトルゾーンへ（条件欄「マナ／墓地:クリーチャー」・nが合計上限）"],
@@ -12822,6 +12867,7 @@ const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","dr
   "manaPlusPerZone","destroyWeakerPick","manaAllWeaker","exileToGrave","handToManaBreakPlus","deckTopShieldRestMana","foeDeckBottomOverMaxMana",
   "handes","peepDiscard","grantBlockerPick","deckShield","revealBottomShield","nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "selfDiscardDrawNow",   /* 条件欄は「引く枚数」なのでゾーン条件式として読まない（v14.74） */
+  "graveToDeckAll",       /* 条件欄は「どちらのプレイヤーか」（v14.79） */
   "foeRandCreManaHandToDeck","breakPlusPerAllyNoSpell",
   "exileRecruitPerZone","elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS","foeTapThenDeckBottom",
   "drawPerElem","winDiscardDrawUntap","elemToShieldOrDeck","handGearFree","gearCrossAnyFree","breakMineThenKill",
@@ -17145,15 +17191,31 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       if(put>0){sfx("move");toast(`🛡 手札から${put}枚をシールド化した`);await notifyShieldPlaced(pi,placed);}
     }else if(f.t==="graveToDeckAll"){
-      // 🔀 自分の墓地のカードをすべて山札に加えてシャッフル
-      if(!Z.grave.length){toast("墓地にカードがありません");}
+      /* 🔀 墓地のカードをすべて山札に加えてシャッフル。
+         条件欄（f.side でも可）に「相手」＝相手だけ／「自分」＝自分だけ／
+         「プレイヤー」または空欄＋相手がいる時＝どちらのプレイヤーか選ぶ（ポクチンちん型・v14.79）。 */
+      let gp=pi;
+      {
+        const sd=String(f.side||f.cond||"").trim();
+        if(/相手/.test(sd))gp=S.vs?op:pi;
+        else if(/自分/.test(sd))gp=pi;
+        else if(S.vs&&(/プレイヤー|選/.test(sd)||sd==="")){
+          const jg=await askChoice("🔀 どちらのプレイヤーの墓地を山札に加えてシャッフルしますか",
+            [`${S.players[pi].label}（自分）`,`${S.players[op].label}（相手）`]);
+          if(jg===null)continue;
+          gp=(jg===0)?pi:op;
+        }
+      }
+      const ZG=zonesOf(gp);
+      if(!ZG.grave.length){toast(`${S.players[gp].label} の墓地にカードがありません`);}
       else{
         snap();
-        const gc=Z.grave.splice(0);
-        gc.forEach(x=>{x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;Z.deck.push(x);});
-        shuffle(Z.deck);
+        const gc=ZG.grave.splice(0);
+        gc.forEach(x=>{x.faceup=false;x.seen=false;x.tapped=false;x.sideways=false;x.rot=0;ZG.deck.push(x);});
+        shuffle(ZG.deck);
         sfx("move");renderAll();
-        toast(`🔀 墓地の${gc.length}枚を山札に加えてシャッフルした`);
+        toast(`🔀 ${S.players[gp].label} の墓地${gc.length}枚を山札に加えてシャッフルした`);
+        logOnly(`🔀 ${S.players[gp].label}：墓地${gc.length}枚を山札へ加えてシャッフル`);
       }
     }else if(f.t==="suspenseReveal"){
       // 🃏 サスペンス型：相手のシールドn枚と手札n枚をランダム公開→その中の呪文を好きな数コストを支払わず唱える→公開カードはすべて墓地へ
@@ -25466,6 +25528,7 @@ function renderFxEditor(){
   {const e=$("fxAwakenPayN");if(e)e.value=FXEDIT.awakenPayN||"";}
   {const e=$("fxAwakenPayZone");if(e)e.value=FXEDIT.awakenPayZone||"";}
   {const e=$("fxStBounceCheat");if(e)e.checked=!!FXEDIT.stBounceCheat;}
+  {const e=$("fxStBounceCheatTo");if(e)e.value=FXEDIT.stBounceCheatTo||"hand";}
   {const e=$("fxStManaCheat");if(e)e.checked=!!FXEDIT.stManaCheat;}
   {const e=$("fxStBattleCheat");if(e)e.checked=!!FXEDIT.stBattleCheat;}
   {const e=$("fxSamuraiGen");if(e)e.checked=!!FXEDIT.samuraiGen;}
@@ -27701,6 +27764,7 @@ function openFxEditor(key){
     awakenPayN:cur&&(+cur.awakenPayN||0)||0,
     awakenPayZone:cur&&cur.awakenPayZone||"",
     stBounceCheat:cur?!!cur.stBounceCheat:false,
+    stBounceCheatTo:(cur&&cur.stBounceCheatTo)||"hand",
     stManaCheat:cur?!!cur.stManaCheat:false,
     stBattleCheat:cur?!!cur.stBattleCheat:false,
     samuraiGen:cur?!!cur.samuraiGen:false,
@@ -27889,6 +27953,39 @@ $("fxAdd1").addEventListener("click",()=>{FXEDIT.faces[1].push({t:"draw",n:1});r
 {const b=document.getElementById("fxChgImg");if(b)b.addEventListener("click",async ()=>{if(!FXEDIT)return;const ok=await changeCardImage(FXEDIT.key,FXEDIT.name);if(ok)renderFxThumb();});}
 {const b=document.getElementById("fxZoomImg");if(b)b.addEventListener("click",()=>{if(!FXEDIT)return;showBigCardImage(FXEDIT.key,FXEDIT.name);});}
 $("fxCancel").addEventListener("click",fxBackToSettings);
+/* 🧪 登録した効果を、保存せずにこの盤面で試す（v14.80）。
+   「登録どおりに動くか」を出す前に確かめられるようにするためのもの。
+   ・実行するのは編集中の「出た時（上面）」の効果ならび
+   ・自分のバトルゾーンにいるカードを仮の発動元として使う（無ければ仮のカードを作る）
+   ・盤面は本当に変わるので、確かめたら「↩ 戻る」で元に戻すこと（先に snap しておく） */
+{const b=document.getElementById("fxTryNow");
+ if(b)b.addEventListener("click",async ()=>{
+   try{
+     if(!FXEDIT){toast("編集中のカードがありません");return;}
+     if(!S.expert){toast("🧪 試すには「EX（自動処理）」をオンにしてください");return;}
+     const list=(FXEDIT.faces&&FXEDIT.faces[0])?FXEDIT.faces[0].filter(f=>f&&f.t):[];
+     if(!list.length){toast("🧪 「出た時」の効果が1つも入っていません（上の段に足してから試してください）");return;}
+     if(!await ask(`🧪 いま編集している「出た時」の効果 ${list.length}件を、この盤面で試しに実行します。\n\n・登録は保存されません\n・盤面は本当に変わります（あとで「↩ 戻る」で元に戻せます）\n\n実行しますか？`))return;
+     const me=S.seat|0;
+     const Zme=zonesOf(me);
+     // 仮の発動元：同じ名前が場にいればそれ、いなければ盤面の先頭、それも無ければ仮のカード
+     let srcT=Zme.battle.find(x=>normName(faceNameOf(x))===FXEDIT.key)||Zme.battle[0]||null;
+     let temp=false;
+     if(!srcT){
+       srcT={id:"try:"+Date.now(),name:FXEDIT.name||"（お試し）",faceup:true,tapped:false};
+       temp=true;
+     }
+     try{snap();}catch(e){}
+     $("fxOlay").classList.remove("open");
+     toast(`🧪 試し実行：${FXEDIT.name}（発動元：${temp?"仮のカード":faceNameOf(srcT)}）`);
+     logOnly(`🧪 試し実行：《${FXEDIT.name}》の出た時 ${list.length}件（登録は保存していません）`);
+     await runFxList(me,list.map(f=>({...f})),srcT);
+     renderAll();
+     toast("🧪 試し実行が終わりました。おかしければ「↩ 戻る」で盤面を元に戻し、登録を直してください");
+   }catch(e){
+     toast("🧪 試し実行でエラー："+(e&&e.message?e.message:"不明"));
+   }
+ });}
 $("fxSave").addEventListener("click",async ()=>{
   const p=$("fxPower").value.trim();
   FXDB.set(FXEDIT.key,{
@@ -28208,6 +28305,7 @@ $("fxSave").addEventListener("click",async ()=>{
     awakenPayN:$("fxAwakenPayN")?(Math.abs(+$("fxAwakenPayN").value)||0):0,
     awakenPayZone:$("fxAwakenPayZone")?$("fxAwakenPayZone").value.trim():"",
     stBounceCheat:$("fxStBounceCheat")?$("fxStBounceCheat").checked:false,
+    stBounceCheatTo:$("fxStBounceCheatTo")?($("fxStBounceCheatTo").value||"hand"):"hand",
     stManaCheat:$("fxStManaCheat")?$("fxStManaCheat").checked:false,
     stBattleCheat:$("fxStBattleCheat")?$("fxStBattleCheat").checked:false,
     samuraiGen:$("fxSamuraiGen")?$("fxSamuraiGen").checked:false,
@@ -28933,7 +29031,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.manaUntapN>0)attrs.push(`常在：相手ターン開始時マナ回復を${v.manaUntapN}枚に制限`);
     if(v.stNoCheat)attrs.push("常在：召喚以外で出せない");
     if(v.noChooseOppTurn)attrs.push("相手ターン中は相手に選ばれない");
-    if(v.stBounceCheat)attrs.push("相手ターン中：相手が召喚以外で出したクリーチャーを手札へ");
+    if(v.stBounceCheat)attrs.push(`相手ターン中：相手が召喚以外で出したクリーチャーを${({hand:"手札",deckBottom:"山札の下",grave:"墓地",mana:"マナ"})[v.stBounceCheatTo||"hand"]}へ`);
     if(v.stManaCheat)attrs.push("相手が踏み倒しで出したクリーチャーをマナへ");
     if(v.stCipToMana)attrs.push("相手の「出た時」持ちが出たらマナゾーンへ");
     if(v.stNoST)attrs.push("🚫常在：相手はS・トリガーを使えない");
