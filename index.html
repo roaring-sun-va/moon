@@ -25,7 +25,7 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 /* 📱 iOS Safari では height:100% がアドレスバーぶんズレて下に余白が残る。
    実際の表示領域に合う 100dvh を使う（v14.64） */
-html,body{height:100%;height:100dvh}
+html,body{height:100%;height:100dvh;overflow:hidden}
 body{
   background:
     radial-gradient(1200px 500px at 80% -10%, rgba(245,197,66,.06), transparent 60%),
@@ -553,7 +553,7 @@ body.ld-peeking .olay{padding-bottom:158px}
 .olSteps>summary::-webkit-details-marker{display:none}
 /* 🖼 対戦開始の看板に出すデッキ表紙（v14.49）。DMOの対戦相手カードと同じ役割 */
 .stDeckPrev{position:relative;width:100%;height:112px;border-radius:9px;overflow:hidden;
-  background:#0d1119;background-size:cover;background-position:center 28%;
+  background:#0d1119;background-size:cover;background-position:center 20%;
   background-repeat:no-repeat;border:1px solid var(--line)}
 .stDeckPrev:empty::after{content:"デッキ未選択";position:absolute;inset:0;display:flex;
   align-items:center;justify-content:center;color:#3f4d68;font-size:11px;font-weight:800}
@@ -623,18 +623,11 @@ body.ld-peeking .olay{padding-bottom:158px}
 #deckStats .ds-sep{color:#3f4d68}
 #deckStats .ds-mut{color:var(--muted)}
 
-@media(max-width:520px){
-  #deckGrid{grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:4px}
-  .dg-img{height:clamp(58px,15vw,84px)}
-  .dg-cap{font-size:9px;padding:2px 3px}
-  .dg-n{min-width:16px;height:16px;font-size:10px;line-height:16px;border-radius:8px}
-  .dg-ops button{font-size:12px;padding:3px 0}
-}
 #sleeveOlay .panelbox{max-width:720px}
 #cardMgrBox{max-width:760px}
 /* 🖼 デッキリストの画像表示（v14.51・DMOのデッキ一覧の形）
    文字欄（deckText）が正のデータ。グリッドはそれを描いた鏡で、＋−は文字欄を書き換える */
-#deckGrid{display:none;grid-template-columns:repeat(auto-fill,minmax(clamp(52px,13vw,112px),1fr));gap:6px;
+#deckGrid{display:none;grid-template-columns:repeat(auto-fill,minmax(var(--dgw,clamp(52px,13vw,112px)),1fr));gap:6px;
   max-height:46dvh;overflow:auto;padding:2px}
 #deckGrid.show{display:grid}
 #deckViewSeg .btn.on{background:linear-gradient(180deg,var(--accent),#d9a520);color:#241a00}
@@ -644,10 +637,18 @@ body.ld-peeking .olay{padding-bottom:158px}
    aspect-ratio は環境によって効かず、height:0＋padding は flex の子だと潰される。
    flex:0 0 auto と height の組み合わせなら、どの環境でも必ずこの高さになる。 */
 .dg-img{position:relative;width:100%;flex:0 0 auto;
-  height:clamp(70px,17vw,132px);
+  height:var(--dgh,clamp(70px,17vw,132px));
   background:center 20%/cover no-repeat #131a28}
 .dg-img.noimg::after{content:"画像なし";position:absolute;inset:0;display:flex;align-items:center;
   justify-content:center;color:#3f4d68;font-size:10px;font-weight:800}
+/* 📱 スマホ用は本体定義より「後ろ」に置くこと。
+   前に置くと、後ろの .dg-img{height:...} に上書きされてPCでも小さくなる（v14.65で修正） */
+@media(max-width:520px){
+  #deckGrid{grid-template-columns:repeat(auto-fill,minmax(var(--dgw,52px),1fr));gap:4px}
+  .dg-cap{font-size:9px;padding:2px 3px}
+  .dg-n{min-width:16px;height:16px;font-size:10px;line-height:16px;border-radius:8px}
+  .dg-ops button{font-size:12px;padding:3px 0}
+}
 .dg-n{position:absolute;top:3px;right:3px;min-width:20px;height:20px;border-radius:10px;
   background:var(--accent);color:#241a00;font-size:12px;font-weight:900;line-height:20px;
   text-align:center;padding:0 5px;box-shadow:0 1px 4px rgba(0,0,0,.6)}
@@ -1856,6 +1857,11 @@ body.shake{animation:bodyShake .4s ease-out}
         <span style="font-size:12px;font-weight:700">ゾーンの縦幅（カードの大きさ）比率</span>
         <div id="zoneScaleList" style="display:flex;flex-direction:column;gap:3px"></div>
         <div class="hint">「盾（シールド）のカード」は盾だけの大きさ。「山札/墓地の段（段の高さ）」はその段が確保する縦幅、「山札・墓地・GR・超次元の束」は枚数が出ている四角そのものの大きさです。</div>
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700">デッキのカードタイル</span>
+        <input type="range" id="setDgSize" min="44" max="160" step="4" style="flex:1">
+        <span id="setDgSizeLb" style="font-size:12px;min-width:52px;text-align:right"></span>
+      </div>
       <div class="row"><button class="btn small" id="btnBoardTune" style="flex:1">👁 盤面で見ながら調整（設定を下に小さく）</button></div>
 <div class="row" style="align-items:center;gap:8px">
         <span style="font-size:12px;font-weight:700">カード間隔</span>
@@ -4051,10 +4057,25 @@ function openGameLog(){
        r=r+W+8;b=baseB;
        if(r+W>vw-24)break;
      }else b=nb;
+     // 📜 よけた先が画面の外に出ないよう必ず内側に収める（v14.65）。
+     //    これが無いと、重なりを避けて左や上へ動くうちに画面外へ出て「消える」
+     r=Math.max(4,Math.min(vw-W-4,r));
+     b=Math.max(4,Math.min(vh-H-4,b));
      f.style.setProperty("--lfr",r+"px");
      f.style.setProperty("--lfb",b+"px");
    }
+   // 最後にもう一度、今の位置が画面内か確かめる（保険）
+   try{
+     const fin=f.getBoundingClientRect();
+     if(fin.right<24||fin.left>vw-24||fin.bottom<24||fin.top>vh-24){
+       f.style.removeProperty("--lfr");f.style.removeProperty("--lfb");
+       if(typeof S!=="undefined"&&S)S.logFabPos=null;
+     }
+   }catch(e){}
  };
+ // 📜 画面の大きさ・向きが変わったら置き直す（回転やキーボードで外に出るのを防ぐ）
+ window.addEventListener("resize",()=>{try{placeLogFab();}catch(e){}});
+ window.addEventListener("orientationchange",()=>{setTimeout(()=>{try{placeLogFab();}catch(e){}},250);});
  {let _lfLast=0,_lfTm=null;
   const _lfRun=()=>{_lfLast=Date.now();try{placeLogFab();}catch(e){}};
   window.pingLogFab=()=>{
@@ -5048,7 +5069,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.64";
+const APP_VER="v14.65";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -40225,6 +40246,20 @@ function openDeckPanel(){
   renderCostCurve();try{renderDeckStats();}catch(e){}
 }
 $("btnSettings").addEventListener("click",openSettings);
+/* 🖼 デッキのカードタイルの大きさ（v14.65・雷鳴神さん依頼）。
+   幅を決めると、絵の高さは 1.35 倍で追従する */
+function applyDgSize(px){
+  const w=Math.max(44,Math.min(160,+px||0));
+  document.body.style.setProperty("--dgw",w+"px");
+  document.body.style.setProperty("--dgh",Math.round(w*1.35)+"px");
+  const lb=document.getElementById("setDgSizeLb");
+  if(lb)lb.textContent=w+"px";
+}
+{const r=document.getElementById("setDgSize");
+ if(r){
+   r.addEventListener("input",()=>applyDgSize(r.value));
+   r.addEventListener("change",async ()=>{try{if(db)await idbPut("misc","dgSize",+r.value);}catch(e){}});
+ }}
 {const b=document.getElementById("btnBoardTune");
  if(b)b.addEventListener("click",()=>{
    const ol=$("settingsOlay");
@@ -43586,6 +43621,9 @@ function splashRun(off){
   {const z=db?await idbGet("misc","ldStackSize"):null;
    if(z!=null)LD_STACK_SIZE=Math.max(0,Math.min(2,(+z)||0));}
   {const dv=db?await idbGet("misc","deckView"):null;if(dv==="text"||dv==="img")DECK_VIEW=dv;}
+  {const dg=db?await idbGet("misc","dgSize"):null;
+   if(dg!=null){const r=$("setDgSize");if(r)r.value=dg;applyDgSize(dg);}
+   else{const r=$("setDgSize");if(r)r.value=88;}}
   {try{const oz=db?await idbGet("misc","openZones"):null;
     if(oz)S.openZones=Object.assign({hand:false,shield:false,deck:false,gr:false},JSON.parse(oz));}catch(e){}}
   const nm=db?await idbGet("misc","nameMap"):null;
