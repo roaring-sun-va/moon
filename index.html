@@ -23,7 +23,9 @@
   --card-w:calc(var(--card-h) * 0.715);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%}
+/* 📱 iOS Safari では height:100% がアドレスバーぶんズレて下に余白が残る。
+   実際の表示領域に合う 100dvh を使う（v14.64） */
+html,body{height:100%;height:100dvh}
 body{
   background:
     radial-gradient(1200px 500px at 80% -10%, rgba(245,197,66,.06), transparent 60%),
@@ -560,7 +562,8 @@ body.ld-peeking .olay{padding-bottom:158px}
   font-size:11px;font-weight:900;color:#fff;text-shadow:0 1px 3px #000;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stDeckPrev .sdp-sub{font-size:9.5px;font-weight:800;color:#b9c6de}
-@media(min-width:760px){.stDeckPrev{height:150px}}
+@media(min-width:760px){.stDeckPrev{height:220px}}
+@media(min-width:1100px){.stDeckPrev{height:260px}}
 #stMetaRow{margin-top:8px;align-items:center;flex-wrap:wrap}
 /* ☰ メニュー（v14.49） */
 #navDrawer{position:fixed;inset:0;z-index:9600;display:none}
@@ -621,7 +624,8 @@ body.ld-peeking .olay{padding-bottom:158px}
 #deckStats .ds-mut{color:var(--muted)}
 
 @media(max-width:520px){
-  #deckGrid{grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:5px}
+  #deckGrid{grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:4px}
+  .dg-img{height:clamp(58px,15vw,84px)}
   .dg-cap{font-size:9px;padding:2px 3px}
   .dg-n{min-width:16px;height:16px;font-size:10px;line-height:16px;border-radius:8px}
   .dg-ops button{font-size:12px;padding:3px 0}
@@ -630,13 +634,17 @@ body.ld-peeking .olay{padding-bottom:158px}
 #cardMgrBox{max-width:760px}
 /* 🖼 デッキリストの画像表示（v14.51・DMOのデッキ一覧の形）
    文字欄（deckText）が正のデータ。グリッドはそれを描いた鏡で、＋−は文字欄を書き換える */
-#deckGrid{display:none;grid-template-columns:repeat(auto-fill,minmax(clamp(64px,16vw,112px),1fr));gap:8px;
+#deckGrid{display:none;grid-template-columns:repeat(auto-fill,minmax(clamp(52px,13vw,112px),1fr));gap:6px;
   max-height:46dvh;overflow:auto;padding:2px}
 #deckGrid.show{display:grid}
 #deckViewSeg .btn.on{background:linear-gradient(180deg,var(--accent),#d9a520);color:#241a00}
 .dg-tile{position:relative;border:1px solid var(--line);border-radius:9px;overflow:hidden;
   background:#0d1119;display:flex;flex-direction:column}
-.dg-img{position:relative;width:100%;aspect-ratio:5/7;min-height:96px;
+/* 🖼 絵の高さは「固定px」で決める（v14.64）。
+   aspect-ratio は環境によって効かず、height:0＋padding は flex の子だと潰される。
+   flex:0 0 auto と height の組み合わせなら、どの環境でも必ずこの高さになる。 */
+.dg-img{position:relative;width:100%;flex:0 0 auto;
+  height:clamp(70px,17vw,132px);
   background:center 20%/cover no-repeat #131a28}
 .dg-img.noimg::after{content:"画像なし";position:absolute;inset:0;display:flex;align-items:center;
   justify-content:center;color:#3f4d68;font-size:10px;font-weight:800}
@@ -5040,7 +5048,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.63";
+const APP_VER="v14.64";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -28001,7 +28009,7 @@ function openCardCivSearch(){
   const civBar=document.createElement("div");civBar.style.cssText="display:flex;gap:5px;flex-wrap:wrap";
   const inp=document.createElement("input");inp.type="text";inp.placeholder="名前・種族で絞り込み（任意）";inp.style.cssText="width:100%;box-sizing:border-box;font-size:13px;padding:7px";
   const list=document.createElement("div");
-  list.style.cssText="overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(72px,18vw,118px),1fr));gap:8px;min-height:240px;align-content:start;padding:2px";
+  list.style.cssText="overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(76px,19vw,118px),1fr));gap:8px;min-height:240px;align-content:start;padding:2px";
   const foot=document.createElement("div");foot.style.cssText="font-size:11px;color:var(--muted,#8a93a8)";
   const civMatch=v=>{
     if(multi&&!(v.civs&&v.civs.length>=2))return false;
@@ -28149,9 +28157,7 @@ function openCardCivSearch(){
       const im=document.createElement("div");im.className="dg-img";
       // ⚠ aspect-ratio がこのダイアログでは効かない環境があった（v14.55）。
       //    高さ0＋padding-top:140% は幅から必ず高さが出る（背景はpadding領域にも描かれる）
-      im.style.boxSizing="content-box"; // 全体が border-box なので、これが無いと高さ0に潰れる（帯の真因）
-      im.style.height="0";
-      im.style.paddingTop="140%";
+      // 高さは .dg-img の固定px（v14.64）に任せる。padding方式は flex の子で潰れた
       const url=imgURL.has(k)?imgURL.get(k):null;
       if(url)im.style.backgroundImage=`url("${url}")`;
       else im.classList.add("noimg");
