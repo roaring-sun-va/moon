@@ -822,8 +822,11 @@ body.ld-peeking .olay{padding-bottom:158px}
   #ldStack .lds-nm{font-size:12.5px;line-height:1.4}
   #ldStack .lds-ev,#ldStack .lds-note{font-size:11.5px}
 }
-/* 📜 待機中の件数を丸ボタンに出す */
-#logFab{position:relative}
+/* 📜 待機中の件数を丸ボタンに出す。
+   ⚠ ここに「relative での position 上書き」を書かないこと（v14.68で削除）。
+   上の #logFab は position:fixed で、fixed はそれ自体がバッジ（absolute）の基準になる。
+   relative で上書きすると丸ボタンが「流れの中」に置かれ、--lfr/--lfb が
+   固定位置ではなく相対ずらしになって、位置計算が全部狂う（失踪の原因だった）。 */
 #logFab .fab-badge{
   position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;
   background:#b46bff;color:#fff;border-radius:9px;font-size:11px;font-weight:900;
@@ -5104,7 +5107,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.67";
+const APP_VER="v14.68";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -39902,10 +39905,35 @@ window.updateVPeek=()=>{
   b.title="このパネルを一時的に隠して盤面を確認します（「📋 パネルに戻る」で戻れます）";
   b.dataset.vmode="peek";
 };
+/* 📱 画面の高さを実測して html/body に直接入れる（v14.68）。
+   iPhoneのホーム画面アプリ等では 100dvh が実際の表示領域とずれることがあり、
+   CSSは正しいのに bottombar の下に余白が残る（Chromiumでは出ない・実機だけで出る）。
+   safe-area と同じ「実測して入れる」方式で、単位の解釈差に左右されないようにする。 */
+window.fitAppHeight=function(){
+  try{
+    const vh=window.innerHeight;
+    if(!vh)return;
+    document.documentElement.style.height=vh+"px";
+    document.body.style.height=vh+"px";
+    const bd=document.getElementById("board");
+    if(bd&&bd.style.height)bd.style.height="";   // 前回の直埋めを一度消してから測り直す
+    const bb=document.getElementById("bottombar");
+    if(bb&&bd){
+      const gap=Math.round(vh-bb.getBoundingClientRect().bottom);
+      if(gap>8){
+        // flexが効いていない環境への保険：盤面の高さを直接埋める
+        bd.style.height=Math.round(bd.getBoundingClientRect().height+gap)+"px";
+        try{logOnly(`🔬 盤面の下に${gap}pxの余白があったため、盤面を直接広げて埋めました（この行が出続ける場合は報告してください）`);}catch(e){}
+      }
+    }
+    try{fitBoard();}catch(e){}
+  }catch(e){}
+};
 /* 📱 起動時と、向きや大きさが変わった時に帯の高さを測り直す */
 try{applySafeArea();}catch(e){}
+try{fitAppHeight();}catch(e){}
 {let _saRz=null;
- const _sa=()=>{clearTimeout(_saRz);_saRz=setTimeout(()=>{try{applySafeArea();}catch(e){}},120);};
+ const _sa=()=>{clearTimeout(_saRz);_saRz=setTimeout(()=>{try{applySafeArea();}catch(e){}try{fitAppHeight();}catch(e){}},120);};
  window.addEventListener("resize",_sa);
  window.addEventListener("orientationchange",_sa);
  if(window.visualViewport)window.visualViewport.addEventListener("resize",_sa);}
