@@ -25,7 +25,9 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 /* 📱 iOS Safari では height:100% がアドレスバーぶんズレて下に余白が残る。
    実際の表示領域に合う 100dvh を使う（v14.64） */
-html,body{height:100%;height:100dvh;overflow:hidden}
+html,/* 📱 縦に並べて、盤面が残りを全部使うようにする（v14.66）。
+   これが無いと #board{flex:1} が効かず、bottombar の下に余白が残る */
+body{height:100%;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
 body{
   background:
     radial-gradient(1200px 500px at 80% -10%, rgba(245,197,66,.06), transparent 60%),
@@ -562,8 +564,10 @@ body.ld-peeking .olay{padding-bottom:158px}
   font-size:11px;font-weight:900;color:#fff;text-shadow:0 1px 3px #000;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stDeckPrev .sdp-sub{font-size:9.5px;font-weight:800;color:#b9c6de}
-@media(min-width:760px){.stDeckPrev{height:220px}}
-@media(min-width:1100px){.stDeckPrev{height:260px}}
+@media(min-width:760px){.stDeckPrev{height:110px}}
+/* 🖼 デッキ作成の表紙だけは大きいまま（対戦開始の看板は元の大きさに戻す・v14.66） */
+@media(min-width:760px){#dkPrev{height:220px}}
+@media(min-width:1100px){#dkPrev{height:260px}}
 #stMetaRow{margin-top:8px;align-items:center;flex-wrap:wrap}
 /* ☰ メニュー（v14.49） */
 #navDrawer{position:fixed;inset:0;z-index:9600;display:none}
@@ -1676,17 +1680,45 @@ body.shake{animation:bodyShake .4s ease-out}
       <label><input type="checkbox" id="setAnim" checked> 🎬 カード演出（マスター・全演出の一括ON/OFF）</label>
     </div>
     <div class="row" id="animSetRow" style="gap:4px 12px;flex-wrap:wrap"></div>
-    <div class="row" style="align-items:center;gap:8px">
+    
+    
+    <section>
+      
+    <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
+        <span style="font-size:12px;font-weight:700">ゾーンの縦幅（カードの大きさ）比率</span>
+        <div id="zoneScaleList" style="display:flex;flex-direction:column;gap:3px"></div>
+        <div class="hint">「盾（シールド）のカード」は盾だけの大きさ。「山札/墓地の段（段の高さ）」はその段が確保する縦幅、「山札・墓地・GR・超次元の束」は枚数が出ている四角そのものの大きさです。</div>
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700">デッキのカードタイル</span>
+        <input type="range" id="setDgSize" min="44" max="160" step="4" style="flex:1">
+        <span id="setDgSizeLb" style="font-size:12px;min-width:52px;text-align:right"></span>
+      </div>
+      <div class="row"><button class="btn small" id="btnBoardTune" style="flex:1">👁 盤面で見ながら調整（設定を下に小さく）</button></div>
+<div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700">カード間隔</span>
+        <input type="range" id="setCardGap" min="2" max="18" step="1" value="5" style="flex:1">
+        <span id="cardGapVal" style="font-size:12px;width:44px;text-align:right">5px</span>
+      </div>
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700" title="「対戦」がオン（相手あり）の時のカードの大きさ">カードサイズ<span style="font-size:10px;color:var(--muted)">（相手あり）</span></span>
+        <input type="range" id="setCardScale" min="70" max="250" step="5" value="100" style="flex:1">
+        <span id="cardScaleVal" style="font-size:12px;width:44px;text-align:right">100%</span>
+      </div>
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700" title="「対戦」がオフ（1人）の時のカードの大きさ。1人だと盤面が広いぶんカードが大きく出るので、ここで別に調整できます">カードサイズ<span style="font-size:10px;color:var(--muted)">（相手なし）</span></span>
+        <input type="range" id="setCardScaleSolo" min="50" max="250" step="5" value="100" style="flex:1">
+        <span id="cardScaleSoloVal" style="font-size:12px;width:44px;text-align:right">100%</span>
+      </div>
+      <div class="row"><label><input type="checkbox" id="setFitBoard" checked> カードを画面の高さに自動で収める（オフ＝サイズ設定をそのまま大きく反映し、はみ出す分は縦スクロール）</label></div>
+    </div></details>
+
+    <details class="setSect"><summary>🔊 サウンド</summary><div class="setSectBody">
+<div class="row" style="align-items:center;gap:8px">
       <span style="font-size:12px;font-weight:700">効果音 音量</span>
       <input type="range" id="setSfxVol" min="0" max="100" step="5" value="100" style="flex:1">
       <span id="sfxVolLb" style="font-size:12px;width:36px;text-align:right">100%</span>
     </div>
-    
-    <section>
-      
-    </div></details>
 
-    <details class="setSect"><summary>🔊 サウンド</summary><div class="setSectBody">
 
       <div class="row"><button class="btn small" id="btnSound">🔊 効果音：ON</button></div>
     </section>
@@ -1853,36 +1885,9 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row" style="align-items:center;gap:8px">
         <label><input type="checkbox" id="setCompactHead"> ゾーン見出し・ボタンを小さくする（省スペース）</label>
       </div>
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
-        <span style="font-size:12px;font-weight:700">ゾーンの縦幅（カードの大きさ）比率</span>
-        <div id="zoneScaleList" style="display:flex;flex-direction:column;gap:3px"></div>
-        <div class="hint">「盾（シールド）のカード」は盾だけの大きさ。「山札/墓地の段（段の高さ）」はその段が確保する縦幅、「山札・墓地・GR・超次元の束」は枚数が出ている四角そのものの大きさです。</div>
-      <div class="row" style="align-items:center;gap:8px">
-        <span style="font-size:12px;font-weight:700">デッキのカードタイル</span>
-        <input type="range" id="setDgSize" min="44" max="160" step="4" style="flex:1">
-        <span id="setDgSizeLb" style="font-size:12px;min-width:52px;text-align:right"></span>
+      
       </div>
-      <div class="row"><button class="btn small" id="btnBoardTune" style="flex:1">👁 盤面で見ながら調整（設定を下に小さく）</button></div>
-<div class="row" style="align-items:center;gap:8px">
-        <span style="font-size:12px;font-weight:700">カード間隔</span>
-        <input type="range" id="setCardGap" min="2" max="18" step="1" value="5" style="flex:1">
-        <span id="cardGapVal" style="font-size:12px;width:44px;text-align:right">5px</span>
-      </div>
-      <div class="row" style="align-items:center;gap:8px">
-        <span style="font-size:12px;font-weight:700" title="「対戦」がオン（相手あり）の時のカードの大きさ">カードサイズ<span style="font-size:10px;color:var(--muted)">（相手あり）</span></span>
-        <input type="range" id="setCardScale" min="70" max="250" step="5" value="100" style="flex:1">
-        <span id="cardScaleVal" style="font-size:12px;width:44px;text-align:right">100%</span>
-      </div>
-      <div class="row" style="align-items:center;gap:8px">
-        <span style="font-size:12px;font-weight:700" title="「対戦」がオフ（1人）の時のカードの大きさ。1人だと盤面が広いぶんカードが大きく出るので、ここで別に調整できます">カードサイズ<span style="font-size:10px;color:var(--muted)">（相手なし）</span></span>
-        <input type="range" id="setCardScaleSolo" min="50" max="250" step="5" value="100" style="flex:1">
-        <span id="cardScaleSoloVal" style="font-size:12px;width:44px;text-align:right">100%</span>
-      </div>
-      <div class="row"><label><input type="checkbox" id="setFitBoard" checked> カードを画面の高さに自動で収める（オフ＝サイズ設定をそのまま大きく反映し、はみ出す分は縦スクロール）</label></div>
-      </div>
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
-        <label><input type="checkbox" id="setKeysOn"> ⌨️ ショートカットキーを有効にする</label>
-        <div id="hotkeyList" style="display:flex;flex-direction:column;gap:3px"></div>
+      
         <div class="hint">操作対象は「操作」中のプレイヤー。入力欄にフォーカス中やパネル表示中は無効。1文字（A-Z/0-9）で設定。</div>
       </div>
       
@@ -1919,6 +1924,10 @@ body.shake{animation:bodyShake .4s ease-out}
     </div></details>
 
     <details class="setSect"><summary>⌨ ショートカット / メモ</summary><div class="setSectBody">
+<div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
+        <label><input type="checkbox" id="setKeysOn"> ⌨️ ショートカットキーを有効にする</label>
+        <div id="hotkeyList" style="display:flex;flex-direction:column;gap:3px"></div>
+
 
       <div class="hint">
         ⌘Z / Ctrl+Z：1手戻る<br>
@@ -4064,17 +4073,13 @@ function openGameLog(){
      f.style.setProperty("--lfr",r+"px");
      f.style.setProperty("--lfb",b+"px");
    }
-   // 最後にもう一度、今の位置が画面内か確かめる（保険）
-   try{
-     const fin=f.getBoundingClientRect();
-     if(fin.right<24||fin.left>vw-24||fin.bottom<24||fin.top>vh-24){
-       f.style.removeProperty("--lfr");f.style.removeProperty("--lfb");
-       if(typeof S!=="undefined"&&S)S.logFabPos=null;
-     }
-   }catch(e){}
  };
  // 📜 画面の大きさ・向きが変わったら置き直す（回転やキーボードで外に出るのを防ぐ）
- window.addEventListener("resize",()=>{try{placeLogFab();}catch(e){}});
+ {let _rzTm=null;
+  window.addEventListener("resize",()=>{
+    if(_rzTm)clearTimeout(_rzTm);
+    _rzTm=setTimeout(()=>{try{placeLogFab();}catch(e){}},400); // つまんでいる最中に戻さない
+  });}
  window.addEventListener("orientationchange",()=>{setTimeout(()=>{try{placeLogFab();}catch(e){}},250);});
  {let _lfLast=0,_lfTm=null;
   const _lfRun=()=>{_lfLast=Date.now();try{placeLogFab();}catch(e){}};
@@ -5069,7 +5074,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.65";
+const APP_VER="v14.66";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -24547,7 +24552,11 @@ function fxJumpIsSet(el){
     return el.selectedIndex!==di;
   }
   const dv=String(el.defaultValue==null?"":el.defaultValue).trim();
-  return String(el.value||"").trim()!==dv;
+  const cur=String(el.value||"").trim();
+  // 🔢 「0＝なし」の数値欄は、0 を未設定として扱う（v14.66）。
+  //    J・O・E や B・A・D・S が常に「登録済み」に出てしまっていた
+  if(el.type==="number"&&(cur==="0"||cur==="")&&(dv===""||dv==="0"))return false;
+  return cur!==dv;
 }
 /* 隠れているか（ツインパクト下面など、そもそも使わない欄かどうか）。
    折りたたみグループの中や、しぼり込みで一時的に隠れている行は「隠れている」とは見なさない。 */
@@ -28176,6 +28185,12 @@ function openCardCivSearch(){
       tile.style.cursor="pointer";
       tile.setAttribute("role","button");
       const im=document.createElement("div");im.className="dg-img";
+      // 🖼 高さはインラインで直接決める（v14.66）。
+      //    CSSクラス経由だと、他の定義との前後関係で効かないことが5回続いたため、
+      //    もう外部の指定に左右されない書き方にする
+      {const _w=Math.max(64,Math.min(140,Math.round(window.innerWidth*0.09)));
+       im.style.height=Math.round(_w*1.35)+"px";
+       im.style.flex="0 0 auto";}
       // ⚠ aspect-ratio がこのダイアログでは効かない環境があった（v14.55）。
       //    高さ0＋padding-top:140% は幅から必ず高さが出る（背景はpadding領域にも描かれる）
       // 高さは .dg-img の固定px（v14.64）に任せる。padding方式は flex の子で潰れた
