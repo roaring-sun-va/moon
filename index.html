@@ -3979,17 +3979,18 @@ function evLabel(ev){
    ⚠ dvh で指定すると、ログの箱自体の高さ（スマホは max-height:44dvh）を超えられず、
       「中」と「大」が同じ見た目になっていた。箱の内側の高さに対する割合で決める。 */
 let LD_STACK_SIZE=1;
-const LD_STACK_RATIO=[0.16,0.48,0.96];   // v14.72：小と大の差をはっきりさせた（旧 .24/.46/.80）
-const LD_STACK_MAX=["11dvh","26dvh","46dvh"];   // 予備（ログの箱の高さが測れない時だけ使う）
+/* ⏳ 小・中・大の高さ（v14.76）。
+   v14.72で「ログの箱の高さ×割合」にしたが、箱の高さはスタックの高さで決まるため、
+   中→大で逆に縮むことがあった（切り替える前の箱の高さに引きずられる）。
+   画面の高さに対する固定値に戻し、必ず 小＜中＜大 になるようにする。
+   「大」は箱の上限（44dvh）を超えるので #logDock.ld-big で箱ごと広げる。 */
+const LD_STACK_MAX=["12dvh","30dvh","62dvh"];
+const LD_STACK_RATIO=LD_STACK_MAX;   // 互換：段階数を見ている箇所のため残す
 const LD_STACK_LB=["小","中","大"];
 function ldStackMaxPx(){
-  try{
-    const d=document.getElementById("logDock");
-    const h=d?d.getBoundingClientRect().height:0;
-    const r=LD_STACK_RATIO[LD_STACK_SIZE]!=null?LD_STACK_RATIO[LD_STACK_SIZE]:0.46;
-    if(h>60)return Math.round(h*r)+"px";
-  }catch(e){}
-  return LD_STACK_MAX[LD_STACK_SIZE]||"26dvh";
+  // ⚠ ログの箱の高さから計算しないこと。箱の高さはスタックの高さで決まるので、
+  //    中→大で逆に縮む事故になる（v14.72〜75の不具合）。
+  return LD_STACK_MAX[LD_STACK_SIZE]||"30dvh";
 }
 async function cycleLdStackSize(){
   LD_STACK_SIZE=(LD_STACK_SIZE+1)%LD_STACK_RATIO.length;
@@ -5201,7 +5202,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.75";
+const APP_VER="v14.76";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -14887,7 +14888,7 @@ async function runFxList(pi,list,srcCard,inPump){
         }else if(x.isGR){
           x.faceup=false;x.tapped=false;x.rot=0;OZr.gr.push(x);
         }else{
-          x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;
+          x.faceup=false;x.seen=true;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;   // 🔍 公開情報として残す
           OZr.deck.push(x);sentR.push(x);
         }
       };
@@ -14952,12 +14953,12 @@ async function runFxList(pi,list,srcCard,inPump){
       toast(`💥 ${faceNameOf(tgt)}：このターン、シールドを${cntA}枚多くブレイクする`);
       logOnly(`💥 ${S.players[pi].label}：${faceNameOf(tgt)} に追加ブレイク+${cntA}（自分のクリーチャー${cntA}体）`);
       if(S.vs){
-        S.pturn=S.pturn|0;
-        S.turnLock=S.turnLock||[];
-        // 🚫 このターンの間、相手は呪文を唱えられない（本来は「そのクリーチャーの攻撃中」だけ）
-        S.turnLock.push({pi:op,kind:"spell",prop:null,op:null,val:null,dynVal:null,caster:pi,until:S.pturn});
-        toast(`🚫 このターン、相手は呪文を唱えられない（本来は ${faceNameOf(tgt)} の攻撃中だけ）`);
-        logOnly(`🚫 ${S.players[op].label} は呪文を唱えられない（このターン・${faceNameOf(tgt)} の攻撃中の近似）`);
+        // 🚫 「そのクリーチャーの攻撃中」だけ相手は呪文を唱えられない（v14.76で正確に）。
+        //    印を付けておき、攻撃の開始でロックを貼り、攻撃の終わりに外す。
+        tgt.buff.noSpellAtk=true;
+        markBuffTurn(tgt,["noSpellAtk"]);
+        toast(`🚫 ${faceNameOf(tgt)} の攻撃中は、相手は呪文を唱えられない`);
+        logOnly(`🚫 ${faceNameOf(tgt)} に「攻撃中の呪文ロック」を付与（このターン）`);
       }
       sfx("ok");renderAll();
     }else if(f.t==="foeTopCostPickToDeck"){
@@ -14991,7 +14992,7 @@ async function runFxList(pi,list,srcCard,inPump){
         }else if(x.isGR){
           x.faceup=false;x.tapped=false;x.rot=0;OZd.gr.push(x);
         }else{
-          x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;
+          x.faceup=false;x.seen=true;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;   // 🔍 公開情報として残す
           OZd.deck.push(x);sentT.push(x);
         }
       };
@@ -21790,10 +21791,33 @@ async function offerOniEnd(){
     }
   }
 }
+/* 🚫 「そのクリーチャーの攻撃中、相手は呪文を唱えられない」（ジョジョジョ・マキシマム型・v14.76）。
+   buff.noSpellAtk が付いたクリーチャーが攻撃を始めた時だけロックを貼り、攻撃の終わりに外す。 */
+function atkSpellLockOn(pi,c){
+  try{
+    if(!S.vs||!c||!c.buff||!c.buff.noSpellAtk)return;
+    const op2=1-(pi|0);
+    S.pturn=S.pturn|0;
+    S.turnLock=S.turnLock||[];
+    S.turnLock.push({pi:op2,kind:"spell",prop:null,op:null,val:null,dynVal:null,
+      caster:pi,until:S.pturn,atkOf:c.id});
+    toast(`🚫 ${faceNameOf(c)} の攻撃中：相手は呪文を唱えられない`);
+    logOnly(`🚫 ${S.players[op2].label} は呪文を唱えられない（${faceNameOf(c)} の攻撃中）`);
+  }catch(e){}
+}
+function atkSpellLockOff(c){
+  try{
+    if(!c||!S.turnLock||!S.turnLock.length)return;
+    const before=S.turnLock.length;
+    S.turnLock=S.turnLock.filter(L=>!(L&&L.atkOf===c.id));
+    if(S.turnLock.length!==before)logOnly(`🚫 ${faceNameOf(c)} の攻撃が終わり、呪文ロックを解除`);
+  }catch(e){}
+}
 async function startAttack(pi,id){
   const Z=zonesOf(pi);
   const c=Z.battle.find(x=>x.id===id);if(!c)return;
   CUR_ATTACKER=id;
+  atkSpellLockOn(pi,c);
   if(isSealed(c)){toast(`🔒 ${c.name} は封印されている！（クリーチャーとして扱われず、攻撃できません）`);return;}
   if(S.expert){
     const rA=getReg(c);
@@ -22423,6 +22447,7 @@ async function execAttack(pi,id,tg){
   const atkEnd=async()=>{
     if(_atkEndRan)return;
     _atkEndRan=true;
+    atkSpellLockOff(c);   // 🚫 攻撃中だけの呪文ロックを外す（v14.76）
     if(S.expert)await runSelfAtkEnd(pi,c);
     // 🔄 覚醒（攻撃に関する条件）は攻撃が終わってから。
     //    攻撃中にバトルゾーンを離れていたら覚醒しない。ブロックされた場合も「攻撃が通った」扱いにしない。
@@ -29144,7 +29169,7 @@ function placeCard(Z,toZone,c){
     c.faceup=(toZone==="shieldUp");Z.shield.push(c);
   }
   else if(toZone==="deckTop"){c.faceup=false;c.seen=false;Z.deck.unshift(c);}
-  else if(toZone==="deckBottom"){c.faceup=false;c.seen=false;Z.deck.push(c);}
+  else if(toZone==="deckBottom"){c.faceup=false;Z.deck.push(c);}   /* 🔍 seen は消さない（v14.76・公開情報に残すため。混ぜれば shuffleDeck が消す） */
   else if(toZone==="grBottom")Z.gr.push(c);
   else if(toZone==="hand")toHand(Z,c);
   // 🌱 デュエプレモード：マナゾーンは99枚まで。100枚目以降はかわりに墓地へ（マナ置き時・墓地置き時の能力は発動しない）
@@ -29850,6 +29875,18 @@ function applyEnterReplacement(pTo,c,mode){
     return "pending";
   }
 }
+/* 🔍 みんなが見ていたゾーンから山札へ移したカードは「確認済み」にする（v14.76）。
+   吸い込むナウ型で山札の下に送ったカードが「🔍 山札の公開情報」に出なかったための対処。
+   シャッフルすれば shuffleDeck が確認済みを消すので、混ざった後まで残ることはない。 */
+const _PUB_ZONES=new Set(["battle","mana","grave","reveal","look","hyper","gr","exile"]);
+function markDeckKnownFromPublic(c,fromZone,toZone){
+  try{
+    if(!c)return;
+    if(!/^deck/.test(String(toZone||"")))return;
+    if(!_PUB_ZONES.has(String(fromZone||"")))return;
+    c.seen=true;
+  }catch(e){}
+}
 function moveCardXRaw(pFrom,fromZone,id,pTo,toZone){
   return moveCardX(pFrom,fromZone,id,pTo,toZone,true);
 }
@@ -30257,7 +30294,10 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   else if(toZone==="grave"&&fromZone!=="grave"&&fromZone!=="battle"&&graveShuffleRepApply(c,pTo)){
     // ♾ フォーエバー・プリンセス：墓地に置かれるかわりに墓地＋自身を山札へシャッフル（手札を捨てる/山札を削る等）
   }
-  else placeCard(Z,toZone,c);
+  else{
+    markDeckKnownFromPublic(c,fromZone,toZone);   // 🔍 見えていた場所→山札 は確認済みで残す（v14.76）
+    placeCard(Z,toZone,c);
+  }
   if(!_reorder){c._mvxRep=true;try{markArrive(c);}finally{delete c._mvxRep;}} // 🔧 配置後に呼ぶ（並べ替えでは出直し扱いにしない・置換ロックは本体側で判定するためフラグで除外）
   // 🛡 表向きでシールドに置く操作は誤操作しやすいので確認（城/Gキャッスルは除く）
   if(toZone==="shieldUp"&&S.expert&&!S.freePlay){
