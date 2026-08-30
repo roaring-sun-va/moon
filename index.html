@@ -5202,7 +5202,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.76";
+const APP_VER="v14.77";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -16058,9 +16058,20 @@ async function runFxList(pi,list,srcCard,inPump){
       // 🌱 このクリーチャーよりパワーが小さいクリーチャーをすべて持ち主のマナゾーンへ（プチョヘンザ型）。
       //    基準は「いま解決しているカード」のパワー。条件欄の先頭に「相手:」「自分:」で片側だけにできる。
       const meMW=srcCard&&[0,1].map(pp=>zonesOf(pp).battle.find(x=>x.id===srcCard.id)).find(Boolean);
-      const basePow=meMW?powNow(meMW):((getReg(srcCard)||{}).power!=null?+getReg(srcCard).power:null);
-      if(basePow==null){toast("🌱 基準になるパワーが分かりません（登録のパワーが空です）");continue;}
+      let basePow=meMW?powNow(meMW):((getReg(srcCard)||{}).power!=null?+getReg(srcCard).power:null);
       let filtMW=String(f.cond||"").trim();
+      /* 🔢 条件欄に「パワー3000以下」「パワー3000未満」と書けば、その数字を基準にする（v14.77）。
+         ニルバーナーのように「自分のパワーではなく決まった数字で切る」カードのため。 */
+      let cmpMW="<";   // 既定は「自分より小さい」
+      {
+        const mP=filtMW.match(/パワー\s*(\d+)\s*(以下|未満)/);
+        if(mP){
+          basePow=+mP[1];
+          cmpMW=(mP[2]==="以下")?"<=":"<";
+          filtMW=filtMW.replace(mP[0],"").replace(/^[／\/、,：:]+|[／\/、,：:]+$/g,"").trim();
+        }
+      }
+      if(basePow==null){toast("🌱 基準になるパワーが分かりません（登録のパワーが空です）");continue;}
       let sidesMW=S.vs?[pi,op]:[pi];
       {const m=filtMW.match(/^(相手|自分)\s*[:：]\s*/);
        if(m){sidesMW=(m[1]==="相手")?(S.vs?[op]:[]):[pi];filtMW=filtMW.replace(m[0],"").trim();}}
@@ -16072,14 +16083,16 @@ async function runFxList(pi,list,srcCard,inPump){
           if(!isCreatureReg(rx))continue;
           if(isSealed(x))continue;
           const pw=powNow(x);
-          if(pw==null||pw>=basePow)continue;             // 「小さい」＝基準未満
+          if(pw==null)continue;
+          if(cmpMW==="<=" ? (pw>basePow) : (pw>=basePow))continue;   // 既定＝基準未満／「◯以下」指定なら以下
           if(filtMW&&!lockFilterOk(filtMW,rx,x))continue;
           hitsMW.push({sp,x});
         }
       }
-      if(!hitsMW.length){toast(`🌱 パワー${basePow}より小さいクリーチャーはいません`);renderAll();continue;}
+      const _cmpLb=(cmpMW==="<=")?"以下":"より小さい";
+      if(!hitsMW.length){toast(`🌱 パワー${basePow}${_cmpLb}のクリーチャーはいません`);renderAll();continue;}
       snap();
-      toast(`🌱 パワー${basePow}より小さいクリーチャー${hitsMW.length}体をマナゾーンへ`);
+      toast(`🌱 パワー${basePow}${_cmpLb}のクリーチャー${hitsMW.length}体をマナゾーンへ`);
       for(const {sp,x} of hitsMW){
         const ZM=zonesOf(sp);
         if(!ZM.battle.some(y=>y.id===x.id))continue;
@@ -18842,6 +18855,29 @@ function canSeal(pi,c){
   if(S.expert&&r&&r.noSeal&&!isIgnored(c,pi)){toast(`🔏 ${faceNameOf(c)} は封印されない！`);return false;}
   return true;
 }
+/* 🚯 能力無視の名前あわせ（v14.77）。
+   正式名称をそのまま打たないと当たらず面倒だったので、
+   「入れた文字が名前に含まれる」「名前が入れた文字に含まれる」のどちらでも当たるようにする。
+   例：「禁断」→《禁断の鼓動》／「エモハ」→《エモーショナル・ハードコア》は当たらないので、
+   略称は「エモーショナル」のように名前の一部で入れてください（当たった名前はトーストで知らせます）。
+   ⚠ 短すぎる指定（1文字）は関係ないカードまで巻き込むので、2文字以上を要求する。 */
+function ignoreNameHit(key,c){
+  try{
+    if(!key)return false;
+    const k=String(key);
+    if(k.length<2)return false;
+    const names=[];
+    try{names.push(faceNameOf(c));}catch(e){}
+    try{if(c&&c.name)names.push(c.name);}catch(e){}
+    try{const rr=getReg(c);if(rr&&rr.name)names.push(rr.name);}catch(e){}
+    for(const nmRaw of names){
+      const nm=normName(nmRaw||"");
+      if(!nm)continue;
+      if(nm===k||nm.includes(k)||k.includes(nm))return true;
+    }
+  }catch(e){}
+  return false;
+}
 function isIgnored(c,pi){
   if(!S.expert)return false;
   if(c.buff&&c.buff.ignoreAbility)return true; // 🚯 付与：このカードの能力を無視（立ち上がれ型等）
@@ -18851,7 +18887,7 @@ function isIgnored(c,pi){
       if(x.id===c.id)continue;
       if(isSealed(x))continue;
       if(isIgnoredRaw(x))continue;
-      if(x.ignoreName&&normName(faceNameOf(c))===x.ignoreName)return true;
+      if(x.ignoreName&&ignoreNameHit(x.ignoreName,c))return true;
       const rx=getReg(x);
       if(!rx||!rx.ignore)continue;
       if(rx.ignore==="cost"&&r&&r.cost!=null&&r.cost<=(rx.ignoreN||0))return true;
@@ -18865,7 +18901,7 @@ function isIgnoredRaw(c){
     for(const x of zonesOf(p2).battle){
       if(x.id===c.id)continue;
       if(isSealed(x))continue;
-      if(x.ignoreName&&normName(faceNameOf(c))===x.ignoreName)return true;
+      if(x.ignoreName&&ignoreNameHit(x.ignoreName,c))return true;
       const rx=getReg(x);
       if(!rx||!rx.ignore)continue;
       if(rx.ignore==="cost"&&r&&r.cost!=null&&r.cost<=(rx.ignoreN||0))return true;
@@ -18926,10 +18962,36 @@ async function askIgnoreNameOnBattleEntry(pi,c){
     // enqueueFx() の時点では開かない。pumpFx がこのカードの解決順まで来てから
     // 共通モーダル列を通して宣言する（親効果・盾選択への割り込み防止）。
     if(!zonesOf(pi).battle.some(x=>x.id===c.id))return;
-    const nm=await askText(`🚯 ${faceNameOf(c)}：能力を無視するクリーチャーの名前を指定`,"");
-    if(nm&&nm.trim()&&zonesOf(pi).battle.some(x=>x.id===c.id)){
-      c.ignoreName=normName(nm.trim());
-      toast(`🚯 「${nm.trim()}」の能力を無視する（このカードが場にある間）`);
+    // 🚯 まず「今バトルゾーンにいるカード」から選べるようにする（正式名称を打たなくて済む）。
+    //    足りなければ自由入力へ。入力は名前の一部でも当たる（ignoreNameHit）。
+    let nm=null;
+    try{
+      const names=[];
+      for(const p3 of [0,1]){
+        for(const x of zonesOf(p3).battle){
+          if(x.id===c.id)continue;
+          const n3=faceNameOf(x);
+          if(n3&&!names.includes(n3))names.push(n3);
+        }
+      }
+      if(names.length){
+        const j3=await askChoice(`🚯 ${faceNameOf(c)}：能力を無視するカードの名前を指定`,
+          [...names.map(n3=>`《${n3}》`),"✍ 自分で入力する（名前の一部でも可）"]);
+        if(j3===null)nm=null;
+        else if(j3<names.length)nm=names[j3];
+        else nm=await askText(`🚯 能力を無視するカードの名前（一部でも可・例：禁断）`,"");
+      }else{
+        nm=await askText(`🚯 ${faceNameOf(c)}：能力を無視するカードの名前（一部でも可・例：禁断）`,"");
+      }
+    }catch(e){}
+    if(nm&&String(nm).trim()&&zonesOf(pi).battle.some(x=>x.id===c.id)){
+      c.ignoreName=normName(String(nm).trim());
+      const hits=[];
+      for(const p3 of [0,1])for(const x of zonesOf(p3).battle){
+        if(x.id!==c.id&&ignoreNameHit(c.ignoreName,x))hits.push(faceNameOf(x));
+      }
+      toast(`🚯 「${String(nm).trim()}」の能力を無視する（このカードが場にある間）${hits.length?`\n今あてはまるカード：${hits.map(h=>`《${h}》`).join("、")}`:"\n※今バトルゾーンにあてはまるカードはありません"}`);
+      logOnly(`🚯 ${faceNameOf(c)}：「${String(nm).trim()}」を含む名前のカードの能力を無視${hits.length?`（現在：${hits.join("、")}）`:""}`);
     }
     delete c._ignoreNameAsking;renderAll();
   }catch(e){delete c._ignoreNameAsking;}
