@@ -2958,6 +2958,7 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
         <label><input type="checkbox" id="fxJBig1"> ジョラゴン・ビッグ1（攻撃時、手札のジョーカーズを捨てて出た時能力を使う）</label>
         <label><input type="checkbox" id="fxGrantDS"> 場にある間、手札の自分のクリーチャーに自身のシンパシーを付与（ゲイル・ヴェスパー／流星アーシュ型・複数で重複）</label>
+        <input type="text" id="fxGrantDSSym" placeholder="付与するシンパシー（例：ドラゴン・空欄＝自分のシンパシーを配る）" title="自分は持っていないが手札の味方にだけ与えるカード（流星アーシュ型）はここに書きます。ここに書くと、手札にいる本人には効きません" style="flex:1;min-width:220px">
         <input id="fxGrantDSFilt" placeholder="付与対象（空欄＝全クリーチャー／例：生徒会組）" style="flex:1 1 330px" title="手札でシンパシーを与える対象を、種族・文明・名前などで絞ります">
         <div style="flex:1 1 100%;font-size:12px;font-weight:900;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:2px;margin-top:6px">常在効果（場にある間）</div>
         <label><input type="checkbox" id="fxStManaTap"> 相手のマナはタップして置かれる</label>
@@ -5200,7 +5201,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.74";
+const APP_VER="v14.75";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11019,6 +11020,8 @@ const FX_TYPES=[
   ["manaPlusPerZone","💠 そのターン、〔条件欄のゾーン:対象〕1枚につき使用可能マナを1増やす（上限は最大マナの2倍・大革命のD ワイルド・サファリ・チャンネル型／例：マナ:多色）"],
   ["destroyWeakerPick","💥 このクリーチャーよりパワーが小さい相手のクリーチャーをn体選んで破壊する（頂上連結 ロッド・ゾージア5th型／条件欄でさらに絞れる）"],
   ["manaUntapPick","🔄 自分のマナゾーンにあるカードをn枚アンタップする（ラスト・GOLDEN・ドラゴン型・タップしているマナから順に）"],
+  ["foeRandCreManaHandToDeck","🎲 相手のクリーチャー・相手のマナ・相手の手札からそれぞれランダムにn枚ずつ、相手の山札の一番下に置く（燃えるデット・ソード型）"],
+  ["breakPlusPerAllyNoSpell","💥🚫 自分のクリーチャーを数え、自分のクリーチャー1体を選ぶ。このターン、そのクリーチャーはその数だけシールドを多くブレイクし、相手は呪文を唱えられない（ジョジョジョ・マキシマム型）"],
   ["foeTopCostPickToDeck","🎰 相手の山札の上からn枚を表向きにし、自分はその中のコストを1つ選ぶ。選んだコストの相手クリーチャーすべてと表向きのn枚を、ランダムな順番で相手の山札の一番下に置く（7777777型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
@@ -11676,10 +11679,14 @@ async function autoTapCost(pi,c){
   }
   // ゲイル・ヴェスパー型：場のgrantDS持ちが手札のクリーチャーにシンパシー付与（複数で重複）
   if(paySide==="creature"){
-    const granters=Z.battle.filter(b=>{const rb=getReg(b);return rb&&rb.grantDS&&rb.sympathy&&b.id!==c.id&&String(rb.sympathy)!==String(r.sympathy||"")&&(!rb.grantDSFilt||lockFilterOk(rb.grantDSFilt,r,c));});
+    /* 💞 付与するシンパシーは grantDSSym（無ければ自身の sympathy）。
+       アーシュのように「自分は持っていないが手札の味方に与える」カードは grantDSSym だけを書く。
+       こうしないと、手札にいる本人にまで自分のシンパシーがかかってしまう（v14.75で修正）。 */
+    const dsSymOf=rb=>String((rb&&(rb.grantDSSym||rb.sympathy))||"").trim();
+    const granters=Z.battle.filter(b=>{const rb=getReg(b);return rb&&rb.grantDS&&dsSymOf(rb)&&b.id!==c.id&&dsSymOf(rb)!==String(r.sympathy||"")&&(!rb.grantDSFilt||lockFilterOk(rb.grantDSFilt,r,c));});
     for(const g of granters){
       const rg=getReg(g);
-      const gcnt=sympathyCount(pi,c,rg.sympathy).cnt;
+      const gcnt=sympathyCount(pi,c,dsSymOf(rg)).cnt;
       if(gcnt>0&&cost>0){
         const mult=rg.symX||1;
         const dec=Math.min(gcnt*mult,Math.max(0,cost-1)); // 0以下にならない（下限1）
@@ -12814,6 +12821,7 @@ const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","dr
   "manaPlusPerZone","destroyWeakerPick","manaAllWeaker","exileToGrave","handToManaBreakPlus","deckTopShieldRestMana","foeDeckBottomOverMaxMana",
   "handes","peepDiscard","grantBlockerPick","deckShield","revealBottomShield","nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "selfDiscardDrawNow",   /* 条件欄は「引く枚数」なのでゾーン条件式として読まない（v14.74） */
+  "foeRandCreManaHandToDeck","breakPlusPerAllyNoSpell",
   "exileRecruitPerZone","elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS","foeTapThenDeckBottom",
   "drawPerElem","winDiscardDrawUntap","elemToShieldOrDeck","handGearFree","gearCrossAnyFree","breakMineThenKill",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
@@ -14864,6 +14872,94 @@ async function runFxList(pi,list,srcCard,inPump){
         }
         renderAll();
       }
+    }else if(f.t==="foeRandCreManaHandToDeck"){
+      /* 🎲 燃えるデット・ソード型（v14.75）：相手のクリーチャー・相手のマナ・相手の手札から
+         それぞれランダムに1枚ずつ、相手の山札の一番下に置く。n=各ゾーンから置く枚数（既定1）。
+         エターナルΩは手札へ（離場置換）、サイキックは超次元、GRはGRゾーンの下（通常処理）。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const OZr=zonesOf(op);
+      const cnt=Math.max(1,n);
+      const sentR=[],doneR=[];
+      const bottomR=x=>{
+        const rx2=getReg(x);
+        if(x.isPsy||(rx2&&(rx2.ctype==="psychic"||rx2.ctype==="psyevo"))){
+          x.face=0;x.rot=0;x.tapped=false;x.faceup=true;x.isPsy=false;OZr.hyper.push(x);
+        }else if(x.isGR){
+          x.faceup=false;x.tapped=false;x.rot=0;OZr.gr.push(x);
+        }else{
+          x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;
+          OZr.deck.push(x);sentR.push(x);
+        }
+      };
+      for(let i=0;i<cnt;i++){
+        // 1) バトルゾーンのクリーチャー（封印中は対象外）
+        {
+          const pool=OZr.battle.filter(x=>{const rx=getReg(x);return !isSealed(x)&&rx&&isCreatureReg(rx);});
+          if(pool.length){
+            const hc=pool[Math.floor(Math.random()*pool.length)];
+            const bi=OZr.battle.findIndex(x=>x.id===hc.id);
+            if(bi>=0){
+              if(hasEtOmega(op,hc,getReg(hc))){etOmegaToHand(op,hc,OZr.battle);}
+              else{
+                OZr.battle.splice(bi,1);
+                hc._leaveUnder=(hc.under&&hc.under.length)||0;
+                fireLeaveWatch(op,hc);
+                if(hc.gear&&hc.gear.length){const gs=hc.gear.splice(0);gs.forEach(g=>gearOut(OZr,g));}
+                if(hc.seals&&hc.seals.length){const sl=hc.seals.splice(0);sl.forEach(x2=>{x2.faceup=true;OZr.grave.push(x2);});}
+                const us=hc.under?hc.under.splice(0):[];
+                bottomR(hc);us.forEach(bottomR);
+                doneR.push(`クリーチャー《${faceNameOf(hc)}》`);
+              }
+            }
+          }else if(i===0)toast("相手のバトルゾーンにクリーチャーがいません");
+        }
+        // 2) マナゾーン
+        if(OZr.mana.length){
+          const mi=Math.floor(Math.random()*OZr.mana.length);
+          const mc=OZr.mana.splice(mi,1)[0];
+          doneR.push(`マナ《${faceNameOf(mc)}》`);
+          bottomR(mc);
+        }else if(i===0)toast("相手のマナゾーンにカードがありません");
+        // 3) 手札
+        if(OZr.hand.length){
+          const hi=Math.floor(Math.random()*OZr.hand.length);
+          const hc2=OZr.hand.splice(hi,1)[0];
+          doneR.push(`手札《${faceNameOf(hc2)}》`);
+          bottomR(hc2);
+        }else if(i===0)toast("相手の手札がありません");
+      }
+      if(doneR.length){
+        sfx("grave");
+        toast(`🎲 ${doneR.join(" / ")} をランダムに相手の山札の一番下へ`);
+        logOnly(`🎲 ${S.players[op].label}：${doneR.join(" / ")} が山札の一番下へ（ランダム）`);
+        try{logDeckBottomOrder(op,sentR,"ランダム除去","（クリーチャー/マナ/手札）");}catch(e){}
+      }
+      renderAll();
+    }else if(f.t==="breakPlusPerAllyNoSpell"){
+      /* 💥🚫 ジョジョジョ・マキシマム型（v14.75）：自分のクリーチャーを数える。
+         このターン、自分のクリーチャー1体はその数だけシールドを追加でブレイクし、
+         そのクリーチャーの攻撃中、相手は呪文を唱えられない。
+         （「攻撃中だけ」は追えないので、このターンいっぱいの呪文ロックで近似する） */
+      const mine=Z.battle.filter(x=>{const rx=getReg(x);return !isSealed(x)&&rx&&isCreatureReg(rx);});
+      if(!mine.length){toast("自分のバトルゾーンにクリーチャーがいません");continue;}
+      const cntA=mine.length;
+      const j=mine.length===1?0:await pickCard(`💥 追加で${cntA}枚ブレイクするクリーチャーを選択（自分のクリーチャー${cntA}体ぶん）`,mine,{});
+      if(j===null)continue;
+      const tgt=mine[j];
+      tgt.buff=tgt.buff||{};
+      tgt.buff.bkAdd=(+tgt.buff.bkAdd||0)+cntA;
+      markBuffTurn(tgt,["bkAdd"]);
+      toast(`💥 ${faceNameOf(tgt)}：このターン、シールドを${cntA}枚多くブレイクする`);
+      logOnly(`💥 ${S.players[pi].label}：${faceNameOf(tgt)} に追加ブレイク+${cntA}（自分のクリーチャー${cntA}体）`);
+      if(S.vs){
+        S.pturn=S.pturn|0;
+        S.turnLock=S.turnLock||[];
+        // 🚫 このターンの間、相手は呪文を唱えられない（本来は「そのクリーチャーの攻撃中」だけ）
+        S.turnLock.push({pi:op,kind:"spell",prop:null,op:null,val:null,dynVal:null,caster:pi,until:S.pturn});
+        toast(`🚫 このターン、相手は呪文を唱えられない（本来は ${faceNameOf(tgt)} の攻撃中だけ）`);
+        logOnly(`🚫 ${S.players[op].label} は呪文を唱えられない（このターン・${faceNameOf(tgt)} の攻撃中の近似）`);
+      }
+      sfx("ok");renderAll();
     }else if(f.t==="foeTopCostPickToDeck"){
       /* 🎰 7777777型（v14.72）：相手は自身の山札の上からn枚を表向きにし、自分はそれらの持つコストの中から1つを選ぶ。
          選んだコストを持つ相手のクリーチャーすべてと、表向きにしたn枚を、ランダムな順番で相手の山札の一番下に置く。
@@ -19354,7 +19450,8 @@ function dispCost(c,pi){
     }
     // 💞 場の付与元が、対象に合う手札のカードへ与えるシンパシーもコスト表示へ反映。
     if(r.ctype!=="spell"){
-      const granters=zonesOf(pi).battle.filter(b=>{const rb=getReg(b);return rb&&rb.grantDS&&rb.sympathy&&b.id!==c.id&&String(rb.sympathy)!==String(r.sympathy||"")&&(!rb.grantDSFilt||lockFilterOk(rb.grantDSFilt,r,c));});
+      const _dsSym=rb=>String((rb&&(rb.grantDSSym||rb.sympathy))||"").trim();
+      const granters=zonesOf(pi).battle.filter(b=>{const rb=getReg(b);return rb&&rb.grantDS&&_dsSym(rb)&&b.id!==c.id&&_dsSym(rb)!==String(r.sympathy||"")&&(!rb.grantDSFilt||lockFilterOk(rb.grantDSFilt,r,c));});
       for(const g of granters){
         const rg=getReg(g),cnt=sympathyCount(pi,c,rg.sympathy).cnt;
         if(cnt>0){const mult=rg.symX||1;const civ0S=r.civs||[];const floorS=(civ0S.length===1&&civ0S[0]==="zero")?0:Math.max(1,civ0S.length||1);cost-=Math.min(cnt*mult,Math.max(0,cost-floorS));}
@@ -25198,6 +25295,7 @@ function renderFxEditor(){
   $("fxJBig1").checked=!!FXEDIT.jbig1;
   $("fxGrantDS").checked=!!FXEDIT.grantDS;
   {const e=$("fxGrantDSFilt");if(e)e.value=FXEDIT.grantDSFilt||"";}
+  {const e=$("fxGrantDSSym");if(e)e.value=FXEDIT.grantDSSym||"";}
   $("fxStManaTap").checked=!!FXEDIT.stManaTap;
   {const e=$("fxAwakenEv");if(e)e.value=FXEDIT.awakenEv||"";}
   {const e=$("fxAwakenFilt");if(e)e.value=FXEDIT.awakenFilt||"";}
@@ -27394,6 +27492,7 @@ function openFxEditor(key){
     jbig1:cur?!!cur.jbig1:false,
     grantDS:cur?!!cur.grantDS:false,
     grantDSFilt:cur&&cur.grantDSFilt||"",
+    grantDSSym:cur&&cur.grantDSSym||"",
     stManaTap:cur?!!cur.stManaTap:false,
     awakenEv:cur&&cur.awakenEv||"",
     awakenFilt:cur&&cur.awakenFilt||"",
@@ -27938,6 +28037,7 @@ $("fxSave").addEventListener("click",async ()=>{
     jbig1:$("fxJBig1").checked,
     grantDS:$("fxGrantDS").checked,
     grantDSFilt:$("fxGrantDSFilt")?$("fxGrantDSFilt").value.trim():"",
+    grantDSSym:$("fxGrantDSSym")?$("fxGrantDSSym").value.trim():"",
     stManaTap:$("fxStManaTap").checked,
     awakenEv:$("fxAwakenEv")?$("fxAwakenEv").value:"",
     awakenFilt:$("fxAwakenFilt")?$("fxAwakenFilt").value.trim():"",
@@ -28652,7 +28752,7 @@ $("btnRegList").addEventListener("click",()=>{
     else if(v.cstFx==="stayPow")attrs.push("⚓常在：離れる時パワー0超ならとどまる");
     if(v.splus)attrs.push(["","シールド・プラス","スーパー・S・プラス","ウルトラ・S・プラス"][v.splus]||`S・プラス${v.splus}`);
     if(v.jbig1)attrs.push("ジョラゴン・ビッグ1");
-    if(v.grantDS)attrs.push(`手札にシンパシー付与${v.grantDSFilt?`（対象：${v.grantDSFilt}）`:""}`);
+    if(v.grantDS)attrs.push(`手札にシンパシー付与${v.grantDSSym?`：${v.grantDSSym}`:""}${v.grantDSFilt?`（対象：${v.grantDSFilt}）`:""}`);
     if(v.stManaTap)attrs.push("常在：相手マナはタップイン");
     if(v.awakenEv)attrs.push(`覚醒：${v.awakenCond||v.awakenFilt||"無条件"}${v.awakenEv==="allyEnter"?"（味方が出た時）":""}${v.awakenMyTurn?"／自分のターン中":""}${v.awakenLoop?"／ループ覚醒":""}`);
     if(v.stNoDeckPeek)attrs.push("常在：誰も山札を見られない");
