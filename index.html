@@ -2772,6 +2772,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このギアをクロスしたクリーチャー（クロス先）が破壊された時、このギアのコントローラーがn枚引く（秘福 サスペンス・ブーツ型）。ギア自身の破壊ではなく、クロス先クリーチャーの破壊が条件です">⚙ クロス先が破壊された時 <input type="number" id="fxGearHostDeadDraw" min="0" max="9" value="0" style="width:52px"> 枚引く</label>
         <label title="《神託アイドル！コットン》にクロス中で、そのコットンがタップしている自分のターン終了時、手札の光または闇のゼニス1体を任意でコストを支払わずに召喚します（ライオネル・グロリア型）"><input type="checkbox" id="fxGearEndZenith"> ⚙ ターン終了時、タップ中のコットンから光/闇のゼニスを無料召喚</label>
         <label><input type="checkbox" id="fxGearSA"> ⚙ クロス先に「スピードアタッカー」を与える</label>
+        <label title="これをクロスしたクリーチャーが離れる時、かわりにこのクロスギアを外してもよい（聖竜鎧 シデンズ・ソウル型）。クリーチャーは場に残ります"><input type="checkbox" id="fxGearShield"> ⚙ クロス先が離れる時、かわりにこのギアを外す（身代わり）</label>
         <label>⚙ クロス先のブレイク+<input type="number" id="fxGearBreakAdd" min="0" max="9" value="0" style="width:52px"></label>
         <label title="このクリーチャー自身が「エスケープP'S」を持つ（破壊される時パワー0超なら、かわりにランダム盾1つを手札へ・ST不可・各ターン1回）"><input type="checkbox" id="fxEscapePS"> 🏃 エスケープP'S（自身）</label>
         <label title="常在：自分の対象カードの実行（召喚/詠唱）コストをn少なくする。最低1で止まる（一番隊/ギア型・ジェネレート中もクロス中も有効）">⚙ 常在：自分の<input type="text" id="fxCostRedAllyF" list="raceList" placeholder="対象（例：ゼニス／オラクル）" style="width:170px">のコスト−<input type="number" id="fxCostRedAllyN" min="0" max="9" value="0" style="width:52px"></label>
@@ -5223,7 +5224,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.81";
+const APP_VER="v14.82";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9498,8 +9499,17 @@ function runWatchFx(pi,type,trigCard){
     const rx=getReg(x);
     return rx&&(rx.watchFx||[]).some(w=>w&&w.graveOnly&&w.ev===type);
   });
+  /* ⚙ クロス中のクロスギアも見る（v14.82）。
+     クロスしたギアは host.gear の中にいて battle には並ばないため、
+     ギアに登録した誘発（「自分のクリーチャーが出た時」等）が一度も動いていなかった。 */
+  const _gears=[];
+  try{
+    for(const b of zonesOf(pi).battle){
+      if(b&&b.gear&&b.gear.length)for(const g of b.gear)if(g)_gears.push(g);
+    }
+  }catch(e){}
   const _scan=(SELF_ONLY_EV.has(type)&&trigCard)?[trigCard]
-    :[...((S.gameMode!=="tcg")?[...zonesOf(pi).battle].reverse():zonesOf(pi).battle),..._grave];
+    :[...((S.gameMode!=="tcg")?[...zonesOf(pi).battle].reverse():zonesOf(pi).battle),..._gears,..._grave];
   for(const c of _scan){
     const r=getReg(c);
     if(r&&r.watchFx&&r.watchFx.length){
@@ -25437,6 +25447,7 @@ function renderFxEditor(){
   {const e=$("fxGearBlocker");if(e)e.checked=!!FXEDIT.gearBlocker;}
   {const e=$("fxGearSlayer");if(e)e.checked=!!FXEDIT.gearSlayer;}
   {const e=$("fxGearSA");if(e)e.checked=!!FXEDIT.gearSA;}
+  {const e=$("fxGearShield");if(e)e.checked=!!FXEDIT.gearShield;}
   {const e=$("fxGearBreakAdd");if(e)e.value=String(FXEDIT.gearBreakAdd||0);}
   {const e=$("fxGearEscapePS");if(e)e.checked=!!FXEDIT.gearEscapePS;}
   {const e=$("fxGearHostDeadDraw");if(e)e.value=String(FXEDIT.gearHostDeadDraw||0);}
@@ -27679,6 +27690,7 @@ function openFxEditor(key){
     gearEndZenith:cur?!!cur.gearEndZenith:false,
     gearSlayer:cur?!!cur.gearSlayer:false,
     gearSA:cur?!!cur.gearSA:false,
+    gearShield:cur?!!cur.gearShield:false,
     gearBreakAdd:cur&&(+cur.gearBreakAdd||0)||0,
     gearEscapePS:cur?!!cur.gearEscapePS:false,
     escapePS:cur?!!cur.escapePS:false,
@@ -28220,6 +28232,7 @@ $("fxSave").addEventListener("click",async ()=>{
     gearBlocker:$("fxGearBlocker")?$("fxGearBlocker").checked:false,
     gearSlayer:$("fxGearSlayer")?$("fxGearSlayer").checked:false,
     gearSA:$("fxGearSA")?$("fxGearSA").checked:false,
+    gearShield:$("fxGearShield")?$("fxGearShield").checked:false,
     gearBreakAdd:$("fxGearBreakAdd")?(parseInt($("fxGearBreakAdd").value,10)||0):0,
     gearEscapePS:$("fxGearEscapePS")?$("fxGearEscapePS").checked:false,
     gearHostDeadDraw:$("fxGearHostDeadDraw")?(parseInt($("fxGearHostDeadDraw").value,10)||0):0,
@@ -29031,6 +29044,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gearEndZenith)attrs.push("⚙ターン終了時：タップ中コットンから光/闇ゼニスを無料召喚");
     if(v.gearEscapePS)attrs.push("⚙クロス先に「エスケープP'S」付与");
     if(v.gearSA)attrs.push("⚙クロス先にSA付与");
+    if(v.gearShield)attrs.push("⚙クロス先が離れる時の身代わり");
     if(v.gearBreakAdd)attrs.push(`⚙クロス先のブレイク+${v.gearBreakAdd}`);
     if(v.escapePS)attrs.push("🏃エスケープP'S（破壊→かわりにランダム盾1を手札・各ターン1回）");
     if(v.costRedAllyF&&v.costRedAllyN)attrs.push(`⚙常在：自分の${v.costRedAllyF}のコスト−${v.costRedAllyN}（最低1）`);
