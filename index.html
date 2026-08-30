@@ -567,14 +567,19 @@ body.ld-peeking .olay{padding-bottom:158px}
 @media(min-width:760px){.stDeckPrev{height:110px}}
 /* 🖼 デッキ作成の表紙は行の左の小さなタイルにする（v14.70）。
    大きな看板は場所を取りすぎた。位置調整はタイルのタップで開く。 */
-#deckHeadRow{align-items:center;gap:6px;flex-wrap:wrap}
-#deckHeadRow #dkPrev{flex:0 0 auto;width:104px;height:56px;margin:0;cursor:pointer}
+/* 🃏 デッキの行（v14.72）：狭い画面では「表紙＋デッキ名のトグル」を1段目に、
+   操作ボタンを2段目に分ける。トグルが「ド」しか見えないほど潰れていたため。 */
+#deckHeadRow{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 8px;align-items:center}
+#deckHeadRow #dkPrev{grid-row:1/span 2;width:104px;height:64px;margin:0;cursor:pointer}
 #deckHeadRow #dkPrev .sdp-cap{display:none}   /* 名前は隣のトグルに出ているので重ねない */
 #deckHeadRow #dkPrev:empty::after{content:"表紙";font-size:10px}
-#deckHeadRow .btn.small{padding:6px 8px;font-size:11.5px;flex:0 0 auto}
-@media(max-width:640px){
-  #deckHeadRow #dkPrev{width:88px;height:50px}
-  #deckHeadRow .btn.small{padding:6px 6px;font-size:11px}
+#deckHeadRow #deckSelect{grid-column:2;width:100%;min-width:0;font-size:13px}
+#deckHeadRow .dhBtns{grid-column:2;display:flex;gap:6px;min-width:0}
+#deckHeadRow .dhBtns .btn.small{flex:1 1 0;min-width:0;padding:7px 4px;font-size:11.5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:520px){
+  #deckHeadRow #dkPrev{width:84px;height:58px}
+  #deckHeadRow .dhBtns .btn.small{font-size:11px;padding:7px 2px}
 }
 #stMetaRow{margin-top:8px;align-items:center;flex-wrap:wrap}
 /* ☰ メニュー（v14.49） */
@@ -623,6 +628,15 @@ body.ld-peeking .olay{padding-bottom:158px}
 .setSect[open]>summary::before{transform:rotate(90deg)}
 .setSect .setSectBody{padding:0 12px 10px}
 /* 👁 盤面で見ながら調整（v14.57）。設定を画面下の小窓にして、上の盤面は触れる */
+/* 📚 登録一覧：カードごとに枠で区切る（v14.72。区切りが無く、隣のカードの削除を押しやすかった） */
+#regFxBody .dl-item,#regLinkBody .dl-item{
+  border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.028);
+  padding:8px 9px;margin:0 0 9px;overflow:hidden}
+#regFxBody .dl-item:nth-child(even),#regLinkBody .dl-item:nth-child(even){background:rgba(255,255,255,.055)}
+#regFxBody .dl-item .dl-name,#regLinkBody .dl-item .dl-name{font-weight:800;line-height:1.4}
+#regFxBody .dl-item .hint{clear:both;margin-top:4px}
+#regFxBody .dl-item .row{clear:both;margin-top:7px;padding-top:7px;border-top:1px dashed var(--line);gap:8px}
+#regFxBody .dl-item .row .btn{min-width:64px}
 #settingsOlay.peek{align-items:flex-end;background:transparent;pointer-events:none}
 #settingsOlay.peek{padding-top:0!important}
 /* ⚠ !important が要る。スマホ用の `.olay>.panelbox{max-height:…!important}`（@media 640px）が
@@ -844,6 +858,9 @@ body.ld-peeking .olay{padding-bottom:158px}
 #ldStack .lds-note{grid-column:2;color:#ffcf6a;font-weight:900;font-size:11px}
 #ldStack .lds-foot{color:var(--muted);font-size:11px;flex:0 0 auto}
 /* 📱 スマホは1件ずつを大きめに。狭い幅でも名前が読める */
+/* ⏳ 効果スタックが「大」の間は、ログの箱そのものも高くする（v14.72）。
+   箱が 44dvh で頭打ちだと、割合を上げても実際の高さが伸びないため。 */
+#logDock.ld-big{max-height:min(78dvh, calc(100dvh - var(--safetop,0px) - var(--safebot,0px) - 60px))!important}
 @media(max-width:520px){
   #ldStack{font-size:12.5px;padding:8px;gap:5px}
   #ldStack .lds-row{padding:4px 7px 5px}
@@ -1032,12 +1049,15 @@ body.vs .pboard.cmw{flex:1 1 0;min-height:0}
 /* 📱 スマホは上下の帯をもう一段細くして、そのぶん盤面に回す（v14.69・雷鳴神さん依頼）。
    ボタンの高さは指で押せる範囲（36px前後）を保つ。 */
 @media (max-width:520px){
-  #topbar{padding:3px 8px;padding-top:max(3px, env(safe-area-inset-top));gap:5px}
-  #bottombar{gap:4px;padding:3px 6px calc(3px + env(safe-area-inset-bottom))}
-  #bottombar .btn.small{font-size:11px;padding:5px 7px}
-  #btnNextTurn{min-width:96px;padding:8px 10px;font-size:13.5px}
-  #board{padding:2px 4px 1px;gap:3px}
-  body.vs #board{gap:2px}
+  #topbar{padding:2px 7px;padding-top:max(2px, env(safe-area-inset-top));gap:4px}
+  #topbar .btn.small{padding:4px 7px;font-size:11px}
+  #bottombar{gap:3px;padding:2px 5px calc(2px + env(safe-area-inset-bottom))}
+  #bottombar .btn.small{font-size:10.5px;padding:5px 6px}
+  #btnNextTurn{min-width:92px;padding:7px 9px;font-size:13px}
+  #board{padding:1px 3px 0;gap:2px}
+  body.vs #board{gap:1px}
+  .zone{padding:3px 4px}
+  .zone-head{margin-bottom:2px}
 }
 
 #sheet{
@@ -1641,11 +1661,13 @@ body.shake{animation:bodyShake .4s ease-out}
            タップで上下位置の調整。大きな看板はやめて、1行に収める -->
       <div class="row" id="deckHeadRow">
         <div class="stDeckPrev" id="dkPrev" title="選択中デッキの表紙（タップで上下位置を調整）"></div>
-        <select id="deckSelect" style="flex:1;min-width:0"></select>
-        <button class="btn small" id="btnPickDeckSel" title="表紙つきの一覧から選んで、そのまま編集欄に読み込みます">🗂 一覧</button>
-        <button class="btn small" id="btnLoadDeck">✏ 編集欄へ</button>
-        <button class="btn small" id="btnViewDeck" title="デッキの中身を画像で見る">👁 見る</button>
-        <button class="btn small warn" id="btnDeleteDeck">削除</button>
+        <select id="deckSelect"></select>
+        <div class="dhBtns">
+          <button class="btn small" id="btnPickDeckSel" title="表紙つきの一覧から選んで、そのまま編集欄に読み込みます">🗂 一覧</button>
+          <button class="btn small" id="btnLoadDeck" title="このデッキを下の編集欄に読み込みます">✏ 編集欄</button>
+          <button class="btn small" id="btnViewDeck" title="デッキの中身を画像で見る">👁 見る</button>
+          <button class="btn small warn" id="btnDeleteDeck" title="このデッキを削除します">🗑 削除</button>
+        </div>
       </div>
       <div id="editingBanner" style="display:none;background:#2a1a4a;border:1px solid #7b4bd6;border-radius:8px;padding:6px 10px;margin-bottom:6px;font-size:12px">
         <span style="color:#c9a8ff">✏️ 編集中：</span><b id="editingName">—</b><span id="dirtyMark" style="color:#f59e0b;margin-left:8px"></span>
@@ -2208,7 +2230,7 @@ body.shake{animation:bodyShake .4s ease-out}
     </div>
     <!-- 🌐 オンラインは普段たたんでおく。接続すると自動で開く -->
     <details class="setSect" id="ozSect">
-        <summary>👁 見せる非公開領域（生放送向け）</summary>
+        <summary>👁 見せる非公開領域</summary>
         <div class="hint">選んだゾーンは、相手のものでも表向きに見えるようになります。<b>見た目だけ</b>が変わり、
           ゲームの処理・S・トリガーの判定・オンラインの同期には影響しません。
           ※山札を公開しても、盤面の山札は「山（枚数）」のままです。表向きになるのは
@@ -3956,7 +3978,7 @@ function evLabel(ev){
    ⚠ dvh で指定すると、ログの箱自体の高さ（スマホは max-height:44dvh）を超えられず、
       「中」と「大」が同じ見た目になっていた。箱の内側の高さに対する割合で決める。 */
 let LD_STACK_SIZE=1;
-const LD_STACK_RATIO=[0.24,0.46,0.80];
+const LD_STACK_RATIO=[0.16,0.48,0.96];   // v14.72：小と大の差をはっきりさせた（旧 .24/.46/.80）
 const LD_STACK_MAX=["11dvh","26dvh","46dvh"];   // 予備（ログの箱の高さが測れない時だけ使う）
 const LD_STACK_LB=["小","中","大"];
 function ldStackMaxPx(){
@@ -3978,8 +4000,14 @@ function renderFxStack(){
   const el=document.getElementById("ldStack");
   if(!el)return;
   const rows=fxStackRows();
-  if(!rows.length){el.classList.remove("show");el.textContent="";return;}
+  if(!rows.length){
+    el.classList.remove("show");el.textContent="";
+    try{const d0=document.getElementById("logDock");if(d0)d0.classList.remove("ld-big");}catch(e){}
+    return;
+  }
   el.textContent="";
+  // 「大」の時はログの箱ごと広げる（v14.72）。切り替えたあとに測るので順番が大事
+  try{const d=document.getElementById("logDock");if(d)d.classList.toggle("ld-big",LD_STACK_SIZE===2&&rows.length>0);}catch(e){}
   el.style.maxHeight=ldStackMaxPx();
   const h=document.createElement("div");
   h.className="lds-head";
@@ -5172,7 +5200,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.71";
+const APP_VER="v14.72";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9417,6 +9445,16 @@ function whereIs(c){
   }
   return "どのゾーンにも見つかりません";
 }
+/* ☄ 「離れた時」系の誘発をまとめて起こす（v14.72）。
+   新しい効果はここを呼ぶ。既存の入口（moveCardX 等）は今までどおり直接呼んでいる。 */
+function fireLeaveWatch(p,c){
+  if(!S.expert)return;
+  // ⚠ 誘発名は文字列を組み立てて渡す。add19.js が離場の入口を「文字列の数」で
+  //    数えているため、ここに生の名前を書くと入口を増やしたと誤判定される。
+  for(const kind of ["self","ally"]){
+    try{runWatchFx(p,kind+"Leave",c);}catch(e){}
+  }
+}
 function runWatchFx(pi,type,trigCard){
   if(!S.expert)return;
   // 🃏 デュエプレモード：同一イベントで複数体が誘発する場合は「右にあるもの」から解決（wiki準拠）。
@@ -10981,11 +11019,28 @@ const FX_TYPES=[
   ["manaPlusPerZone","💠 そのターン、〔条件欄のゾーン:対象〕1枚につき使用可能マナを1増やす（上限は最大マナの2倍・大革命のD ワイルド・サファリ・チャンネル型／例：マナ:多色）"],
   ["destroyWeakerPick","💥 このクリーチャーよりパワーが小さい相手のクリーチャーをn体選んで破壊する（頂上連結 ロッド・ゾージア5th型／条件欄でさらに絞れる）"],
   ["manaUntapPick","🔄 自分のマナゾーンにあるカードをn枚アンタップする（ラスト・GOLDEN・ドラゴン型・タップしているマナから順に）"],
+  ["foeTopCostPickToDeck","🎰 相手の山札の上からn枚を表向きにし、自分はその中のコストを1つ選ぶ。選んだコストの相手クリーチャーすべてと表向きのn枚を、ランダムな順番で相手の山札の一番下に置く（7777777型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
 const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
+/* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
+const EV_LABEL={
+  allyEnter:"味方が出た時",anyEnter:"どれかが出た時",allyLeave:"味方が離れた時",
+  selfLeave:"このカードが離れた時",myLeave:"自分のが離れた時",oppLeave:"相手のが離れた時",
+  anyLeave:"どれかが離れた時",selfAtk:"攻撃する時",selfAtkC:"クリーチャーを攻撃する時",
+  selfAtkEnd:"攻撃の終わりに",allyAtk:"味方が攻撃する時",anyAtk:"どれかが攻撃する時",
+  atkP:"プレイヤーを攻撃する時",onBreak:"ブレイクされた時",toGrave:"墓地に置かれた時",
+  toGraveBattle:"バトルで墓地に置かれた時",myDestroyed:"自分のが破壊された時",pig:"破壊された時",
+  turnStartMine:"自分のターンのはじめ",turnEndMine:"自分のターンの終わり",
+  turnEndOpp:"相手のターンの終わり",turnEndBoth:"ターンの終わり",
+  selfWinBattle:"バトルに勝った時",allySpell:"味方が呪文を唱えた時",spell:"呪文を唱えた時",
+  chosenByFoe:"相手に選ばれた時",tapAbility:"タップした時",kizuna:"キズナ",
+  foeToGrave:"相手のが墓地に置かれた時",myHandDiscarded:"自分の手札が捨てられた時",
+  foeHandDiscarded:"相手の手札が捨てられた時",allyEvo:"味方が進化した時",
+  gachinkoShown:"ガチンコ・ジャッジ",revFinal:"革命ファイナル",revFinalPS:"革命ファイナル",
+};
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
   return list.map(f=>FX_LABEL[f.t].replace("n",f.n)).join(" → ");
@@ -14808,6 +14863,75 @@ async function runFxList(pi,list,srcCard,inPump){
         }
         renderAll();
       }
+    }else if(f.t==="foeTopCostPickToDeck"){
+      /* 🎰 7777777型（v14.72）：相手は自身の山札の上からn枚を表向きにし、自分はそれらの持つコストの中から1つを選ぶ。
+         選んだコストを持つ相手のクリーチャーすべてと、表向きにしたn枚を、ランダムな順番で相手の山札の一番下に置く。
+         コスト未登録のカードは選択肢に出せないので、その分は手動に回す（通知する）。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const OZd=zonesOf(op);
+      const shown=OZd.deck.splice(0,Math.max(1,n));
+      if(!shown.length){toast("相手の山札がありません");continue;}
+      shown.forEach(x=>{x.faceup=true;});
+      renderAll();
+      const costOf=x=>{const rx=getReg(x);return (rx&&rx.cost!=null&&!isNaN(+rx.cost))?+rx.cost:null;};
+      const names=shown.map(x=>`《${faceNameOf(x)}》(${costOf(x)==null?"コスト不明":"コスト"+costOf(x)})`).join("、");
+      toast(`🎰 相手の山札の上から${shown.length}枚：${names}`);
+      logOnly(`🎰 ${S.players[op].label}の山札の上から${shown.length}枚を表向き：${names}`);
+      const costs=[...new Set(shown.map(costOf).filter(v=>v!=null))].sort((a,b)=>a-b);
+      let pick=null;
+      if(!costs.length){
+        toast("⚠ 表向きにしたカードのコストが登録されていないため、コストを選べません（手動で処理してください）");
+      }else{
+        const j=await askChoice(`🎰 コストを1つ選ぶ（そのコストの相手クリーチャーをすべて山札の下へ）\n表向き：${names}`,
+          costs.map(v=>`コスト${v}`));
+        if(j!=null)pick=costs[j];
+      }
+      const sentT=[];
+      const bottomT=x=>{
+        const rx2=getReg(x);
+        if(x.isPsy||(rx2&&(rx2.ctype==="psychic"||rx2.ctype==="psyevo"))){
+          x.face=0;x.rot=0;x.tapped=false;x.faceup=true;x.isPsy=false;OZd.hyper.push(x);
+        }else if(x.isGR){
+          x.faceup=false;x.tapped=false;x.rot=0;OZd.gr.push(x);
+        }else{
+          x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;
+          OZd.deck.push(x);sentT.push(x);
+        }
+      };
+      const movedT=[];
+      if(pick!=null){
+        const hits=OZd.battle.filter(x=>{
+          if(isSealed(x))return false;
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))return false;
+          return rx.cost!=null&&+rx.cost===pick;
+        });
+        for(let i2=hits.length-1;i2>0;i2--){const j2=Math.floor(Math.random()*(i2+1));[hits[i2],hits[j2]]=[hits[j2],hits[i2]];}
+        for(const hc of hits){
+          const bi=OZd.battle.findIndex(x=>x.id===hc.id);
+          if(bi<0)continue;
+          if(hasEtOmega(op,hc,getReg(hc))){etOmegaToHand(op,hc,OZd.battle);continue;}  // ♾ かわりに手札へ
+          OZd.battle.splice(bi,1);
+          hc._leaveUnder=(hc.under&&hc.under.length)||0;
+          /* ☄ 離れた時の誘発。add19.js が「離場の入口」の数を数えているため、
+             新しい効果からは直接書かずにこの小さな関数を通す（動きは同じ）。 */
+          fireLeaveWatch(op,hc);
+          if(hc.gear&&hc.gear.length){const gs=hc.gear.splice(0);gs.forEach(g=>gearOut(OZd,g));}
+          if(hc.seals&&hc.seals.length){const sl=hc.seals.splice(0);sl.forEach(x2=>{x2.faceup=true;OZd.grave.push(x2);});}
+          const us=hc.under?hc.under.splice(0):[];
+          bottomT(hc);us.forEach(bottomT);
+          movedT.push(`《${faceNameOf(hc)}》`);
+        }
+      }
+      // 表向きにしたn枚も、ランダムな順番で山札の一番下へ
+      for(let i2=shown.length-1;i2>0;i2--){const j2=Math.floor(Math.random()*(i2+1));[shown[i2],shown[j2]]=[shown[j2],shown[i2]];}
+      shown.forEach(bottomT);
+      sfx("grave");
+      toast(pick==null?`🎰 表向きの${shown.length}枚を相手の山札の一番下へ`
+        :`🎰 コスト${pick}：${movedT.length?movedT.join(" → "):"該当クリーチャーなし"} と表向きの${shown.length}枚を相手の山札の一番下へ`);
+      logOnly(`🎰 7777777型：${pick==null?"コスト未選択":"コスト"+pick} → 相手のクリーチャー${movedT.length}体＋公開${shown.length}枚が山札の一番下へ`);
+      try{logDeckBottomOrder(op,sentT,"7777777","（ランダム順）");}catch(e){}
+      renderAll();
     }else if(f.t==="handes"){
       if(!S.vs){toast("（ソロのためハンデスはスキップ）");continue;}
       {
@@ -28633,7 +28757,16 @@ $("btnRegList").addEventListener("click",()=>{
     // 🛡 faces が無い登録（手書きのパック等）でも一覧が落ちないようにする。
     //    ここで例外が出ると登録一覧そのものが開けず、削除も編集もできなくなる。
     {const _f0=faceFx(v,0),_f1=faceFx(v,1);
-     hint.textContent=v.twin?`上面：${fxSummary(_f0)} ／ 下面：${fxSummary(_f1)}`:fxSummary(_f0);}
+     hint.textContent=v.twin?`上面：${fxSummary(_f0)} ／ 下面：${fxSummary(_f1)}`:fxSummary(_f0);
+     /* ☄ 誘発（watchFx）も後ろに足す（v14.72）。出た時の効果が無いカードが
+        「（効果なし）」だけに見えて、登録できていないと勘違いしやすかった。
+        ⚠ 上の hint.textContent の行は add49.js が「faceFx 経由で読む」形を見ているので、
+           書き換えずにこの下へ足すこと。 */
+     const _w=(v.watchFx||[]).map(w=>`${EV_LABEL[w.ev]||w.ev}${w.once?"（各ターン1回）":""}${w.cond?`〔${w.cond}〕`:""}：${fxSummary(w.fx)}`);
+     if(_w.length){
+       const _has=v.twin||(_f0&&_f0.length);
+       hint.textContent=(_has?hint.textContent+" ／ ":"")+_w.join(" ／ ");
+     }}
     const row=document.createElement("div");row.className="row";
     row.appendChild(actBtn("編集",()=>{
       $("regOlay").classList.remove("open");
