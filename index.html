@@ -642,9 +642,18 @@ body.ld-peeking .olay{padding-bottom:158px}
    flex:0 0 auto と height の組み合わせなら、どの環境でも必ずこの高さになる。 */
 .dg-img{position:relative;width:100%;flex:0 0 auto;
   height:var(--dgh,clamp(70px,17vw,132px));
+  min-height:var(--dgh,clamp(70px,17vw,132px));
   background:center 20%/cover no-repeat #131a28}
 .dg-img.noimg::after{content:"画像なし";position:absolute;inset:0;display:flex;align-items:center;
   justify-content:center;color:#3f4d68;font-size:10px;font-weight:800}
+/* 🖼 子を持たない1枚タイル（v14.67・カード検索用）。
+   高さはJSがインラインで入れる。絵はタイル自身の背景、名前は下に重ねる。 */
+.dg-tile.dgt-flat{display:block;background:center 20%/cover no-repeat #131a28}
+.dg-tile.dgt-flat .dg-cap{position:absolute;left:0;right:0;bottom:0;
+  height:20px;box-sizing:border-box;line-height:14px;
+  background:rgba(8,11,18,.82);border-top:1px solid rgba(255,255,255,.08)}
+.dg-tile.dgt-flat.noimg::after{content:"画像なし";position:absolute;left:0;right:0;top:0;bottom:20px;
+  display:flex;align-items:center;justify-content:center;color:#3f4d68;font-size:10px;font-weight:800}
 /* 📱 スマホ用は本体定義より「後ろ」に置くこと。
    前に置くと、後ろの .dg-img{height:...} に上書きされてPCでも小さくなる（v14.65で修正） */
 @media(max-width:520px){
@@ -777,26 +786,42 @@ body.ld-peeking .olay{padding-bottom:158px}
   #splash.flash::after{opacity:0}
   #splashBolts path.fire,#splashBolts path.arc{opacity:.5}
 }
-}
 /* ⏳ 効果スタック（待機中の誘発）。ログの中に間借りする。
    何も待っていない時は出さないので、盤面の場所を取らない。 */
-#ldStack{display:none;flex-direction:column;gap:3px;padding:6px 8px;margin:0 6px 4px;
+#ldStack{display:none;flex-direction:column!important;gap:4px;padding:7px 8px;margin:0 6px 5px;
   background:rgba(180,107,255,.10);border:1px solid rgba(180,107,255,.45);border-radius:9px;
-  font-size:11.5px;line-height:1.45;max-height:26dvh;overflow:auto}
+  font-size:12px;line-height:1.4;max-height:26dvh;overflow:auto;
+  min-width:0;box-sizing:border-box}
 #ldStack.show{display:flex}
 #ldStack .lds-head{font-weight:900;color:#d9a8ff;letter-spacing:.03em;
-  display:flex;align-items:center;justify-content:space-between;gap:6px}
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  flex:0 0 auto;font-size:11.5px}
 #ldStack .lds-size{flex:0 0 auto;background:rgba(180,107,255,.16);color:#d9a8ff;
-  border:1px solid rgba(180,107,255,.5);border-radius:7px;padding:1px 8px;
-  font-size:10.5px;font-weight:900;cursor:pointer;font-family:inherit}
-#ldStack .lds-row{display:flex;gap:6px;align-items:baseline;
-  border-left:3px solid var(--line);padding-left:6px}
+  border:1px solid rgba(180,107,255,.5);border-radius:7px;padding:2px 10px;
+  font-size:11px;font-weight:900;cursor:pointer;font-family:inherit}
+/* ⏳ 1件＝1ブロック（v14.67）。番号は左の柱、名前と誘発名は右で折り返す。
+   横並びのflexだと、スマホの狭い幅でカード名が1文字ずつ縦に割れていた。 */
+#ldStack .lds-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 7px;
+  align-items:start;flex:0 0 auto;min-width:0;
+  border-left:3px solid var(--line);border-radius:0 7px 7px 0;
+  padding:3px 6px 4px;background:rgba(255,255,255,.03)}
 #ldStack .lds-row.me{border-left-color:#5aa9ff}
 #ldStack .lds-row.foe{border-left-color:#ff7b7b}
-#ldStack .lds-n{flex:0 0 auto;font-weight:900;color:var(--muted);font-variant-numeric:tabular-nums}
-#ldStack .lds-nm{font-weight:800;color:var(--text);word-break:break-word}
-#ldStack .lds-ev{color:var(--muted)}
-#ldStack .lds-note{color:#ffcf6a;font-weight:800}
+#ldStack .lds-row.now{background:rgba(255,207,106,.13);border-left-color:#ffcf6a}
+#ldStack .lds-n{grid-column:1;grid-row:1/span 2;align-self:center;
+  font-weight:900;color:var(--muted);font-variant-numeric:tabular-nums;min-width:15px}
+#ldStack .lds-nm{grid-column:2;font-weight:800;color:var(--text);
+  min-width:0;overflow-wrap:anywhere;word-break:normal;line-height:1.35}
+#ldStack .lds-ev{grid-column:2;color:var(--muted);font-size:11px;min-width:0;overflow-wrap:anywhere}
+#ldStack .lds-note{grid-column:2;color:#ffcf6a;font-weight:900;font-size:11px}
+#ldStack .lds-foot{color:var(--muted);font-size:11px;flex:0 0 auto}
+/* 📱 スマホは1件ずつを大きめに。狭い幅でも名前が読める */
+@media(max-width:520px){
+  #ldStack{font-size:12.5px;padding:8px;gap:5px}
+  #ldStack .lds-row{padding:4px 7px 5px}
+  #ldStack .lds-nm{font-size:12.5px;line-height:1.4}
+  #ldStack .lds-ev,#ldStack .lds-note{font-size:11.5px}
+}
 /* 📜 待機中の件数を丸ボタンに出す */
 #logFab{position:relative}
 #logFab .fab-badge{
@@ -1682,7 +1707,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <div class="row" id="animSetRow" style="gap:4px 12px;flex-wrap:wrap"></div>
     
     
-    <section>
+
       
     <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
         <span style="font-size:12px;font-weight:700">ゾーンの縦幅（カードの大きさ）比率</span>
@@ -1710,6 +1735,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <span id="cardScaleSoloVal" style="font-size:12px;width:44px;text-align:right">100%</span>
       </div>
       <div class="row"><label><input type="checkbox" id="setFitBoard" checked> カードを画面の高さに自動で収める（オフ＝サイズ設定をそのまま大きく反映し、はみ出す分は縦スクロール）</label></div>
+      </div>
     </div></details>
 
     <details class="setSect"><summary>🔊 サウンド</summary><div class="setSectBody">
@@ -1721,8 +1747,8 @@ body.shake{animation:bodyShake .4s ease-out}
 
 
       <div class="row"><button class="btn small" id="btnSound">🔊 効果音：ON</button></div>
-    </section>
-    <section>
+
+
       
     <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
       <span style="font-size:12px;font-weight:700">BGM</span>
@@ -1886,10 +1912,10 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="setCompactHead"> ゾーン見出し・ボタンを小さくする（省スペース）</label>
       </div>
       
-      </div>
+
       
-        <div class="hint">操作対象は「操作」中のプレイヤー。入力欄にフォーカス中やパネル表示中は無効。1文字（A-Z/0-9）で設定。</div>
-      </div>
+
+
       
       <div class="row"><label><input type="checkbox" id="setAutoTap"> コスト自動マナタップ（EX時：コスト登録済みカードを手札から出すと左から自動タップ）</label></div>
       <div class="row"><label><input type="checkbox" id="setNoUntapMana"> ターン開始時にマナを自動アンタップしない</label></div>
@@ -1905,8 +1931,8 @@ body.shake{animation:bodyShake .4s ease-out}
         </select>
       </div>
       <div class="hint">変更は次回起動時から反映します。iPhoneで「高速表示」にすると画像数によってはSafariが再読み込みするため、通常は「自動」がおすすめです。</div>
-    </section>
-    <section>
+
+
       
     </div></details>
 
@@ -1918,8 +1944,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="file" id="importInput" accept=".json,.zip,.dmrv.zip,application/json,application/zip,application/x-zip-compressed" style="display:none">
       </div>
       <div class="hint">デッキ・効果登録・多面カード・カード名・スリーブ設定（＋任意で画像）を1つのファイルに保存します。AirDropやiCloud Driveで他の端末に送り、読み込んでください。</div>
-    </section>
-    <section>
+
+
       
     </div></details>
 
@@ -1927,6 +1953,8 @@ body.shake{animation:bodyShake .4s ease-out}
 <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
         <label><input type="checkbox" id="setKeysOn"> ⌨️ ショートカットキーを有効にする</label>
         <div id="hotkeyList" style="display:flex;flex-direction:column;gap:3px"></div>
+        <div class="hint">操作対象は「操作」中のプレイヤー。入力欄にフォーカス中やパネル表示中は無効。1文字（A-Z/0-9）で設定。</div>
+      </div>
 
 
       <div class="hint">
@@ -1935,7 +1963,7 @@ body.shake{animation:bodyShake .4s ease-out}
         山札やゾーンから「盾」に追加されたカードはオレンジ枠でマークされます（カードメニューで解除可）<br>
         攻撃中の効果処理は、画面上部のバナーから「攻撃再開/中止」を選べます
       </div>
-    </section>
+    
     
     </div></details>
 <div class="row" style="justify-content:flex-end">
@@ -3407,7 +3435,7 @@ body.shake{animation:bodyShake .4s ease-out}
   <div class="cd-grip cd-grip-l" id="cdGripL" title="ドラッグで大きさを変える（左下）"></div>
 </div>
 
-<div id="logDock">>
+<div id="logDock">
   <div class="ld-head">
     <span class="ld-title" id="ldTitle">📜 ログ</span>
     <button class="btn small ghost" id="ldDeck" title="山札の公開情報（確認済み・表向き・横差し）を見る">🔍</button>
@@ -3912,12 +3940,14 @@ function renderFxStack(){
   el.appendChild(h);
   rows.forEach((r,i)=>{
     const d=document.createElement("div");
-    d.className="lds-row "+(r.pi===(S.seat|0)?"me":"foe");
-    const n=document.createElement("span");n.className="lds-n";n.textContent=`${i+1}.`;
+    d.className="lds-row "+(r.pi===(S.seat|0)?"me":"foe")+(r.now?" now":"");
+    const n=document.createElement("span");n.className="lds-n";n.textContent=`${i+1}`;
     const nm=document.createElement("span");nm.className="lds-nm";nm.textContent=r.name;
-    const ev=document.createElement("span");ev.className="lds-ev";ev.textContent=r.ev;
+    // 誘発名とどちら側かを1行にまとめる（自分/相手が色だけだと小さい画面で分かりにくい）
+    const ev=document.createElement("span");ev.className="lds-ev";
+    ev.textContent=`${r.pi===(S.seat|0)?"自分":"相手"}／${r.ev}`;
     d.appendChild(n);d.appendChild(nm);d.appendChild(ev);
-    if(r.now){const b=document.createElement("span");b.className="lds-note";b.textContent="◀ いまここ";d.appendChild(b);}
+    if(r.now){const b=document.createElement("span");b.className="lds-note";b.textContent="▶ いま処理中";d.appendChild(b);}
     el.appendChild(d);
   });
   // 止まっている時は理由も出す（🚑 を押す前に原因が分かるように）
@@ -3925,7 +3955,7 @@ function renderFxStack(){
     const w=fxWaitState();
     if(w.fxRunning||w.toGrave||w.trig){
       const f=document.createElement("div");
-      f.className="lds-ev";f.style.marginTop="2px";
+      f.className="lds-foot";f.style.marginTop="2px";
       f.textContent=`（${fxWaitLabel()}）`;
       el.appendChild(f);
     }
@@ -5074,7 +5104,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.66";
+const APP_VER="v14.67";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -28177,31 +28207,28 @@ function openCardCivSearch(){
     if(!rows.length){const d=document.createElement("div");d.style.cssText="font-size:12px;color:var(--muted,#8a93a8);padding:8px;grid-column:1/-1";d.textContent="該当なし";list.appendChild(d);return;}
     // 🖼 カード画像のタイルで並べる（v14.53・雷鳴神さん依頼）。
     //    デッキリストの画像表示（.dg-tile）と同じ見た目。タップで1枚追加
+    const CAP_H=20;   // 下の名前帯の高さ（px）
+    {const _w=Math.max(64,Math.min(140,Math.round(window.innerWidth*0.09)));
+     list.style.gridAutoRows=(Math.round(_w*1.35)+CAP_H)+"px";}
     for(const [nm,v] of rows.slice(0,300)){
       const k=normName(nm);
       // ⚠ button だと中の絵の高さが潰れる環境があった（v14.54でdivに変更）
+      // 🖼 タイルは「絵を入れる子」を持たない1枚の箱にする（v14.67）。
+      //    絵の高さを子のdivに持たせる方式は、環境によって潰れる報告が続いたため、
+      //    タイル自身に高さを持たせ、絵はその背景として描く。子が無いので潰れようがない。
       const tile=document.createElement("div");
-      tile.className="dg-tile";
+      tile.className="dg-tile dgt-flat";
       tile.style.cursor="pointer";
       tile.setAttribute("role","button");
-      const im=document.createElement("div");im.className="dg-img";
-      // 🖼 高さはインラインで直接決める（v14.66）。
-      //    CSSクラス経由だと、他の定義との前後関係で効かないことが5回続いたため、
-      //    もう外部の指定に左右されない書き方にする
       {const _w=Math.max(64,Math.min(140,Math.round(window.innerWidth*0.09)));
-       im.style.height=Math.round(_w*1.35)+"px";
-       im.style.flex="0 0 auto";}
-      // ⚠ aspect-ratio がこのダイアログでは効かない環境があった（v14.55）。
-      //    高さ0＋padding-top:140% は幅から必ず高さが出る（背景はpadding領域にも描かれる）
-      // 高さは .dg-img の固定px（v14.64）に任せる。padding方式は flex の子で潰れた
+       tile.style.height=(Math.round(_w*1.35)+CAP_H)+"px";}
       const url=imgURL.has(k)?imgURL.get(k):null;
-      if(url)im.style.backgroundImage=`url("${url}")`;
-      else im.classList.add("noimg");
+      if(url)tile.style.backgroundImage=`url("${url}")`;
+      else tile.classList.add("noimg");
       if(v.cost!=null){
         const cb=document.createElement("div");cb.className="dg-n";cb.textContent=v.cost;
-        cb.title="コスト";im.appendChild(cb);
+        cb.title="コスト";tile.appendChild(cb);
       }
-      tile.appendChild(im);
       const cap=document.createElement("div");cap.className="dg-cap";
       const civTxt=(v.civs||[]).map(c=>(CV[c]||[c])[0]).join("");
       cap.textContent=nm;cap.title=`${nm}　${civTxt}　${CT[v.ctype]||""}`;
