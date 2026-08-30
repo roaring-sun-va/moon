@@ -3420,6 +3420,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <button type="button" class="btn small" id="regNamedBtn" style="white-space:nowrap">⭐ 固有辞書</button>
       <button type="button" class="btn small primary" id="regBatchBtn" style="white-space:nowrap">📝 名前リストから連続登録</button>
       <button type="button" class="btn small" id="regBulkRaceBtn" style="white-space:nowrap">🏷 種族一括付与</button>
+      <button type="button" class="btn small" id="regAudit" style="white-space:nowrap" title="効果が空の登録・画像が無い登録・登録が無い画像をまとめて一覧にします（画像と名前の取り違えを探す手がかりに）">🔍 登録の点検</button>
       <span id="regSearchN" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
     </div>
     <h3 style="margin-top:4px">⚡ 効果登録</h3>
@@ -5224,7 +5225,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.82";
+const APP_VER="v14.83";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -29283,6 +29284,47 @@ $("btnRegList").addEventListener("click",()=>{
 });
 $("regClose").addEventListener("click",()=>$("regOlay").classList.remove("open"));
 $("regCloseTop").addEventListener("click",()=>$("regOlay").classList.remove("open"));
+/* 🔍 登録の点検（v14.83）。画像と名前と効果の取り違えを探すための手がかりを一覧にする。
+   ・効果もキーワードも空の登録（登録したつもりで中身が無い）
+   ・画像が無い登録／効果登録が無い画像（名前がずれていると必ず両方に出る＝取り違えの目印）
+   ・同じ画像が2つ以上の名前に付いている（コピーミスの目印） */
+{const b=document.getElementById("regAudit");
+ if(b)b.addEventListener("click",()=>{
+  try{
+    const KW=["breaks","mach","blocker","sa","st","sst","stplus","jd","gs","slayer","gzero","jchange","invade","revchg",
+      "exlife","charger","mad","sympathy","watchFx","repIn","ignore","stAuraPow","grantDS","modeN","gimmick","neverLeave",
+      "gearSA","gearPow","gearBlocker","gearShield","gearCrossN","selfRed","preHyperCut","stBounceCheat","twin"];
+    const empty=[],noImg=[];
+    for(const [k,v] of FXDB){
+      const faces=(v&&v.faces)||[[],[]];
+      const hasFx=faces.some(f=>(f||[]).length);
+      if(!hasFx&&!KW.some(x=>v&&v[x]))empty.push(dispName.get(k)||k);
+      if(!imgURL.has(k))noImg.push(dispName.get(k)||k);
+    }
+    const noReg=[];
+    for(const k of imgURL.keys()){
+      if(k==="__back__")continue;
+      if(!FXDB.has(k))noReg.push(dispName.get(k)||k);
+    }
+    // 同じ絵が複数の名前に付いていないか（先頭だけ比べる簡易判定）
+    const bySig=new Map();
+    for(const [k,u] of imgURL){
+      if(k==="__back__"||typeof u!=="string")continue;
+      const sig=u.length+":"+u.slice(0,64);
+      if(!bySig.has(sig))bySig.set(sig,[]);
+      bySig.get(sig).push(dispName.get(k)||k);
+    }
+    const dup=[...bySig.values()].filter(a=>a.length>1);
+    const sec=(t,arr,note)=>arr.length?`\n\n【${t}】${arr.length}件${note?`（${note}）`:""}\n`+arr.slice(0,60).map(x=>`・${x}`).join("\n")+(arr.length>60?`\n…ほか${arr.length-60}件`:""):"";
+    const msg=`🔍 登録の点検（全${FXDB.size}件・画像${imgURL.size}枚）`
+      +sec("効果もキーワードも空の登録",empty,"登録したつもりで中身が入っていない")
+      +sec("画像が無い登録",noImg,"名前がずれていると『登録が無い画像』にも同数出ます")
+      +sec("効果登録が無い画像",noReg,"上と見比べて、同じカードが両方に出ていたら名前のずれ＝取り違え")
+      +(dup.length?`\n\n【同じ絵が複数の名前に付いている】${dup.length}組\n`+dup.slice(0,20).map(a=>"・"+a.join(" ／ ")).join("\n"):"");
+    logOnly(msg.replace(/\n/g,"　"));
+    ask(msg+"\n\n※この内容はログにも残しました").catch(()=>{});
+  }catch(e){toast("点検でエラー："+(e&&e.message||"不明"));}
+ });}
 /* 種族を複数カードにまとめて付与（例：魔導具）。呪文/タマシード等に種族欄を1枚ずつ書く手間を省く */
 async function bulkTagRace(){
   if(!FXDB.size){toast("登録カードがありません");return;}
@@ -39236,6 +39278,28 @@ function openImageManager(){
       }
       shown++;
       const el=vCardEl(k==="__back__"?"裏面":name);
+      /* 🔍 画像と登録の取り違えを見つけやすくする（v14.83）。
+         絵の下に、その名前で登録されている中身（コスト/パワー/文明/種別）を小さく出す。
+         絵は7コストなのに登録は3コスト、のような食い違いが一目で分かる。 */
+      if(k!=="__back__"){
+        const rk=FXDB.get(k);
+        const info=document.createElement("div");
+        info.style.cssText="font-size:9.5px;line-height:1.35;color:#9fb0cc;padding:0 3px 2px;text-align:center;word-break:break-all";
+        if(!rk){
+          info.textContent="⚠ 効果登録なし";
+          info.style.color="#f59e0b";
+        }else{
+          const CJ={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"零"};
+          const CT2={creature:"ク",spell:"呪",crossgear:"ギア",twinpact:"ツイン",psychic:"サイ",tamaseed:"タマ",aura:"オーラ",castle:"城",evo:"進化",neoevo:"NEO",ultimate:"究極"};
+          const bits=[];
+          if(rk.cost!=null)bits.push(`コスト${rk.cost}`);
+          if(rk.power!=null)bits.push(`P${rk.power}`);
+          if(rk.civs&&rk.civs.length)bits.push(rk.civs.map(c2=>CJ[c2]||c2).join(""));
+          if(rk.ctype&&CT2[rk.ctype])bits.push(CT2[rk.ctype]);
+          info.textContent=bits.join("・")||"（中身なし）";
+        }
+        el.appendChild(info);
+      }
       if(mgrSel.has(k))el.classList.add("picked");
       if(k==="__back__"){
         const th=el.querySelector(".thumb");th.innerHTML="";
