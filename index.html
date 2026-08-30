@@ -5202,7 +5202,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.77";
+const APP_VER="v14.78";
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -18855,24 +18855,36 @@ function canSeal(pi,c){
   if(S.expert&&r&&r.noSeal&&!isIgnored(c,pi)){toast(`🔏 ${faceNameOf(c)} は封印されない！`);return false;}
   return true;
 }
-/* 🚯 能力無視の名前あわせ（v14.77）。
-   正式名称をそのまま打たないと当たらず面倒だったので、
-   「入れた文字が名前に含まれる」「名前が入れた文字に含まれる」のどちらでも当たるようにする。
-   例：「禁断」→《禁断の鼓動》／「エモハ」→《エモーショナル・ハードコア》は当たらないので、
-   略称は「エモーショナル」のように名前の一部で入れてください（当たった名前はトーストで知らせます）。
-   ⚠ 短すぎる指定（1文字）は関係ないカードまで巻き込むので、2文字以上を要求する。 */
+/* 🚯 能力無視の名前あわせ（v14.78）。
+   ・カード名で指定する。多面カード（ツインパクト・裏面・禁断の鼓動など）は
+     **つながっている面すべての名前**を見るので、どちらの面の名前で指定しても当たる。
+     例：禁断の鼓動として場に出ていても、表の《伝説の禁断 ドキンダムX》で指定できる。
+   ・打ち間違い対策として、名前の一部でも当たる（入れた文字が名前に含まれる／その逆）。
+   ⚠ 1文字の指定は関係ないカードまで巻き込むので無効。 */
+function ignoreNameCandidates(c){
+  const out=new Set();
+  const push=v=>{const nm=normName(v||"");if(nm)out.add(nm);};
+  try{push(faceNameOf(c));}catch(e){}
+  try{if(c&&c.name)push(c.name);}catch(e){}
+  try{const rr=getReg(c);if(rr&&rr.name)push(rr.name);}catch(e){}
+  // 🔁 多面カード：つながっている面の名前も候補にする
+  try{
+    if(typeof LINKS!=="undefined"&&LINKS&&LINKS.size){
+      const mine=[...out];
+      for(const [,faces] of LINKS){
+        if(!Array.isArray(faces))continue;
+        if(faces.some(f=>mine.includes(normName(f))))faces.forEach(f=>push(f));
+      }
+    }
+  }catch(e){}
+  return [...out];
+}
 function ignoreNameHit(key,c){
   try{
     if(!key)return false;
     const k=String(key);
     if(k.length<2)return false;
-    const names=[];
-    try{names.push(faceNameOf(c));}catch(e){}
-    try{if(c&&c.name)names.push(c.name);}catch(e){}
-    try{const rr=getReg(c);if(rr&&rr.name)names.push(rr.name);}catch(e){}
-    for(const nmRaw of names){
-      const nm=normName(nmRaw||"");
-      if(!nm)continue;
+    for(const nm of ignoreNameCandidates(c)){
       if(nm===k||nm.includes(k)||k.includes(nm))return true;
     }
   }catch(e){}
@@ -18974,14 +18986,37 @@ async function askIgnoreNameOnBattleEntry(pi,c){
           if(n3&&!names.includes(n3))names.push(n3);
         }
       }
-      if(names.length){
-        const j3=await askChoice(`🚯 ${faceNameOf(c)}：能力を無視するカードの名前を指定`,
-          [...names.map(n3=>`《${n3}》`),"✍ 自分で入力する（名前の一部でも可）"]);
-        if(j3===null)nm=null;
-        else if(j3<names.length)nm=names[j3];
-        else nm=await askText(`🚯 能力を無視するカードの名前（一部でも可・例：禁断）`,"");
-      }else{
-        nm=await askText(`🚯 ${faceNameOf(c)}：能力を無視するカードの名前（一部でも可・例：禁断）`,"");
+      const menu=[];
+      if(names.length)menu.push({k:"battle",lb:`🃏 いまバトルゾーンにいるカードから選ぶ（${names.length}枚）`});
+      menu.push({k:"reg",lb:"📚 登録済みカードから探す（名前で絞り込み）"});
+      menu.push({k:"text",lb:"✍ 自分で入力する（名前の一部でも可）"});
+      const jm=menu.length===1?0:await askChoice(`🚯 ${faceNameOf(c)}：能力を無視するカードの名前を指定`,menu.map(m=>m.lb));
+      if(jm!=null){
+        const kind=menu[jm].k;
+        if(kind==="battle"){
+          const j3=await askChoice("🃏 どのカードの能力を無視しますか",names.map(n3=>`《${n3}》`));
+          if(j3!=null)nm=names[j3];
+        }else if(kind==="reg"){
+          // 📚 場にいなくても、登録済みのカード名から選べる（先に出されるカードを指定する用）
+          const pool=[];
+          try{
+            const seen2=new Set();
+            for(const [k4,v4] of dispName){
+              const nm4=v4||k4;
+              if(!nm4||seen2.has(nm4))continue;
+              seen2.add(nm4);
+              pool.push({id:"ign:"+k4,name:nm4});
+            }
+            pool.sort((a,b)=>String(a.name).localeCompare(String(b.name),"ja"));
+          }catch(e){}
+          if(!pool.length)toast("登録済みのカードがありません");
+          else{
+            const j4=await pickCard("📚 能力を無視するカードを選ぶ（上の欄で名前を絞り込めます）",pool,{});
+            if(j4!=null&&pool[j4])nm=pool[j4].name;
+          }
+        }else{
+          nm=await askText(`🚯 能力を無視するカードの名前（一部でも可）`,"");
+        }
       }
     }catch(e){}
     if(nm&&String(nm).trim()&&zonesOf(pi).battle.some(x=>x.id===c.id)){
