@@ -5225,7 +5225,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v14.83";
+const APP_VER="v15.0";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -35132,7 +35132,9 @@ function fxShareKeys(scope,deckNames){
   }
   if(scope==="self")return all.filter(k=>((FXDB.get(k)||{})._src)==="self");
   if(scope==="recent"){
-    const th=Date.now()-7*86400000;
+    // 🗓 days＝何日ぶんの登録を送るか（省略時は7日・v14.84で日数指定に対応）
+    const days=Math.max(1,+arguments[2]||7);
+    const th=Date.now()-days*86400000;
     return all.filter(k=>(Number((FXDB.get(k)||{})._v)||0)>=th);
   }
   return all;
@@ -35411,7 +35413,7 @@ $("olFxShare").addEventListener("click",async ()=>{
     ["📤 カードを選んで送る",
      "📤 全部を送る",
      "📤 いま選んでいるデッキで使うカードだけ送る",
-     "📤 直近1週間に効果登録し直したカードだけ送る",
+     "🗓 最近◯日ぶんに効果登録したカードだけ送る（日数を指定）",
      `📥 受け取った登録を確認して取り込む（${inb}件）`]);
   if(j===null)return;
   if(j===4){showFxDiffPanel();return;}
@@ -35432,7 +35434,13 @@ $("olFxShare").addEventListener("click",async ()=>{
     // 🖼 表紙（cover）も一緒に送る。相手の端末でも同じ絵が出る
     // ⚠ cover は末尾に置くこと（backup.js の「④送る側が表紙を入れている」が cover:d.cover||null} の形を見ている）
     _sendDeckObj={name:n,deck:{main:d.main,gr:d.gr||[],hy:d.hy||[],sp:d.sp||[],ex:d.ex||[],coverY:(d.coverY!=null?d.coverY:null),cover:d.cover||null}};
-  }else{keys=fxShareKeys("recent");label="直近1週間の効果更新分";}
+  }else{
+    // 🗓 何日ぶんかを聞く（書き出し側と共通のパネル・v15.0で統合）
+    const days=await askRecentFxDays();
+    if(days==null)return;
+    keys=fxShareKeys("recent",null,days);
+    label=`直近${days}日ぶんの効果登録`;
+  }
   if(!keys.length){toast("送る対象のカード登録がありません");return;}
   if(!await ask(`📤 カード登録 ${keys.length}件を送信します（${label}）\nよろしいですか？`))return;
   await olSendFx(keys,label);
@@ -41728,12 +41736,30 @@ async function exportDeckShare(deckNames,withImg){
   const imgN=Object.keys(images).length;
   toast(`📤 ${multi?`${decks.length}個のデッキ`:`「${shortName(decks[0].name)}」`}を書き出しました（カード${keys.size}種${imgN?`・画像${imgN}枚`:"・画像なし"}）。相手は「📥 読み込み」で取り込めます`);
 }
+/* 🗓 「何日ぶんの効果登録か」を聞く共通パネル（v15.0）。
+   オンラインの受け渡しと、共有パックの書き出しの両方から使う（別々に持たない）。
+   1／3／7／30日の件数の目安を見せてから選べる。キャンセル＝null。 */
+async function askRecentFxDays(){
+  const now=Date.now();
+  const cnt=d2=>[...FXDB.keys()].filter(k=>(Number((FXDB.get(k)||{})._v)||0)>=now-d2*86400000).length;
+  let days=await askNumber(`🗓 何日ぶんの効果登録を対象にしますか？\n（きょう登録・更新したものだけ＝1）\n\n目安：1日＝${cnt(1)}件／3日＝${cnt(3)}件／7日＝${cnt(7)}件／30日＝${cnt(30)}件`,7,365);
+  if(days==null||isNaN(days))return null;
+  return Math.max(1,Math.min(365,days|0));
+}
 /* 📦 カード登録だけの共有パック（画像なし・数百KB）。取り込みは差分画面を通る */
 async function exportFxPack(){
   const j=await askChoice("📦 カード登録だけの共有パックを書き出します（画像は含みません）\n書き出す範囲を選んでください",
-    ["全部","自分が登録・更新したものだけ","最近2週間に更新した分だけ"]);
+    ["全部","自分が登録・更新したものだけ","🗓 最近◯日ぶんに登録した分だけ（日数を指定）"]);
   if(j===null)return;
-  const keys=fxShareKeys(["all","self","recent"][j]);
+  let keys,_dLb="";
+  if(j===2){
+    const days=await askRecentFxDays();
+    if(days==null)return;
+    keys=fxShareKeys("recent",null,days);
+    _dLb=`直近${days}日ぶん`;
+  }else{
+    keys=fxShareKeys(["all","self"][j]);
+  }
   if(!keys.length){toast("対象のカード登録がありません");return;}
   const cardFx={},faceLinks={},nameMap={};
   for(const k of keys){
@@ -41748,7 +41774,7 @@ async function exportFxPack(){
   a.download=`dmrv-cardfx-${keys.length}件-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-  toast(`📦 カード登録${keys.length}件を書き出しました。受け取った人は「📥 読み込み」で取り込めます`);
+  toast(`📦 カード登録${keys.length}件を書き出しました${_dLb?`（${_dLb}）`:""}。受け取った人は「📥 読み込み」で取り込めます`);
 }
 /* 🧩 index.html に貼る同梱データ（マーカーの間を丸ごと差し替える） */
 async function exportBuiltinSnippet(){
