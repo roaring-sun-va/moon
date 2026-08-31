@@ -2787,7 +2787,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="味方の指定種族が相手クリーチャーとバトルする時、タップせずにこのクリーチャーがかわりにバトルする（ガードマンと違いタップしない）"><input type="checkbox" id="fxBattleSub"> 🥏 バトル肩代わり（タップなし）／対象種族<input type="text" id="fxBattleSubRace" placeholder="例：スノーフェアリー（空欄=すべて）" style="width:200px"></label>
         <label><input type="checkbox" id="fxSA"> スピードアタッカー（召喚酔いしない）</label>
         <label title="このカードがどこからでも自分の墓地に置かれる時、かわりにこのカードと自分の墓地を山札に加えてシャッフルする（悠久を統べる者 フォーエバー・プリンセス型）"><input type="checkbox" id="fxGraveShuffleRep"> ♾ 墓地に置かれる時、かわりに墓地＋自身を山札へシャッフル（フォーエバー・プリンセス型）</label>
-        <label><input type="checkbox" id="fxMach"> マッハファイター（出たターン、クリーチャーを攻撃できる）</label>
+        <label style="display:none"><input type="checkbox" id="fxMach"> マッハファイター（出たターン、クリーチャーを攻撃できる）</label>
         <label><input type="checkbox" id="fxHEnergy"> ハイパーエナジー（自分のクリーチャーをタップして1体につきコスト2軽減）</label>
         <input type="text" id="fxHyperNote" placeholder="HM時の能力メモ（自動化できない分）" style="flex:1;min-width:120px">
         <span style="font-size:12px;font-weight:700">HM時パワー</span>
@@ -5225,7 +5225,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.0";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.1";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5840,6 +5840,31 @@ function markArrive(c,opt){
       }
     }
   }catch(e){}
+}
+/* 🔁 v15.1 同じ能力が2つのキーに分かれていたのを吸収する。
+   マッハファイター … 「アンタップ獣も攻撃先に出す」は machf、「出たターンでも殴れる」は mach を見ていた。
+     片方だけの登録だと能力が半分しか働かないので、読む時は必ず hasMachF() を通すこと。
+   ジャストダイバー … 登録側は jd、出た時のアナウンスは jdiver を見ていた（hasJDiver()）。
+   エターナル・Ω   … 一部の登録が eternalOmega になっていた（本体は etOmega しか読まない）。
+   fxAliasReg() は登録そのものを両対応に直す。読み込み・パック取り込みのたびに通している。 */
+function hasMachF(r){return !!(r&&(r.machf||r.mach));}
+function hasJDiver(r){return !!(r&&(r.jdiver||r.jd));}
+function fxAliasReg(r){
+  if(!r||typeof r!=="object")return r;
+  if(r.machf||r.mach){r.machf=true;r.mach=true;}
+  if(r.jdiver||r.jd){r.jdiver=true;r.jd=true;}
+  if(r.eternalOmega){r.etOmega=true;delete r.eternalOmega;}
+  return r;
+}
+function fxAliasAll(){
+  let n=0;
+  for(const [,v] of FXDB){
+    const before=(v&&typeof v==="object")?`${!!v.machf}${!!v.mach}${!!v.jd}${!!v.jdiver}${!!v.eternalOmega}${!!v.etOmega}`:"";
+    fxAliasReg(v);
+    const after=(v&&typeof v==="object")?`${!!v.machf}${!!v.mach}${!!v.jd}${!!v.jdiver}${!!v.eternalOmega}${!!v.etOmega}`:"";
+    if(before!==after)n++;
+  }
+  return n;
 }
 function getReg(c){return FXDB.get(faceKeyOf(c))||FXDB.get(normName(c.name))||null;}
 /* 🌌 サイキック・クリーチャーとドラグハートは、超次元ゾーンとバトルゾーン以外には置けない。
@@ -11131,7 +11156,8 @@ function cardInfoText(key){
   // キーワード類
   const kw=[];
   const K=[["sa","SA"],["blocker","ブロッカー"],["slayer","スレイヤー"],["st","S・トリガー"],["gs","G・ストライク"],["machf","マッハファイター"],["jd","ジャストダイバー"],["noBlock","ブロックされない"],["noAtked","攻撃されない"],["noChoose","選ばれない"],["cantAtk","攻撃できない"],["cantAtkP","プレイヤー攻撃不可"],["guardman","ガードマン"],["escape","エスケープ"],["escapePS","エスケープP'S"],["exlife","EXライフ"],["mad","マッドネス"],["charger","チャージャー"],["battleSelfKill","バトル後自壊"],["atkPSelfKill","プレイヤー攻撃後に自壊"],["auraTapIn","相手タップイン"],["auraTapInPow","パワー小タップイン(両者・チリ型)"],["stLockBoth","ロック両者適用"],["stLockPsy","サイキック出せない"],["altCostKill","代替コスト後自壊"]];
-  for(const [k2,lb] of K)if(r[k2])kw.push(lb);
+  const _kwAl={machf:hasMachF(r),jd:hasJDiver(r)};   // v15.1 別名キーの登録も拾う
+  for(const [k2,lb] of K)if((k2 in _kwAl)?_kwAl[k2]:r[k2])kw.push(lb);
   if(r.breaks&&r.breaks>1)kw.push(`${r.breaks===2?"W":r.breaks===3?"T":r.breaks+""}・ブレイカー`);
   if(r.sympathy)kw.push(`シンパシー(${r.sympathy}${r.symX>1?`×${r.symX}`:""}${r.symFace==="0"?"・上面だけ":r.symFace==="1"?"・下面だけ":""})`);
   if(r.gzero)kw.push(`G・ゼロ(${r.gzero})`);
@@ -22171,7 +22197,7 @@ async function startAttack(pi,id){
     }
     return false;
   })();
-  const atkAll=!!(reg&&(reg.atkUn||reg.machf))||_auraMach||!!(c.buff&&c.buff.attackUntapped);
+  const atkAll=!!(reg&&reg.atkUn)||hasMachF(reg)||_auraMach||!!(c.buff&&c.buff.attackUntapped);
   const targets=[];
   if(S.noAtkTurn&&S.noAtkTurn.on&&S.noAtkTurn.key===`${S.turn}`){
     toast("⛔ このターン、すべてのクリーチャーは攻撃できません");
@@ -22784,7 +22810,7 @@ async function execAttack(pi,id,tg){
   if(S.expert&&c.sick){
     const rA=getReg(c);
     const saOk=rA&&(rA.sa||(rA.gggSA&&gggOn(pi)));
-    const machOk=(rA&&(rA.mach||(c.hyper&&rA.hmMach))||allyGrant(pi,"agMach"))&&tg.kind==="creature";
+    const machOk=(hasMachF(rA)||(rA&&c.hyper&&rA.hmMach)||allyGrant(pi,"agMach"))&&tg.kind==="creature";
     if(saOk||machOk){
       c.sick=false;
     }else{
@@ -23670,7 +23696,7 @@ async function execAttack(pi,id,tg){
   if(S.expert&&!(getReg(c)||{}).noAtkRedirect){
     S.tauntUsed=S.tauntUsed||{};
     const rAtk=getReg(c);
-    const canHitUntapped=!!(rAtk&&(rAtk.mach||(c.hyper&&rAtk.hmMach)))||!!(c.buff&&c.buff.attackUntapped)||allyGrant(pi,"agMach");
+    const canHitUntapped=hasMachF(rAtk)||!!(rAtk&&c.hyper&&rAtk.hmMach)||!!(c.buff&&c.buff.attackUntapped)||allyGrant(pi,"agMach");
     const taunts=OZ.battle.filter(x=>{
       const r2=getReg(x);
       if(!r2||!r2.taunt)return false;
@@ -25357,7 +25383,7 @@ function renderFxEditor(){
   {const e=$("fxStAuraOthers");if(e)e.checked=!!FXEDIT.stAuraOthers;}
   {const e=$("fxStAuraFilt");if(e)e.value=FXEDIT.stAuraFilt||"";}
   $("fxCantAtkP").checked=!!FXEDIT.cantAtkP;
-  $("fxMachF").checked=!!FXEDIT.machf;
+  $("fxMachF").checked=hasMachF(FXEDIT);
   {const e=$("fxStAuraMach");if(e)e.checked=!!FXEDIT.stAuraMach;}
   {const e=$("fxAtkOnlyF");if(e)e.value=FXEDIT.atkOnlyF||"";}
   {const e=$("fxSealPeelOnce");if(e)e.checked=!!FXEDIT.sealPeelOncePerTurn;}
@@ -25469,7 +25495,7 @@ function renderFxEditor(){
   $("fxGraveShuffleRep").checked=!!FXEDIT.graveShuffleRep;
   $("fxHEnergy").checked=!!FXEDIT.henergy;
   {const e=$("fxHandDestroyN");if(e)e.value=String(FXEDIT.handDestroyN||0);}
-  $("fxMach").checked=!!FXEDIT.mach;
+  $("fxMach").checked=hasMachF(FXEDIT);
   $("fxZRush").checked=!!FXEDIT.zrush;
   $("fxHyperNote").value=FXEDIT.hyperNote||"";
   $("fxHmPow").value=FXEDIT.hmPow||"";
@@ -25576,7 +25602,7 @@ function renderFxEditor(){
   $("fxLabyMagic").checked=!!FXEDIT.labyMagic;
   $("fxTapIn").checked=!!FXEDIT.tapIn;
   $("fxDronGo").value=FXEDIT.dronGo||"";
-  $("fxJD").checked=!!FXEDIT.jdiver;
+  $("fxJD").checked=hasJDiver(FXEDIT);
   $("fxPsyLink").value=FXEDIT.psyLink||"";
   $("fxPsyLinkTo").value=FXEDIT.psyLinkTo||"";
   $("fxPsyLinkMap").value=FXEDIT.psyLinkMap||"";
@@ -27612,7 +27638,7 @@ function openFxEditor(key){
     stAuraHmOnly:cur?!!cur.stAuraHmOnly:false,
     stAuraFilt:cur&&cur.stAuraFilt||"",
     cantAtkP:cur?!!cur.cantAtkP:false,
-    machf:cur?!!cur.machf:false,
+    machf:hasMachF(cur),
     stAuraMach:cur?!!cur.stAuraMach:false,
     atkOnlyF:cur&&cur.atkOnlyF||"",
     sealPeelOncePerTurn:cur?!!cur.sealPeelOncePerTurn:false,
@@ -27708,7 +27734,7 @@ function openFxEditor(key){
     sa:cur?!!cur.sa:false,
     graveShuffleRep:cur?!!cur.graveShuffleRep:false,
     henergy:cur?!!cur.henergy:false,
-    mach:cur?!!cur.mach:false,
+    mach:hasMachF(cur),
     zrush:cur?!!cur.zrush:false,
     hyperNote:cur&&cur.hyperNote||"",
     hmPow:cur&&cur.hmPow||0,
@@ -27778,7 +27804,8 @@ function openFxEditor(key){
     labyMagic:cur?!!cur.labyMagic:false,
     tapIn:cur?!!cur.tapIn:false,
     dronGo:cur&&cur.dronGo||"",
-    jdiver:cur?!!cur.jdiver:false,
+    jdiver:hasJDiver(cur),
+    jd:hasJDiver(cur),
     psyLink:cur&&cur.psyLink||"",
     psyLinkTo:cur&&cur.psyLinkTo||"",
     psyLinkMap:cur&&cur.psyLinkMap||"",
@@ -28149,7 +28176,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stAuraOthers:$("fxStAuraOthers")?$("fxStAuraOthers").checked:false,
     stAuraFilt:($("fxStAuraFilt")?$("fxStAuraFilt").value:"").trim(),
     cantAtkP:$("fxCantAtkP").checked,
-    machf:$("fxMachF").checked,
+    machf:($("fxMachF").checked||$("fxMach").checked),
     stAuraMach:$("fxStAuraMach")?$("fxStAuraMach").checked:false,
     atkOnlyF:$("fxAtkOnlyF")?$("fxAtkOnlyF").value.trim():"",
     sealPeelOncePerTurn:$("fxSealPeelOnce")?$("fxSealPeelOnce").checked:false,
@@ -28253,7 +28280,7 @@ $("fxSave").addEventListener("click",async ()=>{
     graveShuffleRep:$("fxGraveShuffleRep").checked,
     henergy:$("fxHEnergy").checked,
     handDestroyN:$("fxHandDestroyN")?(parseInt($("fxHandDestroyN").value,10)||0):0,
-    mach:$("fxMach").checked,
+    mach:($("fxMachF").checked||$("fxMach").checked),
     zrush:$("fxZRush").checked,
     hyperNote:$("fxHyperNote").value.trim(),
     hmPow:+$("fxHmPow").value||0,
@@ -28362,6 +28389,7 @@ $("fxSave").addEventListener("click",async ()=>{
     tapIn:$("fxTapIn").checked,
     dronGo:$("fxDronGo").value||"",
     jdiver:$("fxJD").checked,
+    jd:$("fxJD").checked,
     psyLink:$("fxPsyLink").value.trim(),
     psyLinkTo:$("fxPsyLinkTo").value.trim(),
     psyLinkMap:$("fxPsyLinkMap").value.trim(),
@@ -28994,7 +29022,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.shieldBurn)attrs.push("シールド焼却");
     if(v.qqqx)attrs.push("Q.Q.QX型");
     if(v.auraTapIn||v.auraNote)attrs.push("常在");
-    if(v.machf)attrs.push("マッハファイター");
+    if(hasMachF(v))attrs.push("マッハファイター");
     if(v.noBlock)attrs.push("ブロックされない");
     if(v.noAtked)attrs.push("攻撃されない");
     if(v.foeCantAtkPByPowLT)attrs.push(`相手のパワー${v.foeCantAtkPByPowLT}未満は自分を攻撃不可`);
@@ -29056,7 +29084,6 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.sa)attrs.push("SA");
     if(v.graveShuffleRep)attrs.push("♾墓地→山札シャッフル置換");
     if(v.henergy)attrs.push("Hエナジー");
-    if(v.mach)attrs.push("マッハファイター");
     if(v.zrush)attrs.push("Zラッシュ");
     if(v.sInvade)attrs.push("S級侵略");
     if(v.sympathy)attrs.push(`シンパシー(${v.sympathy})`);
@@ -29096,7 +29123,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.labyMagic)attrs.push("ラビリンス・マジック");
     if(v.tapIn)attrs.push("タップイン");
     if(v.dronGo)attrs.push(`P'Sドロンゴー${v.dronGo==="V"?"V":""}`);
-    if(v.jdiver)attrs.push("ジャストダイバー");
+    if(hasJDiver(v))attrs.push("ジャストダイバー");
     if(v.psyLink)attrs.push(`リンク：${v.psyLink}`);
     if(v.taunt)attrs.push(v.taunt==="always"?"攻撃誘導（永続）":v.taunt==="tapped"?"攻撃誘導（タップ時・アリナティウス型）":"攻撃誘導（最初の1回）");
     if(v.stWhen||v.stCond)attrs.push("条件ST");
@@ -29291,7 +29318,7 @@ $("regCloseTop").addEventListener("click",()=>$("regOlay").classList.remove("ope
 {const b=document.getElementById("regAudit");
  if(b)b.addEventListener("click",()=>{
   try{
-    const KW=["breaks","mach","blocker","sa","st","sst","stplus","jd","gs","slayer","gzero","jchange","invade","revchg",
+    const KW=["breaks","mach","machf","blocker","sa","st","sst","stplus","jd","jdiver","gs","slayer","gzero","jchange","invade","revchg",
       "exlife","charger","mad","sympathy","watchFx","repIn","ignore","stAuraPow","grantDS","modeN","gimmick","neverLeave",
       "gearSA","gearPow","gearBlocker","gearShield","gearCrossN","selfRed","preHyperCut","stBounceCheat","twin"];
     const empty=[],noImg=[];
@@ -29640,7 +29667,7 @@ function etOmegaToHand(ownerP,c,curArr){
    自身のΩは無視状態で消えるが、付与は付与元の能力なので付与元が有効なら生きる */
 /* ♾ エターナルΩの由来（置換競合の優先判定用・v10.23）：1=①自身の能力／2=②「与える」常在で付与／0=なし */
 function etOmegaCat(pi,c,r){
-  if(r&&r.etOmega&&!isIgnored(c,pi))return 1;
+  if(r&&(r.etOmega||r.eternalOmega)&&!isIgnored(c,pi))return 1;
   if(!S.expert)return 0;
   for(const b of zonesOf(pi).battle){
     const rb=getReg(b);
@@ -29653,7 +29680,7 @@ function etOmegaCat(pi,c,r){
   return 0;
 }
 function hasEtOmega(pi,c,r){
-  if(r&&r.etOmega&&!isIgnored(c,pi))return true;
+  if(r&&(r.etOmega||r.eternalOmega)&&!isIgnored(c,pi))return true;
   if(!S.expert)return false;
   for(const b of zonesOf(pi).battle){
     const rb=getReg(b);
@@ -30812,7 +30839,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     if(S.expert&&reg&&reg.gimmick==="complex"&&!reg.complexArc){c.tapped=true;c.under=c.under||[];toast(`⬛ ${c.name} はタップして出る（下に8枚でアンタップ）`);}
     if(S.expert&&reg&&reg.gimmick==="complex"&&reg.complexArc){c.under=c.under||[];}
     if(S.expert&&reg&&reg.tapIn&&(!reg.gimmick||reg.gimmick!=="complex")){c.tapped=true;toast(`⤵ ${c.name} はタップして出る`);}
-    if(S.expert&&reg&&reg.jdiver){
+    if(S.expert&&hasJDiver(reg)){
       toast(`🌀 ジャストダイバー持ち：${faceNameOf(c)}（付与はメニューのバフから手動で・処理順は任意）`);
     }
     if(S.expert&&reg&&reg.psyLink){
@@ -35276,6 +35303,7 @@ function showFxDiffPanel(){
       try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
       reg._v=Number(v._v)||Date.now();
       reg._src="shared:"+(FX_INBOX.from||"共有");
+      fxAliasReg(reg);   // v15.1 mach/machf・jd/jdiver・eternalOmega をそろえる
       FXDB.set(k,reg);
       if(!dispName.has(k))dispName.set(k,FX_INBOX.names[k]||k); // 名前を入れないとカード一覧に出ない
       if(!LINKS.has(k)&&Array.isArray(FX_INBOX.links[k]))LINKS.set(k,FX_INBOX.links[k]);
@@ -35502,6 +35530,7 @@ async function fxMergeIncoming(pack,from,opts={}){
     let reg;try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
     reg._v=inV||Date.now();
     reg._src=srcTag;
+    fxAliasReg(reg);   // v15.1 mach/machf・jd/jdiver・eternalOmega をそろえる
     FXDB.set(k,reg);
     if(!dispName.has(k))dispName.set(k,names[k]||k); // 名前を入れないとカード一覧に出ない
     if(!LINKS.has(k)&&Array.isArray(links[k]))LINKS.set(k,links[k]);
@@ -42296,7 +42325,7 @@ $("importInput").addEventListener("change",async e=>{
       for(const k of data.artKeys)ART_KEYS.add(k);
       await persistArtKeys();
     }
-    if(data.cardFx){FXDB.clear();for(const [k,v] of Object.entries(data.cardFx))FXDB.set(k,v);await persistFx();}
+    if(data.cardFx){FXDB.clear();for(const [k,v] of Object.entries(data.cardFx))FXDB.set(k,fxAliasReg(v));await persistFx();}
     if(data.faceLinks){LINKS.clear();for(const [k,v] of Object.entries(data.faceLinks))LINKS.set(k,v);await persistLinks();}
     if(data.nameMap){for(const [k,v] of Object.entries(data.nameMap))dispName.set(k,v);await persistNames();}
     if(Array.isArray(data.sleeve)){
@@ -44619,6 +44648,7 @@ function splashRun(off){
    if(miss.length){miss.sort((a,b)=>(dispName.get(a)||a).localeCompare(dispName.get(b)||b,"ja"));for(const k of miss)imgOrder.set(k,++imgSeq);await persistImgOrder();}}
   const fx=db?await idbGet("misc","cardFx"):null;
   if(fx)for(const [k,v] of Object.entries(fx))FXDB.set(k,v);
+  {const _al=fxAliasAll();if(_al){await persistFx();console.log(`[v15.1] 別名キーをそろえた登録：${_al}件`);}}
   const lk=db?await idbGet("misc","faceLinks"):null;
   if(lk)for(const [k,v] of Object.entries(lk))LINKS.set(k,v);
   {const bo=db?await idbGet("misc","builtinOff"):null;if(bo!==null&&bo!==undefined)BUILTIN_OFF=!!bo;}
