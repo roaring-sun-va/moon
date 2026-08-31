@@ -2778,6 +2778,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="装備先クリーチャーのパワーを相手のターン中だけ+n（例：+12000）。オーラ／ドラグハートでも有効">⚙ 装備先パワー+（相手ターン中のみ）<input type="number" id="fxGearPowOppT" min="0" step="500" value="0" style="width:86px"></label>
         <label title="装備先クリーチャーに「ブロッカー」を与える。クロスギア／オレガ・オーラ／ドラグハート・ウエポン共通"><input type="checkbox" id="fxGearBlocker"> ⚙ 装備先に「ブロッカー」を与える</label>
         <label title="これをクロスしたクリーチャーに「スレイヤー」を与える（秘福 キナコ・カチューシャ型）。クロスギア／オレガ・オーラ／ドラグハート・ウエポン共通"><input type="checkbox" id="fxGearSlayer"> ⚙ クロス先に「スレイヤー」を与える</label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="「この呪文を唱える時、自分の手札を1枚、超次元ゾーンに置いてもよい。そうしたら、唱えるコストをn少なくする」（鬼修羅と跳次元の決断型）。0なら使いません"><span style="font-size:12px;font-weight:700">🌌 手札を超次元に置いて軽減</span><input type="number" id="fxHandToHyperRed" style="width:70px" placeholder="0" min="0" max="9"></label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="コスト軽減（常時）側だけ、クロスの有無の条件を分けたい時に使います。空欄なら常在の付与と同じ条件になります"><span style="font-size:12px;font-weight:700">💠 軽減側のクロス条件</span><select id="fxAlwRedCross" style="width:auto"><option value="">（付与と同じ）</option><option value="on">クロス中のみ</option><option value="off">クロスされていない時のみ</option></select></label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="「ドラゴンまたはサムライにクロスされている時」のように、クロス先の条件で付与を切り替えたい時に書きます（空欄＝クロス先を問わない）"><span style="font-size:12px;font-weight:700">⚙ クロス先の条件</span><input type="text" id="fxStAuraCrossF" list="raceList" placeholder="例：ドラゴン｜サムライ（空欄＝問わない）" style="width:220px"></label>
         <label title="これをクロスしたクリーチャーが離れる時、かわりにこのクロスギアを外してもよい（聖竜鎧 シデンズ・ソウル型）。外すとクリーチャーは場に残ります。確認パネルが出ます（強制で外す fxGearShield とは別）"><input type="checkbox" id="fxGearLeaveRep"> ⚙ クロス先が離れる時、かわりにこのギアを外してもよい（確認あり）</label>
@@ -5240,7 +5241,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.12";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.14";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5732,6 +5733,15 @@ function markArrive(c,opt){
     try{
       const _pOwn=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
       if(_pOwn!=null)queueCheatWatchers(_pOwn,c);
+    }catch(e){}
+  }
+  /* 💠 v15.13：EXライフの専用シールドは「バトルゾーンに出た」すべての経路で作る。
+     墓地から出した時・踏み倒しの時に付かない、という報告があったため、
+     出た時の共通処理であるここに移した。裏返り（変形）とG・リンクは対象外。 */
+  if(!_flipOnly&&!opt.noExLife&&!c._noExLife){
+    try{
+      const _pEx=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
+      if(_pEx!=null&&typeof makeExLifeShield==="function")makeExLifeShield(_pEx,c);
     }catch(e){}
   }
   c.dealIdx=null;c._pfAsked=false;arrived.add(c.id);setTimeout(()=>arrived.delete(c.id),1000);
@@ -10347,6 +10357,14 @@ async function jretSummon(pi,zone,id){
   ok.onclick=async ()=>{
     snap();
     const back=[...sel];
+    /* 💠 v15.13：支払うコストは「戻す前の盤面」で決める。
+       ヤッタレマン型の常在軽減は、そのヤッタレマンを戻しても、戻す前に決まったコストに乗る。
+       以前は登録された素のコストから戻した数を引くだけで、他の軽減をまったく見ていなかった。 */
+    let baseCost=(r.cost!=null&&!isNaN(+r.cost))?+r.cost:null;
+    try{
+      const _dc=(typeof dispCost==="function")?dispCost(c,pi):null;
+      if(_dc&&_dc.cost!=null)baseCost=+_dc.cost;
+    }catch(e){}
     for(const id2 of back)moveCard(pi,"battle",id2,"hand");   // 離れた時の誘発・置換もここで働く
     const f2=findCard(pi,zone,id);
     if(f2){
@@ -10356,11 +10374,12 @@ async function jretSummon(pi,zone,id){
       if(!cheatEnterBattle(pi,cc)){renderAll();return;}   // 🟥 7面上限を通す（戻したぶん空いている）
       cc._viaCheat=false;   // 召喚なので踏み倒しではない
       const rr=getReg(cc);
-      if(S.expert&&S.autoTap&&rr&&rr.cost!=null){
-        const pay=Math.max(0,rr.cost-back.length);
+      if(S.expert&&S.autoTap&&baseCost!=null){
+        const pay=Math.max(0,baseCost-back.length);
         let n=0;
         for(const m of Z2.mana){if(n>=pay)break;if(!m.tapped){m.tapped=true;n++;}}
-        toast(`🃏 ${back.length}体を手札に戻す → コスト${rr.cost}−${back.length}＝${pay}を支払い`);
+        const _raw=(rr&&rr.cost!=null)?+rr.cost:baseCost;
+        toast(`🃏 ${back.length}体を手札に戻す → コスト${_raw}${baseCost!==_raw?`（軽減後${baseCost}）`:""}−${back.length}＝${pay}を支払い`);
       }else{
         toast(`🃏 ${back.length}体を手札に戻した（コストは手動で）`);
       }
@@ -11209,6 +11228,7 @@ const FX_TYPES=[
   ["destroyAllCond","💥 条件に合うクリーチャーをすべて破壊する（両者・モーツァルト型／条件欄＝例：ドラゴン以外。先頭に「相手:」「自分:」を付けると片側だけ＝destroyFiltAllの片側指定できる版）"],
   ["manaKill","💎 相手のマナゾーンからn枚選び、持ち主の墓地に置く（マナ破壊・条件欄で対象を絞れる）"],
   ["psyOut","🌌 自分の超次元ゾーンからサイキック・クリーチャーをn体まで選んでバトルゾーンに出す（超次元ホール型／条件欄＝例：コスト9以下／闇。「合計6以下」と書くとコスト合計の上限になる）"],
+  ["foeElemToHyper","🌌 相手のエレメントをn個選び、持ち主の超次元ゾーンに置く（鬼修羅と跳次元の決断型／クリーチャー・タマシード・クロスギア等が対象。相手が超次元ゾーンを使っていなくても置ける）"],
   ["foeMaxPowToHyper","🌌 相手の、パワーが一番大きいクリーチャーをすべて、持ち主の超次元ゾーンに置く（轟く跳躍 テレポートゾーン型／サイキックでない普通のクリーチャーでも置ける）"],
   ["psyJump","🦘 跳次元召喚n（自分の超次元ゾーンから、コストn以下で文明がすべて自分のマナゾーンにあるクリーチャーを1体、コストを支払ったものとして召喚。n＝コストの上限／条件欄でさらに絞れる）"],
   ["psyReturn","🌌 相手のサイキック・クリーチャーをn体選んで超次元ゾーンに戻す（ミスター・アクア型／条件欄で対象を絞れる）"],
@@ -11241,6 +11261,7 @@ const FX_TYPES=[
   ["deckGearFree","⚙ 自分の山札を見て、条件に合うクロスギア1枚をコストを支払わずにジェネレートする→山札をシャッフル（条件欄＝例：コスト4以下）"],
   ["handGearFree","⚙ 手札からクロスギア1つを、コストを支払わずにジェネレートしてもよい（任意・条件欄＝対象／侍流ジェネレートの中身）"],
   ["gearCrossAnyFree","⚙ 自分のジェネレート済みクロスギアを、コストを支払わずに自分のクリーチャーにクロスしてもよい（枚数nまで・n未指定＝好きなだけ／バザガベルグ型）"],
+  ["gearCrossSelfFree","⚙ **このクロスギア自身**を、コストを支払わずに自分のクリーチャーにクロスしてもよい（聖竜鎧 シデンズ・ソウル型／他のギアは選べません）"],
   ["breakMineThenKill","💥 自分のシールドを1つブレイクしてもよい。ブレイクした時だけ、条件に合う相手クリーチャー1体を選んで破壊する（条件欄＝例：パワー6000以下・武偉型）"],
   ["handGearCrossSelf","⚙ 手札からクロスギア1枚を任意でジェネレートする。その後、自分のクロスギア1枚をこのクリーチャーに任意で無料クロス（コットン型）"],
   ["hoganBlaster","🎰 自分の山札をシャッフルし、上から1枚を表向きにする。クリーチャーならバトルゾーンに出し、呪文ならコストを支払わずに唱える（どちらでもなければ手札へ・ホーガン・ブラスター型／条件欄で対象を絞れる）"],
@@ -11553,7 +11574,10 @@ function parseSympathy(sy){
    数えられないため、その枚数も返して案内に出す（「機能していない」の原因が分かるように）。 */
 function sympathyCount(pi,c,sy){
   const {zone,toks}=parseSympathy(sy);
-  const arr=zoneCards(zonesOf(pi),zone).filter(b=>!c||b.id!==c.id);
+  /* 💠 v15.13：墓地（やマナ）から召喚する時、そのカード自身もまだそのゾーンにあるので数に入れる
+     （超神星HADES・ドラゲリオンを墓地から召喚する時、自分自身が数えられていなかった）。
+     手札から出す時だけは、そのカードは手札を離れるものとして数えない。 */
+  const arr=zoneCards(zonesOf(pi),zone).filter(b=>!(c&&b.id===c.id&&zone==="hand"));
   // 🧬 墓地進化・マナ進化：進化元はコストを支払う瞬間まではそのゾーンにあったカードなので数に入れる
   //    （先に下へ移してから支払うため、そのままだと進化元の枚数だけ軽減が減っていた）
   if(c&&c.under&&c.under.length)for(const u of c.under){if(u&&u._evoFrom===zone)arr.push(u);}
@@ -11822,6 +11846,30 @@ async function autoTapCost(pi,c){
       if(cost<before2)toast(`💸 呪文コスト−${before2-cost}（残り${cost}）`);
     }
     S._nextSpellRed=null;   // 使い切り
+  }
+  /* 🌌 v15.14 「この呪文を唱える時、自分の手札を1枚、超次元ゾーンに置いてもよい。
+     そうしたら、唱えるコストを n 少なくする」（鬼修羅と跳次元の決断型）。
+     置くのは任意なので、まず確認してから手札を選ぶ。 */
+  if(+r.handToHyperRed>0&&cost>0){
+    const Zh=zonesOf(pi);
+    if(Zh.hand.length){
+      const yesH=await ask(`🌌 手札を1枚、超次元ゾーンに置いてコストを${+r.handToHyperRed}少なくしますか？`);
+      if(yesH){
+        const jH=await pickCard("🌌 超次元ゾーンに置く手札を選択（キャンセルで置かない）",Zh.hand,{hint:"タップで選択　／　✕ で置かない"});
+        if(jH!==null){
+          const cardH=Zh.hand[jH];
+          Zh.hand.splice(jH,1);
+          cardH.faceup=true;cardH.face=0;cardH.rot=0;cardH.tapped=false;cardH.under=[];
+          Zh.hyper.push(cardH);
+          const beforeH=cost;
+          cost=Math.max(0,cost-(+r.handToHyperRed||0));
+          toast(`🌌 ${faceNameOf(cardH)} を超次元ゾーンへ → コスト${beforeH}−${beforeH-cost}＝${cost}`);
+          logOnly(`🌌 ${faceNameOf(c)}：手札の《${faceNameOf(cardH)}》を超次元ゾーンに置いてコスト−${beforeH-cost}`);
+          try{runWatchFx(pi===0?1:0,"foeHyperPlaced");}catch(e){}
+          renderAll();
+        }
+      }
+    }else toast("🌌 手札が無いのでコスト軽減は使えません");
   }
   {
     let dd=(paySide==="creature")?dddDiscount(r,pi):0;
@@ -14424,6 +14472,42 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       if(doneG)toast(`⚙ ${doneG}個のクロスギアをコストを支払わずにクロスした`);
       renderAll();
+    }else if(f.t==="gearCrossSelfFree"){
+      /* ⚙ v15.13 シデンズ・ソウル型：**このクロスギア自身**を、コストを支払わずに
+         自分のクリーチャーにクロスする。バザガベルグ型（gearCrossAnyFree）と違い、
+         他のクロスギアは選べない。既にクロス中なら、別のクリーチャーへ移し替える。
+         条件欄でクロス先を絞れる（例：自分の他のクリーチャー→「他」）。 */
+      const gSelf=srcCard;
+      const rgS=getReg(gSelf);
+      if(!gSelf||!rgS||!(rgS.ctype==="crossgear"||rgS.ctype==="evocrossgear")){
+        toast("⚙ この効果はクロスギアの登録にだけ使えます");renderAll();continue;
+      }
+      const filtS=String(f.cond||"").trim();
+      const hostNow=(typeof gearHostOf==="function")?gearHostOf(gSelf):null;
+      const hostsS=Z.battle.filter(x=>{
+        const rx=getReg(x);
+        if(!rx||!isCreatureReg(rx))return false;
+        if(filtS==="他"&&hostNow&&x.id===hostNow.id)return false;   // 「自分の他のクリーチャー」
+        if(filtS&&filtS!=="他"&&!lockFilterOk(filtS,rx,x))return false;
+        return true;
+      });
+      if(!hostsS.length){toast("⚙ クロスできるクリーチャーがいません");renderAll();continue;}
+      const jS=await pickCard(`⚙ ${faceNameOf(gSelf)} を無料でクロスする先を選択（キャンセルでクロスしない）`,hostsS,
+        {sub:x=>(hostNow&&x.id===hostNow.id)?"いまクロス中":"",hint:"タップで選択　／　✕ でクロスしない"});
+      if(jS===null){renderAll();continue;}
+      snap();
+      if(hostNow){   // 付け替え：いまのクロス先から外す
+        const hi=hostNow.gear.findIndex(x=>x.id===gSelf.id);
+        if(hi>=0)hostNow.gear.splice(hi,1);
+      }
+      const tgtS=hostsS[jS];
+      tgtS.gear=tgtS.gear||[];
+      tgtS.gear.push(gSelf);
+      gSelf.isCross=true;
+      {const bi=Z.battle.findIndex(x=>x.id===gSelf.id);if(bi>=0)Z.battle.splice(bi,1);}
+      sfx("ok");renderAll();
+      toast(`⚙ ${faceNameOf(gSelf)} を ${faceNameOf(tgtS)} にクロスした（コストを支払わずに）`);
+      logOnly(`⚙ ${faceNameOf(gSelf)}：コストを支払わずに ${faceNameOf(tgtS)} にクロス`);
     }else if(f.t==="breakMineThenKill"){
       // 💥 武偉型：自分のシールドを1つブレイクしてもよい。**ブレイクした時だけ**、
       //    条件（f.cond・例「パワー6000以下」）に合う相手のクリーチャーを1体選んで破壊する。
@@ -17946,6 +18030,41 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       if(_out.length)await waitFxIdle(inPump);
       renderAll();
+    }else if(f.t==="foeElemToHyper"){
+      /* 🌌 v15.14 鬼修羅と跳次元の決断型：相手のエレメントを選び、持ち主の超次元ゾーンに置く。
+         クリーチャーだけでなくタマシード・クロスギア等も対象（エレメント）。
+         サイキックでなくても、相手が超次元ゾーンを使っていなくても置ける。 */
+      if(!S.vs){toast("（ソロのため相手の超次元送りはスキップ）");renderAll();continue;}
+      const ZOe=zonesOf(op);
+      const capE=Math.max(1,f.n|0);
+      const filtE=String(f.cond||"").trim();
+      for(let i2=0;i2<capE;i2++){
+        const poolE=ZOe.battle.filter(x=>{
+          const rx=getReg(x);
+          if(isSealed(x))return false;
+          if(rx&&(rx.noChoose||momoUntouchable(x))&&!isIgnored(x,op))return false;
+          return !filtE||!rx||lockFilterOk(filtE,rx,x);
+        });
+        if(!poolE.length){toast(i2?"🌌 これ以上は選べません":"🌌 相手のバトルゾーンにエレメントがありません");break;}
+        const jE=await pickCard(`🌌 持ち主の超次元ゾーンに置く相手のエレメントを選択（${i2+1}/${capE}${filtE?`・${filtE}`:""}）`,poolE,
+          {sub:x=>{const rx=getReg(x);return rx&&rx.ctype==="crossgear"?"クロスギア":(rx&&rx.ctype==="tamaseed"?"タマシード":"");},hint:"タップで選択　／　✕ で終了"});
+        if(jE===null)break;
+        const tE=poolE[jE];
+        snap();
+        const biE=ZOe.battle.findIndex(y=>y.id===tE.id);
+        if(biE<0)continue;
+        leaveBattleCleanup(ZOe,tE,"hyper");
+        ZOe.battle.splice(biE,1);
+        tE.tapped=false;tE.sideways=false;tE.rot=0;tE.buff=null;tE.seals=[];tE.mark=false;
+        tE.faceup=true;tE.face=0;tE.under=[];tE.isCross=false;
+        ZOe.hyper.push(tE);
+        sfx("move");renderAll();
+        toast(`🌌 ${faceNameOf(tE)} を持ち主の超次元ゾーンに置いた`);
+        logOnly(`🌌 ${S.players[op].label} の《${faceNameOf(tE)}》を持ち主の超次元ゾーンへ`);
+        runWatchFx(pi,"foeHyperPlaced");
+        await waitFxIdle(inPump);
+      }
+      renderAll();
     }else if(f.t==="foeMaxPowToHyper"){
       /* 🌌 v15.8 轟く跳躍 テレポートゾーン型
          相手の、パワーが一番大きいクリーチャーを**すべて**、持ち主の超次元ゾーンに置く。
@@ -20087,6 +20206,25 @@ function dispCost(c,pi){
         alw+=(+rb.alwRed||0);
       }
       if(alw>0)cost=Math.max(cost>0?1:0,cost-alw);
+    }
+    /* ⚙ v15.14 常在「自分の〔対象〕の実行コスト−n」（カイザー・ルピア／一番隊型）を表示にも反映。
+       支払い時（payCost）では効いていたが、手札のコスト表示に入っていなかった。
+       条件付きの追加軽減（表向きの盾があればさらに−1 など）もここで見る。 */
+    {
+      let redA=0;
+      const scanCRd=(obj)=>{
+        const rb=getReg(obj);
+        if(!rb||!rb.costRedAllyF||!(+rb.costRedAllyN))return;
+        if(isSealed(obj)||isIgnored(obj,pi))return;
+        if(!lockFilterOk(rb.costRedAllyF,r,c))return;
+        redA+=(+rb.costRedAllyN);
+        const n2=+rb.costRedAllyN2||0;
+        const cd2=String(rb.costRedAllyCond||"").trim();
+        if(n2>0&&(!cd2||zoneCondOk(cd2,pi,obj)))redA+=n2;
+      };
+      for(const b of zonesOf(pi).battle){scanCRd(b);(b.gear||[]).forEach(scanCRd);}
+      if(c.under&&c.under.length)for(const u of c.under){scanCRd(u);(u.gear||[]).forEach(scanCRd);}
+      if(redA>0&&cost>1)cost=Math.max(1,cost-redA);
     }
     // 💠 各ターン最初の召喚コスト軽減（表示に反映・このターン未使用の軽減元のみ）
     if(r.ctype!=="spell"){
@@ -23352,7 +23490,14 @@ async function execAttack(pi,id,tg){
       }
       if(r.invRace&&!raceMatch(aRegNow,r.invRace))return false;
       if(r.invCost&&!(aRegNow.cost!=null&&aRegNow.cost>=r.invCost))return false;
-      if(r.invPow&&!(aRegNow.power!=null&&+aRegNow.power>=r.invPow))return false;
+      /* 💪 v15.14：パワー条件は**いまのパワー**で見る（登録された素のパワーではない）。
+         パワー+2000などで条件を満たしたのに、革命チェンジのパネルが出なかった。 */
+      if(r.invPow){
+        let _pwNow=null;
+        try{_pwNow=(typeof powNow==="function")?powNow(c):null;}catch(e){}
+        if(_pwNow==null)_pwNow=(aRegNow&&aRegNow.power!=null)?+aRegNow.power:null;
+        if(!(_pwNow!=null&&_pwNow>=r.invPow))return false;
+      }
       return true;
     };
     const cands=[];
@@ -25832,6 +25977,7 @@ function renderFxEditor(){
   {const e=$("fxGearEscapePS");if(e)e.checked=!!FXEDIT.gearEscapePS;}
   {const e=$("fxGearLeaveRep");if(e)e.checked=!!FXEDIT.gearLeaveRep;}
   {const e=$("fxAlwRedCross");if(e)e.value=FXEDIT.alwRedCross||"";}
+  {const e=$("fxHandToHyperRed");if(e)e.value=String(FXEDIT.handToHyperRed||0);}
   {const e=$("fxStAuraCrossF");if(e)e.value=FXEDIT.stAuraCrossF||"";}
   {const e=$("fxGearHostDeadDraw");if(e)e.value=String(FXEDIT.gearHostDeadDraw||0);}
   {const e=$("fxGearEndZenith");if(e)e.checked=!!FXEDIT.gearEndZenith;}
@@ -28080,6 +28226,7 @@ function openFxEditor(key){
     gearEscapePS:cur?!!cur.gearEscapePS:false,
     gearLeaveRep:cur?!!cur.gearLeaveRep:false,
     alwRedCross:(cur&&cur.alwRedCross)||"",
+    handToHyperRed:cur?(+cur.handToHyperRed||0):0,
     stAuraCrossF:(cur&&cur.stAuraCrossF)||"",
     escapePS:cur?!!cur.escapePS:false,
     costRedAllyF:cur&&cur.costRedAllyF||"",
@@ -28630,6 +28777,7 @@ $("fxSave").addEventListener("click",async ()=>{
     gearEscapePS:$("fxGearEscapePS")?$("fxGearEscapePS").checked:false,
     gearLeaveRep:$("fxGearLeaveRep")?$("fxGearLeaveRep").checked:false,
     alwRedCross:$("fxAlwRedCross")?$("fxAlwRedCross").value:"",
+    handToHyperRed:$("fxHandToHyperRed")?(parseInt($("fxHandToHyperRed").value,10)||0):0,
     stAuraCrossF:$("fxStAuraCrossF")?$("fxStAuraCrossF").value.trim():"",
     gearHostDeadDraw:$("fxGearHostDeadDraw")?(parseInt($("fxGearHostDeadDraw").value,10)||0):0,
     gearEndZenith:$("fxGearEndZenith")?$("fxGearEndZenith").checked:false,
@@ -29445,6 +29593,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gearShield)attrs.push("⚙クロス先が離れる時の身代わり");
     if(v.gearBreakAdd)attrs.push(`⚙クロス先のブレイク+${v.gearBreakAdd}`);
     if(v.gearLeaveRep)attrs.push("⚙クロス先が離れる時、かわりにこのギアを外してもよい（確認あり）");
+    if(+v.handToHyperRed)attrs.push(`🌌 手札1枚を超次元ゾーンに置いてコスト−${v.handToHyperRed}（任意）`);
     if(v.alwRedCross)attrs.push(`💠軽減は${v.alwRedCross==="on"?"クロス中":"クロスされていない時"}だけ`);
     if(v.stAuraCrossF)attrs.push(`⚙付与は${v.stAuraCrossF}にクロスされている時だけ`);
     if(v.escapePS)attrs.push("🏃エスケープP'S（破壊→かわりにランダム盾1を手札・各ターン1回）");
@@ -31358,6 +31507,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         ZB7.push(nc);
         window.__glJoinId=nc.id;
         try{fxKeyword(pTo,"G・リンク！",glOrderNames(nm2,parts),nm2);}catch(e){}
+        nc._noExLife=true;   // 🔗 リンクは「新しく出た」のではないのでEXライフは作らない
         markArrive(nc);
         nc.sick=_wasSick;   // 🔗 リンクは「新しく出た」のではない
         emitEvent(pTo,"summon");
@@ -31643,6 +31793,12 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     c.faceup=false;c.tapped=false;c.rot=0;
     ZT.gr.push(c);
     toast(`GRクリーチャー：${dispName.get(faceKeyOf(c))||c.name} はGRゾーンの下へ戻った`);
+  }
+  /* 🌌 v15.14：超次元ゾーンにカードが置かれた時の誘発（轟く跳躍 テレポートゾーン型）。
+     「相手の超次元ゾーンに置かれた時」なので、置かれた側から見た相手に鳴らす。
+     効果からの直接移動（foeElemToHyper 等）は、そちらでも鳴らしている。 */
+  if(S.expert&&toZone==="hyper"&&fromZone!=="hyper"){
+    try{runWatchFx(pTo===0?1:0,"foeHyperPlaced");}catch(e){}
   }
   sfx("move");
   {
@@ -32612,10 +32768,18 @@ function cardEl(pi,zone,c){
     el.appendChild(gt);
   }
   if(c.exFor!=null&&zone==="shield"){
+    /* 💠 v15.13：EXライフが複数あるとどれがどのクリーチャーのものか分からないので、
+       持ち主のクリーチャー名を短く添える。名前は登録時の _addedBy から取る。 */
+    let exOwn="";
+    try{
+      const _oz=zonesOf(pi);
+      const _oc=(_oz&&_oz.battle||[]).find(x=>x.id===c.exFor);
+      exOwn=_oc?faceNameOf(_oc):String(c._addedBy||"").replace(/（EXライフ）$/,"");
+    }catch(e){}
     const ex=document.createElement("span");
     ex.className="extag";
-    ex.textContent="EX盾";
-    ex.title="EXライフの専用シールド";
+    ex.textContent=exOwn?`EX盾:${exOwn.length>6?exOwn.slice(0,6)+"…":exOwn}`:"EX盾";
+    ex.title=exOwn?`EXライフの専用シールド（${exOwn}）`:"EXライフの専用シールド（持ち主は場を離れています）";
     el.appendChild(ex);
   }
   if((showBLab||zone==="mana")&&c.frozen){
