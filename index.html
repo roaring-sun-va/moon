@@ -5237,7 +5237,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.6";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.8";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11078,6 +11078,7 @@ const FX_TYPES=[
   ["destroyAllCond","💥 条件に合うクリーチャーをすべて破壊する（両者・モーツァルト型／条件欄＝例：ドラゴン以外。先頭に「相手:」「自分:」を付けると片側だけ＝destroyFiltAllの片側指定できる版）"],
   ["manaKill","💎 相手のマナゾーンからn枚選び、持ち主の墓地に置く（マナ破壊・条件欄で対象を絞れる）"],
   ["psyOut","🌌 自分の超次元ゾーンからサイキック・クリーチャーをn体まで選んでバトルゾーンに出す（超次元ホール型／条件欄＝例：コスト9以下／闇。「合計6以下」と書くとコスト合計の上限になる）"],
+  ["foeMaxPowToHyper","🌌 相手の、パワーが一番大きいクリーチャーをすべて、持ち主の超次元ゾーンに置く（轟く跳躍 テレポートゾーン型／サイキックでない普通のクリーチャーでも置ける）"],
   ["psyJump","🦘 跳次元召喚n（自分の超次元ゾーンから、コストn以下で文明がすべて自分のマナゾーンにあるクリーチャーを1体、コストを支払ったものとして召喚。n＝コストの上限／条件欄でさらに絞れる）"],
   ["psyReturn","🌌 相手のサイキック・クリーチャーをn体選んで超次元ゾーンに戻す（ミスター・アクア型／条件欄で対象を絞れる）"],
   ["gachinkoExtraTurn","🎲 相手とガチンコ・ジャッジし、自分が勝ったら、このターンの後にもう一度自分のターンを行う（鬼丸「覇」型／引き分けは仕掛けた側の勝ち）"],
@@ -14300,9 +14301,10 @@ async function runFxList(pi,list,srcCard,inPump){
       if(jb===null||jb>=Z.shield.length){toast("（ブレイクしなかった）");renderAll();continue;}
       if(nB<=1)await breakShields(pi,1,null,jb);
       else{
-        // 選んだ盾を先頭に、足りない分は隣の盾から順に足してまとめて割る
-        const idxsB=[jb];
-        for(let i2=0;i2<Z.shield.length&&idxsB.length<nB;i2++)if(i2!==jb)idxsB.push(i2);
+        /* 💥 v15.8：クロスギアでブレイク数が増えた時、追加ぶんも自分で選ぶ。
+           以前は選んだ1枚のほかを盾の並び順で機械的に埋めていた（選べないので実質ランダムに見えた）。 */
+        let idxsB=await pickShieldIdxs(pi,nB);
+        if(!idxsB||!idxsB.length)idxsB=[jb];   // パネルを閉じた時は、最初に選んだ1枚だけ割る
         await breakShields(pi,idxsB.length,null,idxsB);
       }
       renderAll();
@@ -17806,6 +17808,38 @@ async function runFxList(pi,list,srcCard,inPump){
         LAST_ARRIVED=cc;emitEvent(pi,"summon");enqueueFx(pi,cc);
       }
       if(_out.length)await waitFxIdle(inPump);
+      renderAll();
+    }else if(f.t==="foeMaxPowToHyper"){
+      /* 🌌 v15.8 轟く跳躍 テレポートゾーン型
+         相手の、パワーが一番大きいクリーチャーを**すべて**、持ち主の超次元ゾーンに置く。
+         ・選ぶのではなく最大パワーで決まるので、「選ばれない」は関係ない。
+         ・サイキックでない普通のクリーチャーでも置ける（超次元ゾーンを使っていない相手にも働く）。
+         ・置いた後に誘発 foeHyperPlaced を鳴らす（跳次元召喚などをつなげるため）。 */
+      if(!S.vs){toast("（ソロのため相手の超次元送りはスキップ）");renderAll();continue;}
+      const ZO=zonesOf(op);
+      const poolH=ZO.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&!isSealed(x);});
+      if(!poolH.length){toast("🌌 相手のバトルゾーンにクリーチャーがいません");renderAll();continue;}
+      let maxP=-Infinity;
+      poolH.forEach(x=>{const pw=dispPower(x);if(pw!=null&&pw>maxP)maxP=pw;});
+      const tgtsH=poolH.filter(x=>{const pw=dispPower(x);return pw!=null&&pw===maxP;});
+      if(!tgtsH.length){toast("🌌 パワーが分かるクリーチャーがいません（手動で送ってください）");renderAll();continue;}
+      snap();
+      let movedH=0;
+      tgtsH.forEach(x=>{
+        const bi=ZO.battle.findIndex(y=>y.id===x.id);
+        if(bi<0)return;
+        leaveBattleCleanup(ZO,x,"hyper");
+        ZO.battle.splice(bi,1);
+        x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;x.seals=[];x.mark=false;
+        x.faceup=true;x.face=0;x.under=[];
+        ZO.hyper.push(x);
+        movedH++;
+      });
+      sfx("move");renderAll();
+      toast(`🌌 パワーが一番大きいクリーチャー${movedH}体（パワー${maxP}）を相手の超次元ゾーンへ`);
+      logOnly(`🌌 ${faceNameOf(srcCard||{name:"効果"})}：${S.players[op].label} のパワー最大のクリーチャー${movedH}体（${maxP}）を持ち主の超次元ゾーンに置いた`);
+      if(movedH)runWatchFx(pi,"foeHyperPlaced");
+      await waitFxIdle(inPump);
       renderAll();
     }else if(f.t==="psyJump"){
       /* 🦘 跳次元召喚n（v15.3）
@@ -23261,6 +23295,10 @@ async function execAttack(pi,id,tg){
             else if(rb&&rb.ctype==="dragheart"){bc.face=0;bc.rot=0;Z.hyper.push(bc);}
             else Z.hand.push(bc);
           });
+          /* 🔔 v15.7：入れ替えで場を離れたカードの「離れた時」を誘発させる。
+             革命チェンジ・J・チェンジ・P革命チェンジ・S革命チェンジは splice で直接動かすので、
+             moveCard を通らず、ソーナンデスの「バトルゾーンを離れた時」等が誘発していなかった。 */
+          if(S.expert)for(const bc of backs){runWatchFx(pi,"selfLeave",bc);runWatchFx(pi,"allyLeave",bc);}
           toast(`${_toShield?"🐉S革命チェンジ":isJ?"🃏J・チェンジ":r.pKakumei?"🌌P革命チェンジ":"♻革命チェンジ"}！ ${faceNameOf(hcard)}（${faceNameOf(c)}は${_toShield?"表向きシールド":c.isGR?"GRゾーンの下":r.pKakumei?"超次元ゾーン":isJ?"マナゾーン":"手札"}へ・攻撃継続）`);
           try{fxShare("evo",(_toShield?"S革命チェンジ！":isJ?"J・チェンジ！":r.pKakumei?"P革命チェンジ！":"革命チェンジ！"),
             `${S.players[pi].label}　${faceNameOf(c)} と入れ替え`,true,hcard.name,pi);}catch(e){}
@@ -24546,6 +24584,7 @@ const TRIG_EVS=[
   ["gachinkoShown","🎲 ガチンコ・ジャッジでこのカードを見せた時（逆転王女プリン型）"],
   ["foeToGrave","⚰ 相手のカードがどこからでも墓地に置かれた時（偽りの王 ヴィルヘルム型／条件欄で対象を絞れる）"],
   ["myHandDiscarded","🗑 相手の効果で自分の手札が捨てられた時（墓守の鐘ベルリン型）"],
+  ["foeHyperPlaced","🌌 相手の超次元ゾーンにカードが置かれた時（いまは「超次元ゾーンに置く」効果でだけ鳴ります）"],
   ["selfDiscardedByFoe","🗑 このカード自身が相手の効果で手札から捨てられた時（貝獣パウアー型／墓地にいるまま効果だけ働く・自分で捨てた時は働かない）"],
   ["onAwake","🔄 このクリーチャーに覚醒した時（裏返ってこの面になった時だけ。超次元から直接出した時は発動しない）"],
   ["foeHandDiscarded","🗑 相手が自身の手札を捨てた時（ジェニー・ジェーン型・自分の効果で捨てさせた時も含む）"],
@@ -29221,7 +29260,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gearShield)attrs.push("⚙クロス先が離れる時の身代わり");
     if(v.gearBreakAdd)attrs.push(`⚙クロス先のブレイク+${v.gearBreakAdd}`);
     if(v.escapePS)attrs.push("🏃エスケープP'S（破壊→かわりにランダム盾1を手札・各ターン1回）");
-    if(v.costRedAllyF&&v.costRedAllyN)attrs.push(`⚙常在：自分の${v.costRedAllyF}のコスト−${v.costRedAllyN}（最低1）`);
+    if(v.costRedAllyF&&v.costRedAllyN)attrs.push(`⚙常在：自分の${v.costRedAllyF}のコスト−${v.costRedAllyN}（最低1）${
+      (+v.costRedAllyN2)?`／${v.costRedAllyCond?`${v.costRedAllyCond} の間は`:""}さらに−${v.costRedAllyN2}`:""}`);
     if(v.korin)attrs.push(`🕊光臨（終了時タップで山上${v.korinLook||6}枚→出す${v.korinFilt?`：${v.korinFilt}`:""}）`);
     if(v.silent)attrs.push("サイレントスキル");
     if(v.guardman)attrs.push("ガードマン");
