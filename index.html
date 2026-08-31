@@ -5225,7 +5225,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.1";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.4";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5848,6 +5848,17 @@ function markArrive(c,opt){
    エターナル・Ω   … 一部の登録が eternalOmega になっていた（本体は etOmega しか読まない）。
    fxAliasReg() は登録そのものを両対応に直す。読み込み・パック取り込みのたびに通している。 */
 function hasMachF(r){return !!(r&&(r.machf||r.mach));}
+/* 🪆 v15.2 誘発（watchFx）の書き方は2通りある。
+     ① 平たい形 … {ev:"allyEnter",t:"draw",n:1,cond:"ドラゴン"}
+     ② 入れ子   … {ev:"allyEnter",cond:"ドラゴン",fx:[{t:"draw",n:1},{t:"retrieveHand",n:1,cond:"マナ:ドラゴン"}]}
+   ②は「誘発の条件」と「効果ごとの条件」を分けて書けるので、複数行の誘発ではこちらを使う。
+   どちらで書かれていても同じように動かすため、行を取り出す時は必ずこの2つを通すこと。 */
+function fxRowsOf(w){return (w&&!w.t&&Array.isArray(w.fx)&&w.fx.length)?w.fx:(w?[w]:[]);}
+/* ⚠ v15.4：攻撃まわりの誘発（selfAtk／selfAtkC／selfAtkP／selfAtkEnd）とガチンコ・ジャッジの
+   絞り込みは「w.t があること」で見ている（雷鳴神さんの環境のテストがこの形を見張っているため）。
+   **これらのイベントでは入れ子（fx:[...]）を使わず、平たい形で1行ずつ書くこと。**
+   出た時・離れた時など、それ以外の誘発は入れ子でよい（runFxList が展開する）。 */
+function hasFxRows(w){return !!(w&&(w.t||(Array.isArray(w.fx)&&w.fx.length)));}
 function hasJDiver(r){return !!(r&&(r.jdiver||r.jd));}
 function fxAliasReg(r){
   if(!r||typeof r!=="object")return r;
@@ -7108,7 +7119,7 @@ const FX_ACT_BANNER={
   nWorldShuffle:{k:"draw",t:"リセット＆ドロー！",big:1}, tutor:{k:"draw",t:"サーチ！"},
   slotReveal:{k:"draw",t:"めくって選ぶ！"}, hoganBlaster:{k:"draw",t:"ホーガン・ブラスター！",big:1},
   graveRecruit:{k:"revive",t:"蘇生！",big:1}, deathGate:{k:"revive",t:"デス・ゲート！",big:1},
-  psyOut:{k:"revive",t:"超次元から登場！",big:1}, myManaRecruit:{k:"revive",t:"マナから踏み倒し！"},
+  psyOut:{k:"revive",t:"超次元から登場！",big:1}, psyJump:{k:"revive",t:"跳次元召喚！",big:1}, myManaRecruit:{k:"revive",t:"マナから踏み倒し！"},
   foeManaRecruit:{k:"revive",t:"相手のマナから！"}, handManaRecruit:{k:"revive",t:"手札・マナから！"},
   deckCastSpellAll:{k:"revive",t:"山札から呪文を！",big:1}, freeSummon:{k:"revive",t:"踏み倒し！",big:1},
   bouncePick:{k:"bounce",t:"バウンス！"}, bounceFilt:{k:"bounce",t:"バウンス！"},
@@ -11033,6 +11044,7 @@ const FX_TYPES=[
   ["destroyAllCond","💥 条件に合うクリーチャーをすべて破壊する（両者・モーツァルト型／条件欄＝例：ドラゴン以外。先頭に「相手:」「自分:」を付けると片側だけ＝destroyFiltAllの片側指定できる版）"],
   ["manaKill","💎 相手のマナゾーンからn枚選び、持ち主の墓地に置く（マナ破壊・条件欄で対象を絞れる）"],
   ["psyOut","🌌 自分の超次元ゾーンからサイキック・クリーチャーをn体まで選んでバトルゾーンに出す（超次元ホール型／条件欄＝例：コスト9以下／闇。「合計6以下」と書くとコスト合計の上限になる）"],
+  ["psyJump","🦘 跳次元召喚n（自分の超次元ゾーンから、コストn以下で文明がすべて自分のマナゾーンにあるクリーチャーを1体、コストを支払ったものとして召喚。n＝コストの上限／条件欄でさらに絞れる）"],
   ["psyReturn","🌌 相手のサイキック・クリーチャーをn体選んで超次元ゾーンに戻す（ミスター・アクア型／条件欄で対象を絞れる）"],
   ["gachinkoExtraTurn","🎲 相手とガチンコ・ジャッジし、自分が勝ったら、このターンの後にもう一度自分のターンを行う（鬼丸「覇」型／引き分けは仕掛けた側の勝ち）"],
   ["selfManaThenFoeMana","🍃 このクリーチャーを自分のマナゾーンに置いてもよい。そうした場合、相手のクリーチャーn体をマナゾーンに置く（エリカッチュ型／条件欄＝例：タップ中／どちらもタップして置くので使用可能マナは増えない）"],
@@ -11132,7 +11144,9 @@ const EV_LABEL={
 };
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
-  return list.map(f=>FX_LABEL[f.t].replace("n",f.n)).join(" → ");
+  const rows=list.filter(f=>f&&f.t);
+  if(!rows.length)return "（効果なし）";
+  return rows.map(f=>String(FX_LABEL[f.t]||f.t).replace("n",f.n)).join(" → ");
 }
 /* ℹ️ カードの登録内容を人が読める要約テキストにする（デッキ編成画面などでの効果確認用） */
 function cardInfoText(key){
@@ -12584,7 +12598,7 @@ const MODE_FX_ALIAS={
   "相手盾マナ送り":"foeShieldToMana","相手シールドマナ":"foeShieldToMana","盾マナ送り":"foeShieldToMana",
   "パワー合計破壊":"destroySumPow","合計破壊":"destroySumPow","スクラッパー":"destroySumPow",
   "全体破壊":"destroyAllCond","すべて破壊":"destroyAllCond","マナ破壊":"manaKill","ガチンコ追加ターン":"gachinkoExtraTurn","鬼丸":"gachinkoExtraTurn",
-  "超次元":"psyOut","サイキック展開":"psyOut","サイキック戻し":"psyReturn",
+  "超次元":"psyOut","サイキック展開":"psyOut","サイキック戻し":"psyReturn","跳次元召喚":"psyJump","跳次元":"psyJump",
   "自分マナ送りして相手マナ送り":"selfManaThenFoeMana","エリカッチュ":"selfManaThenFoeMana",
   "山下踏み倒し":"bottomGravePlay","一番下":"bottomGravePlay",
   // 今回追加した効果ぶん
@@ -12953,7 +12967,8 @@ const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","dr
   "exileRecruitPerZone","elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS","foeTapThenDeckBottom",
   "drawPerElem","winDiscardDrawUntap","elemToShieldOrDeck","handGearFree","gearCrossAnyFree","breakMineThenKill",
   "handManaCastSpell","deckSearchTop","foeGraveTopCostToDeck","deckToGravePick","graveCastBottom",
-  "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho"]);
+  "manaCastSpell","deckAnyToGrave","motherEarth","motherMonsho",
+  "psyJump"]);
 /* 🛡 対戦中に増えたシールド（オレンジの印）に「どのカードで追加したか」を記録する。
    個々の効果に手を入れず、効果を1件処理し終えたタイミングで印だけ付いている盾を拾って刻む。 */
 function stampShieldSrc(label){
@@ -13090,6 +13105,13 @@ async function runFxList(pi,list,srcCard,inPump){
   try{
   const _srcLbl=srcCard?faceNameOf(srcCard):"";
   for(const f of list){
+    /* 🪆 v15.2 誘発の中身を配列で書いた登録（{ev:"allyEnter",cond:"ドラゴン",fx:[{t:"draw"}]}）を展開する。
+       以前は効果型（t）が無いので黙って何も起きず、「⚡誘発処理」のトーストだけが出ていた。
+       誘発の条件欄は呼び出し側で判定済み。中の各行は自分の条件欄をそのまま使う。 */
+    if(f&&!f.t&&Array.isArray(f.fx)&&f.fx.length){
+      await runFxList(pi,f.fx,srcCard,inPump);
+      continue;
+    }
     try{stampShieldSrc(_srcLbl);}catch(e){} // 前の効果で増えた盾を取りこぼさないよう、各行の頭でも刻む
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
@@ -17750,6 +17772,55 @@ async function runFxList(pi,list,srcCard,inPump){
         LAST_ARRIVED=cc;emitEvent(pi,"summon");enqueueFx(pi,cc);
       }
       if(_out.length)await waitFxIdle(inPump);
+      renderAll();
+    }else if(f.t==="psyJump"){
+      /* 🦘 跳次元召喚n（v15.3）
+         自分の超次元ゾーンから、コストn以下で、**その文明がすべて自分のマナゾーンにある**
+         クリーチャーを1体、コストを支払ったものとして召喚する。
+         ・n は体数ではなく**コストの上限**（跳次元召喚6 なら {t:"psyJump",n:6}）。
+         ・「コストを支払ったものとして召喚」なので踏み倒しではない。
+           _viaCheat を付けないので、オニカマス型（stBounceCheat）の対象にならない。
+         ・条件欄でさらに絞れる（例：ドラゴン）。 */
+      const capJ=Math.max(0,f.n|0);
+      const filtJ=String(f.cond||"").trim();
+      if(!Z.hyper||!Z.hyper.length){toast("🌌 超次元ゾーンにカードがありません");renderAll();continue;}
+      const manaCivJ=new Set();
+      for(const mcard of Z.mana){const rm=getReg(mcard);if(rm&&rm.civs)for(const cv of rm.civs)manaCivJ.add(cv);}
+      const civAllInMana=x=>{
+        const rx=getReg(x);const cs=(rx&&rx.civs)||[];
+        if(!cs.length)return true;                       // 文明が未登録のカードは止めない（登録漏れで詰まないように）
+        return cs.every(cv=>cv==="zero"||manaCivJ.has(cv)); // ゼロ（無色）は文明を持たないので条件に含めない
+      };
+      const poolJ=Z.hyper.filter(x=>{
+        const rx=getReg(x);
+        if(!rx||!isCreatureReg(rx))return false;
+        const cJ=(rx.cost!=null&&!isNaN(+rx.cost))?+rx.cost:0;
+        if(cJ>capJ)return false;
+        if(!civAllInMana(x))return false;
+        return !filtJ||lockFilterOk(filtJ,rx,x);
+      });
+      if(!poolJ.length){
+        toast(`🦘 跳次元召喚${capJ}：条件に合うクリーチャーがいません（コスト${capJ}以下／文明がすべて自分のマナゾーンにある${filtJ?`／${filtJ}`:""}）`);
+        renderAll();continue;
+      }
+      const jJ=await pickCard(`🦘 跳次元召喚${capJ}：召喚するクリーチャーを選択\n（コスト${capJ}以下・文明がすべて自分のマナゾーンにあるもの${filtJ?`・${filtJ}`:""}）\nキャンセルで召喚しない`,
+        poolJ,{sub:x=>{const rx=getReg(x);return rx&&rx.cost!=null?`コスト${rx.cost}`:"";}});
+      if(jJ===null){renderAll();continue;}
+      const tgtJ=poolJ[jJ];
+      const hiJ=Z.hyper.findIndex(x=>x.id===tgtJ.id);
+      if(hiJ<0){renderAll();continue;}
+      snap();
+      const ccJ=Z.hyper.splice(hiJ,1)[0];
+      ccJ.faceup=true;ccJ.tapped=false;ccJ.sideways=false;ccJ.isPsy=true;   // 🌌 離れたら超次元へ戻る印
+      const rcJ=getReg(ccJ);
+      ccJ.sick=(S.turn>0)&&!(rcJ&&rcJ.sa)&&!/psy/.test(String(rcJ&&rcJ.ctype||""));
+      if(!battleEntryOk(pi,ccJ)){Z.hyper.push(ccJ);renderAll();continue;}
+      Z.battle.push(ccJ);markArrive(ccJ);
+      noteSummonTurn(pi,ccJ);   // 💠 このターンの召喚として数える（各ターン最初の召喚の軽減判定に使う）
+      sfx("move");renderAll();
+      toast(`🦘 跳次元召喚${capJ}：${faceNameOf(ccJ)} を召喚した（コストを支払ったものとして）`);
+      LAST_ARRIVED=ccJ;emitEvent(pi,"summon");enqueueFx(pi,ccJ);
+      await waitFxIdle(inPump);
       renderAll();
     }else if(f.t==="psyReturn"){
       // 🌌 相手のサイキック・クリーチャーを超次元ゾーンに戻す（ミスター・アクア型）
@@ -24054,7 +24125,7 @@ function fxUsageCounts(){
     if(!r)continue;
     const seenT=new Set(),seenE=new Set();
     (r.faces||[]).forEach(fl=>(fl||[]).forEach(f=>{if(f&&f.t)seenT.add(f.t);}));
-    (r.watchFx||[]).forEach(w=>{if(w){if(w.t)seenT.add(w.t);if(w.ev)seenE.add(w.ev);}});
+    (r.watchFx||[]).forEach(w=>{if(w){for(const x of fxRowsOf(w))if(x&&x.t)seenT.add(x.t);if(w.ev)seenE.add(w.ev);}});
     seenT.forEach(t=>type.set(t,(type.get(t)||0)+1));
     seenE.forEach(e=>ev.set(e,(ev.get(e)||0)+1));
     for(const k of Object.keys(r)){
@@ -29254,7 +29325,7 @@ $("btnRegList").addEventListener("click",()=>{
         「（効果なし）」だけに見えて、登録できていないと勘違いしやすかった。
         ⚠ 上の hint.textContent の行は add49.js が「faceFx 経由で読む」形を見ているので、
            書き換えずにこの下へ足すこと。 */
-     const _w=(v.watchFx||[]).map(w=>`${EV_LABEL[w.ev]||w.ev}${w.once?"（各ターン1回）":""}${w.cond?`〔${w.cond}〕`:""}：${fxSummary(w.fx)}`);
+     const _w=(v.watchFx||[]).map(w=>`${EV_LABEL[w.ev]||w.ev}${w.once?"（各ターン1回）":""}${w.cond?`〔${w.cond}〕`:""}：${fxSummary(fxRowsOf(w))}`);
      if(_w.length){
        const _has=v.twin||(_f0&&_f0.length);
        hint.textContent=(_has?hint.textContent+" ／ ":"")+_w.join(" ／ ");
