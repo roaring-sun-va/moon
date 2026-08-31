@@ -5237,7 +5237,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.5";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.6";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11172,7 +11172,7 @@ const EV_LABEL={
   turnEndOpp:"相手のターンの終わり",turnEndBoth:"ターンの終わり",
   selfWinBattle:"バトルに勝った時",allySpell:"味方が呪文を唱えた時",spell:"呪文を唱えた時",
   chosenByFoe:"相手に選ばれた時",tapAbility:"タップした時",kizuna:"キズナ",
-  foeToGrave:"相手のが墓地に置かれた時",myHandDiscarded:"自分の手札が捨てられた時",
+  foeToGrave:"相手のが墓地に置かれた時",myHandDiscarded:"自分の手札が捨てられた時",selfDiscardedByFoe:"相手の効果で手札から捨てられた時",
   foeHandDiscarded:"相手の手札が捨てられた時",allyEvo:"味方が進化した時",
   gachinkoShown:"ガチンコ・ジャッジ",revFinal:"革命ファイナル",revFinalPS:"革命ファイナル",
 };
@@ -19084,6 +19084,26 @@ function afterHandDiscard(owner,c,byPi){
       }
     }
   }catch(e){}
+  /* 🗑 v15.6 このカード自身が「相手のカードの効果によって手札から捨てられた時」（貝獣パウアー型）。
+     ・捨てさせたのが相手（byPi!==owner）の時だけ働く。自分で捨てた時は働かない。
+     ・カードは墓地にあるまま、効果だけを解決する（マッドネスのようにバトルゾーンには出ない）。
+     ・ハンデスの解決が終わってから動かすので、他の「捨てられた時」と順番が競合しない。 */
+  try{
+    if(byPi!=null&&byPi!==owner){
+      const rSD=getReg(c);
+      const listSD=((rSD&&rSD.watchFx)||[]).filter(w=>w&&w.ev==="selfDiscardedByFoe");
+      if(listSD.length&&!c._sdByFoeQ){
+        c._sdByFoeQ=true;
+        const cidSD=c.id;
+        enqueueWatchJob(async()=>{
+          c._sdByFoeQ=false;
+          if(!zonesOf(owner).grave.some(x=>x.id===cidSD))return;   // 既に墓地から動いていたら何もしない
+          toast(`🗑 ${faceNameOf(c)}：相手の効果で手札から捨てられた時の効果`);
+          await runFxList(owner,listSD,c,false);
+        });
+      }
+    }
+  }catch(e){}
   // マッドネス
   const rM=getReg(c);
   if(rM&&rM.madness){
@@ -24526,6 +24546,7 @@ const TRIG_EVS=[
   ["gachinkoShown","🎲 ガチンコ・ジャッジでこのカードを見せた時（逆転王女プリン型）"],
   ["foeToGrave","⚰ 相手のカードがどこからでも墓地に置かれた時（偽りの王 ヴィルヘルム型／条件欄で対象を絞れる）"],
   ["myHandDiscarded","🗑 相手の効果で自分の手札が捨てられた時（墓守の鐘ベルリン型）"],
+  ["selfDiscardedByFoe","🗑 このカード自身が相手の効果で手札から捨てられた時（貝獣パウアー型／墓地にいるまま効果だけ働く・自分で捨てた時は働かない）"],
   ["onAwake","🔄 このクリーチャーに覚醒した時（裏返ってこの面になった時だけ。超次元から直接出した時は発動しない）"],
   ["foeHandDiscarded","🗑 相手が自身の手札を捨てた時（ジェニー・ジェーン型・自分の効果で捨てさせた時も含む）"],
 ];
