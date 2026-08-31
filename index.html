@@ -5237,7 +5237,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.8";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.9";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5867,6 +5867,29 @@ function hasMachF(r){return !!(r&&(r.machf||r.mach));}
      ② 入れ子   … {ev:"allyEnter",cond:"ドラゴン",fx:[{t:"draw",n:1},{t:"retrieveHand",n:1,cond:"マナ:ドラゴン"}]}
    ②は「誘発の条件」と「効果ごとの条件」を分けて書けるので、複数行の誘発ではこちらを使う。
    どちらで書かれていても同じように動かすため、行を取り出す時は必ずこの2つを通すこと。 */
+/* 🪆 v15.9 入れ子の誘発を、効果エディタで扱える平たい行に開く。
+   {ev,cond,once,fx:[{t,n,cond},…]} → [{ev,cond,once,t,n,cond2},…]
+   誘発の条件（cond）は各行にそのまま引き継ぎ、効果ごとの条件は cond2 に移す。 */
+function fxWatchFlatten(list){
+  const out=[];
+  (list||[]).forEach(w=>{
+    if(!w)return;
+    if(!w.t&&Array.isArray(w.fx)&&w.fx.length){
+      w.fx.forEach(x=>{
+        if(!x)return;
+        const row={...w};
+        delete row.fx;
+        Object.assign(row,x);
+        row.cond=String(w.cond||"");
+        row.cond2=String(x.cond||"");
+        out.push(row);
+      });
+      return;
+    }
+    out.push({...w});
+  });
+  return out;
+}
 function fxRowsOf(w){return (w&&!w.t&&Array.isArray(w.fx)&&w.fx.length)?w.fx:(w?[w]:[]);}
 /* ⚠ v15.4：攻撃まわりの誘発（selfAtk／selfAtkC／selfAtkP／selfAtkEnd）とガチンコ・ジャッジの
    絞り込みは「w.t があること」で見ている（雷鳴神さんの環境のテストがこの形を見張っているため）。
@@ -6056,12 +6079,16 @@ function evoKindOf(r){
   if((r.twin||r.ctype==="twinpact")&&r.twinTop&&EVO_CTYPES.includes(r.twinTop))return r.twinTop;
   return null;
 }
-function evoKindLabel(k){return k==="ultimate"?"究極進化":k==="neoevo"||k==="neodream"?"NEO":k==="lunatic"?"ルナティック進化":"進化";}
+function evoKindLabel(k){return k==="ultimate"?"究極進化":k==="gneo"||k==="gneodream"?"G-NEO":k==="neoevo"||k==="neodream"?"NEO":k==="lunatic"?"ルナティック進化":"進化";}
 /* NEOクリーチャー判定（単体neoevo/neodream or ツインパクト上面neoevo） */
 function isNeoReg(r){
   if(!r)return false;
+  /* 🧬 v15.9：G-NEO（gneo）と G-NEOドリーム（gneodream）もここに含める。
+     入っていなかったので進化クリーチャー扱いになり、「進化元を選ぶ」だけで
+     『通常クリーチャーとして出す／NEO進化として出す』の確認パネルが出ていなかった。 */
   if(r.ctype==="neoevo"||r.ctype==="neodream")return true;
-  if((r.twin||r.ctype==="twinpact")&&r.twinTop==="neoevo")return true;
+  if(r.ctype==="gneo"||r.ctype==="gneodream")return true;
+  if((r.twin||r.ctype==="twinpact")&&(r.twinTop==="neoevo"||r.twinTop==="gneo"||r.twinTop==="gneodream"))return true;
   return false;
 }
 /* 🌟 ドリーム・クリーチャー（DMR）：自分のバトルゾーンに同名は2つ以上出ない */
@@ -9656,7 +9683,10 @@ function runWatchFx(pi,type,trigCard){
               else{const rt=getReg(trigCard);if(!lockFilterOk(cnd,rt,trigCard)){_diag(type==="allyEnter"?"に出たカード（自身）が合いません":"に唱えた呪文が合いません");return;}}
             }
           }
-          w2={...w,cond:""};
+          /* 🔎 v15.9：誘発の条件欄（cond）は「誘発するかどうか」の判定なので、効果には渡さない。
+             効果そのものを絞りたい時は cond2（効果側の条件）に書く。
+             入れ子（fx:[…]）で書いた場合は、中の各行が自分の cond をそのまま使う。 */
+          w2={...w,cond:String(w.cond2||"")};
         }
         if(w.once)_onceKeys.push(onceKey); // 実行後にまとめて記録（1手戻すと未使用に戻せるよう、消費はfx完了後）
         fx.push(w2);
@@ -24698,7 +24728,17 @@ function fxTrigRowEl(i){
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(ev);top.appendChild(evb);top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
   bot.appendChild(hld);bot.appendChild(onceL);bot.appendChild(g1L);bot.appendChild(optLw);bot.appendChild(hmLw);bot.appendChild(pbLw);bot.appendChild(skLw);bot.appendChild(fxHenreiEl(f));
-  const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
+  /* 🔎 v15.9：効果側の条件。上の条件欄は「誘発するかどうか」の判定なので、
+     「マナのドラゴンを戻す」のように**効果の対象**を絞りたい時はこちらに書く。
+     以前はこの欄が無く、条件欄に効果の条件を書くと『その名前のカードが出た時』の意味になっていた。 */
+  const cnd2=document.createElement("input");
+  cnd2.type="text";
+  cnd2.placeholder="効果側の条件（例：マナ:ドラゴン・空欄＝しぼらない）";
+  cnd2.title="上の条件欄は『誘発するかどうか』の判定です。効果の対象を絞りたい時（例：マナゾーンのドラゴンだけ手札に戻す）はこちらに書きます";
+  cnd2.style.cssText="flex:1 1 100%;min-width:0;font-size:12px";
+  cnd2.value=f.cond2||"";
+  cnd2.onchange=()=>{f.cond2=cnd2.value.trim();};
+  const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);condWrap.appendChild(cnd2);
   bot.appendChild(condWrap);
   row.appendChild(top);row.appendChild(bot);
   return row;
@@ -28174,7 +28214,11 @@ function openFxEditor(key){
     escapeFoeTurn:cur?!!cur.escapeFoeTurn:false,
     seiba:cur?!!cur.seiba:false,
     seibaF:cur&&cur.seibaF||"",
-    watchFx:cur&&cur.watchFx?cur.watchFx.map(x=>({...x})):[],
+    /* 🪆 v15.9：入れ子の誘発（{ev,cond,fx:[…]}）は、効果エディタでは
+       1行ずつの平たい形＋「効果側の条件」(cond2) に開いて見せる。
+       開かないと効果型が空になり、画面には先頭の効果（n枚ドロー）が出てしまい、
+       そのまま保存すると中身が消えていた。 */
+    watchFx:cur&&cur.watchFx?fxWatchFlatten(cur.watchFx):[],
     d2:cur?!!cur.d2:false,
     d2SealRep:cur?!!cur.d2SealRep:false,
     seal:cur&&cur.seal||0,
