@@ -5240,7 +5240,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.11";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.12";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7708,6 +7708,7 @@ function restoreState(st){
   if(st.ec!=null)ENTERED_CNT=st.ec|0;
   if(st.pt!=null)S.pturn=st.pt|0;
   if(st.wo)S._watchOnce=st.wo; // 1手戻る：各ターン1回の使用権も戻す
+  S._watchOncePend={};           // 予約（解決待ち）は戻した時点で消す
   if(st.g1)S._once1G=st.g1;   // 🔟 ゲーム中1回の使用済みも戻す
   if(st.fs)S.firstSumUsed=st.fs; // 召喚コスト軽減の使用状況も戻す
   if(st.su)S.sumTurn=st.su;       // 💠 このターンの召喚記録も戻す
@@ -8341,7 +8342,7 @@ function startGame(picks){
   FX_HOLD=false;GAME_PAUSE=false;LABY_RUN=false;ALLY_WAIT=0;try{ORI_QUEUE.length=0;TOGRAVE_PENDING.length=0;TRIG_PENDING.length=0;}catch(e){}{const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
   MUGETSU_BUSY=false;MUGETSU_TE_DONE=false;MUGETSU_ASKED={};MUGETSU_PENDING=new Set();MUGETSU_THIS_TRIG=new Set();
   MUGETSU_OUT_WAIT=new Set();MUGETSU_OUT_BUSY=false;
-  S._watchOnce={};S._once1G={};S.pendingAtk=null;MOVE_BLOCKED=false;
+  S._watchOnce={};S._watchOncePend={};S._once1G={};S.pendingAtk=null;MOVE_BLOCKED=false;
   try{$("fxBanner").classList.remove("show");}catch(e){}
   if(!S.players[0].mainList.length){openDeckPanel();toast("先にデッキを登録してください");return;}
   snap();
@@ -9626,12 +9627,19 @@ function runWatchFx(pi,type,trigCard){
         const onceKey=`${c.id}:${type}:${wi}`;
         if(w.once){
           S._watchOnce=S._watchOnce||{};
-          if(S._watchOnce[onceKey]===`${S.turn}:${S.who}`){_onceSkipped++;return;}
+          S._watchOncePend=S._watchOncePend||{};
+          /* 1️⃣ v15.12：使用済みの記録は効果が終わってから付ける（1手戻せるように）ので、
+             同時に2体出ると2回目の判定が「まだ未使用」になり二重に発動していた。
+             予約（_watchOncePend）を積む時点で立てて、それも使用済みとして扱う。 */
+          if(S._watchOnce[onceKey]===`${S.turn}:${S.who}`||S._watchOncePend[onceKey]){_onceSkipped++;return;}
           // 「各ターン1回」はこの登録を持つカード個体ごとに数える。
           // 以前は allyEnter 全般へ「そのターン最初の対象だけ」という別能力まで混ぜていたため、
           // アーシュの後に出た熊田すず等が不発になっていた。初回限定は専用登録で表現する。
         }
-        let w2=w;
+        /* 🔎 v15.12：効果側の条件（cond2）は、誘発の条件欄が空でも効くようにする。
+           以前は誘発の条件欄が書かれている時にしか cond2 が渡らず、
+           ソーナンデスのように誘発の条件が無いカードでは回収のゾーン指定が効かなかった。 */
+        let w2=(w&&w.cond2)?{...w,cond:String(w.cond2)}:w;
         // 🕐 ターン限定（自分ターン/相手ターン）は全イベント共通でゲート（allyEnter以外の誘発に登録しても効くように）
         {
           const cndAll=String(w.cond||"");
@@ -9697,6 +9705,8 @@ function runWatchFx(pi,type,trigCard){
       if(fx.length&&_onceSkipped)toast(`1️⃣ ${faceNameOf(c)}：各ターン1回の効果${_onceSkipped}件はこのターン使用済みのためスキップ（残りの効果のみ実行）`);
       if(fx.length){
         const _oks=_onceKeys.slice();
+        // 1️⃣ 予約した時点で「使う」と決まるので、ここで押さえておく（同時に出た2体目は弾かれる）
+        if(_oks.length){S._watchOncePend=S._watchOncePend||{};for(const k of _oks)S._watchOncePend[k]=true;}
         // ⏱ 誘発時点のバトルゾーン位置を記録（デュエプレ「右にあるものから解決」の基準。離れた場合は離れた時点の位置を参照）
         const _pos0=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
         // 🔬 予約時点でバトルゾーンにいないはずはないが、万一あれば記録して原因を追えるようにする
@@ -9717,7 +9727,8 @@ function runWatchFx(pi,type,trigCard){
           try{ await runFxList(pi,fx,c); }
           finally{ FX_TRIG=_prevTrig; }
           S._watchOnce=S._watchOnce||{};
-          for(const k of _oks)S._watchOnce[k]=`${S.turn}:${S.who}`;
+          S._watchOncePend=S._watchOncePend||{};
+          for(const k of _oks){S._watchOnce[k]=`${S.turn}:${S.who}`;delete S._watchOncePend[k];}
         };
         if(S.expert&&S.vs&&(fxRunning||FX_GATE>0)){
           TRIG_PENDING.push({pi,fx,c,onceKeys:_oks,ev:type,pos:_pos0,trigCard:trigCard||null});
@@ -19320,7 +19331,12 @@ function afterHandDiscard(owner,c,byPi){
     const rd=getReg(c);
     const isJok=rd&&raceMatch(rd,"ジョーカーズ");
     if(isJok||!rd){
-      (async()=>{
+      /* 🎪 v15.12：いま解決中の効果に割り込まないよう、効果キューに積む。
+         （ソーナンデスの「手札を1枚捨てる → マナから回収」の途中に割り込み、
+           回収の前にビッグ1が動いてしまっていた） */
+      const _bigId=holder.id;
+      enqueueWatchJob(async()=>{
+        if(!zonesOf(owner).battle.some(x=>x.id===_bigId))return;   // 途中で離れていたら何もしない
         const yes=await ask(`🎪 ジョラゴン・ビッグ1（${faceNameOf(holder)}）\n《${faceNameOf(c)}》が手札から捨てられました。出た時能力を使いますか？${!rd?"\n（効果登録なし・手動処理になります）":""}`);
         if(!yes)return;
         const list=rd&&rd.faces&&rd.faces[0]&&rd.faces[0].length?rd.faces[0]:null;
@@ -19329,7 +19345,7 @@ function afterHandDiscard(owner,c,byPi){
           toast(`🎪 ${faceNameOf(c)}：自動効果の登録がないため手動で処理してください`);
         }
         renderAll();
-      })();
+      });
     }
   }
   // ⚡ 「このカードが（どこからでも）墓地に置かれた時」（ゾルザーク型toGrave）：手札を捨てて墓地に置かれた場合も発火
