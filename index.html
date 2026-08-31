@@ -643,7 +643,17 @@ body.ld-peeking .olay{padding-bottom:158px}
    あとから当たって小窓にならなかった（v14.69で判明）。!important 同士なら詳細度でこちらが勝つ。 */
 #settingsOlay.peek>.panelbox{pointer-events:auto;overflow:auto;
   max-height:min(44dvh, calc(100dvh - var(--safetop,0px) - var(--safebot,0px) - 10px))!important;
-  box-shadow:0 -8px 40px rgba(0,0,0,.7);border-color:var(--accent)}
+  box-shadow:0 -8px 40px rgba(0,0,0,.7);border-color:var(--accent);
+  /* 🖐 v15.5：小窓は見出しをつまんで動かせる。位置はこの2つの変数で持つ */
+  transform:translate(var(--tuneX,0px),var(--tuneY,0px))}
+/* 見出しは指でもマウスでもつまめるようにする。touch-action:none が無いと画面ごとスクロールしてしまう */
+#settingsOlay.peek>.panelbox>h2{cursor:grab;touch-action:none;position:sticky;top:0;z-index:2;
+  background:var(--panel,#0d1119);margin:0 -12px 8px;padding:8px 12px;border-bottom:1px solid var(--line)}
+#settingsOlay.peek>.panelbox>h2::after{content:"🖐 つまんで移動（ダブルタップで戻す）";
+  margin-left:auto;font-size:10.5px;font-weight:700;color:var(--muted)}
+#settingsOlay.peek>.panelbox>h2{display:flex;align-items:center;gap:6px}
+#settingsOlay.peek>.panelbox.tuneDrag{transition:none}
+#settingsOlay.peek>.panelbox.tuneDrag>h2{cursor:grabbing}
 /* 小窓の間は説明文・注意書きを畳んで、調整する項目だけを見せる */
 #settingsOlay.peek #setLegal,
 #settingsOlay.peek #btnTutorial,
@@ -2789,6 +2799,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このカードがどこからでも自分の墓地に置かれる時、かわりにこのカードと自分の墓地を山札に加えてシャッフルする（悠久を統べる者 フォーエバー・プリンセス型）"><input type="checkbox" id="fxGraveShuffleRep"> ♾ 墓地に置かれる時、かわりに墓地＋自身を山札へシャッフル（フォーエバー・プリンセス型）</label>
         <label style="display:none"><input type="checkbox" id="fxMach"> マッハファイター（出たターン、クリーチャーを攻撃できる）</label>
         <label><input type="checkbox" id="fxHEnergy"> ハイパーエナジー（自分のクリーチャーをタップして1体につきコスト2軽減）</label>
+        <label><input type="checkbox" id="fxJRet"> 🃏 召喚する時、自分のジョーカーズを好きな数手札に戻し、その数だけコスト軽減（ジョット・ガン・ジョラゴン型／戻したぶん場が空くので7面上限でも出せる）</label>
         <input type="text" id="fxHyperNote" placeholder="HM時の能力メモ（自動化できない分）" style="flex:1;min-width:120px">
         <span style="font-size:12px;font-weight:700">HM時パワー</span>
         <label>自分ターン中、破壊合計 <input type="number" id="fxHandDestroyN" min="0" max="20" value="0" style="width:4.5em"> 体以上になった破壊時、手札から出す（同名T1）</label>
@@ -2970,6 +2981,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <select id="fxAwakenEv" style="font-size:12px">
             <option value="">（覚醒しない）</option>
             <option value="turnStartMine">自分のターンの開始時</option>
+            <option value="turnStartAny">各ターンの開始時（自分・相手のどちらのターンでも・シャコガイル型）</option>
             <option value="turnStartAny">各ターンの開始時</option>
             <option value="turnEndMine">自分のターンの終わりに</option>
             <option value="turnEndOpp">相手のターンの終わりに</option>
@@ -5225,7 +5237,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.4";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.5";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5600,6 +5612,7 @@ function queueCheatWatchers(pTo,c){
             const ZB=zonesOf(pTo);
             const bi=ZB.battle.findIndex(x=>x.id===c.id);
             if(bi<0)return;
+            if(await cheatLeaveRep(pTo,c,live))return;   // ♻ v15.5 離場置換（この経路は moveCard を通らないので自分で見る）
             snap();
             leaveBattleCleanup(ZB,c,_toK==="deckBottom"?"deck":_toK); // 装備・封印・重なっていたカードを整理
             ZB.battle.splice(bi,1);
@@ -5636,6 +5649,7 @@ function queueCheatWatchers(pTo,c){
             const ZB2=zonesOf(pTo);
             const bi2=ZB2.battle.findIndex(x=>x.id===c.id);
             if(bi2<0)return;
+            if(await cheatLeaveRep(pTo,c,live))return;   // ♻ v15.5 離場置換（同上）
             snap();
             leaveBattleCleanup(ZB2,c,"mana");
             ZB2.battle.splice(bi2,1);
@@ -9239,17 +9253,37 @@ async function finishNextTurn(cur){
         }
       })();
     }
-    const ts=Z.battle.filter(c=>{const r=getReg(c);return r&&r.watchFx&&r.watchFx.some(w=>w.ev==="turnStartMine");});
+    /* ⏰ v15.5：「各ターンの開始時」（turnStartAny）は、相手のターンのはじめにも働く。
+       ターンプレイヤー側は turnStartMine と一緒に、相手側は turnStartAny だけを拾う。 */
+    const ts=Z.battle.filter(c=>{const r=getReg(c);return r&&r.watchFx&&r.watchFx.some(w=>w.ev==="turnStartMine"||w.ev==="turnStartAny");});
     if(ts.length){
       await (async()=>{
         for(const c of ts){
           if(isIgnored(c,pi))continue;
           const r=getReg(c);
           const fx=onceFilter(c,r.watchFx.filter(w=>w.ev==="turnStartMine"));
-          if(fx.length){toast(`⚡ターン開始時：${faceNameOf(c)}`);await runFxList(pi,fx,c);}
+          const fxAny=onceFilter(c,r.watchFx.filter(w=>w.ev==="turnStartAny"));   // ⏰ v15.5「各ターンの開始時」
+          const fxAll=[...fx,...fxAny];
+          if(fxAll.length){toast(`⚡ターン開始時：${faceNameOf(c)}`);await runFxList(pi,fxAll,c);}
         }
         renderAll();
       })();
+    }
+    /* ⏰ v15.5：相手側の「各ターンの開始時」（turnStartAny）。
+       相手のターンのはじめにも働くカード（水上第九院 シャコガイル型）はここで拾う。
+       持ち主から見た処理なので、効果は持ち主（foe）の側で流す。 */
+    {
+      const foe=(pi===0)?1:0;
+      const ZF=zonesOf(foe);
+      const tsA=ZF.battle.filter(c=>{const r=getReg(c);return r&&r.watchFx&&r.watchFx.some(w=>w.ev==="turnStartAny");});
+      for(const c of tsA){
+        if(isIgnored(c,foe))continue;
+        if(isSealed(c))continue;
+        const r=getReg(c);
+        const fx=onceFilter(c,r.watchFx.filter(w=>w.ev==="turnStartAny"));
+        if(fx.length){toast(`⚡ターン開始時：${faceNameOf(c)}（${S.players[foe].label}）`);await runFxList(foe,fx,c);}
+      }
+      renderAll();
     }
     // 🃏 ルナ・コスモビュー型：自分のターンに1枚目を引く時、もう1枚余分に引いてもよい
     {
@@ -23118,15 +23152,30 @@ async function execAttack(pi,id,tg){
         if(h.id===c.id)continue;
         const r=getReg(h);
         if(!r)continue;
-        // J・チェンジ：手札から。攻撃クリーチャーのコストがN以上（革命チェンジと同じ入れ替え挙動）
-        if(zn==="hand"&&r.jchange){
-          if(aRegNow&&aRegNow.cost!=null&&aRegNow.cost>=(r.jchangeN||0))cands.push({h,zn,jchange:true});
-          continue;
-        }
         const inv=r.invade||r.kakumei,sv=r.sInvade;
         if(!(zn==="hand"?(inv||sv):(sv&&sZones(sv).includes(zn))))continue;
         if(!condOk(r))continue;
         cands.push({h,zn});
+      }
+    }
+    /* 🃏 J・チェンジ（v15.5で全面的に直した）
+       能力を持つのは**攻撃するクリーチャー自身**（入れ替え「元」）。革命チェンジと逆。
+       攻撃する時、自分の**マナゾーン**にあるコストN以下のジョーカーズ・クリーチャーと入れ替え、
+       攻撃していたクリーチャーはマナゾーンへ行く（同時なのでマナの枚数は変わらない）。
+       マナのカードはタップしていてもよい。
+       ⚠ v15.4までは「手札にある jchange 持ちカード」を探していたので、ソーナンデスのように
+         自分が Jチェンジ を持つクリーチャーでは一度も発動しなかった。 */
+    {
+      const r=aRegNow;   // 攻撃しているクリーチャーの登録
+      if(r&&r.jchange){
+        const capJ=Math.max(0,r.jchangeN|0);
+        for(const h of Z.mana){
+          const rm=getReg(h);
+          if(!rm||!isCreatureReg(rm))continue;
+          if(!raceMatch(rm,"ジョーカーズ"))continue;
+          if(!(rm.cost!=null&&+rm.cost<=capJ))continue;
+          cands.push({h,zn:"mana",jchange:true});
+        }
       }
     }
     // 🐉 S革命チェンジ（表向きのシールドゾーンから）：ヒカリスマ型・コスト5以上アーマードの攻撃時
@@ -23187,11 +23236,12 @@ async function execAttack(pi,id,tg){
             const rb=getReg(bc);
             if(_toShield&&bidx===0){bc.sideways=false;bc.under=[];Z.shield.push(bc);void notifyShieldPlaced(pi,[bc]);} // 本体を表向きの新しいシールドへ
             else if(r.pKakumei){bc.face=0;bc.rot=0;bc.isPsy=false;bc.under=[];Z.hyper.push(bc);} // 🌌 P革命チェンジ：チェンジ元は超次元ゾーンへ送られる
+            else if(isJ){bc.faceup=true;bc.under=[];manaTapIn(bc,pi);Z.mana.push(bc);}   // 🃏 J・チェンジ：入れ替え元はマナゾーンへ
             else if(bc.isGR){bc.faceup=false;bc.under=[];Z.gr.push(bc);}
             else if(rb&&rb.ctype==="dragheart"){bc.face=0;bc.rot=0;Z.hyper.push(bc);}
             else Z.hand.push(bc);
           });
-          toast(`${_toShield?"🐉S革命チェンジ":isJ?"🃏J・チェンジ":r.pKakumei?"🌌P革命チェンジ":"♻革命チェンジ"}！ ${faceNameOf(hcard)}（${faceNameOf(c)}は${_toShield?"表向きシールド":c.isGR?"GRゾーンの下":r.pKakumei?"超次元ゾーン":"手札"}へ・攻撃継続）`);
+          toast(`${_toShield?"🐉S革命チェンジ":isJ?"🃏J・チェンジ":r.pKakumei?"🌌P革命チェンジ":"♻革命チェンジ"}！ ${faceNameOf(hcard)}（${faceNameOf(c)}は${_toShield?"表向きシールド":c.isGR?"GRゾーンの下":r.pKakumei?"超次元ゾーン":isJ?"マナゾーン":"手札"}へ・攻撃継続）`);
           try{fxShare("evo",(_toShield?"S革命チェンジ！":isJ?"J・チェンジ！":r.pKakumei?"P革命チェンジ！":"革命チェンジ！"),
             `${S.players[pi].label}　${faceNameOf(c)} と入れ替え`,true,hcard.name,pi);}catch(e){}
         }
@@ -25565,6 +25615,7 @@ function renderFxEditor(){
   $("fxSA").checked=!!FXEDIT.sa;
   $("fxGraveShuffleRep").checked=!!FXEDIT.graveShuffleRep;
   $("fxHEnergy").checked=!!FXEDIT.henergy;
+  {const e=$("fxJRet");if(e)e.checked=!!FXEDIT.jret;}
   {const e=$("fxHandDestroyN");if(e)e.value=String(FXEDIT.handDestroyN||0);}
   $("fxMach").checked=hasMachF(FXEDIT);
   $("fxZRush").checked=!!FXEDIT.zrush;
@@ -27765,6 +27816,7 @@ function openFxEditor(key){
     dddOff:cur&&(+cur.dddOff||0)||0,
     dddPay:cur&&(+cur.dddPay||0)||0,
     dddMinus:cur?!!cur.dddMinus:false,
+    jret:cur?!!cur.jret:false,
     vtCost:cur?!!cur.vtCost:false,
     vtMode:cur&&cur.vtMode||"battle",
     fushigiCiv:cur&&cur.fushigiCiv?cur.fushigiCiv.slice():[],
@@ -28350,6 +28402,7 @@ $("fxSave").addEventListener("click",async ()=>{
     sa:$("fxSA").checked,
     graveShuffleRep:$("fxGraveShuffleRep").checked,
     henergy:$("fxHEnergy").checked,
+    jret:$("fxJRet")?$("fxJRet").checked:false,
     handDestroyN:$("fxHandDestroyN")?(parseInt($("fxHandDestroyN").value,10)||0):0,
     mach:($("fxMachF").checked||$("fxMach").checked),
     zrush:$("fxZRush").checked,
@@ -29108,7 +29161,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.invade)attrs.push("侵略");
     if(v.kakumei)attrs.push("革命チェンジ");
     if(v.mugetsu)attrs.push((v.mugetsu==="zetsu"?"無月の門・絶":v.mugetsu==="kyomu"?"虚無月の門":"無月の門")+`〔${v.mugetsuN||6}〕`);
-    if(v.jchange)attrs.push(`J・チェンジ${v.jchangeN?`（コスト${v.jchangeN}以上）`:""}`);
+    if(v.jchange)attrs.push(`J・チェンジ${v.jchangeN?`（自分のマナのコスト${v.jchangeN}以下のジョーカーズと入れ替え）`:""}`);
     if(v.ninja)attrs.push(`NS${v.ninja}`);
     if(v.escape)attrs.push("エスケープ");
     if(v.etOmega)attrs.push("エターナルΩ（かわりに手札へ）");
@@ -29183,6 +29236,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.ryuArm)attrs.push(`龍マナ武装${v.ryuArm}`);
     if(v.mDrive)attrs.push(`マナドライブ${v.mDrive}`);
     if(v.yobinion)attrs.push("ヨビニオン");
+    if(v.jret)attrs.push("🃏 召喚時：自分のジョーカーズを好きな数手札に戻し、その数だけコスト軽減");
     if(v.vtCost)attrs.push(`召喚コスト自己軽減（${v.vtMode==="grave"?"自分の墓地の枚数":v.vtMode==="turn"?"ターン数":"場のクリーチャー数"}・最低1）`);
     if(v.endTurnOppPlay)attrs.push("タップ中：相手の召喚/呪文でターン終了");
     if(v.shinkalize)attrs.push("シンカライズ");
@@ -29839,6 +29893,34 @@ async function shFlipRepApply(pi,c,src){
   toast(`🛡 ${faceNameOf(src)}：表向きのシールド1枚を裏向きにして、${faceNameOf(c)} は離れない！`);
   logOnly(`🛡 離場置換（${cn(src)}）：${cn(c)} は離れるかわりに、表向きのシールド1枚を裏向きにした`);
   return true;
+}
+/* ♻ v15.5 オニカマス型・フォーエバー・プリンセス型のように、バトルゾーンから
+   splice で直接カードを動かす経路のための離場置換チェック。
+   これらは moveCard を通らないので、置換（オーエン・ザ・ロード型の常在／エターナル・Ω）が
+   素通りしていた。置換が成立したら true を返す（呼び出し側はそこで終わる）。 */
+async function cheatLeaveRep(pTo,c,live){
+  if(!S.expert)return false;
+  const Z=zonesOf(pTo);
+  const rc=getReg(c);
+  const lrs=stLeaveRepSource(pTo,c);
+  const lb=live?faceNameOf(live):"効果";
+  if(lrs){
+    if(hasEtOmega(pTo,c,rc)){
+      const j=await askChoice(`《${faceNameOf(c)}》の離場置換をどちらにしますか？`,
+        [`♻ ランダム盾ブレイク＋場に残る（${faceNameOf(lrs)} の常在）`,"♾ エターナルΩ（かわりに手札へ）"]);
+      if(j===1){snap();etOmegaToHand(pTo,c,Z.battle);renderAll();return true;}
+    }
+    snap();
+    await stLeaveRepApply(pTo,c,lrs);
+    logOnly(`♻ ${lb} で送られるかわりに、${faceNameOf(lrs)} の離場置換が働いた`);
+    renderAll();return true;
+  }
+  if(hasEtOmega(pTo,c,rc)){
+    snap();etOmegaToHand(pTo,c,Z.battle);
+    logOnly(`♾ ${lb} で送られるかわりに、エターナル・Ωで手札へ`);
+    renderAll();return true;
+  }
+  return false;
 }
 function stLeaveRepSource(pi,c){
   if(!S.expert)return null;
@@ -37003,6 +37085,66 @@ function openCardSheet(ctx){
       },"primary",true));
     }
   }
+  /* 🃏 v15.5 ジョット・ガン・ジョラゴン型：召喚する時、自分のジョーカーズを好きな数
+     手札に戻し、戻した数だけコストを少なくする。
+     ・戻したぶんバトルゾーンが空くので、7面が埋まっていても出せる（先に戻してから出す）。
+     ・戻すのは moveCard を通すので、離れた時の誘発・離場置換もふつうに働く。 */
+  {
+    const rJR=getReg(c);
+    if(rJR&&rJR.jret&&ctx.zone==="hand"){
+      box.appendChild(actBtn("🃏 ジョーカーズを手札に戻して召喚（1体＝コスト1軽減）",async ()=>{
+        closeSheet();closeSel();
+        const Z2=zonesOf(ctx.p);
+        const pool=Z2.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&raceMatch(rx,"ジョーカーズ")&&x.id!==ctx.id;});
+        if(!pool.length){toast("🃏 手札に戻せるジョーカーズがバトルゾーンにいません");return;}
+        $("vTitle").textContent="🃏 手札に戻すジョーカーズを選択（1体＝コスト1軽減）";
+        $("vHint").textContent=`《${faceNameOf(c)}》コスト${rJR.cost!=null?rJR.cost:"？"}。戻した数だけ軽減されます（0体でも召喚できます）`;
+        $("vSearch").style.display="none";$("vStatus").textContent="";
+        const sel=new Set();
+        const g=$("vGrid");g.innerHTML="";
+        for(const cc of pool){
+          const el=vCardEl(faceNameOf(cc));
+          el.addEventListener("click",()=>{
+            if(sel.has(cc.id))sel.delete(cc.id);else sel.add(cc.id);
+            el.classList.toggle("picked",sel.has(cc.id));
+            $("vOk").textContent=`🃏 決定（${sel.size}体戻す＝${sel.size}軽減）`;
+          });
+          g.appendChild(el);
+        }
+        const ok=$("vOk");
+        ok.style.display="";ok.textContent="🃏 決定（0体戻す＝0軽減）";
+        ok.onclick=async ()=>{
+          snap();
+          const back=[...sel];
+          for(const id2 of back)moveCard(ctx.p,"battle",id2,"hand");   // 離れた時の誘発・置換もここで働く
+          const f2=findCard(ctx.p,"hand",ctx.id);
+          if(f2){
+            f2.arr.splice(f2.idx,1);
+            const cc=f2.card;
+            cc.faceup=true;cc.tapped=false;
+            if(!cheatEnterBattle(ctx.p,cc)){renderAll();return;}   // 🟥 7面上限を通す（戻したぶん空いている）
+            const rr=getReg(cc);
+            if(S.expert&&S.autoTap&&rr&&rr.cost!=null){
+              const pay=Math.max(0,rr.cost-back.length);
+              let n=0;
+              for(const m of Z2.mana){if(n>=pay)break;if(!m.tapped){m.tapped=true;n++;}}
+              toast(`🃏 ${back.length}体を手札に戻す → コスト${rr.cost}−${back.length}＝${pay}を支払い`);
+            }else{
+              toast(`🃏 ${back.length}体を手札に戻した（コストは手動で）`);
+            }
+            cc._viaCheat=false;   // 召喚なので踏み倒しではない
+            emitEvent(ctx.p,"summon");
+            enqueueFx(ctx.p,cc);
+          }
+          ok.onclick=null;ok.style.display="none";
+          closeViewer();
+          sfx("ok");renderAll();
+          await waitFxIdle();renderAll();
+        };
+        $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
+      },"primary",true));
+    }
+  }
   {
     const rGx=getReg(c);
     if(rGx&&rGx.galaxy&&ctx.zone==="hand"){
@@ -41294,6 +41436,7 @@ function applyDgSize(px){
  if(b)b.addEventListener("click",()=>{
    const ol=$("settingsOlay");
    const on=ol.classList.toggle("peek");
+   if(!on){try{if(typeof tuneWinReset==="function")tuneWinReset();}catch(e){}}   // 🖐 v15.5：戻す時は位置もリセット
    b.textContent=on?"👁 盤面で見ながら調整：ON（押すと元の大きさに）":"👁 盤面で見ながら調整（設定を下に小さく）";
    if(on){
      // 👁 小窓では「開いている折りたたみ」だけを見せる（v14.69）。
@@ -41306,10 +41449,67 @@ function applyDgSize(px){
      toast("設定を下の小窓にしました。盤面を触りながら調整できます（他の折りたたみは畳みました）");
    }
  });}
+/* 🖐 v15.5：盤面で見ながら調整の小窓を、見出しをつまんで動かせるようにする。
+   ・位置は panelbox の --tuneX / --tuneY（transform）で持つ。レイアウトを触らないので
+     中の折りたたみやスライダーの動きに影響しない。
+   ・画面の外に出て戻せなくならないよう、常に画面内に収まるところまでで止める。
+   ・ダブルタップ（ダブルクリック）で元の位置に戻す。小窓を閉じた時も戻す。 */
+{
+  const box=()=>$("settingsOlay")&&$("settingsOlay").querySelector(":scope>.panelbox");
+  let drag=null;
+  const setPos=(x,y)=>{
+    const b=box();if(!b)return;
+    const r=b.getBoundingClientRect();
+    const curX=parseFloat(getComputedStyle(b).getPropertyValue("--tuneX"))||0;
+    const curY=parseFloat(getComputedStyle(b).getPropertyValue("--tuneY"))||0;
+    // いま画面のどこに居るかから、はみ出さない範囲を出す
+    const left=r.left-curX, top=r.top-curY;
+    const minX=8-left, maxX=(window.innerWidth-8-r.width)-left;
+    const minY=8-top,  maxY=(window.innerHeight-8-r.height)-top;
+    b.style.setProperty("--tuneX",Math.max(Math.min(x,Math.max(minX,maxX)),Math.min(minX,maxX))+"px");
+    b.style.setProperty("--tuneY",Math.max(Math.min(y,Math.max(minY,maxY)),Math.min(minY,maxY))+"px");
+  };
+  const resetPos=()=>{const b=box();if(!b)return;b.style.removeProperty("--tuneX");b.style.removeProperty("--tuneY");};
+  window.tuneWinReset=resetPos;
+  document.addEventListener("pointerdown",ev=>{
+    const ol=$("settingsOlay");
+    if(!ol||!ol.classList.contains("peek"))return;
+    const b=box();if(!b)return;
+    const h=ev.target&&ev.target.closest?ev.target.closest("h2"):null;
+    if(!h||h.parentElement!==b)return;
+    const cx=parseFloat(getComputedStyle(b).getPropertyValue("--tuneX"))||0;
+    const cy=parseFloat(getComputedStyle(b).getPropertyValue("--tuneY"))||0;
+    drag={id:ev.pointerId,sx:ev.clientX,sy:ev.clientY,cx,cy};
+    b.classList.add("tuneDrag");
+    try{h.setPointerCapture(ev.pointerId);}catch(e){}
+    ev.preventDefault();
+  },true);
+  document.addEventListener("pointermove",ev=>{
+    if(!drag||ev.pointerId!==drag.id)return;
+    setPos(drag.cx+(ev.clientX-drag.sx),drag.cy+(ev.clientY-drag.sy));
+    ev.preventDefault();
+  },true);
+  const endDrag=()=>{const b=box();if(b)b.classList.remove("tuneDrag");drag=null;};
+  document.addEventListener("pointerup",endDrag,true);
+  document.addEventListener("pointercancel",endDrag,true);
+  document.addEventListener("dblclick",ev=>{
+    const ol=$("settingsOlay");
+    if(!ol||!ol.classList.contains("peek"))return;
+    const b=box();if(!b)return;
+    const h=ev.target&&ev.target.closest?ev.target.closest("h2"):null;
+    if(!h||h.parentElement!==b)return;
+    resetPos();toast("🖐 調整の小窓を元の位置に戻しました");
+  },true);
+  window.addEventListener("resize",()=>{const b=box();if(!b)return;
+    const x=parseFloat(getComputedStyle(b).getPropertyValue("--tuneX"))||0;
+    const y=parseFloat(getComputedStyle(b).getPropertyValue("--tuneY"))||0;
+    if(x||y)setPos(x,y);});
+}
 // 設定を閉じたら小窓モードも解除しておく
 {const c=$("btnCloseSettings");
  if(c)c.addEventListener("click",()=>{
    $("settingsOlay").classList.remove("peek");
+   try{if(typeof tuneWinReset==="function")tuneWinReset();}catch(e){}   // 🖐 v15.5：動かした小窓の位置も戻す
    const b=document.getElementById("btnBoardTune");
    if(b)b.textContent="👁 盤面で見ながら調整（設定を下に小さく）";
  });}
