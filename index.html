@@ -2778,7 +2778,9 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="装備先クリーチャーのパワーを相手のターン中だけ+n（例：+12000）。オーラ／ドラグハートでも有効">⚙ 装備先パワー+（相手ターン中のみ）<input type="number" id="fxGearPowOppT" min="0" step="500" value="0" style="width:86px"></label>
         <label title="装備先クリーチャーに「ブロッカー」を与える。クロスギア／オレガ・オーラ／ドラグハート・ウエポン共通"><input type="checkbox" id="fxGearBlocker"> ⚙ 装備先に「ブロッカー」を与える</label>
         <label title="これをクロスしたクリーチャーに「スレイヤー」を与える（秘福 キナコ・カチューシャ型）。クロスギア／オレガ・オーラ／ドラグハート・ウエポン共通"><input type="checkbox" id="fxGearSlayer"> ⚙ クロス先に「スレイヤー」を与える</label>
-        <label title="これをクロスしたクリーチャーが離れる時、かわりにこのクロスギアを外してもよい（聖竜鎧 シデンズ・ソウル型）。外すとクリーチャーは場に残ります"><input type="checkbox" id="fxGearLeaveRep"> ⚙ クロス先が離れる時、かわりにこのギアを外してもよい</label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="コスト軽減（常時）側だけ、クロスの有無の条件を分けたい時に使います。空欄なら常在の付与と同じ条件になります"><span style="font-size:12px;font-weight:700">💠 軽減側のクロス条件</span><select id="fxAlwRedCross" style="width:auto"><option value="">（付与と同じ）</option><option value="on">クロス中のみ</option><option value="off">クロスされていない時のみ</option></select></label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="「ドラゴンまたはサムライにクロスされている時」のように、クロス先の条件で付与を切り替えたい時に書きます（空欄＝クロス先を問わない）"><span style="font-size:12px;font-weight:700">⚙ クロス先の条件</span><input type="text" id="fxStAuraCrossF" list="raceList" placeholder="例：ドラゴン｜サムライ（空欄＝問わない）" style="width:220px"></label>
+        <label title="これをクロスしたクリーチャーが離れる時、かわりにこのクロスギアを外してもよい（聖竜鎧 シデンズ・ソウル型）。外すとクリーチャーは場に残ります。確認パネルが出ます（強制で外す fxGearShield とは別）"><input type="checkbox" id="fxGearLeaveRep"> ⚙ クロス先が離れる時、かわりにこのギアを外してもよい（確認あり）</label>
         <label title="このギアをクロスしたクリーチャーに「エスケープP'S」を与える（破壊される時パワー0超なら、かわりにランダム盾1つを手札へ・ST不可・各ターン1回）"><input type="checkbox" id="fxGearEscapePS"> ⚙ クロス先に「エスケープP'S」を与える</label>
         <label title="このギアをクロスしたクリーチャー（クロス先）が破壊された時、このギアのコントローラーがn枚引く（秘福 サスペンス・ブーツ型）。ギア自身の破壊ではなく、クロス先クリーチャーの破壊が条件です">⚙ クロス先が破壊された時 <input type="number" id="fxGearHostDeadDraw" min="0" max="9" value="0" style="width:52px"> 枚引く</label>
         <label title="《神託アイドル！コットン》にクロス中で、そのコットンがタップしている自分のターン終了時、手札の光または闇のゼニス1体を任意でコストを支払わずに召喚します（ライオネル・グロリア型）"><input type="checkbox" id="fxGearEndZenith"> ⚙ ターン終了時、タップ中のコットンから光/闇のゼニスを無料召喚</label>
@@ -5238,7 +5240,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.10";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.11";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11888,7 +11890,11 @@ async function autoTapCost(pi,c){
   if(paySide==="creature"){
     let alwTotal=0;const alwFrom=[];
     for(const b of [...auraSrc(pi),...evoBases]){
-      const rb=getReg(b);
+      /* 💠 v15.11 軽減側だけクロス条件を分けたい時は alwRedCross を使う。
+         ザンゲキは「クロスされていない時＝軽減」「クロスされている時＝全体付与」と逆なので、
+         stAuraCross ひとつでは両立できなかった（付与がクロス中に働いていなかった）。 */
+      const rb0=getReg(b);
+      const rb=(rb0&&rb0.alwRedCross)?{...rb0,stAuraCross:rb0.alwRedCross}:rb0;
       if(!rb||!(+rb.alwRed>0))continue;
       if(b.id===c.id)continue;                       // 自分自身の召喚は軽減しない
       if(isSealed(b)||isIgnored(b,pi))continue;
@@ -20055,7 +20061,8 @@ function dispCost(c,pi){
       const evoB=(c.under&&c.under.length)?[c.under[0]]:[];
       let alw=0;
       for(const b of [...auraSrc(pi),...evoB]){
-        const rb=getReg(b);
+        const rb0=getReg(b);   // 💠 v15.11 軽減側のクロス条件（alwRedCross）を優先
+        const rb=(rb0&&rb0.alwRedCross)?{...rb0,stAuraCross:rb0.alwRedCross}:rb0;
         if(!rb||!(+rb.alwRed>0))continue;
         if(b.id===c.id)continue;
         if(isSealed(b)||isIgnored(b,pi))continue;
@@ -20265,10 +20272,29 @@ function auraSrc(own){
   return out;
 }
 /* その発生源が今そのオーラを出せる状態か（クロスの有無の条件） */
+/* ⚙ そのクロスギアが今どのクリーチャーにクロスされているかを探す */
+function gearHostOf(g){
+  if(!g)return null;
+  for(const p of [0,1]){
+    const z=zonesOf(p);
+    if(!z||!z.battle)continue;
+    const h=z.battle.find(x=>(x.gear||[]).some(y=>y&&y.id===g.id));
+    if(h)return h;
+  }
+  return null;
+}
 function auraCrossOk(rb,b){
   const need=rb&&rb.stAuraCross;
-  if(!need)return true;
   const crossed=!!(b&&b.isCross);
+  /* ⚙ v15.11 クロス先の条件（例：ドラゴンまたはサムライにクロスされている時）。
+     クロス中だけ見る。空欄ならクロス先を問わない。 */
+  if(crossed&&rb&&rb.stAuraCrossF){
+    const h=gearHostOf(b);
+    if(!h)return false;
+    const rh=getReg(h);
+    if(!lockFilterOk(rb.stAuraCrossF,rh,h))return false;
+  }
+  if(!need)return true;
   if(need==="on")return crossed;
   if(need==="off")return !crossed;
   return true;
@@ -25789,6 +25815,8 @@ function renderFxEditor(){
   {const e=$("fxGearBreakAdd");if(e)e.value=String(FXEDIT.gearBreakAdd||0);}
   {const e=$("fxGearEscapePS");if(e)e.checked=!!FXEDIT.gearEscapePS;}
   {const e=$("fxGearLeaveRep");if(e)e.checked=!!FXEDIT.gearLeaveRep;}
+  {const e=$("fxAlwRedCross");if(e)e.value=FXEDIT.alwRedCross||"";}
+  {const e=$("fxStAuraCrossF");if(e)e.value=FXEDIT.stAuraCrossF||"";}
   {const e=$("fxGearHostDeadDraw");if(e)e.value=String(FXEDIT.gearHostDeadDraw||0);}
   {const e=$("fxGearEndZenith");if(e)e.checked=!!FXEDIT.gearEndZenith;}
   {const e=$("fxEscapePS");if(e)e.checked=!!FXEDIT.escapePS;}
@@ -28035,6 +28063,8 @@ function openFxEditor(key){
     gearBreakAdd:cur&&(+cur.gearBreakAdd||0)||0,
     gearEscapePS:cur?!!cur.gearEscapePS:false,
     gearLeaveRep:cur?!!cur.gearLeaveRep:false,
+    alwRedCross:(cur&&cur.alwRedCross)||"",
+    stAuraCrossF:(cur&&cur.stAuraCrossF)||"",
     escapePS:cur?!!cur.escapePS:false,
     costRedAllyF:cur&&cur.costRedAllyF||"",
     costRedAllyN:cur&&cur.costRedAllyN||0,
@@ -28583,6 +28613,8 @@ $("fxSave").addEventListener("click",async ()=>{
     gearBreakAdd:$("fxGearBreakAdd")?(parseInt($("fxGearBreakAdd").value,10)||0):0,
     gearEscapePS:$("fxGearEscapePS")?$("fxGearEscapePS").checked:false,
     gearLeaveRep:$("fxGearLeaveRep")?$("fxGearLeaveRep").checked:false,
+    alwRedCross:$("fxAlwRedCross")?$("fxAlwRedCross").value:"",
+    stAuraCrossF:$("fxStAuraCrossF")?$("fxStAuraCrossF").value.trim():"",
     gearHostDeadDraw:$("fxGearHostDeadDraw")?(parseInt($("fxGearHostDeadDraw").value,10)||0):0,
     gearEndZenith:$("fxGearEndZenith")?$("fxGearEndZenith").checked:false,
     escapePS:$("fxEscapePS")?$("fxEscapePS").checked:false,
@@ -29396,7 +29428,9 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gearSA)attrs.push("⚙クロス先にSA付与");
     if(v.gearShield)attrs.push("⚙クロス先が離れる時の身代わり");
     if(v.gearBreakAdd)attrs.push(`⚙クロス先のブレイク+${v.gearBreakAdd}`);
-    if(v.gearLeaveRep)attrs.push("⚙クロス先が離れる時、かわりにこのギアを外してもよい");
+    if(v.gearLeaveRep)attrs.push("⚙クロス先が離れる時、かわりにこのギアを外してもよい（確認あり）");
+    if(v.alwRedCross)attrs.push(`💠軽減は${v.alwRedCross==="on"?"クロス中":"クロスされていない時"}だけ`);
+    if(v.stAuraCrossF)attrs.push(`⚙付与は${v.stAuraCrossF}にクロスされている時だけ`);
     if(v.escapePS)attrs.push("🏃エスケープP'S（破壊→かわりにランダム盾1を手札・各ターン1回）");
     if(v.costRedAllyF&&v.costRedAllyN)attrs.push(`⚙常在：自分の${v.costRedAllyF}のコスト−${v.costRedAllyN}（最低1）${
       (+v.costRedAllyN2)?`／${v.costRedAllyCond?`${v.costRedAllyCond} の間は`:""}さらに−${v.costRedAllyN2}`:""}`);
