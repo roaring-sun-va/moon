@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.18";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.20";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -29235,7 +29235,9 @@ function pickImage(title,hint){
         g.appendChild(cbar);
       }
       const q=normName(search.value);
-      const keys=Array.from(dispName.keys()).filter(k=>!isArtKey(k)&&!isSystemKey(k)).sort((a,b)=>{
+      // 表示名だけが残った孤立データは候補に出さない。画像・効果・多面リンクのどれかが実在するカードだけ。
+      // 効果登録を削除した後に dispName だけ残り、画像なしの幽霊カードが増える問題への対処。
+      const keys=Array.from(dispName.keys()).filter(k=>!isArtKey(k)&&!isSystemKey(k)&&(imgURL.has(k)||FXDB.has(k)||LINKS.has(k))).sort((a,b)=>{
         if(pickSort==="added"){
           const oa=imgOrder.has(a)?imgOrder.get(a):Infinity, ob=imgOrder.has(b)?imgOrder.get(b):Infinity;
           if(oa!==ob)return oa-ob;
@@ -42995,9 +42997,13 @@ $("importInput").addEventListener("change",async e=>{
     }
     if(data&&data.type==="cards"){
       const n=Object.keys(data.images||{}).length;
-      if(!await ask(`カードパック（画像${n}枚）を読み込みます。\n既存データに追加され、同名カードは上書きされます。よろしいですか？`))return;
+      const forceComplete=!!data.forceComplete;
+      const cardMsg=forceComplete
+        ?`画像付き完全カードパック（画像${n}枚）を読み込みます。\n対象カードの既存登録も、画像・基本情報・効果を含む完全版で上書きします。よろしいですか？`
+        :`カードパック（画像${n}枚）を読み込みます。\n既存データに追加され、同名カードは上書きされます。よろしいですか？`;
+      if(!await ask(cardMsg))return;
       // 📦 カード登録は共通のマージ規則で取り込む（自分が触った登録は黙って上書きしない）
-      {const _mg=await fxMergeIncoming(data,String(data.from||"共有データ").slice(0,12));
+      {const _mg=await fxMergeIncoming(data,String(data.from||"共有データ").slice(0,12),{forceSelf:forceComplete});
        if(data.nameMap)for(const [k,v] of Object.entries(data.nameMap)){if(!dispName.has(k)&&typeof v==="string")dispName.set(k,v);}
        if(data.faceLinks)for(const [k,v] of Object.entries(data.faceLinks)){if(!LINKS.has(k)&&Array.isArray(v))LINKS.set(k,v);}
        await persistNames();await persistLinks();
