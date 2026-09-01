@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.16";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.18";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8489,6 +8489,17 @@ function draw(pi,n=1){
   if(_kept>0||S.gameMode==="tcg")emitEvent(pi,"draw"); // 🃏 dmps：1枚も引けていなければ「引いた時」誘発なし
   renderAll();
 }
+/* 🃏 カード本文に「手札の上限枚数を超えるなら、上限枚数に達するまで引く」とある効果専用。
+   通常の draw は上限超過分を山札から取り出して墓地へ置くが、この経路は超過分を引かず山札に残す。 */
+function drawUpToHandLimit(pi,n=1){
+  const Z=zonesOf(pi),want=Math.max(0,+n||0);
+  const can=S.gameMode==="tcg"?want:Math.min(want,Math.max(0,10-Z.hand.length));
+  const before=Z.hand.length;
+  if(can>0)draw(pi,can);
+  const got=Math.max(0,Z.hand.length-before);
+  if(can<want)toast(`✋ 手札上限10枚まで${got}枚引いた（残り${want-can}枚は引かず山札に残した）`);
+  return got;
+}
 let NEXT_TURN_HOLD=0;
 let TURN_END_PHASE="";   // ⏳ いまターン終了処理のどの段階で待っているか（診断表示用）
 let NT_BLOCK_CNT=0;      // 「次のターン」が保留でブロックされた連続回数（3回で強制解除の提案）
@@ -11058,6 +11069,7 @@ function manaTapIn(c,pi){
 }
 const FX_TYPES=[
   ["draw","n枚ドロー"],
+  ["drawToHandLimit","🃏 手札上限10枚に達するまで最大n枚ドロー（超過分は引かず山札に残す・ガヨウ神／燃えるデット・ソード型）"],
   ["drawFoe","🃏 相手はカードをn枚引く（ViVy-R型・「各プレイヤーはn枚引く」は自分のドロー行→この行の順で登録すると解決プレイヤー先行の処理順になる）"],
   ["oriJudge","⚖ 各プレイヤーは、自身の最大マナ以上のコストを持つクリーチャーをすべて、ランダムな順番で自身の山札の一番下に置く（オリオティス・ジャッジ型・デュエプレ版＝「以上」。条件欄に「より大きい」でTCG版の判定に）"],
   ["foeElemDeckBottomOverMana","⚖ 相手のマナゾーンのカード枚数より大きいコストを持つ相手のエレメントを1つ選び、山札の下へ（ジャッジ・水晶チャージャー型）"],
@@ -11153,6 +11165,7 @@ const FX_TYPES=[
   ["shieldToHandNoST","🛡→✋ 自分のシールドをn枚選んで手札に加える（そのS・トリガーは使えない・トライガード・チャージャー型）"],
   ["selfDiscard","自分の手札からn枚選んで捨てる（バレッドゥ型：捨て終わるまで解決が完了しない）"],
   ["selfDiscardDrawNow","🗑✋ 自分の手札をn枚捨てて、その後カードを（条件欄の枚数だけ）引く（勇愛の天秤型・条件欄が空なら捨てた枚数と同じだけ引く）"],
+  ["selfDiscardDrawToHandLimit","🗑✋ 自分の手札をn枚捨て、その後、手札上限10枚に達するまで条件欄の枚数を引く（超過分は山札に残す・ガヨウ神型）"],
   ["selfDiscardEndDraw","自分の手札を1枚捨てたら、ターン終了時にn枚引く（バルーン・チュリス型）"],
   ["foeTapThenDeckBottom","⤵⚖ 相手のクリーチャーを1体選んでタップする。そのコストが相手の最大マナ以上なら、そのまま山札の下へ（神託アイドル！コットン型・条件欄に「より大きい」でTCG版の判定に）"],
   ["peek","相手の手札を見る"],
@@ -13183,6 +13196,7 @@ const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","dr
   "manaPlusPerZone","destroyWeakerPick","manaAllWeaker","exileToGrave","handToManaBreakPlus","deckTopShieldRestMana","foeDeckBottomOverMaxMana",
   "handes","peepDiscard","grantBlockerPick","deckShield","revealBottomShield","nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
   "selfDiscardDrawNow",   /* 条件欄は「引く枚数」なのでゾーン条件式として読まない（v14.74） */
+  "selfDiscardDrawToHandLimit", /* 同じく条件欄は引く枚数 */
   "graveToDeckAll",       /* 条件欄は「どちらのプレイヤーか」（v14.79） */
   "foeRandCreManaHandToDeck","breakPlusPerAllyNoSpell","foeTopPowerToHyper","handToMana",
   "exileRecruitPerZone","elemKillRetrieve","handesMillPer","destroyRnd","tutorDMPS","foeTapThenDeckBottom",
@@ -13512,7 +13526,9 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("draw");if(dc>0||S.gameMode==="tcg")emitEvent(pi,"draw");
       toast(`🃏 ${dc}枚引いた${ov?`（${ov}枚は手札上限で墓地へ・ドローにならない）`:""}`);renderAll();continue;
     }
-    if(f.t==="draw"){
+    if(f.t==="drawToHandLimit"){
+      drawUpToHandLimit(pi,n);
+    }else if(f.t==="draw"){
       let dc=0,ov=0;for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;if(toHand(Z,c)){markArrive(c);dc++;}else ov++;} // ✋ 超過分はドローにならない（wiki準拠）
       if(dc>0)bumpEv("draws",pi,dc);
       sfx("draw");if(dc>0||S.gameMode==="tcg")emitEvent(pi,"draw");
@@ -15804,7 +15820,7 @@ async function runFxList(pi,list,srcCard,inPump){
         }
       }
       sfx("grave");renderAll();
-    }else if(f.t==="selfDiscardDrawNow"){
+    }else if(f.t==="selfDiscardDrawNow"||f.t==="selfDiscardDrawToHandLimit"){
       // 🗑✋ 自分の手札をn枚捨てて、その後まとめて引く（勇愛の天秤型）
       let dsc=0;
       for(let i=0;i<n;i++){
@@ -15819,7 +15835,7 @@ async function runFxList(pi,list,srcCard,inPump){
       if(dsc){
         const want=(f.cond&&!isNaN(+f.cond))?+f.cond:dsc;
         toast(`🗑 手札を${dsc}枚捨てた`);
-        draw(pi,want);
+        if(f.t==="selfDiscardDrawToHandLimit")drawUpToHandLimit(pi,want);else draw(pi,want);
         renderAll();
       }
     }else if(f.t==="selfDiscardEndDraw"){
@@ -36132,7 +36148,9 @@ async function fxMergeIncoming(pack,from,opts={}){
     const differs=!!cur&&stripMeta(cur)!==stripMeta(v);
     // 自分で編集した登録は時刻の新旧にかかわらず差分画面へ出す。
     // これにより、誤登録を後から訂正したパックも利用者が明示的に採用できる。
-    if(cur&&cur._src==="self"){if(differs)held[k]=v;continue;}
+    // 完全登録パックは、読み込み時に利用者が明示確認した場合だけ手入力も置き換える。
+    // 通常の共有パックは従来どおり差分へ保留し、黙って上書きしない。
+    if(cur&&cur._src==="self"&&!opts.forceSelf){if(differs)held[k]=v;continue;}
     if(cur&&!differs)continue;
     if(cur&&inV>0&&inV<=curV)continue;
     let reg;try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
@@ -42892,8 +42910,12 @@ $("importInput").addEventListener("change",async e=>{
       // 📦 カード登録だけの共有パック（画像なし）
       const n=Object.keys(data.cardFx).length;
       const from=String(data.from||"共有").slice(0,12);
-      if(!await ask(`📦 カード登録の共有パックを読み込みます（${n}件・${from}）\n自分が登録・更新したカードは自動では上書きせず、差分画面で選べます。よろしいですか？`))return;
-      const res=await fxMergeIncoming(data,from);
+      const forceComplete=!!data.forceComplete;
+      const msg=forceComplete
+        ?`📦 完全登録パックを読み込みます（${n}件・${from}）\n対象カードの手入力登録も、コスト・カードタイプ・能力を含む完全版で上書きします。よろしいですか？`
+        :`📦 カード登録の共有パックを読み込みます（${n}件・${from}）\n自分が登録・更新したカードは自動では上書きせず、差分画面で選べます。よろしいですか？`;
+      if(!await ask(msg))return;
+      const res=await fxMergeIncoming(data,from,{forceSelf:forceComplete});
       renderAll();sfx("ok");
       toast(`📦 ${res.applied}件を取り込みました${res.held?`／${res.held}件は保留（差分画面で選べます）`:""}`);
       return;
