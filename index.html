@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.21";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.22";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5928,7 +5928,21 @@ function fxAliasAll(){
   }
   return n;
 }
-function getReg(c){return FXDB.get(faceKeyOf(c))||FXDB.get(normName(c.name))||null;}
+/* 表示名と保存キーが違う単面カードの実在キーを返す。
+   多面リンクを使うとツインパクトまで「変形」扱いになるため、名前一致の別キーはここで解決する。 */
+function canonicalCardKey(nameOrKey){
+  const base=normName(nameOrKey);
+  if(FXDB.has(base)||imgURL.has(base))return base;
+  let imgOnly=null,fxOnly=null;
+  for(const [k,dn] of dispName){
+    if(normName(dn||k)!==base)continue;
+    if(FXDB.has(k)&&imgURL.has(k))return k;
+    if(FXDB.has(k)&&!fxOnly)fxOnly=k;
+    if(imgURL.has(k)&&!imgOnly)imgOnly=k;
+  }
+  return fxOnly||imgOnly||base;
+}
+function getReg(c){return FXDB.get(faceKeyOf(c))||FXDB.get(canonicalCardKey(c.name))||FXDB.get(normName(c.name))||null;}
 /* 🌌 サイキック・クリーチャーとドラグハートは、超次元ゾーンとバトルゾーン以外には置けない。
    カードに登録した効果で直接ゾーンを動かした場合（手札に戻す・シールド送り等）に
    そのまま残ってしまうことがあるので、描画のたびに拾って超次元ゾーンへ戻す。 */
@@ -8031,7 +8045,7 @@ function faceKeyOf(c){
   const base=normName(c.name);
   const link=LINKS.get(base);
   if(link&&link.length)return link[Math.min(c.face||0,link.length-1)];
-  return base;
+  return canonicalCardKey(base);
 }
 function faceNameOf(c){
   const k=faceKeyOf(c);
