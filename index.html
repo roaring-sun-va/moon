@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.20";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.21";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36176,6 +36176,17 @@ async function fxMergeIncoming(pack,from,opts={}){
   if(heldKeys.length&&!opts.noInbox&&opts.autoPanel!==false)setTimeout(()=>{try{showFxDiffPanel();}catch(e){}},600);
   return {applied,held:heldKeys.length,heldItems:held};
 }
+/* 🧹 完全カードパックが指定した旧登録キーを削除する。
+   同じ表示名の別キーが残ると、ビルダーに画像あり／なしの同名カードが2件並ぶため。 */
+async function removePackLegacyKeys(pack){
+  const ks=Array.isArray(pack&&pack.removeKeys)?pack.removeKeys:[];
+  for(const raw of ks){
+    const k=normName(raw);if(!k)continue;
+    FXDB.delete(k);dispName.delete(k);LINKS.delete(k);imgOrder.delete(k);ART_KEYS.delete(k);
+    imgURL.delete(k);if(db)await idbDel("images",k);else memImages.delete(k);
+  }
+  if(ks.length){await persistFx();await persistNames();await persistLinks();await persistArtKeys();}
+}
 /* 📦 同梱データを土台として取り込む（起動時に1回） */
 async function applyBuiltinCardFx(){
   if(BUILTIN_OFF)return;
@@ -43002,6 +43013,7 @@ $("importInput").addEventListener("change",async e=>{
         ?`画像付き完全カードパック（画像${n}枚）を読み込みます。\n対象カードの既存登録も、画像・基本情報・効果を含む完全版で上書きします。よろしいですか？`
         :`カードパック（画像${n}枚）を読み込みます。\n既存データに追加され、同名カードは上書きされます。よろしいですか？`;
       if(!await ask(cardMsg))return;
+      if(forceComplete)await removePackLegacyKeys(data);
       // 📦 カード登録は共通のマージ規則で取り込む（自分が触った登録は黙って上書きしない）
       {const _mg=await fxMergeIncoming(data,String(data.from||"共有データ").slice(0,12),{forceSelf:forceComplete});
        if(data.nameMap)for(const [k,v] of Object.entries(data.nameMap)){if(!dispName.has(k)&&typeof v==="string")dispName.set(k,v);}
@@ -44150,10 +44162,10 @@ function buildDeckSummaryEl(m){
 }
 function bSeed(){
   B.counts.main.clear();B.counts.gr.clear();B.counts.hy.clear();B.counts.ex.clear();
-  for(const e of parseList($("deckText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.main.set(k,Math.min(e.count,4));}
-  for(const e of parseList($("grText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.gr.set(k,Math.min(e.count,2));}
-  for(const e of parseList($("hyText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.hy.set(k,Math.min(e.count,4));}
-  for(const e of parseList($("exText").value)){const k=normName(e.name);if(dispName.has(k))B.counts.ex.set(k,e.count);}
+  // 保存デッキは表示名を持つ。表示名と登録キーが違うカードは、画像/効果の実在キーへ戻す。
+  // 同じ表示名が旧新2行残っている場合は重複事故なので、大きい方の枚数を採用して1つへ統合する。
+  const seed=(id,map,cap)=>{for(const e of parseList($(id).value)){const k=imageKeyForName(e.name);if(!(imgURL.has(k)||FXDB.has(k)||LINKS.has(k)))continue;const v=Math.max(map.get(k)||0,e.count);map.set(k,cap?Math.min(v,cap):v);}};
+  seed("deckText",B.counts.main,4);seed("grText",B.counts.gr,2);seed("hyText",B.counts.hy,4);seed("exText",B.counts.ex,0);
 }
 /* 🔎 ゾーンの中で条件に合うカードの枚数を数える。
    zoneCondOk の「マナ:アビス>=3」と「マナすべてアビス」の両方がこれを使う（判定を二重に書かない）。 */
