@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.23";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.24";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5932,6 +5932,9 @@ function fxAliasAll(){
    多面リンクを使うとツインパクトまで「変形」扱いになるため、名前一致の別キーはここで解決する。 */
 function canonicalCardKey(nameOrKey){
   const base=normName(nameOrKey);
+  // Q.Q.QXの旧登録はlocalStorageに効果付きのまま残ることがあるため、存在判定より先に現行キーへ寄せる。
+  const legacy={"q.q.qx.":"q.q.qx_sec","q.q.qx./終葬5.s.d.":"q.q.qx_sec"};
+  if(legacy[base]&&(FXDB.has(legacy[base])||imgURL.has(legacy[base])))return legacy[base];
   if(FXDB.has(base)||imgURL.has(base))return base;
   // 保存済みデッキが旧内部キーを持っていても、登録側の aliases で現行キーへ戻す。
   // faceLinks は多面カード専用なので、単面・ツインパクトの旧キー移行には使わない。
@@ -8367,7 +8370,7 @@ function startGame(picks){
   if(typeof renderLogDock==="function")renderLogDock();
   // 🔄 処理系の状態を完全リセット（再試合で「処理中」やターン終了保留が引き継がれるのを防止）
   NEXT_TURN_HOLD=0;TURN_END_PHASE="";NT_BLOCK_CNT=0;NT_RUN_ID++;
-  fxQueue.length=0;fxRunning=false;
+  fxQueue.length=0;FX_AFTER_CURRENT.length=0;fxRunning=false;
   WATCH_CHAIN=Promise.resolve();
   MOVE_TAP_CHAIN=Promise.resolve();
   FX_HOLD=false;GAME_PAUSE=false;LABY_RUN=false;ALLY_WAIT=0;try{ORI_QUEUE.length=0;TOGRAVE_PENDING.length=0;TRIG_PENDING.length=0;}catch(e){}{const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
@@ -8726,7 +8729,7 @@ function nextTurn(){
         if(yes){
           NT_RUN_ID++;
           NEXT_TURN_HOLD=0;TURN_END_PHASE="";
-          fxQueue.length=0;fxRunning=false;fxInsertAt=null;ORI_QUEUE.length=0;TOGRAVE_PENDING.length=0;TRIG_PENDING.length=0;{const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
+          fxQueue.length=0;FX_AFTER_CURRENT.length=0;fxRunning=false;fxInsertAt=null;ORI_QUEUE.length=0;TOGRAVE_PENDING.length=0;TRIG_PENDING.length=0;{const rw=document.getElementById("resumeFxWrap");if(rw)rw.style.display="none";}
           WATCH_CHAIN=Promise.resolve();
           toast("⏱ 強制解除しました。もう一度「次のターン ▶」を押してください");
           renderAll();
@@ -15480,11 +15483,14 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!shown.length){toast("相手の山札がありません");continue;}
       shown.forEach(x=>{x.faceup=true;});
       renderAll();
-      const costOf=x=>{const rx=getReg(x);return (rx&&rx.cost!=null&&!isNaN(+rx.cost))?+rx.cost:null;};
-      const names=shown.map(x=>`《${faceNameOf(x)}》(${costOf(x)==null?"コスト不明":"コスト"+costOf(x)})`).join("、");
+      const costsOf=x=>{const rx=getReg(x),out=[];if(!rx)return out;
+        if(rx.cost!=null&&!isNaN(+rx.cost))out.push(+rx.cost);
+        if((rx.twin||rx.ctype==="twinpact")&&rx.cost2!=null&&!isNaN(+rx.cost2))out.push(+rx.cost2);
+        return [...new Set(out)];};
+      const names=shown.map(x=>{const cs=costsOf(x);return `《${faceNameOf(x)}》(${cs.length?"コスト"+cs.join("／"):"コスト不明"})`;}).join("、");
       toast(`🎰 相手の山札の上から${shown.length}枚：${names}`);
       logOnly(`🎰 ${S.players[op].label}の山札の上から${shown.length}枚を表向き：${names}`);
-      const costs=[...new Set(shown.map(costOf).filter(v=>v!=null))].sort((a,b)=>a-b);
+      const costs=[...new Set(shown.flatMap(costsOf))].sort((a,b)=>a-b);
       let pick=null;
       if(!costs.length){
         toast("⚠ 表向きにしたカードのコストが登録されていないため、コストを選べません（手動で処理してください）");
@@ -19038,6 +19044,8 @@ function onceFilter(c,list){
   return out;
 }
 const fxQueue=[];let fxRunning=false;
+// 親能力の完了直後、次の待機クリーチャーCIPへ進む前に解決する能力。
+const FX_AFTER_CURRENT=[];
 /* ⏸ 効果ポンプの一時停止ゲート。0より大きい間は「出た時」も誘発も溜めるだけにする。
    アタック・チャンスで複数枚を唱える間など、「全部唱え終えてからまとめて処理する」場面で使う。
    解除したら pumpFx() を呼び、waitFxIdle(false) で流し切ること。 */
@@ -19491,17 +19499,20 @@ function afterHandDiscard(owner,c,byPi){
          （ソーナンデスの「手札を1枚捨てる → マナから回収」の途中に割り込み、
            回収の前にビッグ1が動いてしまっていた） */
       const _bigId=holder.id;
-      enqueueWatchJob(async()=>{
+      const big1Job=async(inPump)=>{
         if(!zonesOf(owner).battle.some(x=>x.id===_bigId))return;   // 途中で離れていたら何もしない
         const yes=await ask(`🎪 ジョラゴン・ビッグ1（${faceNameOf(holder)}）\n《${faceNameOf(c)}》が手札から捨てられました。出た時能力を使いますか？${!rd?"\n（効果登録なし・手動処理になります）":""}`);
         if(!yes)return;
         const list=rd&&rd.faces&&rd.faces[0]&&rd.faces[0].length?rd.faces[0]:null;
-        if(list){toast(`🎪 ${faceNameOf(c)} の出た時能力を使用`);await runFxList(owner,list,holder);}
+        if(list){toast(`🎪 ${faceNameOf(c)} の出た時能力を使用`);await runFxList(owner,list,holder,!!inPump);}
         if(!list){
           toast(`🎪 ${faceNameOf(c)}：自動効果の登録がないため手動で処理してください`);
         }
         renderAll();
-      });
+      };
+      // 親の残りには割り込まず、親完了後・相手のS・トリガー獣CIPより前に処理する。
+      if(fxRunning)FX_AFTER_CURRENT.push(()=>big1Job(true));
+      else enqueueWatchJob(()=>big1Job(false));
     }
   }
   // ⚡ 「このカードが（どこからでも）墓地に置かれた時」（ゾルザーク型toGrave）：手札を捨てて墓地に置かれた場合も発火
@@ -19887,6 +19898,11 @@ async function pumpFx(){
         await destroyCreature(pi,c);
         renderAll();
       }
+    }
+    // マンハッタン等の親能力を最後まで終えた後、待機中の相手S・トリガー獣CIPへ進む前にビッグ1等を解決。
+    while(FX_AFTER_CURRENT.length){
+      const job=FX_AFTER_CURRENT.shift();
+      try{await job();}catch(e){console.warn("after current fx",e);}
     }
     // ⚡ このカードの解決が完全に終わったので、解決中に墓地へ落ちたカードの「墓地に置かれた時」を発火（割り込まない）
     if(HILITE_ID===c.id){HILITE_ID=null;renderAll();} // 🔶 処理完了でハイライト解除
@@ -31951,7 +31967,7 @@ async function runHotkey(act){
         if(yes){
           NT_RUN_ID++; // 止まっていた処理が後から完了してもターンを進めないよう無効化
           NEXT_TURN_HOLD=0;TURN_END_PHASE="";
-          fxQueue.length=0;fxRunning=false;
+          fxQueue.length=0;FX_AFTER_CURRENT.length=0;fxRunning=false;
           WATCH_CHAIN=Promise.resolve();
           toast("⏱ 強制解除しました。もう一度「次のターン」を押してください");
           renderAll();
