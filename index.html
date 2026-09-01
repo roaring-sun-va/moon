@@ -3324,6 +3324,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxWide"> 横向きカード（ドルマゲドン等・置いた時に横向き）</label>
         <label><input type="checkbox" id="fxDragonB"> ドラゴン・ブレイカー（ブレイク数ぶん山上を盾へ）</label>
         <label><input type="checkbox" id="fxShieldBurn"> シールド焼却（このクリーチャーがブレイクした盾は手札に加えず墓地へ・S・トリガー不可／ボルメテウス型）</label>
+        <input id="fxShieldBurnCond" placeholder="焼却条件（空欄＝無条件／例：バトルマナ:ジョーカーズ10以上）" style="min-width:360px">
         <label><input type="checkbox" id="fxQqqx"> Q.Q.QX型（ブレイクした盾を相手の山札の上から4枚目に横向きで差し込む／相手がその横向きを引くと特殊敗北／相手は自分の山札をシャッフル・確認・表向きにできない／このカードが離れたら自分の山札をシャッフル）</label>
       </div>
       <div class="row" style="gap:12px;flex-wrap:wrap">
@@ -5241,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.15";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.16";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -22153,7 +22154,9 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   S.brokenTurn[op]=(S.brokenTurn[op]||0)+shs.length;
   const stackIds=new Set(stack.map(x=>x.id));
   const aRep=attacker?getReg(attacker):null;
-  if(S.expert&&aRep&&aRep.shieldBurn){
+  const burnPi=op===0?1:0;
+  const burnCondOk=!!(aRep&&aRep.shieldBurn&&(!aRep.shieldBurnCond||zoneCondOk(aRep.shieldBurnCond,burnPi,attacker)));
+  if(S.expert&&burnCondOk){
     // ボルメテウス型：ブレイクした盾は手札に加えるかわりに墓地へ（S・トリガー不可）
     stack.forEach(c=>{
       c.tapped=false;c.faceup=true;c.mark=false;c.sideways=false;
@@ -26304,6 +26307,7 @@ function renderFxEditor(){
   $("fxWide").checked=!!FXEDIT.wide;
   $("fxDragonB").checked=!!FXEDIT.dragonB;
   $("fxShieldBurn").checked=!!FXEDIT.shieldBurn;
+  {const e=$("fxShieldBurnCond");if(e)e.value=FXEDIT.shieldBurnCond||"";}
   $("fxQqqx").checked=!!FXEDIT.qqqx;
   {const v=$("fxEvoBaseN");if(v)v.value=(FXEDIT.evoBaseN>1)?String(FXEDIT.evoBaseN):"";}
   {const v=$("fxEvoZone");if(v)v.value=FXEDIT.evoZone||"";}
@@ -26844,6 +26848,8 @@ function parseCardText(txt,mode){
    if(mCU){out.set.stCostUp=mCU[2]?+mCU[2]:1;if(mCU[1]==="呪文")out.set.stCostUpT="spell";else if(mCU[1]==="クリーチャー")out.set.stCostUpT="creature";}}
   // 🔥 盾焼却：このクリーチャーがブレイクする盾は手札に加えるかわりに墓地へ（ボルメテウス/ウェディング型）
   if(/(?:この)?クリーチャーがシールドをブレイクする時[、,]?相手はそのシールドを手札に加えるかわりに墓地に置く/.test(t))out.set.shieldBurn=true;
+  {const mSB=t.match(/バトルゾーンまたはマナゾーンに自分の(.+?)が(\d+)枚以上あれば/);
+   if(out.set.shieldBurn&&mSB)out.set.shieldBurnCond=`バトルマナ:${mSB[1].trim()}${mSB[2]}以上`;}
   // 💒 召喚コスト：相手のエレメントの持つ文明1つにつきn少なく（ウェディング・イノセンス型）
   {const mCR=t.match(/召喚コストは[、,]?バトルゾーンにある相手のエレメントの持つ文明1つにつき(\d+)少なくなる/);
    if(mCR){out.set.costRedOppCiv=+mCR[1];out.notes.push({msg:`💒 相手エレメントの文明1つにつき召喚コスト−${mCR[1]}を設定しました`,q:"コスト"});}}
@@ -28530,6 +28536,7 @@ function openFxEditor(key){
     wide:cur?!!cur.wide:false,
     dragonB:cur?!!cur.dragonB:false,
     shieldBurn:cur?!!cur.shieldBurn:false,
+    shieldBurnCond:cur&&cur.shieldBurnCond||"",
     qqqx:cur?!!cur.qqqx:false,
     auraTapIn:cur?!!cur.auraTapIn:false,
     auraTapInNeo:cur?!!cur.auraTapInNeo:false,
@@ -29071,6 +29078,7 @@ $("fxSave").addEventListener("click",async ()=>{
     wide:$("fxWide").checked,
     dragonB:$("fxDragonB").checked,
     shieldBurn:$("fxShieldBurn").checked,
+    shieldBurnCond:$("fxShieldBurnCond")?$("fxShieldBurnCond").value.trim():"",
     qqqx:$("fxQqqx").checked,
     evoBaseN:(()=>{const v=$("fxEvoBaseN");const n=v?parseInt(v.value,10):0;return (n>1)?Math.min(5,n):undefined;})(),
     evoZone:(()=>{const v=$("fxEvoZone");return v&&v.value?v.value:undefined;})(),
@@ -29536,7 +29544,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.monsho)attrs.push("裁きの紋章");
     if(v.wide)attrs.push("横向き");
     if(v.dragonB)attrs.push("ドラゴンB");
-    if(v.shieldBurn)attrs.push("シールド焼却");
+    if(v.shieldBurn)attrs.push(`シールド焼却${v.shieldBurnCond?`（${v.shieldBurnCond}）`:""}`);
     if(v.qqqx)attrs.push("Q.Q.QX型");
     if(v.auraTapIn||v.auraNote)attrs.push("常在");
     if(hasMachF(v))attrs.push("マッハファイター");
