@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.24";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.27";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5933,7 +5933,7 @@ function fxAliasAll(){
 function canonicalCardKey(nameOrKey){
   const base=normName(nameOrKey);
   // Q.Q.QXの旧登録はlocalStorageに効果付きのまま残ることがあるため、存在判定より先に現行キーへ寄せる。
-  const legacy={"q.q.qx.":"q.q.qx_sec","q.q.qx./終葬5.s.d.":"q.q.qx_sec"};
+  const legacy={"q.q.qx.":"q.q.qx_sec","q.q.qx./終葬5.s.d.":"q.q.qx_sec","禁断機関vivy-r":"禁断機関vivy-r_sec"};
   if(legacy[base]&&(FXDB.has(legacy[base])||imgURL.has(legacy[base])))return legacy[base];
   if(FXDB.has(base)||imgURL.has(base))return base;
   // 保存済みデッキが旧内部キーを持っていても、登録側の aliases で現行キーへ戻す。
@@ -11316,7 +11316,7 @@ const FX_TYPES=[
   ["deathGate","💀 相手のアンタップしているクリーチャー1体を破壊し、自分の墓地からそのクリーチャーよりコストが小さい進化ではないクリーチャー1枚を出してもよい（地獄門デス・ゲート型）"],
   ["gachinkoWinToHand","🎲 ガチンコ・ジャッジを行い、勝ったらこの呪文を墓地に置くかわりに手札に戻す（ガチンコ・ルーレット型）"],
   ["foeDeckRecruitByFoe","🚪 自分の山札を見て、条件に合うクリーチャーを『相手に』1体選ばせてバトルゾーンに出す→シャッフル（ミラクルとミステリーの扉型／条件欄で対象指定）"],
-  ["handManaRecruit","✋🔷 自分の手札またはマナゾーンから条件に合うクリーチャーをn体選び、バトルゾーンに出す（神聖麒 シューゲイザー型／条件欄＝例：コスト5以下／進化以外）"],
+  ["handManaRecruit","✋🔷 自分の手札またはマナゾーンから条件に合うクリーチャーをn体選び、バトルゾーンに出す（神聖麒 シューゲイザー型／条件欄＝例：コスト5以下／進化以外。「合計7以下」と書くとコスト合計の上限になる）"],
   ["killThenRecruit","💀 自分のクリーチャーをn体まで破壊し、破壊した数だけ自分の山札または手札から条件に合うクリーチャーを出す→山札をシャッフル（神聖斬 アシッド型／条件欄＝例：コスト7以下／無色。破壊対象を絞るには条件欄に「破壊:タップ中」を先頭に付ける）"],
   ["deckToGravePick","🪦 自分の山札を見て、条件に合うカードをn枚選び墓地に置く→山札をシャッフル（邪眼皇ロマノフI世型／条件欄＝例：闇）"],
   ["graveCastBottom","🔮 自分の墓地から条件に合う呪文を1枚、コストを支払わずに唱える。唱えた後、山札の一番下に置く（邪眼皇ロマノフI世型／条件欄＝例：闇／コスト6以下）"],
@@ -14250,7 +14250,14 @@ async function runFxList(pi,list,srcCard,inPump){
       else toast("🗑 相手の手札がありません");renderAll();
     }else if(f.t==="handManaRecruit"){
       // ✋🔷 手札またはマナゾーンから条件に合うクリーチャーを出す（神聖麒 シューゲイザー型）
-      const filt=String(f.cond||"").trim();
+      /* 🔢 v15.27 条件欄に「合計7以下」と書くと、選んだカードのコスト合計の上限になる。
+         psyOut と同じ書き方。烈しき切札 ドギラゴン逆の
+         「コストの合計が7以下になるように、クリーチャーを2体まで手札またはマナゾーンから出す」用。 */
+      let filt=String(f.cond||"").trim();
+      let sumCap=null;
+      const mHM=filt.match(/合計\s*(\d+)\s*以下/);
+      if(mHM){sumCap=+mHM[1];filt=filt.replace(mHM[0],"").replace(/^[／\/|｜、,\s]+|[／\/|｜、,\s]+$/g,"").trim();}
+      let budget=sumCap;
       const put=[];
       for(let i=0;i<n;i++){
         const pool=[];
@@ -14260,12 +14267,13 @@ async function runFxList(pi,list,srcCard,inPump){
             if(!rx||!isCreatureReg(rx))continue;
             if(put.some(y=>y.id===x.id))continue;
             if(filt&&!lockFilterOk(filt,rx,x))continue;
+            if(budget!=null){const cc0=(rx.cost!=null&&!isNaN(+rx.cost))?+rx.cost:0;if(cc0>budget)continue;}
             pool.push({x,zk,zja});
           }
         }
-        if(!pool.length){if(!put.length)toast(`✋🔷 手札・マナに該当クリーチャーがいません${filt?`（${filt}）`:""}`);break;}
-        const j=await pickCard(`✋🔷 手札またはマナゾーンから出すクリーチャーを選択（${i+1}/${n}体目${filt?`・${filt}`:""}）\nキャンセルで終了`,
-          pool.map(o=>o.x),{sub:x=>{const o=pool.find(y=>y.x.id===x.id);return o?o.zja:"";}});
+        if(!pool.length){if(!put.length)toast(`✋🔷 手札・マナに該当クリーチャーがいません${filt?`（${filt}）`:""}${sumCap!=null?`／残りコスト${budget}`:""}`);break;}
+        const j=await pickCard(`✋🔷 手札またはマナゾーンから出すクリーチャーを選択（${i+1}/${n}体目${sumCap!=null?`・残りコスト${budget}`:""}${filt?`・${filt}`:""}）\nキャンセルで終了`,
+          pool.map(o=>o.x),{sub:x=>{const o=pool.find(y=>y.x.id===x.id);const rx=getReg(x);const cs=(rx&&rx.cost!=null)?`コスト${rx.cost}`:"";return o?(cs?`${o.zja}・${cs}`:o.zja):cs;}});
         if(j===null)break;
         const {x:tgt,zk}=pool[j];
         const di=Z[zk].findIndex(y=>y.id===tgt.id);
@@ -14278,6 +14286,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(!battleEntryOk(pi,cc)){Z[zk].push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないため元のゾーンに戻しました`);continue;}
         if(!cheatEnterBattle(pi,cc)){renderAll();continue;}   // 🟥 7面上限を通す
         put.push(cc);
+        if(budget!=null){const cc1=(rc&&rc.cost!=null&&!isNaN(+rc.cost))?+rc.cost:0;budget=Math.max(0,budget-cc1);}
         sfx("move");renderAll();
         toast(`✋🔷 ${faceNameOf(cc)} をバトルゾーンに出した`);
       }
@@ -19494,7 +19503,12 @@ function afterHandDiscard(owner,c,byPi){
   if(holder){
     const rd=getReg(c);
     const isJok=rd&&raceMatch(rd,"ジョーカーズ");
-    if(isJok||!rd){
+    /* 🎪 v15.27 ビッグ1は「出た時」能力を使う効果なので、呪文やクロスギアでは起きない。
+       ジョーカーズの呪文を捨てた時にも確認が出ていた。
+       ctype が空（種類を登録していない）ものは今までどおり聞く。 */
+    const _ctNoCre=["spell","crossgear","evocrossgear","castle","gcastle","field","tamaseed","dragheart","exile"];
+    const isCre=!_ctNoCre.includes(String((rd&&rd.ctype)||""));
+    if((isJok||!rd)&&isCre){
       /* 🎪 v15.12：いま解決中の効果に割り込まないよう、効果キューに積む。
          （ソーナンデスの「手札を1枚捨てる → マナから回収」の途中に割り込み、
            回収の前にビッグ1が動いてしまっていた） */
@@ -24117,6 +24131,12 @@ async function execAttack(pi,id,tg){
       }
     }
   }
+  /* 🛡 v15.27 ブロックの確認は、攻撃時に動いた効果がすべて終わってから出す。
+     J・チェンジで入れ替わった側の「離れた時」や、ジョラゴン・ビッグ1が残っていると、
+     手札を捨てる・マナから回収するより先に「ブロックしますか？」が出ていた。
+     アタック・チャンスの分岐では既に待っているが、通常の攻撃では待っていなかった。 */
+  await WATCH_CHAIN;
+  await waitFxIdle();
   const aregNB=getReg(c);
   // 🛡✋ v10.44：「ブロックされない」の判定を1か所にまとめた。
   //    従来はカード自身の登録（noBlock）しか見ておらず、条件付き常在（cstFx=unblock）・
@@ -36217,6 +36237,14 @@ async function fxMergeIncoming(pack,from,opts={}){
 async function removePackLegacyKeys(pack){
   const ks=Array.isArray(pack&&pack.removeKeys)?pack.removeKeys:[];
   for(const raw of ks){
+    /* 🧹 v15.25 生のキーがそのまま登録されている場合（スペース入りなど）は、
+       normName がスペースを消すため下の行では別のキーに当たってしまう。
+       正しい方（スペース無し）を巻き添えで消さないよう、生のキーが実在する時はそちらを消す。 */
+    {const rk=String(raw||"");
+     if(rk&&rk!==normName(rk)&&FXDB.has(rk)){
+       FXDB.delete(rk);dispName.delete(rk);LINKS.delete(rk);imgOrder.delete(rk);ART_KEYS.delete(rk);
+       imgURL.delete(rk);if(db)await idbDel("images",rk);else memImages.delete(rk);
+       continue;}}
     const k=normName(raw);if(!k)continue;
     FXDB.delete(k);dispName.delete(k);LINKS.delete(k);imgOrder.delete(k);ART_KEYS.delete(k);
     imgURL.delete(k);if(db)await idbDel("images",k);else memImages.delete(k);
