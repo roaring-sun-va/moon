@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.27";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.33";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7315,7 +7315,7 @@ function fxBanner(kind,title,sub,big,cardName,side){
         for(const nm of _multi){
           const cell=document.createElement("div");
           cell.style.cssText=`width:${big?92:70}px;aspect-ratio:63/88;flex:0 0 auto;position:relative;background:#0f172a`;
-          const u=imgURL.get(normName(nm));
+          const u=imgURL.get(canonicalCardKey(nm));
           if(u){
             const im=document.createElement("img");
             im.src=u;im.alt="";im.draggable=false;
@@ -8901,6 +8901,21 @@ async function runTurnEndTriggers(cur2){
         TURN_END_PHASE="⚙ ライオネル・グロリアで召喚したゼニスの効果を処理中";
         await waitFxIdle();await WATCH_CHAIN;await waitFxIdle();TURN_END_PHASE="";
       }
+    }
+    /* ⏰ v15.32 「このターンの終わりに、そのクリーチャーをアンタップする」（鬼修羅・跳次元の決断）。
+       効果側で c._untapEnd=S.turn と印を付けておき、ここでまとめてアンタップする。
+       印はターン番号なので、次のターンに持ち越さない。 */
+    {
+      for(const pp of [0,1]){
+        for(const c of zonesOf(pp).battle){
+          if(c._untapEnd!==S.turn)continue;
+          c._untapEnd=null;
+          if(!c.tapped)continue;
+          c.tapped=false;
+          toast(`⏰ ターン終了時：${faceNameOf(c)} をアンタップした`);
+        }
+      }
+      renderAll();
     }
     // アンタップ状態ならターン終了時に手札へ戻る（グレイト“S-駆”型）
     {
@@ -11225,6 +11240,7 @@ const FX_TYPES=[
   ["retrieveManaGrave","↩ マナと墓地から合計n枚 手札に戻す（両ゾーンを組み合わせて自由に選択・条件欄で対象指定・ベートーベン型）"],
   ["meteoburn","☄ メテオバーン：このクリーチャーの下のカードをn枚墓地に置く（使うかどうかを毎回確認。使わない/枚数不足なら、この行より下に登録した効果を中止・マーキュリー/ヴィーナス型の1枚ずつ形式／条件欄に「強制」と書くと確認なしで実行）"],
   ["untapFilt","🔄 アンタップ：自分の対象クリーチャーをすべてアンタップする（条件欄で対象指定・カード名で自身のみも可・ターン終了時アンタップ／聖霊王ナルカミ／パーフェクト・エイティー型）"],
+  ["untapEndTurn","⏰ このターンの終わりに、対象クリーチャーをアンタップする（いまはアンタップせず、ターン終了時に行う／鬼修羅・跳次元の決断型。条件欄で対象指定・nは体数）"],
   ["graveToManaAllTap","⚰→🔷 自分の墓地から条件に合うカードをすべてタップしてマナゾーンに置く（使用可能マナは増えない・パラスラプト型／条件欄で対象指定）"],
   ["drawAsk","🃏 カードを引く（枚数は実行時に入力・エレメントのカード枚数分など盤面を数えて引くゾグジグス型・0でスキップ）"],
   ["drawPerElem","🃏 自分の〔対象〕エレメント1つにつきn枚引く（自分自身も数える・クリーチャー以外のエレメントも数える／条件欄＝対象・例：光／「任意」にすると引くかどうかを聞くムサシ弐天型）"],
@@ -13404,7 +13420,11 @@ async function runFxList(pi,list,srcCard,inPump){
       toast(`（マッドネスで出た時だけの効果なのでスキップ）`);continue;
     }
     // 🌟 [S]効果（スーパー・S・トリガーのボーナス）：自分の盾が1枚以上ある＝SSTボーナス無効の時は自動スキップ
-    if(f.sstOnly&&Z.shield.length>0){
+    /* 🌟 [S]効果（スーパー・S・トリガーのボーナス）。
+       v15.33：S・トリガーで使ったカードには `_viaSST` の印が付くので、それがあれば印で判定する。
+       印が無い（＝S・トリガー以外の経路や、印を付ける前から場にいる）場合は、
+       従来どおり「自分の盾が0枚」で近似する。 */
+    if(f.sstOnly&&(srcCard&&srcCard._viaSST!==undefined?!srcCard._viaSST:Z.shield.length>0)){
       toast(`🌟 [S]効果はスキップ（スーパー・S・トリガーのボーナスは自分のシールドが0枚でトリガーした時のみ）`);
       continue;
     }
@@ -16901,6 +16921,21 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       if(cnt){sfx("ok");toast(`🛡⚓ ブロッカー${cnt}体に「離れる時パワー0超ならとどまる」を次の自分のターンまで付与`);}
       else toast("対象のブロッカーがいません");
+      renderAll();
+    }else if(f.t==="untapEndTurn"){
+      // ⏰ 「このターンの終わりに、そのクリーチャーをアンタップする」。
+      //    いまはアンタップせず印だけ付け、ターン終了処理でまとめてアンタップする。
+      const filt=String(f.cond||"").trim();
+      const pool=Z.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!filt||lockFilterOk(filt,rx,x));});
+      if(!pool.length){toast(`⏰ 対象のクリーチャーがいません${filt?`（${filt}）`:""}`);renderAll();continue;}
+      let mk=0;
+      for(let i=0;i<n&&pool.length;i++){
+        const j=(n>=pool.length)?0:await pickCard(`⏰ このターンの終わりにアンタップするクリーチャーを選択（${i+1}/${n}体目${filt?`・${filt}`:""}）\nキャンセルで終了`,pool);
+        if(j===null)break;
+        const tgt=pool.splice(j,1)[0];
+        tgt._untapEnd=S.turn;mk++;
+      }
+      if(mk>0)toast(`⏰ ${mk}体はこのターンの終わりにアンタップします`);
       renderAll();
     }else if(f.t==="untapFilt"){
       // 🔄 自分の対象クリーチャーをすべてアンタップ（f.cond＝対象条件・空欄＝全クリーチャー）
@@ -21656,6 +21691,12 @@ async function processBroken(op,stack,label){
       const i=remaining.findIndex(x=>x.id===c.id);
       if(i<0)return; remaining.splice(i,1);
       c.tapped=false;
+      /* 🌟 v15.33 S・トリガーで唱えた／出したことを記録する。
+         [S]効果（SSTボーナス）の判定は「自分の盾が0枚」で近似していたため、
+         盾が0枚の時に普通に召喚しただけでもボーナスが出ていた。
+         この印があるカードは、印を優先して判定する（無い時は従来どおり盾0枚で近似）。 */
+      if(zone==="resolve"||zone==="battle")c._viaSST=(Z.shield.length===0);
+      else c._viaSST=undefined;
       if(zone==="grave"){c.faceup=true;Z.grave.push(c);sfx("grave");wentGrave=true;logOnly(`${S.players[op].label}：ブレイクされた《${faceNameOf(c)}》を墓地へ置いた（S・バック/サバキZコスト等）`);}
       else if(zone==="resolve"){
         // 複数のS・トリガー呪文は解決中に積んでおき、パネル完了後に選んだ順で1枚ずつ解決（スタック式）
@@ -29870,6 +29911,13 @@ $("btnRegList").addEventListener("click",()=>{
       FX_RETURN=()=>{$("btnRegList").click();};   // 📚 閉じたら登録一覧へ戻す（デッキパネルには戻さない）
       openFxEditor(k);
     },"",true));
+    /* ✏️ v15.31 登録一覧からも改名できるようにした。
+       改名の入口が画像管理だけだったので、画像の無いカードは名前を直せず、
+       正しい名前で登録し直す → 旧キーが残って二重登録、という流れになっていた。 */
+    row.appendChild(actBtn("改名",async ()=>{
+      await renameImage(k);
+      $("btnRegList").click();
+    },"",true));
     row.appendChild(actBtn("削除",async ()=>{
       if(!await ask(`《${dispName.get(k)||k}》の登録を削除しますか？`))return;
       FXDB.delete(k);await persistFx();$("btnRegList").click();
@@ -29920,6 +29968,41 @@ $("regCloseTop").addEventListener("click",()=>$("regOlay").classList.remove("ope
    ・効果もキーワードも空の登録（登録したつもりで中身が無い）
    ・画像が無い登録／効果登録が無い画像（名前がずれていると必ず両方に出る＝取り違えの目印）
    ・同じ画像が2つ以上の名前に付いている（コピーミスの目印） */
+/* 🕳 v15.30 表示名から引くと別の登録に当たってしまうもの（＝この登録は一生使われない）。
+   同じ表示名の登録が2つあると canonicalCardKey は片方しか返さないので、もう片方が丸ごと死ぬ。
+   Q.Q.QX で実際に起きた形。ツインパクトは上面だけでも引ければ正常とみなす。 */
+function regAuditShadow(){
+  const out=[];
+  for(const [k,v] of FXDB){
+    const disp=dispName.get(k)||(v&&v.name)||k;
+    const cands=[disp];
+    if(disp.includes("／"))cands.push(disp.split("／")[0]);
+    if(disp.includes("/"))cands.push(disp.split("/")[0]);
+    let okHit=false;
+    for(const cn of cands){if(FXDB.get(canonicalCardKey(cn))===v){okHit=true;break;}}
+    if(!okHit)out.push(`${disp}（キー ${k} → ${canonicalCardKey(cands[0])} に当たる）`);
+  }
+  return out;
+}
+/* ✨ v15.30 効果行の「特殊：〜」は EFFECTS の名前と完全一致で引く。
+   名前が変わると黙って不発になり、ログにも出ないので機械的に拾う。 */
+function regAuditDeadSp(){
+  const out=[];
+  if(typeof EFFECTS==="undefined")return out;
+  const names=new Set(EFFECTS.map(e=>e.name));
+  for(const [k,v] of FXDB){
+    const seen=new Set();
+    const walk=o=>{
+      if(Array.isArray(o)){o.forEach(walk);return;}
+      if(!o||typeof o!=="object")return;
+      if(typeof o.t==="string"&&o.t.startsWith("sp:")&&!names.has(o.t.slice(3)))seen.add(o.t);
+      for(const x of Object.values(o))walk(x);
+    };
+    walk(v);
+    for(const t of seen)out.push(`${dispName.get(k)||k}：${t}`);
+  }
+  return out;
+}
 {const b=document.getElementById("regAudit");
  if(b)b.addEventListener("click",()=>{
   try{
@@ -29947,11 +30030,15 @@ $("regCloseTop").addEventListener("click",()=>$("regOlay").classList.remove("ope
       bySig.get(sig).push(dispName.get(k)||k);
     }
     const dup=[...bySig.values()].filter(a=>a.length>1);
+    const shadow=regAuditShadow();
+    const spDead=regAuditDeadSp();
     const sec=(t,arr,note)=>arr.length?`\n\n【${t}】${arr.length}件${note?`（${note}）`:""}\n`+arr.slice(0,60).map(x=>`・${x}`).join("\n")+(arr.length>60?`\n…ほか${arr.length-60}件`:""):"";
     const msg=`🔍 登録の点検（全${FXDB.size}件・画像${imgURL.size}枚）`
       +sec("効果もキーワードも空の登録",empty,"登録したつもりで中身が入っていない")
       +sec("画像が無い登録",noImg,"名前がずれていると『登録が無い画像』にも同数出ます")
       +sec("効果登録が無い画像",noReg,"上と見比べて、同じカードが両方に出ていたら名前のずれ＝取り違え")
+      +sec("引けない登録（表示名がかぶっている）",shadow,"この登録は使われません。片方の表示名を変えてください")
+      +sec("不発の特殊効果",spDead,"効果の「特殊：〜」が本体に無い名前を指しています")
       +(dup.length?`\n\n【同じ絵が複数の名前に付いている】${dup.length}組\n`+dup.slice(0,20).map(a=>"・"+a.join(" ／ ")).join("\n"):"");
     logOnly(msg.replace(/\n/g,"　"));
     ask(msg+"\n\n※この内容はログにも残しました").catch(()=>{});
@@ -30558,7 +30645,7 @@ function openLinkProgress(pi,id){
     const names=reg.psyLink.split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
     parts=names.map(nm=>{
       const hit=Z.battle.find(x=>x.id!==c.id&&normName(faceNameOf(x))===normName(nm));
-      return {img:imgURL.get(normName(nm)),name:nm,on:!!hit,ref:hit||null};
+      return {img:imgURL.get(canonicalCardKey(nm)),name:nm,on:!!hit,ref:hit||null};
     });
   }
   const slotN=Math.max(parts.length,(mode==="under"?Math.max(c.cnt||0,4):parts.length),2);
@@ -34679,7 +34766,7 @@ async function mdPanel(){
       const lines=rows.length?rows.map(r=>{
         const ratio=Math.round(100*r.c/(r.c+r.s));
         const est=(typeof mdEstCost==="function")?mdEstCost(r.n):null;
-        const reg=FXDB.get(normName(r.n));
+        const reg=FXDB.get(canonicalCardKey(r.n));
         const estTxt=(est!=null&&(!reg||reg.cost==null))?`・📊推定コスト${est}`:"";
         return `${r.n}：マナ${ratio}%／プレイ${100-ratio}%（${Math.round(r.c+r.s)}回${r.a?`・攻撃${r.a}回`:""}${estTxt}）`;
       }).join("\n"):"（サンプル3回以上のカードがまだありません）";
@@ -39706,7 +39793,7 @@ function openZeronPanel(pi,c){
     const on=!!(c.gi&&c.gi[k]);
     const w=document.createElement("div");
     w.style.cssText="position:relative;width:100%";
-    const u=imgURL.get(normName(nm));
+    const u=imgURL.get(canonicalCardKey(nm));
     if(u){
       const im=document.createElement("img");
       im.src=u;im.draggable=false;
@@ -39884,7 +39971,7 @@ function openDeckViewer(pi){
 /* ================= 画像管理（改名/削除） ================= */
 /* 🔍 カードの拡大画像を全画面オーバーレイで表示（デッキ編成・効果登録などから共通利用） */
 function showBigCardImage(key,name){
-  const u=imgURL.get(key)||imgURL.get(normName(name||""))||imgURL.get(normName(key||""));
+  const u=imgURL.get(key)||imgURL.get(canonicalCardKey(name||""))||imgURL.get(canonicalCardKey(key||""))||imgURL.get(normName(name||""))||imgURL.get(normName(key||""));
   if(!u){toast("このカードの画像が登録されていません");return;}
   const ol=document.createElement("div");
   ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:990;display:flex;align-items:center;justify-content:center;cursor:zoom-out";
@@ -39932,10 +40019,19 @@ async function renameImageTo(key,nn){
   if(imgURL.has(newKey)){
     if(!await ask(`「${nn}」は既に存在します。上書きしますか？`))return false;
   }
+  /* ⚠ v15.31 効果登録だけが先にある名前へ改名すると、確認なしで上書きしていた。
+     画像が無い登録は上の imgURL の判定に引っかからないため、別に聞く。 */
+  else if(FXDB.has(newKey)){
+    if(!await ask(`「${nn}」には既に効果登録があります（画像は未登録）。\nこの登録を上書きしますか？`))return false;
+  }
   const blob=db?await idbGet("images",key):memImages.get(key);
-  if(!blob)return false;
-  if(db){await idbPut("images",newKey,blob);await idbDel("images",key);}
-  else{memImages.set(newKey,blob);memImages.delete(key);}
+  /* 🖼 v15.31 画像が無いカードも改名できるようにした。
+     以前は blob が取れないと何も言わずに失敗し、効果登録だけのカードの名前を
+     直せなかった（別名で登録し直す → 旧キーが残って二重登録になる原因）。 */
+  if(blob){
+    if(db){await idbPut("images",newKey,blob);await idbDel("images",key);}
+    else{memImages.set(newKey,blob);memImages.delete(key);}
+  }
   dispName.delete(key);
   if(newKey!=="__back__")dispName.set(newKey,nn);
   if(imgOrder.has(key)){if(newKey!=="__back__")imgOrder.set(newKey,imgOrder.get(key));imgOrder.delete(key);await persistImgOrder();}
@@ -41014,14 +41110,14 @@ async function pickDeckCover(deckName,after){
     }
   }
   if(!pool.length){toast("このデッキにはカードがありません");return;}
-  const costOf=nm=>{const r=FXDB.get(normName(nm));return (r&&r.cost!=null&&!isNaN(+r.cost))?+r.cost:-1;};
+  const costOf=nm=>{const r=FXDB.get(canonicalCardKey(nm));return (r&&r.cost!=null&&!isNaN(+r.cost))?+r.cost:-1;};
   pool.sort((a,b)=>{
-    const ia=imgURL.has(normName(a))?0:1, ib=imgURL.has(normName(b))?0:1;
+    const ia=imgURL.has(canonicalCardKey(a))?0:1, ib=imgURL.has(canonicalCardKey(b))?0:1;
     return ia-ib || costOf(b)-costOf(a) || String(a).localeCompare(String(b),"ja");
   });
   const cards=[{name:"（自動で選ぶ）"},...pool.map(nm=>({name:nm}))];
   const j=await pickCard(`🖼 「${deckName}」の表紙にするカードを選ぶ`,cards,
-    {sub:(c,i)=>i===0?"おまかせ":(imgURL.has(normName(c.name))?"":"画像なし")});
+    {sub:(c,i)=>i===0?"おまかせ":(imgURL.has(canonicalCardKey(c.name))?"":"画像なし")});
   if(j===null)return;
   if(j===0){
     await saveDeckCover(deckName,null,null);   // 自動に戻す時は位置も既定へ
@@ -41864,7 +41960,10 @@ function renderDeckGrid(force){
   let total=0;
   for(const r of rows){
     total+=r.count;
-    const k=normName(r.name);
+    /* 🖼 v15.28 旧キーで登録されているカード（Q.Q.QX など）は normName だけでは
+       画像に当たらない。試合中は getReg 経由で現行キーへ寄っていたので出るのに、
+       デッキ作成の画像だけ「画像なし」になっていた。ここも同じ寄せを通す。 */
+    const k=canonicalCardKey(r.name);
     const tile=document.createElement("div");tile.className="dg-tile";
     const im=document.createElement("div");im.className="dg-img";
     const url=imgURL.has(k)?imgURL.get(k):null;
@@ -42264,7 +42363,7 @@ async function openDeckListViewer(name){
   body.style.cssText="display:flex;flex-direction:column;gap:8px";
   wrap.appendChild(body);
   // 🔀 並び順：登録情報をもとに、コスト・文明・種類・名前で並べ替える
-  const regOf=nm=>FXDB.get(normName(nm))||null;
+  const regOf=nm=>FXDB.get(canonicalCardKey(nm))||null;
   const costOf=nm=>{const r=regOf(nm);return (r&&r.cost!=null&&r.cost!=="")?+r.cost:99;};
   const civOf=nm=>{const r=regOf(nm);const cs=(r&&r.civs)||[];
     if(cs.length>1)return 6; // 多色はまとめて後ろ
@@ -43190,7 +43289,8 @@ function renderDeckStats(){
   const CRE=new Set(["creature","evo","neoevo","psychic","psyevo","ultimate","lunatic","kindancre","dream"]);
   let creN=0,spN=0,otherN=0;
   for(const e of entries){
-    const r=FXDB.get(normName(e.name));
+    /* 🔢 v15.28 旧キー登録も数えられるよう、現行キーへ寄せてから引く（内訳） */
+    const r=FXDB.get(canonicalCardKey(e.name));
     if(!r){unknownN+=e.count;continue;}
     const cv=r.civs||[];
     for(const c of cv)civN[c]=(civN[c]||0)+e.count;
@@ -43215,7 +43315,8 @@ function renderCostCurve(){
   const entries=parseList($("deckText").value);
   const buckets={};let unknown=0,total=0,has0=false;
   for(const e of entries){
-    const r=FXDB.get(normName(e.name));
+    /* 🔢 v15.28 旧キー登録も数えられるよう、現行キーへ寄せてから引く（コスト帯） */
+    const r=FXDB.get(canonicalCardKey(e.name));
     let cost=r&&Number.isFinite(r.cost)?r.cost:(r&&Number.isFinite(r.cost2)?r.cost2:null);
     total+=e.count;
     if(cost==null){unknown+=e.count;continue;}
@@ -43434,7 +43535,7 @@ async function renderDeckList(){
       if(ck){nm.style.backgroundImage=`url("${imgURL.get(ck)}")`;nm.style.backgroundPosition=deckCoverPos(d);}
     }
     const civs=new Set();
-    for(const it of (d.main||[])){const r2=FXDB.get(normName(it.name));if(r2&&r2.civs)r2.civs.forEach(v=>civs.add(v));}
+    for(const it of (d.main||[])){const r2=FXDB.get(canonicalCardKey(it.name));if(r2&&r2.civs)r2.civs.forEach(v=>civs.add(v));}
     const label=`${dispN}（${listTotal(d.main)}枚${listTotal(d.gr||[])?` +GR${listTotal(d.gr)}`:""}${listTotal(d.hy||[])?` +超次元${listTotal(d.hy)}`:""}${listTotal(d.sp||[])?` +特殊${listTotal(d.sp)}`:""}）`;
     const cap=document.createElement("div");cap.className="dpCap";
     const nmTxt=document.createElement("div");nmTxt.className="dpName";
