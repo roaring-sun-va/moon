@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.33";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.34";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7724,7 +7724,7 @@ function chatToggle(open){
   if(willOpen){CHAT_UNREAD=0;chatRenderFab();chatRender();}
 }
 const SCORE=[0,0];
-function serializeState(){return JSON.stringify({t:S.turn,w:S.who,z:S.players.map(p=>p.zones),ec:ENTERED_CNT,pt:S.pturn,wo:S._watchOnce||{},fs:S.firstSumUsed||{},su:S.sumTurn||{},nl:S.noLoseCnt||{},g1:S._once1G||{}});}
+function serializeState(){return JSON.stringify({t:S.turn,w:S.who,z:S.players.map(p=>p.zones),ec:ENTERED_CNT,pt:S.pturn,wo:S._watchOnce||{},fs:S.firstSumUsed||{},su:S.sumTurn||{},nl:S.noLoseCnt||{},nlf:S.noLeaveFoeCnt||{},g1:S._once1G||{}});}
 function snap(){
   const s=serializeState();
   if(HIST.length&&HIST[HIST.length-1]===s)return;
@@ -7747,6 +7747,7 @@ function restoreState(st){
   if(st.fs)S.firstSumUsed=st.fs; // 召喚コスト軽減の使用状況も戻す
   if(st.su)S.sumTurn=st.su;       // 💠 このターンの召喚記録も戻す
   if(st.nl)S.noLoseCnt=st.nl;
+  if(st.nlf)S.noLeaveFoeCnt=st.nlf;
   st.z.forEach((z,i)=>{
     for(const k of Object.keys(emptyZones()))if(!z[k])z[k]=[];
     for(const k of Object.keys(z))z[k].forEach(normalizeCard);
@@ -8792,6 +8793,14 @@ function nextTurn(){
       if(S.noLoseCnt[k]>0){
         S.noLoseCnt[k]--;
         if(S.noLoseCnt[k]===0)toast(`🏆「負けない」効果が終了（${S.players[k].label}）`);
+      }
+    }
+  }
+  if(S.noLeaveFoeCnt){
+    for(const k of [0,1]){
+      if(S.noLeaveFoeCnt[k]>0){
+        S.noLeaveFoeCnt[k]--;
+        if(S.noLeaveFoeCnt[k]===0)toast(`🚫「相手の効果では離れない」効果が終了（${S.players[k].label}）`);
       }
     }
   }
@@ -11257,6 +11266,7 @@ const FX_TYPES=[
   ["pauseManual","⏸ 手動処理タイム（出た時などの処理を一時停止して盤面を自由に操作 →「▶ 効果処理を続行」ボタンで再開。メテオバーンや特殊処理に）"],
   ["runMode","🔀 このカードの「選択効果（モード）」を実行（出た時以外の誘発＝墓地に置かれた時などから選択を出す・ゾルザーク型）"],
   ["noLoseTurn","🏆 このターン、自分はゲームに負けない（ターン効果・発動後にこのカードが離れても持続・革命0コッコルピア型。n=持続ターン切替回数、通常1）"],
+  ["noLeaveFoeFxTurn","🚫 このターン、相手のカードの効果では自分のクリーチャーは離れない（バトルによる破壊と自分の効果は止めない・ドギラゴン逆の極限ファイナル革命型。n=持続ターン切替回数、通常2＝次の自分のターンのはじめまで）"],
   ["oriotis1","このターン（次の相手ターン）オリオティス効果を得る（真悠I）"],
   ["drawTapped","自分のタップしているクリーチャー1体につき1ドロー（真悠II）"],
   ["nextCost","次に召喚するクリーチャーのコスト−n（実行時に文明指定・プレリュード型）"],
@@ -17618,6 +17628,16 @@ async function runFxList(pi,list,srcCard,inPump){
       S.noLoseCnt[pi]=Math.max(S.noLoseCnt[pi]||0,nT);
       sfx("ok");
       toast(`🏆 ${S.players[pi].label}：このターン、ゲームに負けない！${srcCard?`（${faceNameOf(srcCard)}）`:""}`);
+    }else if(f.t==="noLeaveFoeFxTurn"){
+      /* 🚫 このターン、相手のカードの効果では自分のクリーチャーは離れない。
+         バトルによる破壊と、自分のカードの効果は止めない（ドギラゴン逆の極限ファイナル革命）。
+         noLoseCnt と同じくターン切替で減るカウンタなので、カードが離れても持続する。
+         n=2 で「次の自分のターンのはじめまで」（相手のターンを挟む）になる。 */
+      const nL=Math.max(1,n||2);
+      S.noLeaveFoeCnt=S.noLeaveFoeCnt||{};
+      S.noLeaveFoeCnt[pi]=Math.max(S.noLeaveFoeCnt[pi]||0,nL);
+      sfx("ok");
+      toast(`🚫 ${S.players[pi].label}：相手のカードの効果では自分のクリーチャーが離れない！${srcCard?`（${faceNameOf(srcCard)}）`:""}`);
     }else if(f.t==="runMode"){
       // 🔀 このカードのモード選択を実行（墓地に置かれた時などの誘発から呼ぶ・ゾルザーク型）
       if(srcCard){
@@ -20639,6 +20659,16 @@ async function effPower(c,attacking,inBattle){
 async function offerTrueEscape(pi,c){
   if(!S.expert)return false;
   const r=getReg(c);
+  /* 🚫 v15.34 このターン、相手のカードの効果では自分のクリーチャーは離れない（ドギラゴン逆型）。
+     原因の判定は `FX_ACTOR`（runFxList がその効果の持ち主を入れる変数）を見る。
+     `FX_PI` は特殊効果の中でしか設定されないので使えない。
+     バトルによる破壊は runFxList を通らず FX_ACTOR が null なので、ここには入らない
+     ＝今までどおり破壊される。 */
+  if(S.noLeaveFoeCnt&&(S.noLeaveFoeCnt[pi]|0)>0&&FX_ACTOR!=null&&(FX_ACTOR|0)!==pi){
+    toast(`🚫 ${faceNameOf(c)} は相手のカードの効果では離れない！`);
+    logOnly(`🚫 ${S.players[pi].label} の《${faceNameOf(c)}》は相手の効果では離れない（残り${S.noLeaveFoeCnt[pi]}ターン）`);
+    return true;
+  }
   // 🚫 バトルゾーンを離れない（禁断の鼓動型）。手札・マナ・山札・盾送りもすべて無効にする
   if(r&&r.neverLeave&&!isIgnored(c,pi)){
     toast(`🚫 ${faceNameOf(c)} はバトルゾーンを離れない！`);
@@ -20951,6 +20981,15 @@ async function loseRepTopReplace(loser){
   return false;
 }
 async function destroyWithReplace(pi,c){
+  /* 🚫 v15.34 このターン、相手のカードの効果では自分のクリーチャーは離れない（ドギラゴン逆型）。
+     破壊は offerTrueEscape を通らずここへ来るので、同じ判定をここにも置く。
+     `FX_ACTOR` は runFxList が入れる「その効果の持ち主」。
+     バトルによる破壊は runFxList を通らず null なので、ここには入らない＝今までどおり破壊される。 */
+  if(S.expert&&S.noLeaveFoeCnt&&(S.noLeaveFoeCnt[pi]|0)>0&&FX_ACTOR!=null&&(FX_ACTOR|0)!==pi){
+    toast(`🚫 ${faceNameOf(c)} は相手のカードの効果では離れない！`);
+    logOnly(`🚫 ${S.players[pi].label} の《${faceNameOf(c)}》は相手の効果では破壊されない（残り${S.noLeaveFoeCnt[pi]}ターン）`);
+    return;
+  }
   bumpEv("destroys",pi?0:1); // piのクリーチャーが破壊された＝相手(pi?0:1)の破壊数に加算
   const r=getReg(c);
   const Z=zonesOf(pi);
