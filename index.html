@@ -5933,7 +5933,7 @@ function fxAliasAll(){
 function canonicalCardKey(nameOrKey){
   const base=normName(nameOrKey);
   // Q.Q.QXの旧登録はlocalStorageに効果付きのまま残ることがあるため、存在判定より先に現行キーへ寄せる。
-  const legacy={"q.q.qx.":"q.q.qx_sec","q.q.qx./終葬5.s.d.":"q.q.qx_sec","禁断機関vivy-r":"禁断機関vivy-r_sec"};
+  const legacy={"q.q.qx.":"q.q.qx_sec","q.q.qx./終葬5.s.d.":"q.q.qx_sec"};
   if(legacy[base]&&(FXDB.has(legacy[base])||imgURL.has(legacy[base])))return legacy[base];
   if(FXDB.has(base)||imgURL.has(base))return base;
   // 保存済みデッキが旧内部キーを持っていても、登録側の aliases で現行キーへ戻す。
