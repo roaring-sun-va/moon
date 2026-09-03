@@ -2722,6 +2722,14 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxSeiba"> セイバー（他の身代わりになれる）</label>
         <input type="text" id="fxSeibaF" list="raceList" placeholder="セイバー対象（種族/名前・空欄＝全て）" style="flex:1;min-width:150px">
       </div>
+      <div class="row" id="fxIncludedAbilityRow" style="gap:10px;flex-wrap:wrap;border-left:3px solid #22c55e;padding-left:8px">
+        <span style="font-size:12px;font-weight:700">🧬 含まれるカード／登場ターン能力</span>
+        <label>進化元1枚につき召喚コスト−<input type="number" id="fxIncludedCostRed" min="0" max="20" value="0" style="width:56px"></label>
+        <label>最低コスト<input type="number" id="fxIncludedCostFloor" min="0" max="99" value="0" style="width:56px"></label>
+        <label>攻撃時、含まれるカード<input type="number" id="fxAtkWinIncludedN" min="0" max="99" value="0" style="width:56px">枚以上で勝利（0＝なし）</label>
+        <label><input type="checkbox" id="fxFoeEntrySick"> 相手のクリーチャーは出たターン攻撃できない</label>
+        <label><input type="checkbox" id="fxUnderRecycleOnDestroy"> 破壊時、下のカードを墓地から進化元または表向き盾へ</label>
+      </div>
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <span style="font-size:12px;font-weight:700">攻撃/召喚時：</span>
         <label><input type="checkbox" id="fxDDD"> D・D・D</label>
@@ -5242,7 +5250,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.36";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.38";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6535,8 +6543,10 @@ function stackCountOf(c){return 1+((c&&c.under)?c.under.length:0);}
 /* 🧬 v15.35：進化元になったカード自身の誘発。 */
 function notifyBecameEvoSource(pi,c){
   if(!S.expert||!c)return;
-  const r=getReg(c);if(!r||!Array.isArray(r.whenEvoSourceFx))return;
-  enqueueWatchJob(async()=>{toast(`🧬 ${faceNameOf(c)}：進化元になった時`);await runFxList(pi,r.whenEvoSourceFx,c);renderAll();});
+  const r=getReg(c);if(!r)return;
+  const fx=onceFilter(c,[...(Array.isArray(r.whenEvoSourceFx)?r.whenEvoSourceFx:[]),...(r.watchFx||[]).filter(w=>w&&w.ev==="becomeEvoSource")]);
+  if(!fx.length)return;
+  enqueueWatchJob(async()=>{toast(`🧬 ${faceNameOf(c)}：進化元になった時`);await runFxList(pi,fx,c);renderAll();});
 }
 /* 🔮 いま解決中の効果が「呪文」から出たものかどうか。
    「相手の呪文によって選ばれる時だけ選べない」（ベルリン型）の判定に使う。 */
@@ -11407,6 +11417,7 @@ const EV_LABEL={
   foeToGrave:"相手のが墓地に置かれた時",myHandDiscarded:"自分の手札が捨てられた時",selfDiscardedByFoe:"相手の効果で手札から捨てられた時",
   foeHandDiscarded:"相手の手札が捨てられた時",allyEvo:"味方が進化した時",
   gachinkoShown:"ガチンコ・ジャッジ",revFinal:"革命ファイナル",revFinalPS:"革命ファイナル",
+  becomeEvoSource:"進化元になる時",
 };
 function fxSummary(list){
   if(!list||!list.length)return "（効果なし）";
@@ -25013,6 +25024,14 @@ function fxRowEl(faceIdx,i){
   ocb.onchange=()=>{f.opt=ocb.checked;};
   optL.appendChild(ocb);
   optL.appendChild(document.createTextNode("❓任意"));
+  const revL=document.createElement("label");revL.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  revL.title="革命チェンジによって出た時だけ、この効果を実行します";
+  const revC=document.createElement("input");revC.type="checkbox";revC.checked=!!f.revChangeOnly;revC.onchange=()=>{f.revChangeOnly=revC.checked;};
+  revL.appendChild(revC);revL.appendChild(document.createTextNode("♻革命チェンジ時のみ"));
+  const evoL=document.createElement("label");evoL.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  evoL.title="NEO進化など、進化元を持って進化して出た時だけ、この効果を実行します";
+  const evoC=document.createElement("input");evoC.type="checkbox";evoC.checked=!!f.evoOnly;evoC.onchange=()=>{f.evoOnly=evoC.checked;};
+  evoL.appendChild(evoC);evoL.appendChild(document.createTextNode("⤴進化して出た時のみ"));
   const faceL=document.createElement("label");faceL.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
   const faceC=document.createElement("input");faceC.type="checkbox";faceC.checked=!!f.faceChoice;faceC.onchange=()=>{f.faceChoice=faceC.checked;};
   faceL.appendChild(faceC);faceL.appendChild(document.createTextNode("🛡表/裏を選ぶ"));
@@ -25063,7 +25082,7 @@ function fxRowEl(faceIdx,i){
   const top=document.createElement("div");top.className="fxr-top";
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(shb);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
-  bot.appendChild(sumL);bot.appendChild(g1La);bot.appendChild(madL);bot.appendChild(sstL);bot.appendChild(spL);bot.appendChild(optL);bot.appendChild(faceL);
+  bot.appendChild(sumL);bot.appendChild(g1La);bot.appendChild(madL);bot.appendChild(sstL);bot.appendChild(spL);bot.appendChild(optL);bot.appendChild(revL);bot.appendChild(evoL);bot.appendChild(faceL);
   bot.appendChild(obL);bot.appendChild(pbL);bot.appendChild(skL);bot.appendChild(fxHenreiEl(f));
   cnd.classList.add("fxr-cond-input");
   const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
@@ -25083,6 +25102,7 @@ function fxRowEl(faceIdx,i){
 }
 const CIVS=[["fxCivL","light","光"],["fxCivW","water","水"],["fxCivD","dark","闇"],["fxCivF","fire","火"],["fxCivN","nature","自然"],["fxCivZ","zero","ゼロ"]];
 const TRIG_EVS=[
+  ["becomeEvoSource","🧬 このクリーチャーが進化元になる時"],
   ["turnStartMine","自分のターンのはじめに"],
   ["revFinal","⚡ ファイナル革命（革命チェンジで出た時・各ターン1回・他のファイナル革命が未使用なら）"],
   ["revFinalPS","⚡ 極限ファイナル革命P'S（出た時＝どんな出方でも・このゲーム中に自分は1回だけ・任意／複数登録すればモード選択に）"],
@@ -26484,6 +26504,11 @@ function renderFxEditor(){
   $("fxStarEvo").checked=!!FXEDIT.starEvo;
   {const e=$("fxNoBaseEvo");if(e)e.checked=!!FXEDIT.noBaseEvo;}
   $("fxGNeo").checked=!!FXEDIT.gneo;
+  {const e=$("fxIncludedCostRed");if(e)e.value=String(FXEDIT.includedCostRed||0);}
+  {const e=$("fxIncludedCostFloor");if(e)e.value=String(FXEDIT.includedCostFloor||0);}
+  {const e=$("fxAtkWinIncludedN");if(e)e.value=String(FXEDIT.atkWinIncludedN||0);}
+  {const e=$("fxFoeEntrySick");if(e)e.checked=!!FXEDIT.foeEntrySick;}
+  {const e=$("fxUnderRecycleOnDestroy");if(e)e.checked=!!FXEDIT.underRecycleOnDestroy;}
   for(let i=0;i<5;i++)$("fxRace"+(i+1)).value=(FXEDIT.races&&FXEDIT.races[i])||"";
   {const rb=document.getElementById("fxRacesB");if(rb)rb.value=(FXEDIT.races2||[]).join("／");}
   $("fxShieldGo").checked=!!FXEDIT.shieldGo;
@@ -29296,12 +29321,12 @@ $("fxSave").addEventListener("click",async ()=>{
     starEvo:$("fxStarEvo").checked,
     noBaseEvo:$("fxNoBaseEvo")?$("fxNoBaseEvo").checked:false,
     gneo:$("fxGNeo").checked,
-    includedCostRed:+(FXEDIT&&FXEDIT.includedCostRed)||0,
-    includedCostFloor:+(FXEDIT&&FXEDIT.includedCostFloor)||0,
-    atkWinIncludedN:+(FXEDIT&&FXEDIT.atkWinIncludedN)||0,
-    foeEntrySick:!!(FXEDIT&&FXEDIT.foeEntrySick),
+    includedCostRed:$("fxIncludedCostRed")?(Math.max(0,+$("fxIncludedCostRed").value||0)):+(FXEDIT&&FXEDIT.includedCostRed)||0,
+    includedCostFloor:$("fxIncludedCostFloor")?(Math.max(0,+$("fxIncludedCostFloor").value||0)):+(FXEDIT&&FXEDIT.includedCostFloor)||0,
+    atkWinIncludedN:$("fxAtkWinIncludedN")?(Math.max(0,+$("fxAtkWinIncludedN").value||0)):+(FXEDIT&&FXEDIT.atkWinIncludedN)||0,
+    foeEntrySick:$("fxFoeEntrySick")?$("fxFoeEntrySick").checked:!!(FXEDIT&&FXEDIT.foeEntrySick),
     whenEvoSourceFx:(FXEDIT&&Array.isArray(FXEDIT.whenEvoSourceFx))?JSON.parse(JSON.stringify(FXEDIT.whenEvoSourceFx)):[],
-    underRecycleOnDestroy:!!(FXEDIT&&FXEDIT.underRecycleOnDestroy),
+    underRecycleOnDestroy:$("fxUnderRecycleOnDestroy")?$("fxUnderRecycleOnDestroy").checked:!!(FXEDIT&&FXEDIT.underRecycleOnDestroy),
     races:[1,2,3,4,5].map(i=>$("fxRace"+i).value.trim()).filter(x=>x).concat(["","","","",""]).slice(0,5),
     races2:(()=>{const e=document.getElementById("fxRacesB");if(!e)return (FXEDIT&&FXEDIT.races2)||[];return e.value.split(/[／\/、,]/).map(s=>s.trim()).filter(Boolean);})(),
     shieldGo:$("fxShieldGo").checked,
