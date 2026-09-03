@@ -2456,7 +2456,7 @@ body.shake{animation:bodyShake .4s ease-out}
     </section>
     <section>
       <h3>戦闘・属性</h3>
-      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
+      <div class="row" id="fxInvCondRow" style="gap:6px;flex-wrap:wrap;align-items:center">
         <span style="font-size:11px;color:var(--muted);font-weight:700">⚡クイック：</span>
         <button type="button" class="btn small ghost" data-qk="sa">SA</button>
         <button type="button" class="btn small ghost" data-qk="blocker">ブロッカー</button>
@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.35";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.36";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5728,6 +5728,8 @@ function queueCheatWatchers(pTo,c){
 }
 function markArrive(c,opt){
   opt=opt||{};
+  // 入場方法は次の入場で必ず更新する。革命チェンジ側は markArrive の前に指定する。
+  if(!opt.keepEntryMethod)c._entryMethod=opt.entryMethod||"normal";
   const _flipOnly=!!opt.flip&&!(()=>{const rF=getReg(c);return rF&&rF.flipAsNew;})();
   // 🚫 踏み倒しメタ：効果が直接バトルゾーンに置いた場合もここで拾う（裏返りは対象外）
   if(!opt.flip){
@@ -13463,7 +13465,7 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!srcCard._wasSummon){toast(`（召喚以外で出たため「召喚時のみ」の効果はスキップ）`);continue;}
     }
     // 😈 「マッドネスで出た時のみ」の効果（斬隠蒼頭龍バイケン型：「そうした場合、〜してもよい」）
-    if(f.revChangeOnly&&srcCard&&!srcCard._viaRevChange){
+    if(f.revChangeOnly&&srcCard&&srcCard._entryMethod!=="revChange"){
       toast(`（革命チェンジで出た時だけの効果なのでスキップ）`);continue;
     }
     if(f.evoOnly&&srcCard&&!isNeoEvoInstance(srcCard)){
@@ -23839,8 +23841,9 @@ async function execAttack(pi,id,tg){
           try{fxShare("evo",(_toShield?"S革命チェンジ！":isJ?"J・チェンジ！":r.pKakumei?"P革命チェンジ！":"革命チェンジ！"),
             `${S.players[pi].label}　${faceNameOf(c)} と入れ替え`,true,hcard.name,pi);}catch(e){}
         }
-        markArrive(hcard);
-        hcard._viaRevChange=!!isRevCh;
+        // CIPをキューへ入れる前に入場方法を確定する。waitFxIdleの成否に依存させない。
+        markArrive(hcard,{entryMethod:isRevCh?"revChange":"invade"});
+        hcard._viaRevChange=!!isRevCh; // 旧登録・互換用
         emitEvent(pi,"summon");
         enqueueFx(pi,hcard);
         renderAll();
@@ -25334,6 +25337,9 @@ function fxUiPolish(){
       if(invRow&&condRow&&invRow.parentElement===condRow.parentElement){
         invRow.after(condRow);
         condRow.style.cssText+=";border-left:3px solid var(--accent);padding-left:8px;margin-top:2px";
+        const syncInvCond=()=>{condRow.style.display=(["fxInvade","fxKakumei","fxPInvade","fxPKakumei"].some(id=>{const e=document.getElementById(id);return e&&e.checked;})||!!((document.getElementById("fxSInvade")||{}).value))?"flex":"none";};
+        for(const id of ["fxInvade","fxKakumei","fxPInvade","fxPKakumei","fxSInvade"]){const e=document.getElementById(id);if(e&&!e._invCondSync){e.addEventListener("change",syncInvCond);e._invCondSync=true;}}
+        syncInvCond();
       }
     }
     // 常在関連（条件付き常在・置換ロック・能力無視）を常在セクションへ集約
@@ -26076,6 +26082,9 @@ function el0IsText(el){
 {const t=document.getElementById("fxSaveTop");if(t)t.addEventListener("click",()=>{const b=document.getElementById("fxSave");if(b)b.click();});}
 {const t=document.getElementById("fxCancelTop");if(t)t.addEventListener("click",()=>{const b=document.getElementById("fxCancel");if(b)b.click();});}
 function renderFxEditor(){
+  // 侵略／革命チェンジを持たないカードに、無関係な条件欄を表示しない。
+  const _invCondRow=document.getElementById("fxInvCondRow");
+  if(_invCondRow)_invCondRow.style.display=(FXEDIT&&(FXEDIT.invade||FXEDIT.kakumei||FXEDIT.pInvade||FXEDIT.pKakumei||FXEDIT.sInvade))?"flex":"none";
   /* 👁 「盤面を見る」は、対戦が始まっていて、閉じた時の戻り先が盤面の時だけ出す。
      デッキ編成・デッキ一覧・登録一覧などから開いた時は戻り先が盤面ではないので出さない。 */
   {const fp=document.getElementById("fxPeek");
@@ -28734,6 +28743,13 @@ function openFxEditor(key){
     starEvo:cur?!!cur.starEvo:false,
     noBaseEvo:cur?!!cur.noBaseEvo:false,
     gneo:cur?!!cur.gneo:false,
+    // 専用UIをまだ持たない新機能も、カードを開いて保存した時に失わせない。
+    includedCostRed:cur&&(+cur.includedCostRed||0)||0,
+    includedCostFloor:cur&&(+cur.includedCostFloor||0)||0,
+    atkWinIncludedN:cur&&(+cur.atkWinIncludedN||0)||0,
+    foeEntrySick:cur?!!cur.foeEntrySick:false,
+    whenEvoSourceFx:cur&&Array.isArray(cur.whenEvoSourceFx)?JSON.parse(JSON.stringify(cur.whenEvoSourceFx)):[],
+    underRecycleOnDestroy:cur?!!cur.underRecycleOnDestroy:false,
     races:cur&&cur.races||["","","","",""],
     races2:cur&&cur.races2||[],
     shieldGo:cur?!!cur.shieldGo:false,
@@ -29280,6 +29296,12 @@ $("fxSave").addEventListener("click",async ()=>{
     starEvo:$("fxStarEvo").checked,
     noBaseEvo:$("fxNoBaseEvo")?$("fxNoBaseEvo").checked:false,
     gneo:$("fxGNeo").checked,
+    includedCostRed:+(FXEDIT&&FXEDIT.includedCostRed)||0,
+    includedCostFloor:+(FXEDIT&&FXEDIT.includedCostFloor)||0,
+    atkWinIncludedN:+(FXEDIT&&FXEDIT.atkWinIncludedN)||0,
+    foeEntrySick:!!(FXEDIT&&FXEDIT.foeEntrySick),
+    whenEvoSourceFx:(FXEDIT&&Array.isArray(FXEDIT.whenEvoSourceFx))?JSON.parse(JSON.stringify(FXEDIT.whenEvoSourceFx)):[],
+    underRecycleOnDestroy:!!(FXEDIT&&FXEDIT.underRecycleOnDestroy),
     races:[1,2,3,4,5].map(i=>$("fxRace"+i).value.trim()).filter(x=>x).concat(["","","","",""]).slice(0,5),
     races2:(()=>{const e=document.getElementById("fxRacesB");if(!e)return (FXEDIT&&FXEDIT.races2)||[];return e.value.split(/[／\/、,]/).map(s=>s.trim()).filter(Boolean);})(),
     shieldGo:$("fxShieldGo").checked,
