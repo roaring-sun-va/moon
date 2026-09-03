@@ -5242,7 +5242,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.34";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.35";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6530,6 +6530,12 @@ function markBuffTurn(c,keys){
 }
 /* 🌟 モモキングダム✕型：含まれるカード枚数＝自身＋下のカード。6枚未満で攻撃不可・相手に選ばれない。6枚到達でこのターン相手全体−99999。 */
 function stackCountOf(c){return 1+((c&&c.under)?c.under.length:0);}
+/* 🧬 v15.35：進化元になったカード自身の誘発。 */
+function notifyBecameEvoSource(pi,c){
+  if(!S.expert||!c)return;
+  const r=getReg(c);if(!r||!Array.isArray(r.whenEvoSourceFx))return;
+  enqueueWatchJob(async()=>{toast(`🧬 ${faceNameOf(c)}：進化元になった時`);await runFxList(pi,r.whenEvoSourceFx,c);renderAll();});
+}
 /* 🔮 いま解決中の効果が「呪文」から出たものかどうか。
    「相手の呪文によって選ばれる時だけ選べない」（ベルリン型）の判定に使う。 */
 let FX_FROM_SPELL=false;
@@ -6815,6 +6821,7 @@ async function playEvoCreature(p,zone,id){
   const evc=f.card;
   evc.faceup=true;evc.tapped=host.tapped;
   evc.under=[host,...(host.under?host.under.splice(0):[]),...(evc.under||[])];
+  notifyBecameEvoSource(p,host);
   if(host.gear&&host.gear.length){evc.gear=host.gear.splice(0);}
   const bi=Z.battle.findIndex(x=>x.id===host.id);
   Z.battle[bi]=evc;
@@ -6847,7 +6854,7 @@ async function playNeoCreature(p,zone,id){
   }
   // NEO進化：バトルゾーンの自分クリーチャーを進化元に
   const Z=zonesOf(p);
-  const pool=Z.battle.filter(x=>x.id!==id);
+  const pool=Z.battle.filter(x=>x.id!==id&&evoSrcOk(getReg(f0.card),x));
   if(!pool.length){
     toast("進化元になるクリーチャーがいません。NEOクリーチャーとして通常召喚します");
     const f=findCard(p,zone,id); if(f){f.card.neoEvo=false;f.card._neoAsked=true;}
@@ -6867,6 +6874,7 @@ async function playNeoCreature(p,zone,id){
   const evc=f.card;
   evc.faceup=true;evc.tapped=host.tapped;evc.neoEvo=true;
   evc.under=[host,...(host.under?host.under.splice(0):[]),...(evc.under||[])];
+  notifyBecameEvoSource(p,host);
   if(host.gear&&host.gear.length){evc.gear=host.gear.splice(0);}
   const bi=Z.battle.findIndex(x=>x.id===host.id);
   Z.battle[bi]=evc;
@@ -6924,7 +6932,7 @@ async function summonCreatureNeoAware(pi,t,opts){
   // 🧬 NEO：非進化としても出せる。⤴ 進化・究極進化（ultimate等）：進化元がいれば「重ねて出す」を選べる（ライジングNEX対応）
   if(r&&(isNeoReg(r)||isEvoReg(r))&&!isNoBaseEvoReg(r)){
     const isNeo=isNeoReg(r);
-    const bases=Z.battle.filter(x=>x.id!==t.id&&x.id!==opts.excludeId&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize);})());
+    const bases=Z.battle.filter(x=>x.id!==t.id&&x.id!==opts.excludeId&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize)&&evoSrcOk(r,x);})());
     if(bases.length){
       const evoLbl=evoKindLabel(evoKindOf(r));
       const m=await askChoice(
@@ -6943,6 +6951,7 @@ async function summonCreatureNeoAware(pi,t,opts){
             t.faceup=true;t.tapped=host.tapped;
             if(isNeo)t.neoEvo=true;
             t.under=[host,...(host.under?host.under.splice(0):[]),...(t.under||[])];
+            notifyBecameEvoSource(pi,host);
             if(host.gear&&host.gear.length)t.gear=[...(t.gear||[]),...host.gear.splice(0)];
             Z.battle[bi]=t;
             transferAtkState([host.id],t);
@@ -11366,6 +11375,11 @@ const FX_TYPES=[
   ["manaPlusPerZone","💠 そのターン、〔条件欄のゾーン:対象〕1枚につき使用可能マナを1増やす（上限は最大マナの2倍・大革命のD ワイルド・サファリ・チャンネル型／例：マナ:多色）"],
   ["destroyWeakerPick","💥 このクリーチャーよりパワーが小さい相手のクリーチャーをn体選んで破壊する（頂上連結 ロッド・ゾージア5th型／条件欄でさらに絞れる）"],
   ["manaUntapPick","🔄 自分のマナゾーンにあるカードをn枚アンタップする（ラスト・GOLDEN・ドラゴン型・タップしているマナから順に）"],
+  ["includedChargeMana","🌱 このクリーチャーに含まれるカードの枚数まで、山札の上からマナゾーンに置く"],
+  ["manaReturnUpTo","✋ 自分のマナゾーンからn枚まで手札に戻す"],
+  ["includedManaUntap","🔄 このクリーチャーに含まれるカードの枚数まで、自分のマナをアンタップする"],
+  ["topLookCreatureBottom","👀 山札の上からn枚を見てクリーチャー1枚を手札に加え、残りを好きな順序で山札の下に置く"],
+  ["foeElemShield","🛡 相手のエレメントを1つ選び、シールド化する"],
   ["handToMana","🌱 自分の手札からn枚をマナゾーンに置く（任意・キャンセルで置かない／条件欄で対象を絞れる）"],
   ["foeTopPowerToHyper","🌌 相手は自身のパワーが一番大きいクリーチャーをすべて、自身の超次元ゾーンに置く（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く跳躍 テレポートゾーン型）"],
   ["foeRandCreManaHandToDeck","🎲 相手のクリーチャー・相手のマナ・相手の手札からそれぞれランダムにn枚ずつ、相手の山札の一番下に置く（燃えるデット・ソード型）"],
@@ -11775,6 +11789,13 @@ async function autoTapCost(pi,c){
   //    （進化させると進化元はunderへ移るため、Z.battleのスキャンだけだと軽減が消えてしまう不具合の対策）
   const evoBases=(c.under&&c.under.length)?[c.under[0]]:[];
   let cost=r.cost;
+  // 🧬 進化元1枚につき指定値を軽減（自身は数えない・固有下限あり）。
+  if(+r.includedCostRed>0&&c.under&&c.under.length){
+    const floor=Math.max(0,+r.includedCostFloor||0);
+    const dec=Math.min(c.under.length*(+r.includedCostRed),Math.max(0,(+cost||0)-floor));
+    cost=Math.max(floor,(+cost||0)-dec);
+    if(dec)toast(`🧬 進化元${c.under.length}枚×${+r.includedCostRed}：召喚コスト−${dec}（残り${cost}）`);
+  }
   let paySide=(r.ctype==="spell")?"spell":"creature"; // 支払う面の種別（コスト＋n常在の判定用）
   if((r.twin||r.ctype==="twinpact")&&r.cost2!=null&&c._altPay==null){
     const j=await askTwinFace(c,`《${faceNameOf(c)}》どちらの面のコストを支払う？`,
@@ -12493,6 +12514,19 @@ function noteDestroyedForHandTrigger(){
     renderAll();
   });
 }
+async function recycleDestroyedUnder(pi,c){
+  const Z=zonesOf(pi),ids=(c._destroyUnderIds||[]).slice();c._destroyUnderIds=[];
+  const cards=ids.map(id=>Z.grave.find(x=>x.id===id)).filter(Boolean);if(!cards.length)return;
+  const hosts=Z.battle.filter(x=>{const r=getReg(x);return r&&(isNeoReg(r)||isEvoReg(r));});
+  const opts=[];if(hosts.length)opts.push("🧬 自分のNEO／進化クリーチャー1体の下に置く");if(shieldCapOk(Z,true))opts.push("🛡 まとめて1つの表向きシールドにする");
+  if(!opts.length){toast("下にあったカードを置ける場所がありません");return;}
+  const j=await askChoice(`🎼 ${faceNameOf(c)}：下にあった${cards.length}枚をどこに置きますか？`,opts);if(j==null)return;
+  const useHost=opts[j].startsWith("🧬");
+  for(const x of cards){const gi=Z.grave.findIndex(g=>g.id===x.id);if(gi>=0)Z.grave.splice(gi,1);x.tapped=false;x.faceup=true;}
+  if(useHost){const k=hosts.length===1?0:await pickCard("下に置くNEO／進化クリーチャーを選択",hosts);if(k==null){cards.forEach(x=>Z.grave.push(x));return;}hosts[k].under=[...(hosts[k].under||[]),...cards];toast(`🧬 ${cards.length}枚を${faceNameOf(hosts[k])}の下に置いた`);}
+  else{const top=cards.shift();top.under=cards;top.faceup=true;top.mark=true;Z.shield.push(top);await notifyShieldPlaced(pi,[top]);toast(`🛡 ${ids.length}枚を1つの表向きシールドとして置いた`);}
+  renderAll();
+}
 async function destroyCreature(pi,c,opts){
   const Z=zonesOf(pi);
   const i=Z.battle.findIndex(x=>x.id===c.id);
@@ -12811,6 +12845,7 @@ async function destroyCreature(pi,c,opts){
     const r0=getReg(c);
     const d0=(r0&&r0.dest)||"grave";
     const kids=c.under.splice(0);
+    if(r0&&r0.underRecycleOnDestroy)c._destroyUnderIds=kids.map(x=>x.id);
     kids.forEach(u=>{u.tapped=false;u.faceup=true;(Z[d0]||Z.grave).push(u);});
   }
   const r=getReg(c);
@@ -12840,6 +12875,8 @@ async function destroyCreature(pi,c,opts){
   c.tapped=false;c.faceup=true;c.rot=0;
   if(dest==="grave"&&graveShuffleRepApply(c,pi)){runWatchFx(pi,"myDestroyed");return;}
   Z[dest].push(c);
+  if(S.expert&&r&&r.underRecycleOnDestroy&&c._destroyUnderIds&&c._destroyUnderIds.length)
+    enqueueWatchJob(()=>recycleDestroyedUnder(pi,c));
   sfx("grave");
   toast(`破壊：${faceNameOf(c)}${dest==="hand"?"（手札へ）":dest==="mana"?"（マナへ）":""}`);
   runWatchFx(pi,"myDestroyed");
@@ -13426,6 +13463,12 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!srcCard._wasSummon){toast(`（召喚以外で出たため「召喚時のみ」の効果はスキップ）`);continue;}
     }
     // 😈 「マッドネスで出た時のみ」の効果（斬隠蒼頭龍バイケン型：「そうした場合、〜してもよい」）
+    if(f.revChangeOnly&&srcCard&&!srcCard._viaRevChange){
+      toast(`（革命チェンジで出た時だけの効果なのでスキップ）`);continue;
+    }
+    if(f.evoOnly&&srcCard&&!isNeoEvoInstance(srcCard)){
+      toast(`（進化して出た時だけの効果なのでスキップ）`);continue;
+    }
     if(f.madOnly&&srcCard&&!srcCard._viaMadness){
       toast(`（マッドネスで出た時だけの効果なのでスキップ）`);continue;
     }
@@ -16538,6 +16581,35 @@ async function runFxList(pi,list,srcCard,inPump){
         markBuffTurn(me,["bkAdd"]);
         toast(`💥 このターン、${faceNameOf(me)} はシールドを${put}つ多くブレイクする`);
       }else if(put)toast(`💎 ${put}枚をマナゾーンに置いた（ブレイク数を増やす対象が場にいません）`);
+    }else if(f.t==="includedChargeMana"){
+      const max=Math.min(Z.deck.length,srcCard?stackCountOf(srcCard):0);
+      if(!max){toast("🌱 山札がないためマナに置けません");continue;}
+      const j=await askChoice(`🌱 含まれるカードは${max}枚。山札の上から何枚マナに置きますか？`,Array.from({length:max+1},(_,i)=>`${i}枚`));
+      const take=j==null?0:j;
+      for(let i=0;i<take;i++){const mc=Z.deck.shift();mc.faceup=true;mc.tapped=false;manaTapIn(mc,pi);Z.mana.push(mc);markArrive(mc);}
+      if(take)bumpEv("manaAccel",pi,take);toast(`🌱 山札の上から${take}枚をマナゾーンに置いた`);sfx("move");renderAll();
+    }else if(f.t==="manaReturnUpTo"){
+      let moved=0;
+      while(moved<n&&Z.mana.length){const j=await pickCard(`✋ マナから手札に戻すカードを選択（${moved}/${n}枚）`,Z.mana,{hint:"途中で閉じると終了"});if(j==null)break;const mc=Z.mana.splice(j,1)[0];mc.tapped=false;mc.faceup=true;toHand(Z,mc);moved++;renderAll();}
+      toast(`✋ マナゾーンから${moved}枚を手札に戻した`);
+    }else if(f.t==="includedManaUntap"){
+      const max=Math.min(Z.mana.filter(x=>x.tapped).length,srcCard?stackCountOf(srcCard):0);let moved=0;
+      while(moved<max){const pool=Z.mana.filter(x=>x.tapped);const j=await pickCard(`🔄 アンタップするマナを選択（${moved+1}/${max}枚）`,pool);if(j==null)break;pool[j].tapped=false;moved++;renderAll();}
+      toast(`🔄 含まれるカードの枚数まで、マナを${moved}枚アンタップした`);
+    }else if(f.t==="topLookCreatureBottom"){
+      const look=Z.deck.splice(0,Math.min(n,Z.deck.length));look.forEach(x=>{x.faceup=true;x.seen=true;});renderAll();
+      const pool=look.filter(x=>isCreatureReg(getReg(x)));let chosen=null;
+      if(pool.length){const j=await pickCard(`👀 山札の上${look.length}枚：手札に加えるクリーチャーを選択`,pool,{hint:"閉じると加えない"});if(j!=null){chosen=pool[j];look.splice(look.findIndex(x=>x.id===chosen.id),1);chosen.faceup=true;chosen.seen=false;toHand(Z,chosen);}}
+      if(look.length){const ordered=await orderForDeckBottom(look.slice(),"見たカードの残り",pi);ordered.forEach(x=>{x.faceup=false;x.seen=true;Z.deck.push(x);});}
+      toast(chosen?`✋ ${faceNameOf(chosen)} を手札に加えた`:`👀 クリーチャーを手札に加えなかった`);renderAll();
+    }else if(f.t==="foeElemShield"){
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const pool=[...OZ.battle,...OZ.battle.flatMap(h=>h.gear||[])];
+      if(!pool.length){toast("相手のエレメントがありません");continue;}
+      const j=await pickCard("🛡 シールド化する相手のエレメントを選択",pool);if(j==null)continue;
+      const tgt=pool[j];let moved=null;const bi=OZ.battle.findIndex(x=>x.id===tgt.id);
+      if(bi>=0)moved=OZ.battle.splice(bi,1)[0];else for(const h of OZ.battle){const gi=(h.gear||[]).findIndex(x=>x.id===tgt.id);if(gi>=0){moved=h.gear.splice(gi,1)[0];break;}}
+      if(moved){moved.faceup=false;moved.tapped=false;moved.isCross=false;OZ.shield.push(moved);await notifyShieldPlaced(op,[moved]);toast(`🛡 ${faceNameOf(moved)} をシールド化した`);renderAll();}
     }else if(f.t==="manaUntapPick"){
       // 🔄 自分のマナをn枚だけアンタップする（全部アンタップの manaUntapAll と違い枚数を指定できる）
       const tapped=Z.mana.filter(m=>m.tapped);
@@ -20249,6 +20321,8 @@ function dispCost(c,pi){
   let cost=+r.cost;
   const base=cost;
   try{
+    if(+r.includedCostRed>0&&c.under&&c.under.length)
+      cost=Math.max(+r.includedCostFloor||0,cost-c.under.length*(+r.includedCostRed));
     for(const b of zonesOf(pi).battle){
       const rb=getReg(b);
       if(!rb||!rb.stCostM||rb.stCostM<=0)continue;
@@ -22740,6 +22814,12 @@ async function startAttack(pi,id){
     if(((rA&&rA.cantAtk&&!isIgnored(c,pi))||(c.buff&&c.buff.cantAtk)||(S._cantAtkAllTurn&&S._cantAtkAllTurn[pi]===`${S.turn}:${S.who}`))){toast(`⛔ ${faceNameOf(c)} は攻撃できない`);return;}
     // 🌟 モモキングダム✕型：含まれるカードが6枚未満なら攻撃できない
     if(rA&&rA.momoKingX&&!isIgnored(c,pi)&&stackCountOf(c)<6){toast(`⛔ ${faceNameOf(c)} は含まれるカードが6枚未満なので攻撃できない（現在${stackCountOf(c)}枚）`);return;}
+    if(rA&&+rA.atkWinIncludedN>0&&stackCountOf(c)>=+rA.atkWinIncludedN){
+      declareWin(pi,`${faceNameOf(c)}：含まれるカードが${stackCountOf(c)}枚で攻撃`,false);return;
+    }
+    if(c.bornTurn===S.turn&&S.vs&&zonesOf(pi?0:1).battle.some(b=>{const rb=getReg(b);return rb&&rb.foeEntrySick&&!isSealed(b)&&!isIgnored(b,pi?0:1);})){
+      toast(`⛔ ${faceNameOf(c)} は相手の常在効果により、出たターンは攻撃できない`);return;
+    }
     // ⛔ 条件付き攻撃不可：条件式を満たしていない間は攻撃できない（例：墓地:ドラゴン>=5）
     if(rA&&rA.cantAtkCond&&!isIgnored(c,pi)&&!zoneCondOk(rA.cantAtkCond,pi)){
       toast(`⛔ ${faceNameOf(c)} は攻撃できない（条件未達：${rA.cantAtkCond}）`);
@@ -23760,10 +23840,12 @@ async function execAttack(pi,id,tg){
             `${S.players[pi].label}　${faceNameOf(c)} と入れ替え`,true,hcard.name,pi);}catch(e){}
         }
         markArrive(hcard);
+        hcard._viaRevChange=!!isRevCh;
         emitEvent(pi,"summon");
         enqueueFx(pi,hcard);
         renderAll();
         await waitFxIdle();
+        hcard._viaRevChange=false;
         // 🐉 ヒカリスマ型：革命チェンジで出た時、山上2枚を見て1枚を表向きシールド化・1枚を手札（攻撃時はselfAtk側で処理）
         {const rH2=getReg(hcard);if(rH2&&rH2.hikarisma){toast(`🐉 ${faceNameOf(hcard)}：革命チェンジで出た時の効果`);await runFxList(pi,[{t:"peekShieldHand",n:2}],hcard);renderAll();await waitFxIdle();}}
         // ⚡ ファイナル革命：革命チェンジ系で出た時、そのターンまだ他のファイナル革命を使っていなければ発動
@@ -23933,6 +24015,7 @@ async function execAttack(pi,id,tg){
           const host=Z.battle[k];
           h.tapped=host.tapped;
           h.under=[host,...(host.under?host.under.splice(0):[]),...(h.under||[])];
+          notifyBecameEvoSource(pi,host);
           if(host.gear&&host.gear.length){h.gear=host.gear.splice(0);}
           const bi=Z.battle.findIndex(x=>x.id===host.id);
           Z.battle[bi]=h;
