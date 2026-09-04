@@ -5253,7 +5253,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.40";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.41";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11850,7 +11850,8 @@ async function autoTapCost(pi,c){
   if((r.twin||r.ctype==="twinpact")&&r.cost2!=null&&c._altPay==null){
     const j=await askTwinFace(c,`《${faceNameOf(c)}》どちらの面のコストを支払う？`,
       `コスト${r.cost!=null?r.cost:"未設定"}`,`コスト${r.cost2}`,"支払わない");
-    if(j===null||j===2)return;
+    if(j===null||j===2){c._twinChoiceCancelled=true;return;}
+    delete c._twinChoiceCancelled;
     cost=j===0?r.cost:r.cost2;
     // ツインパクトは上面＝クリーチャー・下面＝呪文が通例
     paySide=j===0?"creature":"spell";
@@ -31683,6 +31684,10 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if((fromZone==="battle"||fromZone==="shield")&&(toZone==="grave"||toZone==="exile"))dissolveGhost(id,fromZone==="shield"?"break":"lose");
   f.arr.splice(f.idx,1);
   const c=f.card,Z=zonesOf(pTo);
+  // 手札からツインパクトを一旦バトルゾーンへ置き、自動支払いメニューで面を選ぶ場合は、
+  // 面が確定するまで「クリーチャーが出た」イベントとCIPを予約しない。
+  // 下面を選んだカードをネルガルザーク等がドラゴンの登場として拾う不具合を防ぐ。
+  const _deferTwinFace=!!(S.expert&&S.autoTap&&!S.freePlay&&fromZone==="hand"&&toZone==="battle"&&(()=>{const r=getReg(c);return r&&(r.twin||r.ctype==="twinpact")&&r.cost2!=null;})());
   // 🔁 同一プレイヤーのバトルゾーン内移動＝並べ替え：タップ状態・バフ・出た時効果を再発させない
   const _reorder=(pFrom===pTo&&fromZone==="battle"&&toZone==="battle");
   if(!_reorder){
@@ -32009,7 +32014,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       toast(ok?`💪 マナ武装${reg.manaArm} 達成！（該当マナ${cnt}枚）効果を使えます`:`マナ武装${reg.manaArm}：未達成（該当マナ${cnt}枚）`);
     }
     if(S.expert&&reg&&reg.exlife)makeExLifeShield(pTo,c);   // 💠 v15.10 効果で出た時と同じ処理にまとめた
-    if(!_reorder)emitEvent(pTo,"summon");
+    if(!_reorder&&!_deferTwinFace)emitEvent(pTo,"summon",c);
   }
   if(S.expert&&fromZone==="battle"&&toZone==="grave"&&pFrom===pTo){
     const cX=zonesOf(pFrom).battle.find(x=>x.id===id);
@@ -32030,7 +32035,19 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     if(fromZone!=="battle"){ENTERED_CNT++;c.bornTurn=S.turn;}
   }
   if(S.expert&&S.autoTap&&!S.freePlay&&fromZone==="hand"&&(toZone==="battle"||toZone==="resolve")){
-    MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(pTo,c)).catch(()=>{});
+    MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(async()=>{
+      await autoTapCost(pTo,c);
+      if(_deferTwinFace&&!c._twinChoiceCancelled){
+        const ZT=zonesOf(pTo);
+        if(ZT.battle.some(x=>x.id===c.id)){
+          // 上面を選んだ時だけ、ここで初めて「クリーチャーが出た」を通知する。
+          c.face=0;markArrive(c);emitEvent(pTo,"summon",c);enqueueFx(pTo,c);
+        }else if(ZT.resolve.some(x=>x.id===c.id)){
+          // 下面はautoTapCost内でspellイベントを通知済み。CIPも下面だけを解決する。
+          c.face=1;enqueueFx(pTo,c);
+        }
+      }
+    }).catch(()=>{});
   }
   // 💰 墓地からの「召喚」（ダーク・ルピア型）：支払うか確認してからautoTapCost（シンパシー等の軽減が適用される）。
   //    蘇生・踏み倒し（支払わない）の場合は「いいえ」でそのまま。
@@ -32316,7 +32333,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     }
     // 🔀 公開パネルを開いている間にそこから出したカードは、出た時をパネルを閉じてから処理（入れ子の公開が混ざらないように）
     else if(RV_CIP_DEFER&&$("revealOlay").classList.contains("open"))RV_CIP_DEFER.push([pTo,c]);
-    else enqueueFx(pTo,c);
+    else if(!_deferTwinFace)enqueueFx(pTo,c);
   }
   // ⚡ どこからでも墓地に置かれた時（toGrave）：バトル破壊はdestroyWithReplaceで発火するため、それ以外の墓地着地で発火
   if(S.expert&&toZone==="grave"&&fromZone!=="grave"&&fromZone!=="battle"){
