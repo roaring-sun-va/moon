@@ -5253,7 +5253,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.41";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.42";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6944,6 +6944,22 @@ async function summonCreatureNeoAware(pi,t,opts){
   const Z=zonesOf(pi);
   const r=getReg(t);
   t.neoEvo=false;
+  // 緊急再誕など「クリーチャーを出す」効果で通常の進化クリーチャーを選んだ場合は、
+  // 必ず正規の進化元へ重ねる。進化元なしで非進化クリーチャーとして直置きしない。
+  if(r&&isEvoReg(r)&&!isNeoReg(r)&&!isNoBaseEvoReg(r)&&opts.requireEvolution){
+    const bases=Z.battle.filter(x=>x.id!==t.id&&x.id!==opts.excludeId&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize)&&evoSrcOk(r,x);})());
+    if(!bases.length){toast(`⛔ ${faceNameOf(t)}：条件に合う進化元がないため出せません`);return false;}
+    const k=bases.length===1?0:await pickCard(`⤴ ${faceNameOf(t)}の進化元を選択`,bases,{sub:x=>{const rr=getReg(x);return rr&&rr.shinkalize?"シンカライズ":"クリーチャー";}});
+    if(k===null)return false;
+    const host=bases[k],bi=Z.battle.findIndex(x=>x.id===host.id);if(bi<0)return false;
+    t.faceup=true;t.tapped=host.tapped;t.sick=false;
+    t.under=[host,...(host.under?host.under.splice(0):[]),...(t.under||[])];
+    notifyBecameEvoSource(pi,host);
+    if(host.gear&&host.gear.length)t.gear=[...(t.gear||[]),...host.gear.splice(0)];
+    Z.battle[bi]=t;transferAtkState([host.id],t);markArrive(t);
+    emitEvent(pi,"summon",t);enqueueFx(pi,t);
+    toast(`⤴ ${faceNameOf(host)}の上に${faceNameOf(t)}を進化して出した`);return true;
+  }
   // 🧬 NEO：非進化としても出せる。⤴ 進化・究極進化（ultimate等）：進化元がいれば「重ねて出す」を選べる（ライジングNEX対応）
   if(r&&(isNeoReg(r)||isEvoReg(r))&&!isNoBaseEvoReg(r)){
     const isNeo=isNeoReg(r);
@@ -15489,7 +15505,10 @@ async function runFxList(pi,list,srcCard,inPump){
     }else if(f.t==="selfKillHandRecruitMana"){
       const pool=Z.battle.filter(x=>isCreatureReg(getReg(x)));if(!pool.length)continue;const j=await pickCard("♻ 破壊する自分のクリーチャーを選択（キャンセルで行わない）",pool,{});if(j===null)continue;
       snap();await destroyWithReplace(pi,pool[j]);const cand=Z.hand.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&+rx.cost<=Z.mana.length;});if(!cand.length){toast("手札に出せるクリーチャーがいません");continue;}const k=await pickCard(`♻ 手札からコスト${Z.mana.length}以下を出す`,cand,{});if(k===null)continue;
-      const x=cand[k],hi=Z.hand.findIndex(y=>y.id===x.id);Z.hand.splice(hi,1);if(cheatEnterBattle(pi,x)){emitEvent(pi,"summon");enqueueFx(pi,x);}renderAll();await waitFxIdle(inPump);
+      const x=cand[k],hi=Z.hand.findIndex(y=>y.id===x.id);Z.hand.splice(hi,1);
+      const put=await summonCreatureNeoAware(pi,x,{requireEvolution:true});
+      if(!put){x.faceup=true;x.tapped=false;toHand(Z,x);toast(`↩ ${faceNameOf(x)}は出せなかったため手札に戻しました`);}
+      renderAll();await waitFxIdle(inPump);
     }else if(f.t==="graveFaceShuffleBottom"){
       if(!Z.grave.length)continue;snap();const arr=Z.grave.splice(0);shuffle(arr);for(const x of arr){x.faceup=false;x.tapped=false;Z.deck.push(x);}toast(`🪦🔀 墓地${arr.length}枚を裏向きでシャッフルし、山札の下へ`);renderAll();
     }else if(f.t==="diamondSword"){
@@ -38069,6 +38088,11 @@ function openCardSheet(ctx){
     const rG=getReg(c);
     if(rG&&rG.gzero&&(ctx.zone==="hand"||ctx.zone==="grave")){
       box.appendChild(actBtn(`⚡ G・ゼロで出す／唱える（コスト0）条件：${rG.gzero}`,async ()=>{
+        const gz=String(rG.gzero||"").trim();
+        const parseable=/(?:<=|>=|<|>|＝|=|以上|以下)/.test(gz)||/^(?:自分|相手)?(?:の)?(?:マナ|墓地|手札|盾|シールド|バトル|山札)/.test(gz);
+        if(parseable&&!zoneCondOk(gz,ctx.p,c)){
+          toast(`⛔ G・ゼロの条件を満たしていません（${gz}）`);return;
+        }
         snap();
         const f2=findCard(ctx.p,ctx.zone,ctx.id);
         if(!f2)return;
