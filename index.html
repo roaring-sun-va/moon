@@ -2917,6 +2917,13 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このクリーチャーがタップしていれば、相手が自分のターン中にクリーチャーを召喚するか呪文を唱えた時、そのターンの残りが飛ぶ（禁断機関 ViVy-R型）。「〜した時」の誘発なので、実行した瞬間にタップしていれば誘発が確定し、そのあとデーモン・ハンド等でこのクリーチャーが除去されてもターンは飛びます"><input type="checkbox" id="fxEndTurnOppPlay"> ⏭ タップ中なら、相手がクリーチャー召喚／呪文を唱えた時に相手のターンを終わらせる（ViVy-R型）</label>
         <label><input type="checkbox" id="fxJD"> ジャストダイバー（出た時にアナウンスのみ・付与はメニューから手動）</label>
         <input type="text" id="fxPsyLink" placeholder="覚醒/ゴッド・リンク相手（カード名を「／」区切り・1体でも揃えば確認）" style="flex:1;min-width:200px">
+        <label title="リンク相手が全員そろった時に、その場で合体するかを決めます。ゴッド・リンク＝確認を出す（任意）／覚醒リンク＝確認せず合体する（強制）。空欄なら、これまでどおりメニューの「🔗 リンク進行ビュー」から手動で合体します">リンク種別
+          <select id="fxPsyLinkKind" style="width:auto">
+            <option value="">（手動・従来どおり）</option>
+            <option value="god">ゴッド・リンク（任意・そろったら確認）</option>
+            <option value="awake">覚醒リンク（強制・そろったら自動）</option>
+          </select>
+        </label>
         <input type="text" id="fxPsyLinkMap" placeholder="合体後の名前の表：龍神メタル＝ヘヴィ・メタル／龍神メタル＋破壊神デス＝ヘヴィ・デス・メタル" title="リンクした相手の顔ぶれごとに、合体後のカード名を指定します。並び順はこの名前を「・」で区切った順になります" style="flex:1;min-width:220px">
         <input type="text" id="fxPsyLinkTo" placeholder="リンク後のカード名（空欄＝名前連結）" style="flex:1;min-width:170px">
         <label><input type="checkbox" id="fxPsyLinkW"> リンク後は横向き</label>
@@ -3074,6 +3081,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="相手の「このクリーチャーがバトルゾーンに出た時」で始まる能力を持つクリーチャーが出た時、そのクリーチャーを持ち主のマナゾーンに置く（黒豆だんしゃく型）。出た時の能力は先に解決されます。効果が未登録のカードは、出た時の能力を持つかどうかを確認します"><input type="checkbox" id="fxStCipToMana"> 🌱 相手の「出た時」能力を持つクリーチャーが出た時、そのクリーチャーをマナゾーンに置く（黒豆だんしゃく型）</label>
         <label title="このクリーチャーが自分のバトルゾーンにいる間、相手はシールドの「S・トリガー」を使えない（ブレイクパネルのST使用ボタンが無効化される。G・ストライクやニンジャ・ストライクは別能力なので使える）"><input type="checkbox" id="fxStNoST"> 🚫 常在：相手はS・トリガーを使えない（カース・トーテム/ギガ・ボルバ型）</label>
         <label title="このクリーチャーが攻撃している間だけ、相手はブレイクしたシールドの「G・ストライク」を使えません（覇帝なき侵略 レッドゾーンF／最終勝首領 カツマスター型）"><input type="checkbox" id="fxNoGSAtk"> 🚫 このクリーチャーの攻撃中、相手はG・ストライクを使えない</label>
+        <label title="このクリーチャーが攻撃された時、かわりに1つ前の面へ裏返してアンタップし、その攻撃を中止してもよい（STARSCREAM -BOT MODE- 型）。多面カード登録の裏の面に入れてください"><input type="checkbox" id="fxAtkedFlipBack"> 🔄 攻撃された時、前の面へ裏返して攻撃を中止できる</label>
         <label title="自分のクリーチャーは、相手のカードによる「攻撃できない」効果を無視して攻撃できます（轟く邪道 レッドゾーン型）。常在効果です"><input type="checkbox" id="fxStIgnoreCantAtk"> ⚔ 常在：自分のクリーチャーは「攻撃できない」効果を無視して攻撃できる</label>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span style="font-size:12px;font-weight:700">常在ロック</span>
@@ -5260,7 +5268,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.69";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.70";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6459,6 +6467,7 @@ async function checkAwaken(pi,ev,trigCard){
         // 🔄 「このクリーチャーに覚醒した時」＝裏返ってこの面になった時だけ動く誘発。
         //    超次元から直接この面で出した時は発動しない（出た時の効果とは別）。
         runWatchFx(side,"onAwake",c);
+        try{await checkPsyLink(side);}catch(e){}   // 🔗 覚醒でリンク相手がそろったら合体を持ちかける
       }
     }
   }catch(e){}
@@ -10344,7 +10353,7 @@ function emitEvent(actor,type,card){
       }
     }catch(e){}
     // 🔄 「自分のクリーチャーが出た時」に裏返るサイキック（マティーニ型／ループ覚醒のヤヌス型）
-    if(eventCard)enqueueWatchJob(async()=>{await checkAwaken(actor,"allyEnter",eventCard);});
+    if(eventCard)enqueueWatchJob(async()=>{await checkAwaken(actor,"allyEnter",eventCard);try{await checkPsyLink(actor);}catch(e){}});
     // 🌌 出たのがサイキックなら、超次元ゾーンから呼べるカードを確認する（超時空ストームG・XX 型）
     try{
       const _rp=eventCard&&getReg(eventCard);
@@ -24588,6 +24597,8 @@ async function startAttack(pi,id){
   noteAttackThisTurn(pi,c);   // 🕐 「そのターン◯体目の攻撃」を数える
   S._noGSAtk=(()=>{try{const _rG=getReg(c);return (_rG&&_rG.noGSAtk&&!isIgnored(c,pi))?`${S.turn}:${S.who}`:null;}catch(e){return null;}})();   // 🚫 攻撃中はG・ストライクを使えない
   try{await checkAwaken(pi,"atkDeclare",c);}catch(e){}   // 🔄 攻撃する時の覚醒（時空の忠剣ハチ公／勝首領将軍 カツキング型）
+  // 🔄 攻撃された時、裏返して攻撃を中止（STARSCREAM -BOT MODE- 型）
+  if(tg.kind==="creature"&&await offerAtkedFlipBack(op,tg.cid,c)){renderAll();return;}
   c._sxAtkDone=false;
   c._mbDone=false;
   const wnames=watchNames(pi,tg.kind==="creature"?"atkC":"atkP");
@@ -27865,6 +27876,8 @@ function renderFxEditor(){
   {const e=$("fxFlying");if(e)e.checked=!!FXEDIT.flying;}
   {const e=$("fxKaijo");if(e)e.checked=!!FXEDIT.kaijo;}
   {const e=$("fxNoGSAtk");if(e)e.checked=!!FXEDIT.noGSAtk;}
+  {const e=$("fxAtkedFlipBack");if(e)e.checked=!!FXEDIT.atkedFlipBack;}
+  {const e=$("fxPsyLinkKind");if(e)e.value=FXEDIT.psyLinkKind||"";}
   {const e=$("fxStIgnoreCantAtk");if(e)e.checked=!!FXEDIT.stIgnoreCantAtk;}
   {const e=$("fxInvNoPsy");if(e)e.checked=!!FXEDIT.invNoPsy;}
   $("fxNoAtked").checked=!!FXEDIT.noAtked;
@@ -30140,6 +30153,8 @@ function openFxEditor(key){
     flying:cur?!!cur.flying:false,
     kaijo:cur?!!cur.kaijo:false,
     noGSAtk:cur?!!cur.noGSAtk:false,
+    atkedFlipBack:cur?!!cur.atkedFlipBack:false,
+    psyLinkKind:cur&&cur.psyLinkKind||"",
     stIgnoreCantAtk:cur?!!cur.stIgnoreCantAtk:false,
     invNoPsy:cur?!!cur.invNoPsy:false,
     noAtked:cur?!!cur.noAtked:false,
@@ -30710,6 +30725,8 @@ $("fxSave").addEventListener("click",async ()=>{
     flying:$("fxFlying")?$("fxFlying").checked:false,
     kaijo:$("fxKaijo")?$("fxKaijo").checked:false,
     noGSAtk:$("fxNoGSAtk")?$("fxNoGSAtk").checked:false,
+    atkedFlipBack:$("fxAtkedFlipBack")?$("fxAtkedFlipBack").checked:false,
+    psyLinkKind:$("fxPsyLinkKind")?$("fxPsyLinkKind").value:"",
     stIgnoreCantAtk:$("fxStIgnoreCantAtk")?$("fxStIgnoreCantAtk").checked:false,
     invNoPsy:$("fxInvNoPsy")?$("fxInvNoPsy").checked:false,
     noAtked:$("fxNoAtked").checked,
@@ -31580,6 +31597,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.noChooseIfAlly)attrs.push(`🛡 他の${v.noChooseIfAlly}がいれば選ばれない`);
     if(v.gs)attrs.push("Gストライク");
     if(v.noGSAtk)attrs.push("🚫 攻撃中は相手のG・ストライク不可");
+    if(v.atkedFlipBack)attrs.push("🔄 攻撃された時に裏返して攻撃中止");
+    if(v.psyLinkKind)attrs.push(v.psyLinkKind==="awake"?"🔗 覚醒リンク（そろったら自動）":"🔗 ゴッド・リンク（そろったら確認）");
     if(v.stIgnoreCantAtk)attrs.push("⚔ 常在：攻撃できない効果を無視");
     if(v.invNoPsy)attrs.push("侵略元はサイキック以外");
     if(v.crystalCharger)attrs.push("💎水晶チャージャー（裏向きでマナへ）");
@@ -32555,6 +32574,104 @@ async function dormaCoreRemove(pi,c,manual){
   }
   renderAll();
 }
+/* 🔗 v15.70 リンク合体の本体。リンク進行ビューのボタンと、揃った時の自動確認から共通で呼ぶ。
+   pi＝持ち主、c＝軸になるカード、reg＝その登録、refs＝場にいるリンク相手の実体。 */
+function doPsyLinkMerge(pi,c,reg,refs){
+  const Z=zonesOf(pi);
+  const holders=[c,...refs];
+  for(const x of holders){
+    const i2=Z.battle.findIndex(y=>y.id===x.id);
+    if(i2>=0)Z.battle.splice(i2,1);
+  }
+  const members=linkExpand(holders);   // 🔗 すでにリンクしているカードはほどいて数える
+  const _wasSick=members.some(x=>x.sick);
+  // ⚙ 合体前のクリーチャーにクロスしていたギアは、合体後のクリーチャーへ引き継ぐ（場から消さない）
+  const gAll=[];
+  for(const x of members){if(x.gear&&x.gear.length)gAll.push(...x.gear.splice(0));}
+  const nm2=resolveLinkName(members)||psyLinkNameFor(reg,members.slice(1).map(x=>faceNameOf(x)))||(reg.psyLinkTo)||members.map(x=>faceNameOf(x)).join("／");
+  const nc=makeCard(nm2);
+  nc.gl=true;
+  nc.under=members;
+  if(gAll.length)nc.gear=[...(nc.gear||[]),...gAll];
+  nc.rot=reg.psyLinkW?((pi===S.seat)?270:90):0;
+  members.forEach(b=>{b.tapped=false;});
+  Z.battle.push(nc);
+  window.__glJoinId=nc.id;
+  try{fxKeyword(pi,"G・リンク！",glOrderNames(nm2,members),nm2);}catch(e){}
+  markArrive(nc);
+  nc.sick=_wasSick;   // 🔗 リンクしただけでは召喚酔いにならない
+  emitEvent(pi,"summon");
+  enqueueFx(pi,nc);
+  sfx("ok");
+  if(S.anim!==false)setTimeout(()=>fxAnim(nc.id,"an-gold",800),80);
+  renderAll();
+  toast(`🔗 リンク！ ${nm2}（${members.length}枚合体・メニューから解除可）`);
+  return nc;
+}
+/* 🔗 v15.70 リンク相手が**全員**そろったら、その場で合体を持ちかける。
+   psyLinkKind＝"awake"（覚醒リンク＝強制）なら確認せずに合体、"god"（ゴッド・リンク＝任意）なら確認する。
+   欄が空の登録は、これまでどおりメニューの「リンク進行ビュー」から手動で合体する（挙動を変えない）。
+   一部だけそろった状態での部分リンクも、従来どおりビューから行う。 */
+async function checkPsyLink(pi){
+  try{
+    if(!S.expert)return;
+    const Z=zonesOf(pi);
+    for(const c of [...Z.battle]){
+      const r=getReg(c);
+      if(!r||!r.psyLink||!r.psyLinkKind)continue;
+      if(c.gl)continue;                                  // すでに合体している
+      if(isSealed(c)||isIgnored(c,pi))continue;
+      const names=String(r.psyLink).split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
+      if(!names.length)continue;
+      const refs=[];
+      for(const nm of names){
+        const hit=Z.battle.find(x=>x.id!==c.id&&!refs.some(y=>y.id===x.id)&&normName(faceNameOf(x))===normName(nm));
+        if(!hit)break;
+        refs.push(hit);
+      }
+      if(refs.length!==names.length)continue;            // 全員そろった時だけ声をかける
+      if(c._psyLinkBusy)continue;
+      if(r.psyLinkKind!=="awake"){
+        c._psyLinkBusy=true;
+        const yes=await ask(`🔗 ${[c,...refs].map(x=>faceNameOf(x)).join("・")} がそろいました。\nリンクしますか？`);
+        c._psyLinkBusy=false;
+        if(!yes)continue;
+      }
+      if(!Z.battle.some(x=>x.id===c.id))continue;
+      if(!refs.every(x=>Z.battle.some(y=>y.id===x.id)))continue;
+      snap();
+      doPsyLinkMerge(pi,c,r,refs);
+      return;                                            // 盤面が変わるので1回で抜ける
+    }
+  }catch(e){}
+}
+/* 🔄 v15.70 攻撃された時、かわりに1つ前の面へ裏返してアンタップし、この攻撃を中止してもよい
+   （STARSCREAM -BOT MODE- 型）。攻撃するクリーチャーはすでにタップ済みなので、そのまま残る。 */
+async function offerAtkedFlipBack(defPi,cid,atkC){
+  try{
+    if(!S.expert)return false;
+    const DZ=zonesOf(defPi);
+    const t=DZ.battle.find(x=>x.id===cid);
+    if(!t)return false;
+    const r=getReg(t);
+    if(!r||!r.atkedFlipBack||isSealed(t)||isIgnored(t,defPi))return false;
+    if((t.face|0)<=0)return false;
+    const lk=LINKS.get(normName(t.name))||LINKS.get(faceKeyOf(t));
+    if(!lk||lk.length<2)return false;
+    const yes=await ask(`🔄 ${faceNameOf(t)} は攻撃されました。\n1つ前の面へ裏返してアンタップし、この攻撃を中止しますか？`);
+    if(!yes)return false;
+    snap();
+    const was=faceNameOf(t);
+    t.face=Math.max(0,(t.face|0)-1);
+    t.tapped=false;t.buff=null;t.mark=false;t.sideways=false;
+    {const rB=FXDB.get(lk[t.face|0]);t.rot=(rB&&(rB.wide||rB.d2))?t.rot:0;}
+    toast(`🔄 ${was} は《${faceNameOf(t)}》へ裏返ってアンタップし、攻撃を中止した`);
+    logOnly(`🔄 ${S.players[defPi].label}：《${was}》→《${faceNameOf(t)}》へ裏返り、${atkC?`《${faceNameOf(atkC)}》の`:""}攻撃を中止`);
+    try{fxShare("awake","攻撃中止！",`${S.players[defPi].label}`,true,t.name,defPi);}catch(e){}
+    sfx("flip");renderAll();
+    return true;
+  }catch(e){return false;}
+}
 function openLinkProgress(pi,id){
   const Z=zonesOf(pi);
   const c=Z.battle.find(x=>x.id===id);
@@ -32668,35 +32785,8 @@ function openLinkProgress(pi,id){
     const _onN=parts.filter(x=>x.on).length;
     mk(`🔗 リンク合体！（${_onN+1}体）`,()=>{
       snap();
-      const holders=[c,...parts.filter(x=>x.on).map(x=>x.ref)];
-      for(const x of holders){
-        const i2=Z.battle.findIndex(y=>y.id===x.id);
-        if(i2>=0)Z.battle.splice(i2,1);
-      }
-      const members=linkExpand(holders);   // 🔗 すでにリンクしているカードはほどいて数える
-      const _wasSick=members.some(x=>x.sick);
-      // ⚙ 合体前のクリーチャーにクロスしていたギアは、合体後のクリーチャーへ引き継ぐ（場から消さない）
-      const gAll=[];
-      for(const x of members){if(x.gear&&x.gear.length)gAll.push(...x.gear.splice(0));}
-      const nm2=resolveLinkName(members)||psyLinkNameFor(reg,members.slice(1).map(x=>faceNameOf(x)))||(reg.psyLinkTo)||members.map(x=>faceNameOf(x)).join("／");
-      const nc=makeCard(nm2);
-      nc.gl=true;
-      nc.under=members;
-      if(gAll.length)nc.gear=[...(nc.gear||[]),...gAll];
-      nc.rot=reg.psyLinkW?((pi===S.seat)?270:90):0;
-      members.forEach(b=>{b.tapped=false;});
-      Z.battle.push(nc);
-      window.__glJoinId=nc.id;
-      try{fxKeyword(pi,"G・リンク！",glOrderNames(nm2,members),nm2);}catch(e){}
-      markArrive(nc);
-      nc.sick=_wasSick;   // 🔗 リンクしただけでは召喚酔いにならない
-      emitEvent(pi,"summon");
-      enqueueFx(pi,nc);
-      sfx("ok");
       ol.remove();
-      if(S.anim!==false)setTimeout(()=>fxAnim(nc.id,"an-gold",800),80);
-      renderAll();
-      toast(`🔗 リンク！ ${nm2}（${members.length}枚合体・メニューから解除可）`);
+      doPsyLinkMerge(pi,c,reg,parts.filter(x=>x.on).map(x=>x.ref));
     },true);
   }
   ol.appendChild(bar);
