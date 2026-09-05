@@ -2901,6 +2901,7 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <label><input type="checkbox" id="fxPInvade"> P侵略（超次元から侵略）</label>
+        <label title="侵略元にサイキック・クリーチャーを含めません（「サイキックではないコマンドが攻撃する時」＝時空の禁断 レッドゾーンX型）"><input type="checkbox" id="fxInvNoPsy"> 侵略元はサイキック以外</label>
         <label><input type="checkbox" id="fxPKakumei"> P革命チェンジ（超次元から）</label>
         <label title="このクリーチャーが出た時、山札の上から3枚を表向きにし、その中から進化元になれるカードを1枚この下に置いてよい。残りは山札の下へ"><input type="checkbox" id="fxSoulRaid"> 🔥 超魂レイド（出た時：山上3枚→進化元1枚を下に置く）</label>
         <label title="このカードがクリーチャーの下にあれば、上のクリーチャーにもこのカードの能力（登録した効果）を与える"><input type="checkbox" id="fxSoulX"> 🔗 超魂X（下にあれば上のクリーチャーに能力を付与）</label>
@@ -3003,6 +3004,8 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="turnEndOpp">相手のターンの終わりに</option>
             <option value="turnEndAny">各ターンの終わりに</option>
             <option value="graveAddMine">自分の墓地にカードが置かれた時（その一連の処理が終わってから）</option>
+            <option value="selfAtk">このクリーチャーが攻撃する時（時空の忠剣ハチ公型）</option>
+            <option value="allyAtk">自分のクリーチャーが攻撃する時（条件欄に「攻撃回数自分&gt;=3」等・勝首領将軍 カツキング型）</option>
             <option value="selfAtkEnd">このクリーチャーの攻撃の終わりに</option>
             <option value="atkPlayerThrough">相手プレイヤーへの攻撃がブロックされずに通った後</option>
             <option value="allyEnter">自分のクリーチャーがバトルゾーンに出た時</option>
@@ -3070,6 +3073,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxStNoCheat"> 相手は召喚以外でクリーチャーを出せない（センノー型。侵略/チェンジ/蘇生/ST出しなど不可・GR召喚や墓地召喚は「召喚」なので可）</label>
         <label title="相手の「このクリーチャーがバトルゾーンに出た時」で始まる能力を持つクリーチャーが出た時、そのクリーチャーを持ち主のマナゾーンに置く（黒豆だんしゃく型）。出た時の能力は先に解決されます。効果が未登録のカードは、出た時の能力を持つかどうかを確認します"><input type="checkbox" id="fxStCipToMana"> 🌱 相手の「出た時」能力を持つクリーチャーが出た時、そのクリーチャーをマナゾーンに置く（黒豆だんしゃく型）</label>
         <label title="このクリーチャーが自分のバトルゾーンにいる間、相手はシールドの「S・トリガー」を使えない（ブレイクパネルのST使用ボタンが無効化される。G・ストライクやニンジャ・ストライクは別能力なので使える）"><input type="checkbox" id="fxStNoST"> 🚫 常在：相手はS・トリガーを使えない（カース・トーテム/ギガ・ボルバ型）</label>
+        <label title="このクリーチャーが攻撃している間だけ、相手はブレイクしたシールドの「G・ストライク」を使えません（覇帝なき侵略 レッドゾーンF／最終勝首領 カツマスター型）"><input type="checkbox" id="fxNoGSAtk"> 🚫 このクリーチャーの攻撃中、相手はG・ストライクを使えない</label>
+        <label title="自分のクリーチャーは、相手のカードによる「攻撃できない」効果を無視して攻撃できます（轟く邪道 レッドゾーン型）。常在効果です"><input type="checkbox" id="fxStIgnoreCantAtk"> ⚔ 常在：自分のクリーチャーは「攻撃できない」効果を無視して攻撃できる</label>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span style="font-size:12px;font-weight:700">常在ロック</span>
           <label><input type="checkbox" id="fxStLockSpell"> 相手は呪文を唱えられない</label>
@@ -3298,7 +3303,8 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="primal">S級侵略：原始（手札＋マナから）</option>
           <option value="undead">S級侵略：不死（手札＋墓地から）</option>
           <option value="cosmos">S級侵略：宇宙（手札＋バトルゾーンから）</option>
-          <option value="gousoku">S級侵略：轟速（手札から）</option>
+          <option value="gousoku">S級侵略：轟速（手札＋墓地＋バトルゾーンから）</option>
+          <option value="chougousoku">S級侵略：超轟速（手札＋墓地＋超次元から）</option>
           <option value="sss">SSS級侵略：天災（手札/マナ/墓地/場すべてから）</option>
         </select>
         <span style="font-size:12px;font-weight:700">ギャラクシールド</span>
@@ -5254,7 +5260,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.68";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.69";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5556,6 +5562,50 @@ function turnLeftCount(side,filt){
     if(!S._turnLeft||S._turnLeft.key!==tk)return 0;
     return S._turnLeft.list.filter(a=>a.pi===side&&(!filt||lockFilterOk(filt,a.reg,a))).length;
   }catch(e){return 0;}
+}
+/* 💥 v15.69「自分のクリーチャーは、相手のカードによる攻撃できない効果を無視して攻撃できる」
+   （轟く邪道 レッドゾーン型）。常在なので、攻撃の可否を見ている条件に || で合流させる。 */
+function ignoreCantAtkOn(pi){
+  try{
+    if(!S.expert)return false;
+    return zonesOf(pi).battle.some(x=>{const r=getReg(x);return r&&r.stIgnoreCantAtk&&!isSealed(x)&&!isIgnored(x,pi);});
+  }catch(e){return false;}
+}
+/* 🚫 v15.69 このクリーチャーの攻撃中、相手は「G・ストライク」を使えない
+   （覇帝なき侵略 レッドゾーンF／最終勝首領 カツマスター型）。
+   攻撃を宣言するたびに S._noGSAtk を入れ替えるので、消す処理は要らない。 */
+function noGSNow(){
+  try{return !!(S.expert&&S._noGSAtk&&S._noGSAtk===`${S.turn}:${S.who}`);}catch(e){return false;}
+}
+/* 🧬 v15.69 進化かどうかのざっくり判定（登録の ctype だけで見る）。
+   「進化ではないクリーチャーの上に置いた時」（時空の禁断 レッドゾーンX型）の判定に使う。 */
+function evoLikeReg(r){
+  try{
+    if(typeof isEvoReg==="function")return !!isEvoReg(r);
+    return /evo|ultimate|lunatic|star|neo/i.test(String(r&&r.ctype||""));
+  }catch(e){return false;}
+}
+/* 👁 v15.69「相手が自分のクリーチャーを選んだ時」（勝首領将軍 カツキング型）。
+   既存の chosenByFoe は選ばれた本人だけなので、味方全体を見るこちらを別に用意した。 */
+function noteAllyChosenByFoe(own,card){
+  try{
+    if(!S.vs||own==null)return;
+    for(const x of [...zonesOf(own).battle]){
+      const r=getReg(x);
+      if(!r||!(r.watchFx||[]).some(w=>w&&w.ev==="allyChosenByFoe"))continue;
+      if(isSealed(x)||isIgnored(x,own))continue;
+      if(x._allyChosenBusy)continue;
+      x._allyChosenBusy=true;
+      enqueueWatchJob(async()=>{
+        x._allyChosenBusy=false;
+        const rr=getReg(x);
+        const list=((rr&&rr.watchFx)||[]).filter(w=>w&&w.ev==="allyChosenByFoe");
+        if(!list.length)return;
+        toast(`⚡ ${faceNameOf(x)}：相手が自分のクリーチャーを選んだ時の効果`);
+        await runFxList(own,list,x,false);
+      });
+    }
+  }catch(e){}
 }
 /* 🕐 そのターンに攻撃したクリーチャーの数（「そのターン3体目の攻撃であれば」用） */
 function noteAttackThisTurn(side,c){
@@ -6305,6 +6355,7 @@ async function checkAwaken(pi,ev,trigCard){
     const want=[ev];
     if(ev==="turnStartMine")want.push("turnStartAny");
     if(ev==="turnEndMine"||ev==="turnEndOpp")want.push("turnEndAny");
+    if(ev==="atkDeclare")want.push("selfAtk","allyAtk");   // 🔄 v15.69 攻撃する時の覚醒
     const sides=(ev==="turnStartMine")?[pi,(pi===0?1:0)]:[pi];
     for(const side of sides){
       const Zs=zonesOf(side);
@@ -6315,11 +6366,17 @@ async function checkAwaken(pi,ev,trigCard){
         // 「自分のターン開始時」は持ち主のターンだけ、「各ターンの開始時」は誰のターンでも
         if(r.awakenEv==="turnStartMine"&&side!==pi)continue;
         if(!want.includes(r.awakenEv))continue;
+        if(r.awakenEv==="selfAtk"&&(!trigCard||trigCard.id!==c.id))continue;   // 「このクリーチャーが攻撃する時」は本人だけ
         // 🔁 ループ覚醒（時空の戦猫ヤヌス型）：裏の面にも覚醒が登録されていれば、表へ戻せる。
         //    ふつうの覚醒は表の面（face=0）でだけ判定する。
         const _loop=!!r.awakenLoop;
-        if((c.face|0)!==0&&!_loop)continue;          // すでに覚醒済み
-        const _toFace=((c.face|0)===0)?1:0;
+        /* 🔄 v15.69 段階覚醒（勝首領龍 カツドン→カツキング→カツマスター）。
+           3面以上の登録で、まだ最後の面まで行っていなければ次の面へ進める。
+           ループ覚醒（時空の戦猫ヤヌス型）は従来どおり表へ戻す。 */
+        const _lkN=((LINKS.get(normName(c.name))||[]).length)|0;
+        const _stage=(!_loop&&(c.face|0)>0&&(c.face|0)<_lkN-1);
+        if((c.face|0)!==0&&!_loop&&!_stage)continue;          // すでに最後の面まで覚醒済み
+        const _toFace=_stage?((c.face|0)+1):(((c.face|0)===0)?1:0);
         if(isSealed(c)||isIgnored(c,side))continue;
         const lk=LINKS.get(normName(c.name));
         if(!lk||lk.length<2)continue;
@@ -11636,9 +11693,18 @@ const FX_TYPES=[
   ["foeRandCreManaHandToDeck","🎲 相手のクリーチャー・相手のマナ・相手の手札からそれぞれランダムにn枚ずつ、相手の山札の一番下に置く（燃えるデット・ソード型）"],
   ["breakPlusPerAllyNoSpell","💥🚫 自分のクリーチャーを数え、自分のクリーチャー1体を選ぶ。このターン、そのクリーチャーはその数だけシールドを多くブレイクし、相手は呪文を唱えられない（ジョジョジョ・マキシマム型）"],
   ["foeTopCostPickToDeck","🎰 相手の山札の上からn枚を表向きにし、自分はその中のコストを1つ選ぶ。選んだコストの相手クリーチャーすべてと表向きのn枚を、ランダムな順番で相手の山札の一番下に置く（7777777型）"],
+  ["sealThis","🔏 このクリーチャー自身に封印をn個付ける（燃える禁断 ドルマゲドンW型／自分の山札の上から裏向きで置く）"],
+  ["millSelf","🪦 自分の山札の上からn枚を墓地に置く（ドキンダムの禁炎霊型）"],
+  ["killMinPowFoe","💥 相手の、パワーが一番小さいクリーチャーをすべて破壊する（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く邪道 レッドゾーン型）"],
+  ["killMinCostFoe","💥 相手の、コストが一番小さいクリーチャーをすべて破壊する（同じコストが複数なら全部・条件欄で対象を絞れる・新空のプラズマ ジョンジョ・ジョン型）"],
+  ["sealMinPowFoe","🔏 相手は、自身のパワーが一番小さいクリーチャーすべてに封印を1つずつ付ける（禁断の轟速 ブラックゾーン型／条件欄で対象を絞れる）"],
+  ["handesCastIfSpell","🗑🔮 相手の手札を1枚見ないで選んで捨てさせ、それが呪文なら自分がそれをコストを支払わずに唱えてもよい（禁断の超轟速 バイオレットゾーン型）"],
+  ["foePickReviveThenSeal","👁⚰🔏 相手のクリーチャーを1体選ぶ→そのコスト以下のクリーチャーを自分の墓地から出してもよい→相手は選んだクリーチャーに封印を1つ付ける（バロメアレディの黒像型／条件欄で選ぶ対象を絞れる）"],
+  ["stackTopToGrave","🪦 一番上のカード（このクリーチャー）を墓地に置き、残った進化元をアンタップして場に残す（覇帝なき侵略 レッドゾーンF型）"],
+  ["gachinkoFlipWin","🎲🔄 ガチンコ・ジャッジを1回行い、自分が勝ったら次の面に裏返す（STARSCREAM -ALT MODE- 型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -11652,7 +11718,7 @@ const EV_LABEL={
   turnStartMine:"自分のターンのはじめ",turnEndMine:"自分のターンの終わり",
   turnEndOpp:"相手のターンの終わり",turnEndBoth:"ターンの終わり",
   selfWinBattle:"バトルに勝った時",allySpell:"味方が呪文を唱えた時",spell:"呪文を唱えた時",
-  chosenByFoe:"相手に選ばれた時",tapAbility:"タップした時",kizuna:"キズナ",
+  chosenByFoe:"相手に選ばれた時",allyChosenByFoe:"味方が相手に選ばれた時",tapAbility:"タップした時",kizuna:"キズナ",
   foeToGrave:"相手のが墓地に置かれた時",myHandDiscarded:"自分の手札が捨てられた時",selfDiscardedByFoe:"相手の効果で手札から捨てられた時",
   foeHandDiscarded:"相手の手札が捨てられた時",allyEvo:"味方が進化した時",
   gachinkoShown:"ガチンコ・ジャッジ",revFinal:"革命ファイナル",revFinalPS:"革命ファイナル",
@@ -13552,7 +13618,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -18661,6 +18727,201 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("flip");renderAll();
       toast(`🛡 次の自分のターン開始時まで、${_CIVS[_jc][1]}のクリーチャーに攻撃されません`);
       logOnly(`🛡 ${S.players[pi].label}：${_CIVS[_jc][1]}のクリーチャーに攻撃されない（次の自分のターン開始まで）`);
+    }else if(f.t==="sealThis"){
+      /* 🔏 v15.69 このクリーチャー自身に封印をn個（燃える禁断 ドルマゲドンW型）。
+         既存の sealSelf は「n体に1つずつ」なので別物。 */
+      if(!srcCard){toast("（このカードが見つかりません）");continue;}
+      if(!Z.battle.some(x=>x.id===srcCard.id)){toast("（すでにバトルゾーンを離れています）");continue;}
+      if(!canSeal(pi,srcCard))continue;
+      snap();
+      const _pt=putSealsOn(pi,srcCard,n);
+      if(_pt){
+        toast(`🔏 ${faceNameOf(srcCard)} に封印を${_pt}つ付けた`);
+        logOnly(`🔏 ${S.players[pi].label}：《${faceNameOf(srcCard)}》に封印${_pt}つ`);
+        try{fxShare("seal","封印！",`${S.players[pi].label}`,_pt>=3,srcCard.name,pi);}catch(e){}
+      }
+      sfx("flip");renderAll();
+    }else if(f.t==="millSelf"){
+      /* 🪦 v15.69 自分の山札の上からn枚を墓地に置く（ドキンダムの禁炎霊型） */
+      snap();
+      const _mn=[];
+      for(let i=0;i<n&&Z.deck.length;i++){
+        const x=Z.deck.shift();
+        x.faceup=true;x.tapped=false;x.sideways=false;
+        Z.grave.push(x);_mn.push(faceNameOf(x));
+      }
+      if(!_mn.length){toast("（山札がありません）");continue;}
+      toast(`🪦 自分の山札の上から${_mn.length}枚を墓地に置いた`);
+      logOnly(`🪦 ${S.players[pi].label}：山札から ${_mn.join("、")} を墓地へ`);
+      sfx("grave");renderAll();
+    }else if(f.t==="killMinPowFoe"||f.t==="killMinCostFoe"){
+      /* 💥 v15.69 相手の「パワー（コスト）が一番小さい」クリーチャーをすべて破壊する。
+         同じ値が複数いればその全部。選ぶ効果ではないので「選ばれない」は関係ない。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _byPow=(f.t==="killMinPowFoe");
+      const _fk=String(f.cond||"").trim();
+      const _pl=OZ.battle.filter(x=>{
+        const rx=getReg(x);
+        if(!rx||!isCreatureReg(rx))return false;
+        if(_fk&&!lockFilterOk(_fk,rx,x))return false;
+        if(!_byPow&&(rx.cost==null||rx.cost===""))return false;
+        return true;
+      });
+      if(!_pl.length){toast(`💥 対象の相手クリーチャーがいません${_fk?`（${_fk}）`:""}`);continue;}
+      const _val=x=>_byPow?powSyncOf(x):(+getReg(x).cost||0);
+      const _min=Math.min(..._pl.map(_val));
+      const _tg=_pl.filter(x=>_val(x)===_min);
+      snap();
+      for(const t of [..._tg]){
+        if(!zonesOf(op).battle.some(x=>x.id===t.id))continue;
+        await destroyWithReplace(op,t);
+      }
+      toast(`💥 ${_byPow?"パワー":"コスト"}が一番小さい（${_min}）相手クリーチャー${_tg.length}体を破壊した`);
+      logOnly(`💥 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[op].label} の${_byPow?"パワー":"コスト"}最小（${_min}）${_tg.length}体を破壊`);
+      sfx("grave");renderAll();
+    }else if(f.t==="sealMinPowFoe"){
+      /* 🔏 v15.69 相手は、自身のパワーが一番小さいクリーチャーすべてに封印を1つずつ付ける
+         （禁断の轟速 ブラックゾーン型）。封印は相手自身の山札の上から置く。 */
+      if(!S.vs){toast("（ソロのため封印はスキップ）");continue;}
+      const _fs=String(f.cond||"").trim();
+      const _ps=OZ.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!_fs||lockFilterOk(_fs,rx,x));});
+      if(!_ps.length){toast("🔏 封印を付けられる相手クリーチャーがいません");continue;}
+      const _mnP=Math.min(..._ps.map(x=>powSyncOf(x)));
+      const _tgS=_ps.filter(x=>powSyncOf(x)===_mnP);
+      snap();
+      let _doneS=0;
+      for(const t of _tgS){
+        if(!canSeal(op,t))continue;
+        if(putSealsOn(op,t,1))_doneS++;
+      }
+      toast(`🔏 パワーが一番小さい（${_mnP}）相手クリーチャー${_doneS}体に封印を付けた`);
+      logOnly(`🔏 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[op].label} のパワー最小（${_mnP}）${_doneS}体に封印`);
+      try{fxShare("seal",_doneS>=3?"全体封印！！":"封印！",`${S.players[op].label}`,true,srcCard?srcCard.name:"",pi);}catch(e){}
+      sfx("flip");renderAll();
+    }else if(f.t==="handesCastIfSpell"){
+      /* 🗑🔮 v15.69 相手の手札を1枚見ないで選んで捨てさせ、それが呪文なら
+         自分がその呪文を（相手の墓地から）コストを支払わずに唱えてもよい
+         （禁断の超轟速 バイオレットゾーン型）。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      {
+        const hb=handesBlockedBy(op);
+        if(hb){toast(`🛡 ${faceNameOf(hb)}：手札は相手の効果によって捨てられない！`);continue;}
+      }
+      if(!OZ.hand.length){toast(`${S.players[op].label}の手札がありません`);continue;}
+      snap();
+      const _jh=randInt(OZ.hand.length);
+      const _dc=OZ.hand.splice(_jh,1)[0];
+      _dc.faceup=true;OZ.grave.push(_dc);
+      bumpEv("handes",pi);
+      toast(`🗑 見ないで1枚：${faceNameOf(_dc)} を墓地へ`);
+      afterHandDiscard(op,_dc,pi);
+      sfx("grave");renderAll();
+      const _rd=getReg(_dc);
+      if(!_rd||_rd.ctype!=="spell"){toast("（呪文ではないので唱えません）");continue;}
+      const _yc=await ask(`✨ 捨てさせた《${faceNameOf(_dc)}》は呪文です。コストを支払わずに唱えますか？`);
+      if(!_yc){renderAll();continue;}
+      const _gi=OZ.grave.findIndex(x=>x.id===_dc.id);
+      if(_gi<0){toast("（すでに墓地にありません）");renderAll();continue;}
+      const _sp=OZ.grave.splice(_gi,1)[0];
+      _sp.faceup=true;_sp.tapped=false;
+      if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
+      Z.resolve.push(_sp);
+      emitEvent(pi,"spell",_sp);enqueueFx(pi,_sp);
+      sfx("ok");renderAll();
+      toast(`✨ ${faceNameOf(_sp)} をコストを支払わずに唱えた`);
+      logOnly(`✨ ${S.players[pi].label}：捨てさせた《${faceNameOf(_sp)}》を墓地から詠唱`);
+      await waitFxIdle(inPump);
+    }else if(f.t==="foePickReviveThenSeal"){
+      /* 👁⚰🔏 v15.69 バロメアレディの黒像型：
+         相手のクリーチャーを1体選ぶ → その**以下**のコストのクリーチャーを自分の墓地から出してもよい
+         → その後、相手は選んだクリーチャーに封印を1つ付ける。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _fc=String(f.cond||"").trim();
+      const _pool=OZ.battle.filter(x=>{
+        const rx=getReg(x);
+        if(!rx||!isCreatureReg(rx))return false;
+        if(_fc&&!lockFilterOk(_fc,rx,x))return false;
+        return !(((rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,op));
+      });
+      if(!_pool.length){toast("👁 選べる相手クリーチャーがいません");continue;}
+      const _jp=_pool.length===1?0:await pickCard("👁 相手のクリーチャーを1体選択",_pool,{hint:"タップで選択"});
+      if(_jp===null)continue;
+      snap();
+      const _sel=_pool[_jp];
+      const _rs=getReg(_sel);
+      const _cv=(_rs&&_rs.cost!=null&&_rs.cost!=="")?(+_rs.cost):null;
+      toast(`👁 ${faceNameOf(_sel)} を選んだ`);
+      if(_cv==null||isNaN(_cv)){
+        toast("⚰ 選んだクリーチャーのコストが未登録のため、墓地からの復活は手動で行ってください");
+      }else{
+        const _gp=Z.grave.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&rx.cost!=null&&rx.cost!==""&&(+rx.cost)<=_cv;});
+        if(!_gp.length)toast(`⚰ 自分の墓地にコスト${_cv}以下のクリーチャーがいません`);
+        else{
+          const _kg=await pickCard(`⚰ 墓地から出すクリーチャーを選択（コスト${_cv}以下・キャンセルで出さない）`,_gp,{hint:"任意：出さないならキャンセル"});
+          if(_kg!==null){
+            const _gi2=Z.grave.findIndex(x=>x.id===_gp[_kg].id);
+            if(_gi2>=0){
+              const _rv=Z.grave.splice(_gi2,1)[0];
+              _rv.faceup=true;_rv.tapped=false;_rv.sick=true;
+              Z.battle.push(_rv);markArrive(_rv);
+              toast(`⚰ ${faceNameOf(_rv)} を墓地から出した`);
+              logOnly(`⚰ ${S.players[pi].label}：墓地から《${faceNameOf(_rv)}》を出した（コスト${_cv}以下）`);
+              emitEvent(pi,"summon");enqueueFx(pi,_rv);
+              await waitFxIdle(inPump);
+            }
+          }
+        }
+      }
+      if(zonesOf(op).battle.some(x=>x.id===_sel.id)&&canSeal(op,_sel)){
+        if(putSealsOn(op,_sel,1)){
+          toast(`🔏 ${faceNameOf(_sel)} に封印を1つ付けた`);
+          logOnly(`🔏 ${S.players[op].label} の《${faceNameOf(_sel)}》に封印1つ`);
+        }
+      }
+      sfx("flip");renderAll();
+    }else if(f.t==="stackTopToGrave"){
+      /* 🪦 v15.69 一番上のカード（このクリーチャー）を墓地に置き、
+         残った進化元をアンタップして場に残す（覇帝なき侵略 レッドゾーンF型）。 */
+      if(!srcCard){toast("（このカードが見つかりません）");continue;}
+      const _ai=Z.battle.findIndex(x=>x.id===srcCard.id);
+      if(_ai<0){toast("（すでにバトルゾーンを離れています）");continue;}
+      snap();
+      const _kids=(srcCard.under||[]).splice(0);
+      if(!_kids.length){
+        Z.battle.splice(_ai,1);
+        srcCard.faceup=true;srcCard.tapped=false;
+        Z.grave.push(srcCard);
+        toast(`🪦 ${faceNameOf(srcCard)} を墓地に置いた（下に進化元がありません）`);
+      }else{
+        const _nt=_kids.shift();
+        _nt.under=[..._kids,...(_nt.under||[])];
+        _nt.tapped=false;_nt.faceup=true;
+        Z.battle[_ai]=_nt;
+        srcCard.faceup=true;srcCard.tapped=false;
+        Z.grave.push(srcCard);
+        toast(`🪦 一番上の《${faceNameOf(srcCard)}》を墓地に置き、《${faceNameOf(_nt)}》がアンタップして場に残った`);
+        logOnly(`🪦 ${S.players[pi].label}：一番上の《${faceNameOf(srcCard)}》を墓地へ／《${faceNameOf(_nt)}》はアンタップして残る`);
+      }
+      sfx("grave");renderAll();
+    }else if(f.t==="gachinkoFlipWin"){
+      /* 🎲🔄 v15.69 ガチンコ・ジャッジをして、自分が勝ったら次の面へ裏返す
+         （STARSCREAM -ALT MODE- 型）。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      if(!srcCard){continue;}
+      snap();
+      const _res=await runGachinkoJudge(pi,op,"");
+      if(_res==="ng"){renderAll();continue;}
+      if(_res!=="win"){toast("🎲 勝てなかったため裏返しません");renderAll();continue;}
+      const _lk2=LINKS.get(normName(srcCard.name))||[];
+      if(_lk2.length<2){toast("🎲 多面カード登録がないため裏返せません");renderAll();continue;}
+      if(!Z.battle.some(x=>x.id===srcCard.id)){renderAll();continue;}
+      srcCard.face=Math.min((srcCard.face|0)+1,_lk2.length-1);
+      markArrive(srcCard,{flip:true});
+      sfx("flip");renderAll();
+      toast(`🔄 ガチンコ・ジャッジに勝った：${faceNameOf(srcCard)} に裏返った`);
+      logOnly(`🔄 ${S.players[pi].label}：ガチンコ・ジャッジに勝ち《${faceNameOf(srcCard)}》へ裏返った`);
+      emitEvent(pi,"summon");enqueueFx(pi,srcCard);
+      runWatchFx(pi,"onAwake",srcCard);
     }else if(f.t==="destroyThenDeckSameCostPlay"){
       /* 💥🔎 条件に合う相手のクリーチャーを1体破壊し、その後、自分の山札から
          **そのクリーチャーと同じコスト**のクリーチャーを1枚出してもよい（破壊と誕生の神殿型）。
@@ -23868,7 +24129,7 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   }
   // G・ストライク：手札に加わったGS持ちを確認（複数枚それぞれ発動可・登録した追加効果も処理）
   if(S.expert){
-    const gsCards=OZ.hand.filter(x=>stackIds.has(x.id)&&(()=>{const r2=getReg(x);return (r2&&r2.gs)||shieldGSGrantOk(op,x);})());
+    const gsCards=noGSNow()?[]:OZ.hand.filter(x=>stackIds.has(x.id)&&(()=>{const r2=getReg(x);return (r2&&r2.gs)||shieldGSGrantOk(op,x);})());
     const atkSide=op===0?1:0; // 攻撃していた側（＝ブレイクした側の相手）
     let idxG=0;
     for(const gc of gsCards){
@@ -24215,7 +24476,7 @@ async function startAttack(pi,id){
     const rA=getReg(c);
     if(rA&&rA.gggCantAtk&&!gggOn(pi)){toast(`⛔ ${faceNameOf(c)} はG・G・G未達（手札2枚以上）のため攻撃できない`);return;}
     if(rA&&rA.needOtherAtk&&!otherAttackedThisTurn(pi,c)){toast(`⛔ ${faceNameOf(c)} は、このターン他の自分のクリーチャーが先に攻撃していないため攻撃できない`);return;}
-    const _diaSword=!!(S._diamondSword&&S._diamondSword[pi]===`${S.turn}:${S.who}`);
+    const _diaSword=!!(S._diamondSword&&S._diamondSword[pi]===`${S.turn}:${S.who}`)||ignoreCantAtkOn(pi);
     if(!_diaSword&&((rA&&rA.cantAtk&&!isIgnored(c,pi))||(c.buff&&c.buff.cantAtk)||(S._cantAtkAllTurn&&S._cantAtkAllTurn[pi]===`${S.turn}:${S.who}`)||noAtkPowBlock(pi,c))){toast(`⛔ ${faceNameOf(c)} は攻撃できない`);return;}
     // 🌟 モモキングダム✕型：含まれるカードが6枚未満なら攻撃できない
     if(rA&&rA.momoKingX&&!isIgnored(c,pi)&&stackCountOf(c)<6){toast(`⛔ ${faceNameOf(c)} は含まれるカードが6枚未満なので攻撃できない（現在${stackCountOf(c)}枚）`);return;}
@@ -24325,6 +24586,8 @@ async function startAttack(pi,id){
   c._acAsked=false;   // ✨ アタック・チャンスの確認も、新規宣言のたびに1回だけ出す
   c._allyAtkDone=false;c._anyAtkDone=false;c._gearAtkDone=false; // 攻撃するたびに誘発し直せるよう毎回リセット
   noteAttackThisTurn(pi,c);   // 🕐 「そのターン◯体目の攻撃」を数える
+  S._noGSAtk=(()=>{try{const _rG=getReg(c);return (_rG&&_rG.noGSAtk&&!isIgnored(c,pi))?`${S.turn}:${S.who}`:null;}catch(e){return null;}})();   // 🚫 攻撃中はG・ストライクを使えない
+  try{await checkAwaken(pi,"atkDeclare",c);}catch(e){}   // 🔄 攻撃する時の覚醒（時空の忠剣ハチ公／勝首領将軍 カツキング型）
   c._sxAtkDone=false;
   c._mbDone=false;
   const wnames=watchNames(pi,tg.kind==="creature"?"atkC":"atkP");
@@ -25108,14 +25371,15 @@ async function execAttack(pi,id,tg){
       if(v==="primal"||v==="deck")return ["hand","mana"];
       if(v==="undead"||v==="grave")return ["hand","grave"];
       if(v==="cosmos"||v==="battle")return ["hand","battle"];
-      if(v==="gousoku")return ["hand"];
+      if(v==="gousoku")return ["hand","grave","battle"];   // 🌀 v15.69 禁断の轟速 ブラックゾーン（手札・墓地・バトルゾーン）
+      if(v==="chougousoku")return ["hand","grave","hyper"];  // 🌀 v15.69 禁断の超轟速 バイオレットゾーン（手札・墓地・超次元）
       if(v==="sss"||v==="tensai")return ["hand","mana","grave","battle"];
       return ["hand"];
     };
     const zLb={hand:"手札",mana:"マナ",grave:"墓地",battle:"場",hyper:"超次元",shield:"表向き盾"};
     const aRegNow=getReg(c);
     const condOk=r=>{
-      if(!r.invCiv&&!r.invRace&&!r.invCost&&!r.invPow)return true;
+      if(!r.invCiv&&!r.invRace&&!r.invCost&&!r.invPow&&!r.invNoPsy)return true;
       if(!aRegNow)return false;
       // 🎨 「水または闇のクリーチャー」等の複数文明条件に対応（いずれか1つでも持っていればOK）
       if(r.invCiv){
@@ -25123,6 +25387,7 @@ async function execAttack(pi,id,tg){
         if(need.length&&!(aRegNow.civs&&need.some(k=>aRegNow.civs.includes(k))))return false;
       }
       if(r.invRace&&!raceMatch(aRegNow,r.invRace))return false;
+      if(r.invNoPsy&&/psy/i.test(String(aRegNow.ctype||"")))return false;   // 🌌 v15.69 サイキックではない〜（レッドゾーンX型）
       if(r.invCost&&!(aRegNow.cost!=null&&aRegNow.cost>=r.invCost))return false;
       /* 💪 v15.14：パワー条件は**いまのパワー**で見る（登録された素のパワーではない）。
          パワー+2000などで条件を満たしたのに、革命チェンジのパネルが出なかった。 */
@@ -25138,7 +25403,7 @@ async function execAttack(pi,id,tg){
     for(const h of Z.hyper){
       const r=getReg(h);
       if(!r)continue;
-      if(!(r.pInvade||r.pKakumei))continue;
+      if(!(r.pInvade||r.pKakumei||(r.sInvade&&sZones(r.sInvade).includes("hyper"))))continue;
       if(!condOk(r))continue;
       cands.push({h,zn:"hyper"});
     }
@@ -26576,6 +26841,7 @@ const TRIG_EVS=[
   ["labyII","ラビリンス・マジック II の効果"],
   ["labyIII","ラビリンス・マジック III の効果"],
   ["chosenByFoe","👁 相手がこのクリーチャーを選んだ時（相手の効果の対象に選ばれた時・レッド・ABYTHEN・カイザー型）"],
+  ["allyChosenByFoe","👁 相手が自分のクリーチャーを選んだ時（このクリーチャー以外が選ばれた時も・勝首領将軍 カツキング型）"],
   ["gachinkoShown","🎲 ガチンコ・ジャッジでこのカードを見せた時（逆転王女プリン型）"],
   ["foeToGrave","⚰ 相手のカードがどこからでも墓地に置かれた時（偽りの王 ヴィルヘルム型／条件欄で対象を絞れる）"],
   ["myHandDiscarded","🗑 相手の効果で自分の手札が捨てられた時（墓守の鐘ベルリン型）"],
@@ -27598,6 +27864,9 @@ function renderFxEditor(){
   $("fxNoBlock").checked=!!FXEDIT.noBlock;
   {const e=$("fxFlying");if(e)e.checked=!!FXEDIT.flying;}
   {const e=$("fxKaijo");if(e)e.checked=!!FXEDIT.kaijo;}
+  {const e=$("fxNoGSAtk");if(e)e.checked=!!FXEDIT.noGSAtk;}
+  {const e=$("fxStIgnoreCantAtk");if(e)e.checked=!!FXEDIT.stIgnoreCantAtk;}
+  {const e=$("fxInvNoPsy");if(e)e.checked=!!FXEDIT.invNoPsy;}
   $("fxNoAtked").checked=!!FXEDIT.noAtked;
   {const e=$("fxFoeCantAtkPByPowLT");if(e)e.value=+FXEDIT.foeCantAtkPByPowLT||0;}
   $("fxNoChoose").checked=!!FXEDIT.noChoose;
@@ -29870,6 +30139,9 @@ function openFxEditor(key){
     noBlock:cur?!!cur.noBlock:false,
     flying:cur?!!cur.flying:false,
     kaijo:cur?!!cur.kaijo:false,
+    noGSAtk:cur?!!cur.noGSAtk:false,
+    stIgnoreCantAtk:cur?!!cur.stIgnoreCantAtk:false,
+    invNoPsy:cur?!!cur.invNoPsy:false,
     noAtked:cur?!!cur.noAtked:false,
     noChoose:cur?!!cur.noChoose:false,
     gs:cur?!!cur.gs:false,
@@ -30437,6 +30709,9 @@ $("fxSave").addEventListener("click",async ()=>{
     noBlock:$("fxNoBlock").checked,
     flying:$("fxFlying")?$("fxFlying").checked:false,
     kaijo:$("fxKaijo")?$("fxKaijo").checked:false,
+    noGSAtk:$("fxNoGSAtk")?$("fxNoGSAtk").checked:false,
+    stIgnoreCantAtk:$("fxStIgnoreCantAtk")?$("fxStIgnoreCantAtk").checked:false,
+    invNoPsy:$("fxInvNoPsy")?$("fxInvNoPsy").checked:false,
     noAtked:$("fxNoAtked").checked,
     foeCantAtkPByPowLT:+($("fxFoeCantAtkPByPowLT")?$("fxFoeCantAtkPByPowLT").value:0)||0,
     noChoose:$("fxNoChoose").checked,
@@ -31304,6 +31579,9 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.noChoose)attrs.push("選ばれない");
     if(v.noChooseIfAlly)attrs.push(`🛡 他の${v.noChooseIfAlly}がいれば選ばれない`);
     if(v.gs)attrs.push("Gストライク");
+    if(v.noGSAtk)attrs.push("🚫 攻撃中は相手のG・ストライク不可");
+    if(v.stIgnoreCantAtk)attrs.push("⚔ 常在：攻撃できない効果を無視");
+    if(v.invNoPsy)attrs.push("侵略元はサイキック以外");
     if(v.crystalCharger)attrs.push("💎水晶チャージャー（裏向きでマナへ）");
     else if(v.charger)attrs.push("チャージャー");
     if(v.holdResolve)attrs.push("🕐解決中に保持");
@@ -41183,6 +41461,7 @@ function noteChosenByFoe(card){
     if(!card||FX_ACTOR==null||!S.vs)return;
     const own=[0,1].find(p=>zonesOf(p)&&zonesOf(p).battle&&zonesOf(p).battle.some(x=>x.id===card.id));
     if(own==null||own===FX_ACTOR)return;
+    try{noteAllyChosenByFoe(own,card);}catch(e){}   // 👁 味方全体の「相手が自分のクリーチャーを選んだ時」
     const r=getReg(card);
     if(!r||!(r.watchFx||[]).some(w=>w&&w.ev==="chosenByFoe"))return;
     if(card._chosenBusy)return;
@@ -46147,6 +46426,14 @@ function zoneCondOk(expr,pi,selfCard){
       expr=String(expr)
         .replace(/Dスイッチ(中|後|済|発動後)/g,onNow?"バトル>=0":"バトル<0")
         .replace(/Dスイッチ(前|未|未発動)/g,onNow?"バトル<0":"バトル>=0");
+      if(!String(expr).trim())return true;
+    }
+    /* 🧬 v15.69「進化ではないクリーチャーの上に置いた時」（時空の禁断 レッドゾーンX型）。
+       重ねた進化元に進化クリーチャーが1体もいなければ成立する。 */
+    if(/非進化の上|進化元非進化/.test(String(expr))){
+      const _ud=(selfCard&&selfCard.under)||[];
+      const _okU=_ud.length>0&&!_ud.some(x=>evoLikeReg(getReg(x)));
+      expr=String(expr).replace(/非進化の上|進化元非進化/g,_okU?"バトル>=0":"バトル<0");
       if(!String(expr).trim())return true;
     }
     // 全角・半角の揺れを正規化（＞＜＝、全角数字、全角スペース）
