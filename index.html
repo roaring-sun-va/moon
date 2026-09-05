@@ -2958,6 +2958,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="noDestroy">破壊されない</option>
           <option value="pw">パワー＋n</option>
           <option value="break">ブレイク数＋n</option>
+          <option value="noBlockSmaller">それよりパワーの小さいクリーチャーにブロックされない（ハックル・キリンソーヤ型）</option>
         </select>
         <label title="指定したシールドがある間だけブロッカーを得ます（不滅の精霊パーフェクト・ギャラクシー型）"><input type="checkbox" id="fxSForceBlocker"> シールド・フォース有効中はブロッカー</label>
         <label title="シールド・フォースの効果を、このクリーチャーだけでなく自分のクリーチャー全体に与えます（叡智のW インビンシブル・ギャラクシー型）"><input type="checkbox" id="fxSForceAll"> S・フォースの効果を味方全体へ</label>
@@ -5253,7 +5254,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.66";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.68";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9838,13 +9839,33 @@ function fireLeaveWatch(p,c){
       関数に切り出し、呼び出しは1行だけ・ギアのループより**前**に置くこと。 */
 function pushCastleWatchers(pi,type,arr){
   try{
-    for(const sh of (zonesOf(pi).shield||[])){
-      if(!sh||!sh.faceup||isSealed(sh))continue;
+    for(const {card:sh} of fortifiedCastles(pi)){
       const rs=getReg(sh);
-      if(!rs||!rs.castle)continue;
       if((rs.watchFx||[]).some(w=>w&&w.ev===type))arr.push(sh);
     }
   }catch(e){}
+}
+/* 🏯 v15.67：要塞化した城の**居場所**。
+   ⚠ 城は盾ゾーンに並ぶのではなく、選んだ盾の **under（下）** に重ねられる。
+      `sc.under.push(cc); sc.mark=true;` がその処理（カードメニューの「🏰 要塞化」）。
+   v15.54（castlePowFoe）と v15.55（誘発）はどちらも `Z.shield` を直接見ていたので、
+   **一度も動いていなかった**。ここに一本化する。
+   戻り値は {card:城のカード, host:重なっている盾} の配列。 */
+function fortifiedCastles(pi){
+  const out=[];
+  try{
+    for(const sh of (zonesOf(pi).shield||[])){
+      if(!sh)continue;
+      if(isSealed(sh))continue;
+      for(const u of (sh.under||[])){
+        if(!u)continue;
+        const ru=getReg(u);
+        if(!ru||!ru.castle)continue;
+        out.push({card:u,host:sh});
+      }
+    }
+  }catch(e){}
+  return out;
 }
 function runWatchFx(pi,type,trigCard){
   if(!S.expert)return;
@@ -18700,6 +18721,19 @@ async function runFxList(pi,list,srcCard,inPump){
       const _his=[...((_rg2.races)||[]),...((_rg2.races2)||[])].filter(Boolean).map(x=>normName(x));
       const _same=_mine.some(x=>_his.includes(x));
       if(!_same){toast(`⤴ ${faceNameOf(_gc)} は《${faceNameOf(srcCard)}》と共通の種族が無いため、手札に残ります`);continue;}
+      /* ⚠ v15.67：進化元が要らない登録（noBaseEvo＝邪神M・ロマノフのようなデッキ進化型）は、
+         バトルゾーンのクリーチャーに重ねてはいけない。そのまま単体で出す。 */
+      if(_rg2.noBaseEvo){
+        if(!await ask(`⤴ ${faceNameOf(_gc)} をバトルゾーンに出しますか？（進化元は要りません）`))continue;
+        const _hi3=Z.hand.findIndex(x=>x.id===_gc.id);if(_hi3>=0)Z.hand.splice(_hi3,1);
+        _gc.faceup=true;_gc.tapped=false;_gc.sideways=false;_gc.rot=0;_gc.face=0;
+        if(!cheatEnterBattle(pi,_gc)){if(typeof toHand==="function")toHand(Z,_gc);else Z.hand.push(_gc);renderAll();continue;}
+        _gc.sick=!(_rg2.sa);_gc.bornTurn=S.turn;
+        markArrive(_gc);emitEvent(pi,"summon");enqueueFx(pi,_gc);
+        sfx("ok");renderAll();
+        toast(`⤴ ${faceNameOf(_gc)} をバトルゾーンに出した（進化元なし）`);
+        continue;
+      }
       if(!await ask(`⤴ ${faceNameOf(_gc)} をバトルゾーンに出しますか？（進化元を選びます）`))continue;
       const _pool3=Z.battle.filter(x=>{const rx=getReg(x);
         return rx&&isCreatureReg(rx)&&evoSrcOk(_rg2,x);});
@@ -19435,6 +19469,12 @@ async function runFxList(pi,list,srcCard,inPump){
         sub:x=>{const o=_cands2.find(y=>y.c.id===x.id);return o?(o.z==="hand"?"手札":"マナ"):"";}});
       if(_je===null)continue;
       const _sel=_cands2[_je];
+      /* ⚠ v15.67：noBaseEvo（進化元が要らない登録）は「このクリーチャーの上に置く」対象外。
+         重ねずに単体で出すカードなので、ここでは何もしない。 */
+      if(_sel.r.noBaseEvo){
+        toast(`⤴ ${faceNameOf(_sel.c)} は進化元を必要としないカードなので、重ねられません（そのままです）`);
+        continue;
+      }
       if(!isEvoCtype(_sel.r.ctype)||!evoSrcOk(_sel.r,srcCard)){
         toast(`⤴ ${faceNameOf(_sel.c)} は《${faceNameOf(srcCard)}》から進化できないため、そのままです`);
         logOnly(`⤴ ${faceNameOf(_sel.c)}：進化元の条件に合わないため重ねなかった`);
@@ -22041,9 +22081,7 @@ async function effPower(c,attacking,inBattle){
     const ownC=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle.includes(c));
     if(ownC!=null){
       for(const cp of [0,1]){
-        const ZC=zonesOf(cp);if(!ZC||!ZC.shield)continue;
-        for(const sh of ZC.shield){
-          if(!sh.faceup||isSealed(sh))continue;
+        for(const {card:sh} of fortifiedCastles(cp)){
           const rs=getReg(sh);if(!rs)continue;
           const mine=(cp===ownC);
           const amt=mine?(+rs.castlePowMine||0):(+rs.castlePowFoe||0);
@@ -31391,7 +31429,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.noLose)attrs.push(v.noLoseCond?`ゲームに負けない（条件：${v.noLoseCond}）`:"ゲームに負けない");
     if(v.soulshift)attrs.push("ソウルシフト");
     if(v.gaiash)attrs.push("相手ターン終了時に出せる");
-    if(v.sforce)attrs.push("シールド・フォース"+(v.sforceFx||v.sforceBlocker?`（${[v.sforceFx?({noLeave:"離れない",noDestroy:"破壊されない",pw:"パワー修正",break:"ブレイク数修正"}[v.sforceFx]):"",v.sforceBlocker?"ブロッカー":""].filter(Boolean).join("・")}）`:""));
+    if(v.sforce)attrs.push("シールド・フォース"+(v.sforceFx||v.sforceBlocker?`（${[v.sforceFx?({noLeave:"離れない",noDestroy:"破壊されない",pw:"パワー修正",break:"ブレイク数修正",noBlockSmaller:"小さいクリーチャーにブロックされない"}[v.sforceFx]):"",v.sforceBlocker?"ブロッカー":""].filter(Boolean).join("・")}）`:""));
     if(v.cstCond)attrs.push(`条件常在：${v.cstCond}→${{noLeave:"離れない",noDestroy:"破壊されない",stayPow:"パワー0超でとどまる",sa:"SA",unblock:"ブロックされない",blocker:"ブロッカー",slayer:"スレイヤー"}[v.cstFx]||"表示"}`);
     else if(v.cstFx==="stayPow")attrs.push("⚓常在：離れる時パワー0超ならとどまる");
     if(v.splus)attrs.push(["","シールド・プラス","スーパー・S・プラス","ウルトラ・S・プラス"][v.splus]||`S・プラス${v.splus}`);
