@@ -2658,7 +2658,9 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="水晶チャージャー：この呪文を唱えた後、墓地に置くかわりに裏向きにしてマナゾーンに置く。チャージャーも自動でオンになります"><input type="checkbox" id="fxCrystalCharger"> 💎 水晶チャージャー（裏向きでマナへ）</label>
         <label><input type="checkbox" id="fxHoldResolve"> 🕐 解決中に保持（ザフィヴォ型：処理の途中で他のカードを使う呪文。自動で墓地に置かず、手動で墓地に置いた時に虚無月の門等が誘発）</label>
         <label><input type="checkbox" id="fxCastle"> 城/要塞（盾に重ねて要塞化・表向き）</label>
-        <label title="相手のクリーチャーがシールドを1つ以上ブレイクする時、かわりにこのシールドをブレイクさせてもよい（セイント・キャッスル）"><input type="checkbox" id="fxGcRedirect"> 🏰 ブレイク肩代わり（G城・セイント・キャッスル型）</label>
+        <label title="相手のクリーチャーがシールドを1つ以上ブレイクする時、かわりにこのシールドをブレイクさせてもよい（セイント・キャッスル）"><input type="checkbox" id="fxCastleBreakRep"> 🏰 要塞化した盾のブレイクを、シールド1枚を手札に加えて肩代わりする（ハッスル・キャッスル型）</label>
+        <label title="このカードを自分の超次元ゾーンからコストを支払って召喚できます（頂上龍素 サイクリタ型）。超次元ゾーンからバトルゾーンへ動かした時に、支払うかどうかを確認します"><input type="checkbox" id="fxHyperSummon"> 🌌 超次元ゾーンからコストを払って召喚できる</label>
+        <label><input type="checkbox" id="fxGcRedirect"> 🏰 ブレイク肩代わり（G城・セイント・キャッスル型）</label>
       </div>
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <label><input type="checkbox" id="fxInvade"> 侵略（攻撃時、手札から重ねて進化）</label>
@@ -5268,7 +5270,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.71";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.72";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -23958,6 +23960,46 @@ async function breakShields(op,count,attacker,forceIdx,opts){
   return await _breakShieldsInner(op,count,attacker,forceIdx,OZ);
   }finally{if(typeof GHOST_AUTO!=="undefined")GHOST_AUTO=_gaSaved;}
 }
+/* 🏰 v15.72 ハッスル・キャッスル型：この城を付けて要塞化したシールドが
+   （他の城で要塞化されていなければ）相手のクリーチャーにブレイクされる時、
+   かわりに自分のシールドを1枚、手札に加えてもよい。その盾はブレイクされない。
+   idxs は並びが変わるので、いったんカードのidに直して置き換えてから戻す。 */
+async function offerCastleBreakRep(op,idxs,OZ){
+  try{
+    if(!S.expert)return idxs;
+    let ids=idxs.map(i=>OZ.shield[i]&&OZ.shield[i].id).filter(Boolean);
+    for(const id of [...ids]){
+      const sh=OZ.shield.find(x=>x.id===id);
+      if(!sh)continue;
+      const cas=(sh.under||[]).filter(u=>{const r=getReg(u);return r&&(r.castle||r.ctype==="castle");});
+      if(cas.length!==1)continue;                       // 🏰 他の城でも要塞化されていたら働かない
+      const rc=getReg(cas[0]);
+      if(!rc||!rc.castleBreakRep)continue;
+      if(isSealed(cas[0]))continue;
+      const pool=OZ.shield.filter(x=>x.id!==id);
+      if(!pool.length){toast(`🏰 ${faceNameOf(cas[0])}：かわりに手札へ加えるシールドがありません`);continue;}
+      const yes=await ask(`🏰 ${faceNameOf(cas[0])}\nこのシールドはブレイクされません。\nかわりに自分のシールドを1枚、手札に加えますか？`);
+      if(!yes)continue;
+      const j=await askChoice("🏰 手札に加えるシールドを選択",
+        pool.map((x,k)=>`シールド${OZ.shield.findIndex(y=>y.id===x.id)+1}${x.faceup?`（表：${faceNameOf(x)}）`:""}${x.under&&x.under.length?`（+${x.under.length}枚重ね）`:""}`));
+      if(j===null)continue;
+      snap();
+      const ti=OZ.shield.findIndex(x=>x.id===pool[j].id);
+      if(ti<0)continue;
+      const sc=OZ.shield.splice(ti,1)[0];
+      const add=[sc,...(sc.under?sc.under.splice(0):[])];
+      for(const x of add){
+        x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;x.mark=false;x.buff=null;
+        OZ.hand.push(x);
+      }
+      ids=ids.filter(x=>x!==id);                        // その盾はブレイクされない
+      sfx("move");renderAll();
+      toast(`🏰 ${faceNameOf(cas[0])}：ブレイクのかわりに ${add.map(x=>faceNameOf(x)).join("＋")} を手札に加えた`);
+      logOnly(`🏰 ${S.players[op].label}：《${faceNameOf(cas[0])}》で要塞化した盾はブレイクされず、シールド1枚（${add.length}枚）を手札へ`);
+    }
+    return ids.map(x=>OZ.shield.findIndex(y=>y.id===x)).filter(i=>i>=0);
+  }catch(e){return idxs;}
+}
 async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   const total=count==="all"?OZ.shield.length:Math.min(count,OZ.shield.length);
   if(!total){toast("シールドがありません");return;}
@@ -23995,6 +24037,14 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   }else{
     idxs=await pickShieldIdxs(op,total);
     if(idxs===null)return;
+  }
+  // 🏰 v15.72 ハッスル・キャッスル型：要塞化した盾のブレイクを、シールド1枚の手札加えで肩代わりする
+  if(S.expert&&attacker){
+    const _rep=await offerCastleBreakRep(op,idxs,OZ);
+    if(Array.isArray(_rep)&&_rep.length!==idxs.length){
+      idxs=_rep;
+      if(!idxs.length){renderAll();return;}
+    }
   }
   // 💥 ブレイクの演出。どの盾を割るか決まってから出す（S・トリガーの確認より前）。
   try{
@@ -27956,6 +28006,8 @@ function renderFxEditor(){
   $("fxHoldResolve").checked=!!FXEDIT.holdResolve;
   $("fxCastle").checked=!!FXEDIT.castle;
   $("fxGcRedirect").checked=!!FXEDIT.gcRedirect;
+  {const e=$("fxCastleBreakRep");if(e)e.checked=!!FXEDIT.castleBreakRep;}
+  {const e=$("fxHyperSummon");if(e)e.checked=!!FXEDIT.hyperSummon;}
   $("fxInvade").checked=!!FXEDIT.invade;
   $("fxKakumei").checked=!!FXEDIT.kakumei;
   $("fxMugetsu").value=FXEDIT.mugetsu||"";
@@ -30232,6 +30284,8 @@ function openFxEditor(key){
     holdResolve:cur?!!cur.holdResolve:false,
     castle:cur?!!cur.castle:false,
     gcRedirect:cur?!!cur.gcRedirect:false,
+    castleBreakRep:cur?!!cur.castleBreakRep:false,
+    hyperSummon:cur?!!cur.hyperSummon:false,
     invade:cur?!!cur.invade:false,
     kakumei:cur?!!cur.kakumei:false,
     mugetsu:cur&&cur.mugetsu||"",
@@ -30805,6 +30859,8 @@ $("fxSave").addEventListener("click",async ()=>{
     holdResolve:$("fxHoldResolve").checked,
     castle:$("fxCastle").checked,
     gcRedirect:$("fxGcRedirect").checked,
+    castleBreakRep:$("fxCastleBreakRep")?$("fxCastleBreakRep").checked:false,
+    hyperSummon:$("fxHyperSummon")?$("fxHyperSummon").checked:false,
     invade:$("fxInvade").checked,
     kakumei:$("fxKakumei").checked,
     mugetsu:$("fxMugetsu").value,
@@ -31664,6 +31720,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.noChooseIfAlly)attrs.push(`🛡 他の${v.noChooseIfAlly}がいれば選ばれない`);
     if(v.gs)attrs.push("Gストライク");
     if(v.noGSAtk)attrs.push("🚫 攻撃中は相手のG・ストライク不可");
+    if(v.castleBreakRep)attrs.push("🏰 要塞化した盾のブレイクを肩代わり");
+    if(v.hyperSummon)attrs.push("🌌 超次元から召喚できる");
     if(v.atkedFlipBack)attrs.push("🔄 攻撃された時に裏返して攻撃中止");
     if(v.psyLinkKind)attrs.push(v.psyLinkKind==="awake"?"🔗 覚醒リンク（そろったら自動）":"🔗 ゴッド・リンク（そろったら確認）");
     if(v.stIgnoreCantAtk)attrs.push("⚔ 常在：攻撃できない効果を無視");
@@ -33859,6 +33917,17 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     if(rGS&&isCreatureReg(rGS)&&rGS.cost!=null){
       MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(async()=>{
         const y=await ask(`💰 ${faceNameOf(c)} を墓地から「召喚」しますか？\nはい＝コストを支払う（シンパシー等の軽減適用・マナ自動タップ）\nいいえ＝支払わずに出す（蘇生・踏み倒し）`);
+        if(y)await autoTapCost(pTo,c);
+      }).catch(()=>{});
+    }
+  }
+  /* 🌌 v15.72 超次元ゾーンからの「召喚」（頂上龍素 サイクリタ型）。
+     墓地からの召喚（ダーク・ルピア型）と同じ形で、支払うかどうかを確認する。 */
+  if(S.expert&&S.autoTap&&!S.freePlay&&fromZone==="hyper"&&toZone==="battle"){
+    const rHS=getReg(c);
+    if(rHS&&rHS.hyperSummon&&isCreatureReg(rHS)&&rHS.cost!=null){
+      MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(async()=>{
+        const y=await ask(`🌌 ${faceNameOf(c)} を超次元ゾーンから「召喚」しますか？\nはい＝コストを支払う（軽減も適用・マナ自動タップ）\nいいえ＝支払わずに出す（超次元ホール等の効果で出した場合）`);
         if(y)await autoTapCost(pTo,c);
       }).catch(()=>{});
     }
