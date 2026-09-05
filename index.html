@@ -5253,7 +5253,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.48";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.49";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -25602,6 +25602,15 @@ function fxTrigRowEl(i){
   const ev=document.createElement("select");
   ev.style.cssText="flex:1 1 130px;min-width:130px;max-width:100%";
   for(const [v,lb] of TRIG_EVS){const o=document.createElement("option");o.value=v;o.textContent=lb;if(v===f.ev)o.selected=true;ev.appendChild(o);}
+  /* ⚠ v15.49：選択肢に無い ev（古い登録／新しい誘発の入れ忘れ）は、そのままだと
+     どれも選ばれず、先頭の「🧬 進化元になる時」が選ばれているように見える。
+     TAKASUGI（becomeEvoSource）と見分けが付かず、触った瞬間に書き換わる。
+     値をそのまま持つ専用の選択肢を足して選んでおく。 */
+  if(f.ev&&!TRIG_EVS.some(x=>x[0]===f.ev)){
+    const o=document.createElement("option");
+    o.value=f.ev;o.textContent=`⚠ ${f.ev}（選択肢に無い誘発・値はこのまま保たれます）`;o.selected=true;
+    ev.appendChild(o);
+  }
   ev.onchange=()=>{f.ev=ev.value;};
   const evb=document.createElement("button");
   evb.type="button";evb.className="btn small";evb.textContent="🔎検索";
