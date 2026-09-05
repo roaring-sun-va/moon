@@ -5253,7 +5253,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.49";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.61";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6698,6 +6698,11 @@ function isNeoEvoInstance(c){return !!(c&&(c.neoEvo||(c.under&&c.under.length)))
 /* NEOクリーチャーを手札等からバトルへ：出し方を確認パネルで選ぶ */
 /* ⤴ 進化元の条件（「進化－自分の◯◯1体の上に置く」）に合うかどうか。
    evoSrcFilt が空なら誰でも進化元になれる。合わないカードは候補から外し、理由を知らせる。 */
+/* ⤴ v15.58：進化クリーチャーかどうか。EVOCT は別の関数の中の const なので外から見えない。
+   ここで一本化しておく（新しい進化の種類が増えたらここに足す）。 */
+function isEvoCtype(ct){
+  return ["evo","neoevo","ultimate","starevo","psyevo","lunatic","gneo","neodream","gneodream","smaxevo","onismaxevo","charismaevo"].includes(String(ct||""));
+}
 function evoSrcOk(rEvo,x){
   try{
     if(!rEvo||!rEvo.evoSrcFilt||!String(rEvo.evoSrcFilt).trim())return true;
@@ -9763,6 +9768,20 @@ function fireLeaveWatch(p,c){
     try{runWatchFx(p,kind+"Leave",c);}catch(e){}
   }
 }
+/* 🏯 v15.60：要塞化した城（表向きで盾ゾーンにあるカード）から誘発を拾う。
+   ⚠ runWatchFx の中に直接書くと、クロスギアを集める行と走査の行の間に文字が入り、
+      add132.js（その区間を文字数で見張っている）が落ちる。v15.55→v15.59 で2度踏んだ。
+      関数に切り出し、呼び出しは1行だけ・ギアのループより**前**に置くこと。 */
+function pushCastleWatchers(pi,type,arr){
+  try{
+    for(const sh of (zonesOf(pi).shield||[])){
+      if(!sh||!sh.faceup||isSealed(sh))continue;
+      const rs=getReg(sh);
+      if(!rs||!rs.castle)continue;
+      if((rs.watchFx||[]).some(w=>w&&w.ev===type))arr.push(sh);
+    }
+  }catch(e){}
+}
 function runWatchFx(pi,type,trigCard){
   if(!S.expert)return;
   // 🃏 デュエプレモード：同一イベントで複数体が誘発する場合は「右にあるもの」から解決（wiki準拠）。
@@ -9781,6 +9800,7 @@ function runWatchFx(pi,type,trigCard){
      クロスしたギアは host.gear の中にいて battle には並ばないため、
      ギアに登録した誘発（「自分のクリーチャーが出た時」等）が一度も動いていなかった。 */
   const _gears=[];
+  pushCastleWatchers(pi,type,_gears);
   try{
     for(const b of zonesOf(pi).battle){
       if(b&&b.gear&&b.gear.length)for(const g of b.gear)if(g)_gears.push(g);
@@ -11430,6 +11450,27 @@ const FX_TYPES=[
   ["hakiJudge","🎲 相手のシールドの数だけガチンコ・ジャッジし、勝った回数まで自分の手札／墓地／マナから進化ではないクリーチャーを出す（刃鬼型／条件欄＝出す対象・例：ハンター）"],
   ["matenSwap","🌀 各プレイヤーは手札とマナゾーンをまるごと交換し、その後マナをすべてタップする（魔天降臨型）"],
   ["nWorldShuffle","🌐 各プレイヤーは手札と墓地をすべて山札に加えてシャッフルし、その後それぞれn枚引く（サイバー・N・ワールド型）"],
+  ["deckAnyToGraveN","🗑 自分または相手の山札を見てカードをn枚まで選び、持ち主の墓地に置く→シャッフル（ヘル・スラッシュ／フューチャー・スラッシュ型／条件欄で対象を絞れる）"],
+  ["deckSearchHand","🔎 自分の山札から条件に合うカードを1枚探し、公開して手札に加えてもよい→シャッフル（進化の化身型／条件欄で対象を指定）"],
+  ["deckSearchMana","🔎🌱 自分の山札から条件に合うカードを1枚探し、自分のマナゾーンに置いてもよい→シャッフル（神秘の宝箱型／条件欄で対象を指定・例：自然以外）"],
+  ["manaAllFilt","🌱 条件に合うクリーチャーをすべて持ち主のマナゾーンに置く（条件欄で対象指定・先頭に「相手:」「自分:」で片側だけ／例：相手:パワー3000以下・蒼狼の王妃 イザナミテラス型）"],
+  ["deckTopHandOrMana","👀 山札の上から1枚目を見て、手札に加えるかマナゾーンに置くかを選ぶ（蒼狼の王妃 イザナミテラス型）"],
+  ["evoStackFromHandMana","⤴ 自分のマナゾーンの枚数以下のコストを持つクリーチャーを1体、自分の手札またはマナゾーンから選ぶ。このクリーチャーから進化できるなら、そのクリーチャーをこのクリーチャーの上に置く（蒼狼の王妃 イザナミテラス型）"],
+  ["deckTopSplitHMG","🌊 山札の上からn枚を見て、1枚を手札・1枚をマナ・残りの1枚を墓地に置く（天災 デドダム型・n=3）"],
+  ["peepDiscardKillSameCost","🗑💥 相手の手札を見て1枚選び、捨てさせる。その後、捨てたカードと**同じコスト**の相手のクリーチャーを1体選び、破壊する（ハンプティ・ルピア型／条件欄で捨てる対象を絞れる）"],
+  ["topLookAnyBottom","👀 山札の上からn枚を見て、その中の**どれでも1枚**を手札に加え、残りを好きな順序で山札の下に置く（蒼狼の大王 イザナギテラス型／条件欄で対象を絞れる・クリーチャー限定ではない）"],
+  ["foeDrawAsk","🃏 相手はカードをn枚まで引いてもよい（引くかどうかは相手に聞く・海底鬼面城型）"],
+  ["drawThenDeckBottom","🃏⬇ カードをn枚引き、その後、自分の手札からn枚を山札の一番下に置く（引くかどうかから任意・海底鬼面城型）"],
+  ["anyDestroy","💥 バトルゾーンにあるクリーチャーをn体まで選んで破壊する（自分・相手どちらでも選べる／条件欄で対象を絞れる）"],
+  ["anyDestroyThenRebirth","♻ クリーチャーを1体破壊する（自分・相手どちらでも）。そうした場合、その持ち主は山札の上から進化ではないクリーチャーが出るまで表向きにし、出たクリーチャーをバトルゾーンに出して、それ以外を持ち主の墓地に置く（転生プログラム型）"],
+  ["anyBounce","↩ バトルゾーンにあるクリーチャーをn体まで選び、持ち主の手札に戻す（自分・相手どちらでも選べる・アクア・スナイパー型／条件欄で対象を絞れる）"],
+  ["graveToMana","⚰→🌱 自分の墓地からカードをn枚まで選び、自分のマナゾーンに置く（アンタップで置くので使用可能マナが増える・再誕の社型／条件欄で対象を絞れる）"],
+  ["destroyAllOthers","💥 このクリーチャー以外のクリーチャーをすべて破壊する（自分も相手も・悪魔神王バルカディアス型／条件欄で対象を絞れる）"],
+  ["knightMagic","🗡 ナイト・マジック：バトルゾーンに自分のナイトがあれば、この呪文の【KM】能力をもう一度使ってもよい（魔弾シリーズ／KMにあたる行に「KM」を付け、この行を最後に置く。使えるのは1度だけ）"],
+  ["allZonesToDeck","🌐 各プレイヤーは、バトルゾーン・手札・シールドゾーン・墓地にある自身のカードをすべて山札に加えてシャッフルする（オールデリート型／クリーチャーに付いていた封印は墓地に残る）"],
+  ["myOthersToDeckBottom","⬇ 自分の他のクリーチャーをすべて、好きな順序で自分の山札の一番下に置く（エンペラー・キリコ型／このカード自身は動かさない）"],
+  ["revealUntilNonEvoPlay","🎴 自分の山札の上から、進化ではないクリーチャーがn体出るまで1枚ずつ表向きにする。出たn体をバトルゾーンに出し、残りを山札の下へ（エンペラー・キリコ型／条件欄で対象をさらに絞れる）"],
+  ["pickAnyToDeckBottomThenReveal","⬇🎴 バトルゾーンにある他のクリーチャーを1体選び、持ち主の山札の一番下に置く。その持ち主は、自身の山札の上から進化ではないクリーチャーが出るまで表向きにし、出たクリーチャーを出して残りを山札の下に戻す（斬隠オロチ型）"],
   ["deckCastSpellAll","🔮 自分の山札を見て、条件に合う呪文1枚をコストを支払わずに唱える→山札をシャッフル（条件欄＝例：コスト4以下）"],
   ["deckGearFree","⚙ 自分の山札を見て、条件に合うクロスギア1枚をコストを支払わずにジェネレートする→山札をシャッフル（条件欄＝例：コスト4以下）"],
   ["handGearFree","⚙ 手札からクロスギア1つを、コストを支払わずにジェネレートしてもよい（任意・条件欄＝対象／侍流ジェネレートの中身）"],
@@ -11506,7 +11547,7 @@ const FX_TYPES=[
   ["foeTopCostPickToDeck","🎰 相手の山札の上からn枚を表向きにし、自分はその中のコストを1つ選ぶ。選んだコストの相手クリーチャーすべてと表向きのn枚を、ランダムな順番で相手の山札の一番下に置く（7777777型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -13417,6 +13458,9 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
 const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+  /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
+  "manaAllFilt","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
+  "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
   "graveToShield",
   "manaPlusPerZone","destroyWeakerPick","manaAllWeaker","exileToGrave","handToManaBreakPlus","deckTopShieldRestMana","foeDeckBottomOverMaxMana",
   "handes","peepDiscard","grantBlockerPick","deckShield","revealBottomShield","nextCost","bounceFilt","retrieveHand","retrieveManaGrave","diaBliz","deckRecruit","deckTopRecruitMana","deckSearch","foePowDownAll","graveRecruit","handRecruit","destroyFilt","graveToMana","zoneMove","destroyPick","manaPick","bouncePick","destroyElemPick","manaElemPick","bounceElemPick","selfDestroy","selfMana","selfBounce","foeSelfDestroy","foeSelfMana","foeSelfBounce","tempBlockerAll","selfToZone","sumRecruit","foeAllShield","foeHandShieldRand","deckEvo","suspenseReveal","shieldMakeRand","untapFilt","handStFree","handPlayFree","foeSelfDiscard","deckTopToHand","deckTopSplitSHM","exileRecruitPerBattle","foeToShield","selfBounceAll","deckCastSpell","revealTakeGrave","handRecruitBlkNext","deckTopPlay","bottomGravePlay","destroySumPow","destroyAllCond","manaKill","psyOut","psyReturn","selfManaThenFoeMana","manaKillAllBoth","handesFiltAll","foeManaRecruit","grantAtkUn","hoganBlaster","anyToShield","myManaRecruit","killThenPsyOut","foeDeckRecruitByFoe","handManaRecruit","killThenRecruit","grantTurnAll","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","revealTakeAll","flipTopMana","foeBounceAll","handCastSpell","foeNoSpell","foePowDownPer","destroyFiltAll","graveToManaAllTap","meteoburn","sealFoe","sealSelf","tapOpN","tapAnyN","tapMyN","tapAllOp",
@@ -13544,6 +13588,72 @@ async function payHenrei(pi,f,srcCard){
   }
   return used;
 }
+/* 🔗 v15.50「そうした場合」の連動用。盤面のかたちを1つの文字列にする。
+   直前の行に入る時と次の行に入る時で比べ、変わっていれば「直前の効果は成立した」と見なす。
+   効果種類281個それぞれに成否を返させるのは現実的でないため、盤面の変化で判定している。
+   数え漏れを疑う時は、ここに見る項目を足すこと。例外時は毎回違う値を返す（＝成立扱い）ので、
+   連動が止まって効果が消えることはない。 */
+function fxBoardSig(pi){
+  try{
+    const parts=[];
+    for(const p of [0,1]){
+      const Zx=zonesOf(p);
+      for(const k of ["battle","hand","mana","grave","shield","deck","gr","hyper","exile","resolve","reveal","look"]){
+        const a=Zx[k];parts.push(k+(a?a.length:0));
+      }
+      parts.push("B"+(Zx.battle||[]).map(x=>`${x.id}${x.tapped?"t":""}${(x.under||[]).length}`).join(","));
+      parts.push("M"+(Zx.mana||[]).map(x=>`${x.id}${x.tapped?"t":""}`).join(","));
+    }
+    return parts.join("|");
+  }catch(e){return "sig-error-"+Math.random();}
+}
+/* 🎴 v15.51：山札の上から、進化ではないクリーチャーが need 体出るまで1枚ずつ表向きにする。
+   出たクリーチャーをバトルゾーンに出し、残りは好きな順序で山札の一番下に戻す。
+   エンペラー・キリコと斬隠オロチが同じ形なので共通化した。
+   山札が尽きたら、そこまでに出たぶんで打ち切る（無限ループ防止に上限も置く）。 */
+async function revealUntilNonEvo(pTo,need,filt,restTo){
+  /* restTo … 公開して出さなかったカードの行き先。"grave"＝墓地（転生プログラム型）、
+     省略または "deck"＝山札の一番下（エンペラー・キリコ／斬隠オロチ型）。 */
+  const ZT=zonesOf(pTo);
+  const shown=[],got=[];
+  let guard=0;
+  while(got.length<need&&ZT.deck.length){
+    if(++guard>200){toast("🎴 処理上限に達しました");break;}
+    const c=ZT.deck.shift();c.faceup=true;c.seen=true;shown.push(c);
+    const r=getReg(c);
+    const isEvo=!!(r&&(r.ctype==="evo"||r.ctype==="psyevo"));
+    const okCre=!!(r&&isCreatureReg(r)&&!isEvo&&(!filt||lockFilterOk(filt,r,c)));
+    if(okCre)got.push(c);
+  }
+  renderAll();
+  if(shown.length)logOnly(`🎴 ${S.players[pTo].label}：${shown.length}枚を公開 → ${cnList(shown)}`);
+  for(const c of got){
+    const i=shown.findIndex(x=>x.id===c.id);if(i>=0)shown.splice(i,1);
+    c.faceup=true;c.seen=false;c.tapped=false;c.sideways=false;c.face=0;
+    if(!cheatEnterBattle(pTo,c)){ZT.deck.push(c);continue;}
+    const rc=getReg(c);c.sick=!(rc&&rc.sa);c.bornTurn=S.turn;
+    markArrive(c);emitEvent(pTo,"summon");enqueueFx(pTo,c);
+  }
+  if(restTo==="grave"){
+    let gv=0;
+    for(const c of shown.splice(0)){
+      c.faceup=true;c.seen=false;c.tapped=false;c.sideways=false;c.face=0;c.buff=null;c.seals=[];
+      ZT.grave.push(c);gv++;
+    }
+    if(gv)toast(`🪦 公開して出さなかった${gv}枚を持ち主の墓地に置いた`);
+  }else while(shown.length){
+    let j=0;
+    if(shown.length>1){
+      const k=await pickCard(`⬇ 山札の一番下に戻す順番を選択（残り${shown.length}枚・キャンセルで上から順）`,shown,{hint:"タップで選択"});
+      j=(k===null)?0:k;
+    }
+    const c=shown.splice(j,1)[0];
+    c.faceup=false;c.seen=false;c.tapped=false;c.sideways=false;c.face=0;
+    ZT.deck.push(c);
+  }
+  sfx("ok");renderAll();
+  toast(`🎴 ${S.players[pTo].label}：進化ではないクリーチャー${got.length}体を出した`+(got.length<need?"（山札が尽きました）":""));
+}
 async function runFxList(pi,list,srcCard,inPump){
   // inPump=true のとき、内部の踏み倒し系ハンドラは waitFxIdle で待たない（pumpFx から呼ばれた時のハング防止）。
   const op=pi===0?1:0;
@@ -13564,6 +13674,8 @@ async function runFxList(pi,list,srcCard,inPump){
   }catch(e){FX_FROM_SPELL=false;FX_FROM_CRE=false;FX_SPELL_COST=null;}
   try{
   const _srcLbl=srcCard?faceNameOf(srcCard):"";
+  /* 🔗 v15.50：直前の行に入った時点の盤面。次の行の頭で比べて「直前が成立したか」を判定する。 */
+  let _prevSig=null;
   for(const f of list){
     /* 🪆 v15.2 誘発の中身を配列で書いた登録（{ev:"allyEnter",cond:"ドラゴン",fx:[{t:"draw"}]}）を展開する。
        以前は効果型（t）が無いので黙って何も起きず、「⚡誘発処理」のトーストだけが出ていた。
@@ -13575,6 +13687,20 @@ async function runFxList(pi,list,srcCard,inPump){
     try{stampShieldSrc(_srcLbl);}catch(e){} // 前の効果で増えた盾を取りこぼさないよう、各行の頭でも刻む
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
+    /* 🔗 v15.50「そうした場合」の連動（ifPrev）。
+       直前の行で盤面が動いていなければ、この行は行わない。
+       エメラル・絶望神サガ・ヨミジ丁-二式のように「〜してもよい。そうしたら〜」と続くカード用。
+       1行目（比べる相手がない）は常に実行する。 */
+    {
+      const _sigNow=fxBoardSig(pi);
+      const _prevDid=(_prevSig===null)?true:(_sigNow!==_prevSig);
+      _prevSig=_sigNow;
+      if(f.ifPrev&&!_prevDid){
+        toast("🔗 直前の効果を行わなかったため、この効果は行いません");
+        logOnly("🔗 「そうした場合」の連動：直前が不成立のためスキップ");
+        continue;
+      }
+    }
     const FILT_COND=FILT_COND_SET; // 🔧 共有の集合を参照（誘発側の判定でも使う）
     // ✨ 効果ごとの演出は、対象を選び終えて処理が済んでから出す（選ぶ前に出ると先出しになるため）。
     //    行の処理が終わったら必ず1回だけ呼ぶ。
@@ -18429,6 +18555,64 @@ async function runFxList(pi,list,srcCard,inPump){
       const TZ=zonesOf(tp);if(!TZ.deck.length){toast("山札がありません");continue;}
       const j=await pickCard(`🗑 ${S.players[tp].label}の山札から墓地に置くカードを選択`,TZ.deck,{hint:"山札全体を確認中／タップで選択"});if(j===null)continue;
       snap();const cc=TZ.deck.splice(j,1)[0];cc.faceup=true;cc.tapped=false;TZ.grave.push(cc);shuffle(TZ.deck);logPriv(pi,`🗑 ${S.players[tp].label}の山札から《${faceNameOf(cc)}》を墓地へ→シャッフル`,`${S.players[tp].label}の山札から1枚を墓地へ→シャッフル`);sfx("grave");renderAll();
+    }else if(f.t==="deckAnyToGraveN"){
+      /* 🗑 自分または相手の山札を見てn枚まで選び、持ち主の墓地に置く→シャッフル。
+         既存の deckAnyToGrave（ロスト・チャージャー型）は1枚固定なので、枚数を取る版として作った。 */
+      let _tp=pi;
+      if(S.vs){
+        const _q=await askChoice("🗑 どちらの山札から墓地に置きますか？",[`自分（${S.players[pi].label}）`,`相手（${S.players[op].label}）`]);
+        if(_q===null)continue;
+        _tp=_q===1?op:pi;
+      }
+      const _TZ=zonesOf(_tp);
+      if(!_TZ.deck.length){toast("山札がありません");continue;}
+      const _fg=String(f.cond||"").trim();
+      let _gn=0;
+      for(let i=0;i<n;i++){
+        const _pool=_TZ.deck.filter(x=>{const rx=getReg(x);return !_fg||(rx&&lockFilterOk(_fg,rx,x));});
+        if(!_pool.length){if(!i)toast("🗑 対象のカードがありません");break;}
+        const _j=await pickCard(`🗑 ${S.players[_tp].label}の山札から墓地に置くカードを選択（${i+1}/${n}・キャンセルで終了）`,
+          _pool,{hint:"山札全体を確認中／タップで選択"});
+        if(_j===null)break;
+        if(i===0)snap();
+        const _c=_pool[_j];
+        const _ix=_TZ.deck.findIndex(x=>x.id===_c.id);if(_ix<0)break;
+        _TZ.deck.splice(_ix,1);
+        _c.faceup=true;_c.tapped=false;_TZ.grave.push(_c);_gn++;
+        renderAll();
+      }
+      if(_gn){
+        shuffle(_TZ.deck);
+        logPriv(pi,`🗑 ${S.players[_tp].label}の山札から${_gn}枚を墓地へ→シャッフル`,`${S.players[_tp].label}の山札から${_gn}枚を墓地へ→シャッフル`);
+        sfx("grave");renderAll();
+        toast(`🗑 ${S.players[_tp].label}の山札から${_gn}枚を墓地に置いた`);
+      }else shuffle(_TZ.deck);
+    }else if(f.t==="deckSearchHand"||f.t==="deckSearchMana"){
+      /* 🔎 自分の山札から条件に合うカードを1枚探し、手札に加える（deckSearchHand）／
+         マナゾーンに置く（deckSearchMana）。どちらも任意で、終わったらシャッフルする。
+         既存の deckSearchTop は「山札の一番上に置く」、deckSearch/deckRecruit は「場に出す」なので別。 */
+      const _toMana=(f.t==="deckSearchMana");
+      const _fs=String(f.cond||"").trim();
+      const _pool2=Z.deck.filter(x=>{const rx=getReg(x);return !_fs||(rx&&lockFilterOk(_fs,rx,x));});
+      if(!_pool2.length){toast(`🔎 山札に該当するカードがありません${_fs?`（${_fs}）`:""}`);shuffle(Z.deck);renderAll();continue;}
+      const _j2=await pickCard(`🔎 ${_toMana?"マナゾーンに置く":"手札に加える"}カードを選択（山札全体・キャンセルで選ばない）`,
+        _pool2,{hint:"タップで選択"});
+      if(_j2===null){shuffle(Z.deck);renderAll();toast("🔎 選ばなかった（山札をシャッフル）");continue;}
+      snap();
+      const _c2=_pool2[_j2];
+      const _ix2=Z.deck.findIndex(x=>x.id===_c2.id);if(_ix2<0){shuffle(Z.deck);continue;}
+      Z.deck.splice(_ix2,1);
+      _c2.faceup=true;_c2.seen=false;_c2.tapped=false;_c2.sideways=false;_c2.face=0;
+      if(_toMana){
+        manaTapIn(_c2,pi);Z.mana.push(_c2);markArrive(_c2);bumpEv("manaAccel",pi,1);
+        toast(`🌱 ${faceNameOf(_c2)} をマナゾーンへ（山札をシャッフル）`);
+      }else{
+        if(typeof toHand==="function")toHand(Z,_c2);else Z.hand.push(_c2);
+        markArrive(_c2);
+        toast(`✋ ${faceNameOf(_c2)} を公開して手札に加えた（山札をシャッフル）`);
+      }
+      logOnly(`🔎 ${S.players[pi].label}：山札から《${faceNameOf(_c2)}》を${_toMana?"マナへ":"手札へ"}`);
+      shuffle(Z.deck);sfx("move");renderAll();
     }else if(f.t==="manaCastSpell"){
       const filt=String(f.cond||"").trim();
       // 「火または闇／コスト6以下」は、文明部分だけOR、コスト部分は共通のANDとして扱う。
@@ -18899,6 +19083,452 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🌐 ${S.players[side].label} はカードを${drew}枚引いた`);
       }
       sfx("draw");renderAll();
+    }else if(f.t==="manaAllFilt"){
+      /* 🌱 条件に合うクリーチャーをすべて持ち主のマナゾーンに置く。
+         既存の manaAllWeaker は「このクリーチャーよりパワーが小さい」が前提なので、
+         パワーやコストを直接指定できる版として別に作った。
+         条件欄の先頭に「相手:」「自分:」を書くと片側だけになる（manaAllWeaker と同じ書き方）。 */
+      let _fl2=String(f.cond||"").trim();
+      let _sides=(S.vs?[pi,op]:[pi]);
+      if(/^相手[:：]/.test(_fl2)){_sides=S.vs?[op]:[];_fl2=_fl2.replace(/^相手[:：]/,"").trim();}
+      else if(/^自分[:：]/.test(_fl2)){_sides=[pi];_fl2=_fl2.replace(/^自分[:：]/,"").trim();}
+      const _tg2=[];
+      for(const _p of _sides)
+        for(const x of zonesOf(_p).battle){
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))continue;
+          if(_fl2&&!lockFilterOk(_fl2,rx,x))continue;
+          _tg2.push({p:_p,c:x});
+        }
+      if(!_tg2.length){toast(`🌱 対象のクリーチャーがいません${_fl2?`（${_fl2}）`:""}`);continue;}
+      snap();
+      let _mv2=0;
+      for(const {p:_p3,c:_c4} of _tg2){
+        const _ZP=zonesOf(_p3);
+        const _ix2=_ZP.battle.findIndex(x=>x.id===_c4.id);
+        if(_ix2<0)continue;
+        if(cantLeaveBattle(_p3,_c4))continue;
+        if(await offerTrueEscape(_p3,_c4)){renderAll();continue;}
+        const _ix3=_ZP.battle.findIndex(x=>x.id===_c4.id);if(_ix3<0)continue;
+        _ZP.battle.splice(_ix3,1);
+        const _u4=(_c4.under&&_c4.under.length)?_c4.under.splice(0):[];
+        if(_c4.gear&&_c4.gear.length)_c4.gear.splice(0).forEach(gg=>gearOut(_ZP,gg));
+        if(_c4.seals&&_c4.seals.length)_c4.seals.splice(0).forEach(sx=>{sx.faceup=true;_ZP.grave.push(sx);});
+        _c4.faceup=true;_c4.tapped=false;_c4.sideways=false;_c4.rot=0;_c4.buff=null;_c4.seals=[];_c4.face=0;_c4.mark=false;_c4.neoEvo=false;
+        manaTapIn(_c4,_p3);_ZP.mana.push(_c4);markArrive(_c4);_mv2++;
+        _u4.forEach(y=>{y.faceup=true;y.tapped=false;y.buff=null;y.seals=[];manaTapIn(y,_p3);_ZP.mana.push(y);_mv2++;});
+        renderAll();
+      }
+      sfx("move");renderAll();
+      toast(`🌱 クリーチャー${_mv2}枚を持ち主のマナゾーンに置いた`);
+    }else if(f.t==="deckTopHandOrMana"){
+      /* 👀 山札の上から1枚目を見て、手札に加えるかマナゾーンに置くかを選ぶ。 */
+      if(!Z.deck.length){toast("👀 山札がありません");continue;}
+      snap();
+      const _t1=Z.deck.shift();_t1.faceup=true;_t1.seen=true;renderAll();
+      toast(`👀 山札の上：${faceNameOf(_t1)}`);
+      const _ch=await askChoice(`👀 《${faceNameOf(_t1)}》をどうしますか？`,["✋ 手札に加える","🌱 マナゾーンに置く"]);
+      _t1.seen=false;_t1.faceup=true;_t1.tapped=false;_t1.sideways=false;
+      if(_ch===1){
+        manaTapIn(_t1,pi);Z.mana.push(_t1);markArrive(_t1);bumpEv("manaAccel",pi,1);
+        toast(`🌱 ${faceNameOf(_t1)} をマナゾーンへ`);
+      }else{
+        if(typeof toHand==="function")toHand(Z,_t1);else Z.hand.push(_t1);
+        markArrive(_t1);
+        toast(`✋ ${faceNameOf(_t1)} を手札に加えた`);
+      }
+      sfx("move");renderAll();
+    }else if(f.t==="evoStackFromHandMana"){
+      /* ⤴ 自分のマナゾーンの枚数以下のコストを持つクリーチャーを1体、自分の手札またはマナゾーンから選ぶ。
+         **このクリーチャーから進化できるなら**、そのクリーチャーをこのクリーチャーの上に置く。
+         進化できるか（進化元の条件に srcCard が合うか）は既存の evoSrcOk() で見る。
+         合わなければ選んだカードは元のゾーンに残す（テキストが「進化できるなら」なので、
+         選ぶところまでは行い、条件を満たさなければ何も起きない）。 */
+      if(!srcCard){toast("⤴ 進化元にするカードが特定できないためスキップしました");continue;}
+      if(!Z.battle.some(x=>x.id===srcCard.id)){toast("⤴ このクリーチャーが場にいないためスキップしました");continue;}
+      const _lim3=Z.mana.length;
+      const _cands2=[];
+      for(const _zk of ["hand","mana"])
+        for(const x of (Z[_zk]||[])){
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))continue;
+          if(rx.cost==null||rx.cost===""||(+rx.cost)>_lim3)continue;
+          _cands2.push({z:_zk,c:x,r:rx});
+        }
+      if(!_cands2.length){toast(`⤴ 手札とマナに、コスト${_lim3}以下のクリーチャーがいません`);continue;}
+      const _je=await pickCard(`⤴ 進化させるクリーチャーを選択（コスト${_lim3}以下・手札とマナから）`,
+        _cands2.map(x=>x.c),{hint:"タップで選択・キャンセルで選ばない",
+        sub:x=>{const o=_cands2.find(y=>y.c.id===x.id);return o?(o.z==="hand"?"手札":"マナ"):"";}});
+      if(_je===null)continue;
+      const _sel=_cands2[_je];
+      if(!isEvoCtype(_sel.r.ctype)||!evoSrcOk(_sel.r,srcCard)){
+        toast(`⤴ ${faceNameOf(_sel.c)} は《${faceNameOf(srcCard)}》から進化できないため、そのままです`);
+        logOnly(`⤴ ${faceNameOf(_sel.c)}：進化元の条件に合わないため重ねなかった`);
+        continue;
+      }
+      snap();
+      const _arr=Z[_sel.z];
+      const _si=_arr.findIndex(x=>x.id===_sel.c.id);if(_si<0)continue;
+      _arr.splice(_si,1);
+      const _hi=Z.battle.findIndex(x=>x.id===srcCard.id);if(_hi>=0)Z.battle.splice(_hi,1);
+      const _ev=_sel.c;
+      _ev.faceup=true;_ev.tapped=srcCard.tapped;_ev.sideways=false;_ev.rot=0;_ev.face=0;_ev.sick=false;
+      _ev.under=[srcCard,...(srcCard.under||[]).splice(0),...(_ev.under||[])];
+      Z.battle.splice(Math.max(0,_hi),0,_ev);
+      markArrive(_ev);emitEvent(pi,"summon");enqueueFx(pi,_ev);
+      sfx("ok");renderAll();
+      toast(`⤴ ${faceNameOf(_ev)} を《${faceNameOf(srcCard)}》の上に置いた（進化）`);
+      logOnly(`⤴ ${S.players[pi].label}：${faceNameOf(_ev)} を ${faceNameOf(srcCard)} の上に重ねた`);
+    }else if(f.t==="deckTopSplitHMG"){
+      /* 🌊 山札の上からn枚を見て、1枚を手札・1枚をマナ・残りの1枚を墓地に置く（天災 デドダム型）。
+         v15.45 の deckTopSplitMHGKill（ドンドン火噴くナウ）から破壊を外し、行き先の順番を
+         手札→マナ→墓地にしたもの。 */
+      const _lk=Z.deck.splice(0,n);
+      if(!_lk.length){toast("🌊 山札がありません");continue;}
+      snap();
+      _lk.forEach(x=>{x.faceup=true;x.seen=true;});
+      logOnly(`👀 ${S.players[pi].label}：山札の上${_lk.length}枚を見た → ${cnList(_lk)}`);
+      renderAll();
+      if(_lk.length>1){
+        const _jh=await pickCard("✋ 手札に加える1枚を選択",_lk,{hint:"タップで選択"});
+        if(_jh!==null&&_jh<_lk.length){
+          const _hc=_lk.splice(_jh,1)[0];
+          _hc.faceup=true;_hc.seen=false;_hc.tapped=false;
+          if(typeof toHand==="function")toHand(Z,_hc);else Z.hand.push(_hc);
+          toast(`✋ ${faceNameOf(_hc)} を手札に加えた`);
+        }
+      }
+      if(_lk.length>1){
+        const _jm=await pickCard("🌱 マナゾーンに置く1枚を選択",_lk,{hint:"タップで選択"});
+        if(_jm!==null&&_jm<_lk.length){
+          const _mc=_lk.splice(_jm,1)[0];
+          _mc.faceup=true;_mc.seen=false;_mc.sideways=false;
+          manaTapIn(_mc,pi);Z.mana.push(_mc);markArrive(_mc);
+          bumpEv("manaAccel",pi,1);
+          toast(`💎 ${faceNameOf(_mc)} をマナゾーンへ`);
+        }
+      }
+      for(const _gc of _lk.splice(0)){
+        _gc.faceup=true;_gc.seen=false;_gc.tapped=false;_gc.sideways=false;
+        Z.grave.push(_gc);queueToGrave(pi,_gc,"deck");
+        toast(`🪦 ${faceNameOf(_gc)} を墓地へ`);
+      }
+      sfx("move");renderAll();
+    }else if(f.t==="peepDiscardKillSameCost"){
+      /* 🗑💥 相手の手札を見て1枚選び、捨てさせる。その後、捨てたカードと**同じコスト**の
+         相手のクリーチャーを1体選び、破壊する（ハンプティ・ルピア型）。
+         捨てたカードのコストが未登録なら、破壊は手動でと案内して止まる。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _filtH=String(f.cond||"").trim();
+      const _hand=OZ.hand.filter(x=>{const rx=getReg(x);return !_filtH||(rx&&lockFilterOk(_filtH,rx,x));});
+      if(!_hand.length){toast("🗑 相手の手札に対象がありません");continue;}
+      const _jh2=await pickCard("🗑 相手の手札を見て、捨てさせる1枚を選択",_hand,{hint:"タップで選択",peek:true});
+      if(_jh2===null)continue;
+      snap();
+      const _dc=_hand[_jh2];
+      const _rd=getReg(_dc);
+      const _cst=(_rd&&_rd.cost!=null&&_rd.cost!=="")?(+_rd.cost):null;
+      const _di=OZ.hand.findIndex(x=>x.id===_dc.id);
+      if(_di>=0){
+        OZ.hand.splice(_di,1);
+        _dc.faceup=true;_dc.tapped=false;OZ.grave.push(_dc);
+        if(typeof afterHandDiscard==="function")afterHandDiscard(op,_dc,pi);
+      }
+      sfx("grave");renderAll();
+      toast(`🗑 ${faceNameOf(_dc)}（コスト${_cst==null?"?":_cst}）を捨てさせた`);
+      if(_cst==null||isNaN(_cst)){toast("💥 捨てたカードのコストが未登録のため、破壊は手動で行ってください");continue;}
+      const _kp2=OZ.battle.filter(x=>{const rx=getReg(x);
+        return rx&&isCreatureReg(rx)&&rx.cost!=null&&rx.cost!==""&&(+rx.cost)===_cst;});
+      if(!_kp2.length){toast(`💥 コスト${_cst}の相手クリーチャーはいません`);continue;}
+      const _jk=_kp2.length===1?0:await pickCard(`💥 破壊する相手クリーチャーを選択（コスト${_cst}ちょうど）`,_kp2,{hint:"タップで選択"});
+      if(_jk===null)continue;
+      await destroyWithReplace(op,_kp2[_jk]);
+      renderAll();
+    }else if(f.t==="topLookAnyBottom"){
+      /* 👀 山札の上からn枚を見て、その中のどれでも1枚を手札に加え、残りを好きな順序で
+         山札の下に置く（蒼狼の大王 イザナギテラス型）。
+         既存の topLookCreatureBottom はクリーチャー限定なので、呪文も選べる版として作った。 */
+      const _sh=Z.deck.splice(0,n);
+      if(!_sh.length){toast("👀 山札がありません");continue;}
+      snap();
+      _sh.forEach(x=>{x.faceup=true;x.seen=true;});
+      renderAll();
+      logOnly(`👀 ${S.players[pi].label}：山札の上${_sh.length}枚を見た → ${cnList(_sh)}`);
+      const _fl=String(f.cond||"").trim();
+      const _pick=_sh.filter(x=>{const rx=getReg(x);return !_fl||(rx&&lockFilterOk(_fl,rx,x));});
+      if(_pick.length){
+        const _jp=await pickCard(`✋ 手札に加える1枚を選択（${_sh.length}枚を確認中）`,_pick,{hint:"タップで選択・キャンセルで加えない"});
+        if(_jp!==null){
+          const _hc2=_pick[_jp];
+          const _ix=_sh.findIndex(x=>x.id===_hc2.id);if(_ix>=0)_sh.splice(_ix,1);
+          _hc2.faceup=true;_hc2.seen=false;_hc2.tapped=false;
+          if(typeof toHand==="function")toHand(Z,_hc2);else Z.hand.push(_hc2);
+          toast(`✋ ${faceNameOf(_hc2)} を手札に加えた`);
+        }
+      }else toast(`👀 条件に合うカードがありません${_fl?`（${_fl}）`:""}`);
+      while(_sh.length){
+        let _j3=0;
+        if(_sh.length>1){
+          const _k3=await pickCard(`⬇ 山札の一番下に置く順番を選択（残り${_sh.length}枚・キャンセルで上から順）`,_sh,{hint:"タップで選択"});
+          _j3=(_k3===null)?0:_k3;
+        }
+        const _c3=_sh.splice(_j3,1)[0];
+        _c3.faceup=false;_c3.seen=false;_c3.tapped=false;_c3.sideways=false;_c3.face=0;
+        Z.deck.push(_c3);
+      }
+      sfx("ok");renderAll();
+      toast("⬇ 残りを山札の一番下に置いた");
+    }else if(f.t==="foeDrawAsk"){
+      /* 🃏 相手はカードをn枚まで引いてもよい（海底鬼面城型）。引くかどうかは相手に聞く。
+         ソロでは相手がいないのでスキップする。 */
+      if(!S.vs){toast("（ソロのため相手のドローはスキップ）");continue;}
+      const _ZO=zonesOf(op);
+      if(!_ZO.deck.length){toast(`🃏 ${S.players[op].label} の山札がありません`);continue;}
+      if(!await ask(`🃏 ${S.players[op].label}：カードを${n}枚引きますか？（引かなくてもよい）`))continue;
+      snap();
+      let _dn=0;
+      for(let i=0;i<n;i++){
+        if(!_ZO.deck.length)break;
+        const _c=_ZO.deck.shift();_c.faceup=true;_c.sideways=false;
+        if(toHand(_ZO,_c)){markArrive(_c);_dn++;}
+      }
+      if(_dn){bumpEv("draws",op,_dn);sfx("draw");emitEvent(op,"draw");renderAll();
+        toast(`🃏 ${S.players[op].label} はカードを${_dn}枚引いた`);
+        logOnly(`🃏 ${S.players[op].label}：${_dn}枚ドロー`);}
+    }else if(f.t==="drawThenDeckBottom"){
+      /* 🃏⬇ カードをn枚引き、その後、自分の手札からn枚を山札の一番下に置く（海底鬼面城型）。
+         引くかどうかから任意。引いたら同じ枚数を必ず戻す（テキストが「引いて、置いてもよい」の一体型のため、
+         引いた時点で戻すところまで行う）。 */
+      if(!Z.deck.length){toast("🃏 山札がありません");continue;}
+      if(!await ask(`🃏 カードを${n}枚引いて、手札を${n}枚山札の一番下に置きますか？`))continue;
+      snap();
+      let _dn2=0;
+      for(let i=0;i<n;i++){
+        if(!Z.deck.length)break;
+        const _c=Z.deck.shift();_c.faceup=true;_c.sideways=false;
+        if(toHand(Z,_c)){markArrive(_c);_dn2++;}
+      }
+      if(_dn2){bumpEv("draws",pi,_dn2);sfx("draw");emitEvent(pi,"draw");renderAll();
+        toast(`🃏 カードを${_dn2}枚引いた`);}
+      for(let i=0;i<_dn2;i++){
+        if(!Z.hand.length)break;
+        const _j=(Z.hand.length===1)?0:await pickCard(`⬇ 山札の一番下に置く手札を選択（${i+1}/${_dn2}）`,Z.hand,{hint:"タップで選択"});
+        if(_j===null)break;
+        const _c2=Z.hand.splice(_j,1)[0];
+        _c2.faceup=false;_c2.seen=false;_c2.tapped=false;_c2.sideways=false;_c2.face=0;
+        Z.deck.push(_c2);
+        renderAll();
+      }
+      sfx("move");renderAll();
+      toast("⬇ 手札を山札の一番下に置いた");
+    }else if(f.t==="anyDestroy"||f.t==="anyDestroyThenRebirth"){
+      /* 💥 バトルゾーンのクリーチャーを選んで破壊する（自分・相手どちらでも）。
+         anyDestroyThenRebirth（転生プログラム型）は、そのあと**破壊されたカードの持ち主**が
+         山札の上から進化ではないクリーチャーが出るまで表向きにし、出たクリーチャーを出して
+         それ以外を持ち主の墓地に置く。自分のクリーチャーを選べば自分の山札をめくる。 */
+      const _reb=(f.t==="anyDestroyThenRebirth");
+      const _filtD=String(f.cond||"").trim();
+      const _cnt=_reb?1:n;
+      let _kk=0;
+      for(let i=0;i<_cnt;i++){
+        const _cd=[];
+        for(const _p of (S.vs?[pi,op]:[pi]))
+          for(const x of zonesOf(_p).battle){
+            const rx=getReg(x);
+            if(!rx||!isCreatureReg(rx))continue;
+            if(_filtD&&!lockFilterOk(_filtD,rx,x))continue;
+            _cd.push({p:_p,c:x});
+          }
+        if(!_cd.length){if(!i)toast("💥 対象にできるクリーチャーがいません");break;}
+        const _jd=await pickCard(`💥 破壊するクリーチャーを選択（${i+1}/${_cnt}・自分と相手のどちらでも）`,
+          _cd.map(x=>x.c),{hint:"タップで選択・キャンセルで終了",
+          sub:x=>{const o=_cd.find(y=>y.c.id===x.id);return o?S.players[o.p].label:"";}});
+        if(_jd===null)break;
+        if(i===0)snap();
+        const _op2=_cd[_jd].p, _oc=_cd[_jd].c, _onm=faceNameOf(_oc);
+        const _was=zonesOf(_op2).battle.some(x=>x.id===_oc.id);
+        await destroyWithReplace(_op2,_oc);
+        const _gone=_was&&!zonesOf(_op2).battle.some(x=>x.id===_oc.id);
+        if(_gone)_kk++;
+        renderAll();
+        if(_reb){
+          if(!_gone){toast(`♻ ${_onm} は破壊されなかったため、山札はめくりません`);break;}
+          toast(`♻ ${S.players[_op2].label} は山札の上から進化ではないクリーチャーが出るまで表向きにします`);
+          await revealUntilNonEvo(_op2,1,"","grave");
+        }
+      }
+      if(_kk&&!_reb){sfx("grave");renderAll();toast(`💥 クリーチャー${_kk}体を破壊した`);}
+    }else if(f.t==="anyBounce"){
+      /* ↩ バトルゾーンにあるクリーチャーをn体まで選び、持ち主の手札に戻す（アクア・スナイパー型）。
+         自分のクリーチャーも相手のクリーチャーも選べる。キャンセルで打ち切り。 */
+      const _filt=String(f.cond||"").trim();
+      let _done=0;
+      for(let i=0;i<n;i++){
+        const _cands=[];
+        for(const _p of (S.vs?[pi,op]:[pi]))
+          for(const x of zonesOf(_p).battle){
+            const rx=getReg(x);
+            if(!rx||!isCreatureReg(rx))continue;
+            if(_filt&&!lockFilterOk(_filt,rx,x))continue;
+            _cands.push({p:_p,c:x});
+          }
+        if(!_cands.length){if(!i)toast("↩ 対象にできるクリーチャーがいません");break;}
+        const _j=await pickCard(`↩ 手札に戻すクリーチャーを選択（${i+1}/${n}・自分と相手のどちらでも）`,
+          _cands.map(x=>x.c),{hint:"タップで選択・キャンセルで終了",
+          sub:x=>{const o=_cands.find(y=>y.c.id===x.id);return o?S.players[o.p].label:"";}});
+        if(_j===null)break;
+        if(i===0)snap();
+        if(await bounceOneToHand(_cands[_j].p,_cands[_j].c))_done++;
+      }
+      if(_done){sfx("move");renderAll();toast(`↩ クリーチャー${_done}体を持ち主の手札に戻した`);}
+    }else if(f.t==="graveToMana"){
+      /* ⚰→🌱 自分の墓地からカードをn枚まで選び、自分のマナゾーンに置く（再誕の社型）。
+         タップしないので、置いたぶんはそのターンから使える。キャンセルで打ち切り。 */
+      const _filt2=String(f.cond||"").trim();
+      let _mv=0;
+      for(let i=0;i<n;i++){
+        const _pool=Z.grave.filter(x=>{const rx=getReg(x);return !_filt2||(rx&&lockFilterOk(_filt2,rx,x));});
+        if(!_pool.length){if(!i)toast("⚰ 墓地に対象のカードがありません");break;}
+        const _j2=await pickCard(`⚰→🌱 マナゾーンに置くカードを選択（${i+1}/${n}）`,_pool,{hint:"タップで選択・キャンセルで終了"});
+        if(_j2===null)break;
+        if(i===0)snap();
+        const _c=_pool[_j2];
+        const _i3=Z.grave.findIndex(x=>x.id===_c.id);if(_i3<0)break;
+        Z.grave.splice(_i3,1);
+        _c.faceup=true;_c.tapped=false;_c.sideways=false;_c.buff=null;_c.seals=[];_c.face=0;
+        manaTapIn(_c,pi);
+        Z.mana.push(_c);markArrive(_c);_mv++;
+        renderAll();
+      }
+      if(_mv){bumpEv("manaAccel",pi,_mv);sfx("move");renderAll();
+        toast(`⚰→🌱 墓地から${_mv}枚をマナゾーンに置いた`);
+        logOnly(`⚰→🌱 ${S.players[pi].label}：墓地から${_mv}枚をマナへ`);}
+    }else if(f.t==="destroyAllOthers"){
+      /* 💥 このクリーチャー以外のクリーチャーをすべて破壊する（悪魔神王バルカディアス型）。
+         自分のクリーチャーも巻き込む。このカード自身だけが残る。 */
+      const _filt3=String(f.cond||"").trim();
+      const _tg=[];
+      for(const _p of (S.vs?[pi,op]:[pi]))
+        for(const x of zonesOf(_p).battle){
+          if(srcCard&&x.id===srcCard.id)continue;
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))continue;
+          if(_filt3&&!lockFilterOk(_filt3,rx,x))continue;
+          _tg.push({p:_p,c:x});
+        }
+      if(!_tg.length){toast("💥 他のクリーチャーはいません");continue;}
+      snap();
+      let _kn=0;
+      for(const {p:_p2,c:_c2} of _tg){
+        if(!zonesOf(_p2).battle.some(x=>x.id===_c2.id))continue;
+        await destroyWithReplace(_p2,_c2);_kn++;
+      }
+      sfx("grave");renderAll();
+      toast(`💥 このクリーチャー以外のクリーチャー${_kn}体を破壊した`);
+      logOnly(`💥 ${S.players[pi].label}：${srcCard?faceNameOf(srcCard):""} 以外を全破壊（${_kn}体）`);
+    }else if(f.t==="knightMagic"){
+      /* 🗡 ナイト・マジック（魔弾シリーズ）。
+         「バトルゾーンに自分のナイトがあれば、この呪文の【KM】能力をもう一度使ってもよい」。
+         ・ナイトが2体以上いても、使えるのは**1度だけ**。
+         ・呪文をもう一度唱えたことにはならない（コストも唱えた回数も増えない）。
+         ・1回目の結果を見てから使うか決められるよう、この行は最後に置く。
+         同じ list の中で「KM」を付けた行だけをもう一度回す。繰り返し用の写しからは
+         km を外すので、この行自体が二重に走ることはない。 */
+      const _kn=Z.battle.some(x=>{const rx=getReg(x);
+        return rx&&(rx.races||[]).some(r=>/ナイト/.test(String(r)));});
+      if(!_kn){toast("🗡 バトルゾーンに自分のナイトがいないため、ナイト・マジックは使えません");continue;}
+      const _kmRows=(list||[]).filter(x=>x&&x.km&&x.t);
+      if(!_kmRows.length){toast("🗡 KMにあたる行が登録されていません（効果行の「🗡 KM」にチェックを入れてください）");continue;}
+      if(!await ask("🗡 ナイト・マジック：この呪文の【KM】能力をもう一度使いますか？"))continue;
+      toast("🗡 ナイト・マジック：もう一度【KM】能力を使います");
+      logOnly(`🗡 ${S.players[pi].label}：ナイト・マジック発動`);
+      await runFxList(pi,_kmRows.map(x=>Object.assign({},x,{km:false})),srcCard,inPump);
+    }else if(f.t==="allZonesToDeck"){
+      /* 🌐 各プレイヤーは、バトルゾーン・手札・シールドゾーン・墓地にある自身のカードを
+         すべて山札に加えてシャッフルする（オールデリート型）。
+         ⚠ クリーチャーに付いていた封印は山札に混ぜず、そのプレイヤーの墓地に残す。
+         nWorldShuffle は seals=[] で消していたが、封印はカードなので消えては困る。 */
+      snap();
+      for(const side of (S.vs?[pi,op]:[pi])){
+        const ZS=zonesOf(side);
+        const _seals=[];
+        for(const x of ZS.battle)if(x.seals&&x.seals.length)_seals.push(...x.seals.splice(0));
+        const bt=ZS.battle.splice(0), hs=ZS.hand.splice(0), sh=ZS.shield.splice(0), gs=ZS.grave.splice(0);
+        let moved=0;
+        for(const x of [...bt,...hs,...sh,...gs]){
+          const _u=(x.under&&x.under.length)?x.under.splice(0):[];
+          const _g=(x.gear&&x.gear.length)?x.gear.splice(0):[];
+          for(const y of [..._u,..._g]){
+            y.faceup=false;y.tapped=false;y.sideways=false;y.rot=0;y.buff=null;y.seals=[];y.face=0;y.isCross=false;
+            ZS.deck.push(y);moved++;
+          }
+          x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;x.seals=[];x.face=0;
+          x.mark=false;x.neoEvo=false;x.isCross=false;x.sick=false;
+          ZS.deck.push(x);moved++;
+        }
+        shuffle(ZS.deck);
+        for(const sx of _seals){sx.faceup=true;sx.tapped=false;sx.sideways=false;sx.buff=null;ZS.grave.push(sx);}
+        toast(`🌐 ${S.players[side].label}：場${bt.length}・手札${hs.length}・盾${sh.length}・墓地${gs.length} を山札へ（計${moved}枚）`+
+              (_seals.length?`／封印${_seals.length}個は墓地に残した`:""));
+        logOnly(`🌐 ${S.players[side].label}：全ゾーンを山札に加えてシャッフル（${moved}枚）`+(_seals.length?`・封印${_seals.length}個は墓地`:""));
+      }
+      sfx("move");renderAll();
+    }else if(f.t==="myOthersToDeckBottom"){
+      /* ⬇ 自分の他のクリーチャーをすべて、好きな順序で自分の山札の一番下に置く（エンペラー・キリコ型）。
+         このカード自身は動かさない。順序は1体ずつ選んでもらう。 */
+      const _pool=Z.battle.filter(x=>!(srcCard&&x.id===srcCard.id));
+      if(!_pool.length){toast("⬇ 自分の他のクリーチャーはいません");continue;}
+      snap();
+      let _cnt=0;
+      while(true){
+        const _left=Z.battle.filter(x=>!(srcCard&&x.id===srcCard.id));
+        if(!_left.length)break;
+        let _j=0;
+        if(_left.length>1){
+          const _k=await pickCard(`⬇ 山札の下に置く順番を選択（残り${_left.length}体・キャンセルで残りは上から順）`,_left,{hint:"タップで選択"});
+          _j=(_k===null)?0:_k;
+        }
+        const _c=_left[_j];
+        const _i=Z.battle.findIndex(x=>x.id===_c.id);if(_i<0)break;
+        Z.battle.splice(_i,1);
+        const _u=(_c.under&&_c.under.length)?_c.under.splice(0):[];
+        if(_c.gear&&_c.gear.length)_c.gear.splice(0).forEach(gg=>gearOut(Z,gg));
+        if(_c.seals&&_c.seals.length)_c.seals.splice(0).forEach(sx=>{sx.faceup=true;Z.grave.push(sx);});
+        _c.faceup=false;_c.tapped=false;_c.sideways=false;_c.rot=0;_c.buff=null;_c.face=0;_c.mark=false;_c.neoEvo=false;
+        Z.deck.push(_c);_cnt++;
+        _u.forEach(y=>{y.faceup=false;y.tapped=false;y.buff=null;y.seals=[];Z.deck.push(y);_cnt++;});
+        renderAll();
+      }
+      sfx("move");renderAll();
+      toast(`⬇ 自分の他のクリーチャー${_cnt}枚を山札の一番下に置いた`);
+    }else if(f.t==="revealUntilNonEvoPlay"){
+      /* 🎴 自分の山札の上から、進化ではないクリーチャーがn体出るまで1枚ずつ表向きにする。
+         出たn体をバトルゾーンに出し、残りを山札の下へ（エンペラー・キリコ型）。 */
+      await revealUntilNonEvo(pi,n,String(f.cond||"").trim());
+    }else if(f.t==="pickAnyToDeckBottomThenReveal"){
+      /* ⬇🎴 バトルゾーンにある他のクリーチャーを1体選び、持ち主の山札の一番下に置く。
+         その持ち主は、進化ではないクリーチャーが出るまで表向きにして出し、残りを山札の下へ（斬隠オロチ型）。 */
+      const _cands=[];
+      for(const _p of (S.vs?[pi,op]:[pi]))
+        for(const x of zonesOf(_p).battle)
+          if(!(srcCard&&x.id===srcCard.id))_cands.push({p:_p,c:x});
+      if(!_cands.length){toast("⬇ 他のクリーチャーがいません");continue;}
+      const _j=await pickCard("⬇ 山札の一番下に置くクリーチャーを選択（自分・相手どちらでも）",_cands.map(x=>x.c),
+        {hint:"タップで選択",sub:x=>{const _o=_cands.find(y=>y.c.id===x.id);return _o?S.players[_o.p].label:"";}});
+      if(_j===null)continue;
+      snap();
+      const _own=_cands[_j].p, _tc=_cands[_j].c, _ZO=zonesOf(_own);
+      const _i2=_ZO.battle.findIndex(x=>x.id===_tc.id);if(_i2<0)continue;
+      _ZO.battle.splice(_i2,1);
+      const _u2=(_tc.under&&_tc.under.length)?_tc.under.splice(0):[];
+      if(_tc.gear&&_tc.gear.length)_tc.gear.splice(0).forEach(gg=>gearOut(_ZO,gg));
+      if(_tc.seals&&_tc.seals.length)_tc.seals.splice(0).forEach(sx=>{sx.faceup=true;_ZO.grave.push(sx);});
+      _tc.faceup=false;_tc.tapped=false;_tc.sideways=false;_tc.rot=0;_tc.buff=null;_tc.face=0;_tc.mark=false;_tc.neoEvo=false;
+      _ZO.deck.push(_tc);
+      _u2.forEach(y=>{y.faceup=false;y.tapped=false;y.buff=null;y.seals=[];_ZO.deck.push(y);});
+      renderAll();
+      toast(`⬇ ${faceNameOf(_tc)} を${S.players[_own].label}の山札の一番下へ`);
+      await revealUntilNonEvo(_own,1,String(f.cond||"").trim());
     }else if(f.t==="deckCastSpellAll"){
       // 🔮 山札を全部見て、条件に合う呪文を1枚コストを支払わずに唱える（蒼狼の始祖アマテラス型）→シャッフル
       const filt=String(f.cond||"").trim();
@@ -21124,6 +21754,28 @@ async function effPower(c,attacking,inBattle){
           if(isSealed(b)||isIgnored(b,foeSide))continue;
           if(rb.stAuraFiltFoe&&!(r&&lockFilterOk(rb.stAuraFiltFoe,r,c)))continue;
           p+=(+rb.stAuraPowFoe||0);
+        }
+      }
+    }
+  }
+  /* 🏯 v15.54：要塞化した城の常在パワー修正（ローズ・キャッスル型）。
+     城は「表向きで盾ゾーンにあるカード」なので、バトルゾーンではなく盾を見る。
+     castlePowFoe … その城の持ち主から見た**相手**のクリーチャー全体に効く（例：-1000）
+     castlePowMine … その城の持ち主の**自分**のクリーチャー全体に効く
+     castlePowFilt … 対象を絞る（例：パワー3000以下） */
+  {
+    const ownC=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle.includes(c));
+    if(ownC!=null){
+      for(const cp of [0,1]){
+        const ZC=zonesOf(cp);if(!ZC||!ZC.shield)continue;
+        for(const sh of ZC.shield){
+          if(!sh.faceup||isSealed(sh))continue;
+          const rs=getReg(sh);if(!rs)continue;
+          const mine=(cp===ownC);
+          const amt=mine?(+rs.castlePowMine||0):(+rs.castlePowFoe||0);
+          if(!amt)continue;
+          if(rs.castlePowFilt&&!(r&&lockFilterOk(rs.castlePowFilt,r,c)))continue;
+          p+=amt;
         }
       }
     }
@@ -25533,6 +26185,30 @@ function fxRowEl(faceIdx,i){
   gt.classList.add("fxr-cond-input");
   const gateWrap=document.createElement("div");gateWrap.className="fxr-cond";gateWrap.appendChild(gt);
   bot.appendChild(gateWrap);
+  /* 🔗 v15.50：「そうした場合」の連動。直前の行で盤面が動いた時だけこの行を行う。
+     欄を足しただけでは登録パネルから消えてしまうので、必ずここにも出すこと（v15.48 の教訓）。 */
+  {
+    const kmWrap=document.createElement("label");
+    kmWrap.className="fxr-cond";
+    kmWrap.style.cssText="flex:1 1 100%;display:flex;align-items:center;gap:6px;font-size:12px";
+    kmWrap.title="ナイト・マジックでもう一度使う行に付けます。最後の行に効果種類「knightMagic」を置いてください";
+    const km=document.createElement("input");
+    km.type="checkbox";km.checked=!!f.km;
+    km.onchange=()=>{f.km=km.checked;};
+    kmWrap.appendChild(km);
+    kmWrap.appendChild(document.createTextNode("🗡 KM（ナイト・マジックでもう一度使う行）"));
+    bot.appendChild(kmWrap);
+    const ipWrap=document.createElement("label");
+    ipWrap.className="fxr-cond";
+    ipWrap.style.cssText="flex:1 1 100%;display:flex;align-items:center;gap:6px;font-size:12px";
+    ipWrap.title="「〜してもよい。そうしたら〜」の後半に付けます。直前の行で盤面が動かなかった時は、この行を行いません";
+    const ip=document.createElement("input");
+    ip.type="checkbox";ip.checked=!!f.ifPrev;
+    ip.onchange=()=>{f.ifPrev=ip.checked;};
+    ipWrap.appendChild(ip);
+    ipWrap.appendChild(document.createTextNode("🔗 そうした場合（直前の効果を行った時だけ）"));
+    bot.appendChild(ipWrap);
+  }
   row.appendChild(top);row.appendChild(bot);
   return row;
 }
@@ -32347,8 +33023,11 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       toast(cnt>=reg.ryuArm?`🐲 龍マナ武装${reg.ryuArm} 達成！（マナのドラゴン${cnt}枚）`:`龍マナ武装${reg.ryuArm}：未達成（マナのドラゴン${cnt}枚）`);
     }
     if(S.expert&&reg&&reg.mDrive){
-      const cnt=reg.mDriveCiv?Z.mana.filter(m=>{const rm=getReg(m);return rm&&rm.civs&&rm.civs.includes(reg.mDriveCiv);}).length:Z.mana.length;
-      toast(cnt>=reg.mDrive?`⚙ マナドライブ${reg.mDrive} 達成！（該当マナ${cnt}枚）`:`マナドライブ${reg.mDrive}：未達成（該当マナ${cnt}枚）`);
+      /* ⚙ v15.53：枚数は全体、文明は「1枚でもあれば」。manaDriveOk と同じ判定にそろえた。 */
+      const cnt=Z.mana.length;
+      const _mdOk=(typeof manaDriveOk==="function")?manaDriveOk(pTo,reg):false;
+      toast(_mdOk?`⚙ マナドライブ${reg.mDrive} 達成！（マナ${cnt}枚${reg.mDriveCiv?"・該当文明あり":""}）`
+                 :`マナドライブ${reg.mDrive}：未達成（マナ${cnt}枚${reg.mDriveCiv?"・該当文明の有無を確認してください":""}）`);
     }
     if(S.expert)offerPhoenixStore(pTo,c);
     if(S.expert&&reg&&reg.laby){
@@ -45104,9 +45783,28 @@ function zoneFiltCount(arrs,filt){
     });
   }).length;
 }
+/* ⚙ v15.53：マナドライブの達成判定。
+   「自分のマナゾーンのカードがN枚以上で、そこに〔文明〕があれば」。
+   **枚数は全体の枚数**で、文明はその中に1枚でもあればよい。
+   （v15.52 までの表示は「その文明のカードだけを数えてN枚」になっていたので、あわせて直した） */
+function manaDriveOk(pi,reg){
+  if(!reg||!(reg.mDrive|0))return false;
+  const Zm=zonesOf(pi);
+  const total=(Zm.mana||[]).length;
+  if(total<(reg.mDrive|0))return false;
+  if(!reg.mDriveCiv)return true;
+  return (Zm.mana||[]).some(m=>{const rm=getReg(m);return rm&&(rm.civs||[]).includes(reg.mDriveCiv);});
+}
 function zoneCondOk(expr,pi,selfCard){
   try{
     const op2=pi===0?1:0, Z=zonesOf(pi), OZ=zonesOf(op2);
+    /* ⚙ v15.53「マナドライブ」：このカード自身の登録（mDrive／mDriveCiv）を見て真偽に置き換える。
+       Dスイッチと同じく枚数の比較にならないので、ここで先に真偽へ変換する。 */
+    if(/マナドライブ/.test(String(expr))){
+      const _md=manaDriveOk(pi,selfCard?getReg(selfCard):null);
+      expr=String(expr).replace(/マナドライブ(達成|成立)?/g,_md?"バトル>=0":"バトル<0");
+      if(!String(expr).trim())return true;
+    }
     // 🅳 「Dスイッチ中」「Dスイッチ前」＝このカードのDスイッチの向きで判定する。
     //    サイキック等と違い枚数の比較にならないので、ここで先に取り出して真偽に置き換える。
     if(/Dスイッチ/.test(String(expr))){
