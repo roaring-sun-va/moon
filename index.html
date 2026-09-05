@@ -5253,7 +5253,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.65";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.66";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11688,6 +11688,10 @@ function cardInfoText(key){
   if(r.stLockCre)kw.push(`クリーチャー召喚ロック${r.stLockCreF?`(${r.stLockCreF})`:""}`);
   if(r.stLockSpell)kw.push(`呪文ロック${r.stLockSpellF?`(${r.stLockSpellF})`:""}`);
   if(r.stLockField)kw.push("フィールド実行ロック");
+  if(+r.stNoAtkPow>0)kw.push(`パワー${r.stNoAtkPow}以上は攻撃不可`);
+  if(+r.castlePowFoe)kw.push(`城：相手全体パワー${r.castlePowFoe}`);
+  if(+r.castlePowMine)kw.push(`城：味方全体パワー${r.castlePowMine}`);
+  if(+r.sumKillRed>0)kw.push(`召喚時破壊軽減${r.sumKillRed}`);
   if(r.noLose)kw.push(`負けない${r.noLoseCond?`(${r.noLoseCond})`:""}`);
   if(r.atkWinIncludedN)kw.push(`攻撃時：含まれるカード${r.atkWinIncludedN}枚以上で勝利`);
   if(r.attackLoseSacrifice)kw.push("攻撃による敗北を自身の破壊に置換→次の自分のターン開始時に敗北");
@@ -29945,6 +29949,14 @@ function openFxEditor(key){
     altTapNeed:cur&&cur.altTapNeed||"",
     altCostKill:cur?!!cur.altCostKill:false,
     altCond:cur&&cur.altCond||"",
+    /* ⚠ v15.66：登録パネルに入力欄が無い項目も、ここと収集の両方に書かないと
+       「開いて保存」しただけで消える。v15.46〜v15.65 で足した6項目が抜けていた。 */
+    stNoAtkPow:cur&&+cur.stNoAtkPow||0,
+    stNoAtkPowFilt:cur&&cur.stNoAtkPowFilt||"",
+    castlePowFoe:cur&&+cur.castlePowFoe||0,
+    castlePowMine:cur&&+cur.castlePowMine||0,
+    castlePowFilt:cur&&cur.castlePowFilt||"",
+    sumKillRed:cur&&+cur.sumKillRed||0,
     stLockSpell:cur?!!cur.stLockSpell:false,
     stLockField:cur?!!cur.stLockField:false,
     stSpellPT:cur&&cur.stSpellPT||0,
@@ -30512,6 +30524,14 @@ $("fxSave").addEventListener("click",async ()=>{
     altTapNeed:$("fxAltTapNeed")?$("fxAltTapNeed").value.trim():"",
     altCostKill:$("fxAltCostKill").checked,
     altCond:$("fxAltCond").value.trim(),
+    /* ⚠ v15.66：入力欄が無い項目は FXEDIT の値をそのまま書き戻して保持する。
+       ここに書かないと、登録パネルを開いて保存した瞬間に消える。 */
+    stNoAtkPow:+FXEDIT.stNoAtkPow||0,
+    stNoAtkPowFilt:FXEDIT.stNoAtkPowFilt||"",
+    castlePowFoe:+FXEDIT.castlePowFoe||0,
+    castlePowMine:+FXEDIT.castlePowMine||0,
+    castlePowFilt:FXEDIT.castlePowFilt||"",
+    sumKillRed:+FXEDIT.sumKillRed||0,
     stLockSpell:$("fxStLockSpell").checked,
     stLockField:$("fxStLockField")?$("fxStLockField").checked:false,
     stNoDeckPeek:$("fxStNoDeckPeek")?$("fxStNoDeckPeek").checked:false,
@@ -31313,6 +31333,10 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.altCost!=null)attrs.push(`代替コスト[${v.altCost}]${v.altCiv?`（文明：${v.altCiv}）`:""}${v.altCond?`（${v.altCond}）`:""}`);
     if(v.stLockSpell)attrs.push(`常在：相手は${v.stLockSpellF?v.stLockSpellF+"の":""}呪文を唱えられない`);
     if(v.stLockField)attrs.push("常在：相手はフィールドを実行できない");
+    if(+v.stNoAtkPow>0)attrs.push(`⛔ 常在：パワー${v.stNoAtkPow}以上のクリーチャーは攻撃できない${v.stNoAtkPowFilt?`（${v.stNoAtkPowFilt}）`:""}`);
+    if(+v.castlePowFoe)attrs.push(`🏯 城：相手のクリーチャー全体のパワー${+v.castlePowFoe>0?"+":""}${v.castlePowFoe}`);
+    if(+v.castlePowMine)attrs.push(`🏯 城：自分のクリーチャー全体のパワー${+v.castlePowMine>0?"+":""}${v.castlePowMine}`);
+    if(+v.sumKillRed>0)attrs.push(`💥 召喚時：自分のクリーチャーを破壊して1体につきコスト−${v.sumKillRed}`);
     if(v.stSpellPT>0)attrs.push(`常在：相手は各ターン${v.stSpellPT}回しか呪文を唱えられない`);
     if(v.stCrePT>0)attrs.push(`常在：相手は各ターン${v.stCrePT}体しかクリーチャーを出せない${v.stCrePTevo?"（進化時のみ）":""}`);
     if(v.stLockCre)attrs.push(`常在：相手は${v.stLockCreF?v.stLockCreF+"の":""}クリーチャーを出せない`);
