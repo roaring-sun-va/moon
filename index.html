@@ -5253,7 +5253,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.42";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.44";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6541,6 +6541,13 @@ function markBuffTurn(c,keys){
   c.buff._t=c.buff._t||[];
   for(const k of keys)if(!c.buff._t.includes(k))c.buff._t.push(k);
 }
+/* 🚫 このターン、誰も「S・トリガー」を使えない（無双恐皇ガラムタ型）。
+   noAtkAllTurn と同じくターン番号をキーに持つので、ターンが変われば自然に切れる。
+   常在の stNoST（カース・トーテム型＝相手だけ・ずっと）とは別物で、こちらは両プレイヤーに効く。
+   G・ストライク／ニンジャ・ストライクは別能力なので止めない。 */
+function noSTAllTurnOn(){
+  return !!(S.noSTTurn&&S.noSTTurn.on&&S.noSTTurn.key===`${S.turn}`);
+}
 /* 🌟 モモキングダム✕型：含まれるカード枚数＝自身＋下のカード。6枚未満で攻撃不可・相手に選ばれない。6枚到達でこのターン相手全体−99999。 */
 function stackCountOf(c){return 1+((c&&c.under)?c.under.length:0);}
 /* 🧬 v15.35：進化元になったカード自身の誘発。 */
@@ -7772,9 +7779,12 @@ function snap(){
   HIST_LOG.push(typeof GAMELOG!=="undefined"?GAMELOG.length:0);
   if(HIST.length>50){HIST.shift();HIST_LOG.shift();}
   REDO.length=0;REDO_LOG.length=0;
-  // 📽 リプレイ：試合中はフレームも蓄積（リプレイ再生中は記録しない・上限600）
+  // 📽 リプレイ：試合中はフレームも蓄積（リプレイ再生中は記録しない・上限250）
   if(typeof MATCH_CTX!=="undefined"&&MATCH_CTX&&!REPLAY.on){
-    if(REPLAY.frames.length<600&&REPLAY.frames[REPLAY.frames.length-1]!==s)REPLAY.frames.push(s);
+    /* 🧠 v15.44：上限を600→250へ。1フレームが実測で約36KB（文字列はUTF-16なので2倍）あり、
+       600だと21MBになる。ゾルザークやネルガルザーグのように誘発が連鎖する場面では
+       snap() が短時間に何十回も走るので、ここが一番速く伸びる。 */
+    if(REPLAY.frames.length<250&&REPLAY.frames[REPLAY.frames.length-1]!==s)REPLAY.frames.push(s);
   }
 }
 function restoreState(st){
@@ -7872,13 +7882,22 @@ function autoSaveSnapshot(){
     if(typeof S==="undefined"||!S)return null;
     if((S.turn|0)<=0)return null; // 開始前は保存しない
     return {
-      v:2,at:Date.now(),ver:(typeof APP_VER!=="undefined"?APP_VER:""),
+      v:3,at:Date.now(),ver:(typeof APP_VER!=="undefined"?APP_VER:""),
       turn:S.turn|0,who:S.who|0,seat:S.seat|0,vs:!!S.vs,
       expert:!!S.expert,freePlay:!!S.freePlay,gameMode:S.gameMode||"",
       score:(typeof SCORE!=="undefined"&&SCORE)?SCORE.slice():[0,0],
       labels:S.players.map(p=>p.label||""),
       z:S.players.map(p=>p.zones),
       log:(typeof GAMELOG!=="undefined"&&GAMELOG)?GAMELOG.slice(-200):[],
+      /* 🧠 v15.44：ここまでは盤面だけを保存していたため、読み直しのあと
+         「各ターン1回」「ゲーム中1回」の使用済みが白紙に戻り、軽減も撃ち直せていた。
+         1手戻る（serializeState）は元からこれらを持っているので、同じものを保存する。 */
+      wo:S._watchOnce||{},g1:S._once1G||{},fs:S.firstSumUsed||{},su:S.sumTurn||{},
+      nl:S.noLoseCnt||{},nlf:S.noLeaveFoeCnt||{},
+      na:S.noAtkTurn||null,nst:S.noSTTurn||null,ec:(typeof ENTERED_CNT!=="undefined"?ENTERED_CNT|0:0),pt:S.pturn|0,
+      /* ⚔ 攻撃の途中で読み直された時、盤面だけ戻っても攻撃は消えていた。
+         保留中の攻撃を持っておき、復元後に「▶ 攻撃を再開」を出せるようにする。 */
+      atk:S.pendingAtk?JSON.parse(JSON.stringify(S.pendingAtk)):null,
     };
   }catch(e){return null;}
 }
@@ -7929,9 +7948,37 @@ async function autoSaveOfferRestore(){
       if(s.labels&&s.labels[i])S.players[i].label=s.labels[i];
     });
     S.sel=null;S.msel=[];
+    /* 🧠 v15.44：ターンごと・ゲーム中の使用済みも戻す（v2の保存には入っていないので、あれば使う） */
+    if(s.wo)S._watchOnce=s.wo;
+    if(s.g1)S._once1G=s.g1;
+    if(s.fs)S.firstSumUsed=s.fs;
+    if(s.su)S.sumTurn=s.su;
+    if(s.nl)S.noLoseCnt=s.nl;
+    if(s.nlf)S.noLeaveFoeCnt=s.nlf;
+    if(s.na)S.noAtkTurn=s.na;
+    if(s.nst)S.noSTTurn=s.nst;
+    if(s.pt!=null)S.pturn=s.pt|0;
+    if(s.ec!=null&&typeof ENTERED_CNT!=="undefined")ENTERED_CNT=s.ec|0;
+    S._watchOncePend={};
     if(s.log&&typeof GAMELOG!=="undefined"){GAMELOG.length=0;for(const e of s.log)GAMELOG.push(e);}
     if(typeof HIST!=="undefined"&&HIST)HIST.length=0; // 巻き戻し履歴は引き継がない
+    /* ⚔ 攻撃の途中だったなら、その攻撃を戻して「▶ 攻撃を再開」を出す。
+       攻撃していたクリーチャーが保存時の盤面にまだいる場合だけ復帰させる。 */
+    let _atkBack=false;
+    if(s.atk&&s.atk.id!=null){
+      const _alive=[0,1].some(pp=>S.players[pp]&&(S.players[pp].zones.battle||[]).some(x=>x.id===s.atk.id));
+      if(_alive){
+        S.pendingAtk=s.atk;
+        if(typeof CUR_ATTACKER!=="undefined")CUR_ATTACKER=s.atk.id;
+        _atkBack=true;
+      }
+    }
     renderAll();
+    if(_atkBack){
+      try{if(typeof showResumeBtn==="function")showResumeBtn();}catch(e){}
+      toast("⚔ 攻撃の途中で読み直されていました。「▶ 攻撃を再開」で続きから進めます");
+      logOnly("⚔ 保留中の攻撃を復元しました");
+    }
     logOnly(`💾 途中データから盤面を復元しました（${when}の記録・ターン${S.turn}）`);
     toast(`💾 盤面を復元しました（ターン${S.turn}）\n※オンライン対戦だった場合は、もう一度接続してください`);
     return true;
@@ -11231,7 +11278,7 @@ const FX_TYPES=[
   ["deckTopSplitSHM","🌸 山札の上からn枚を見て、1枚をシールド化→1枚を手札→残りをマナへ（超開花妖精アジサイ！型）"],
   ["exileRecruitPerZone","🌺 自分の指定ゾーンの〔対象〕n枚につき、ゲーム外から指定カード1枚を出す（条件欄：ゾーン:対象→出すカード名。例「マナ:スノーフェアリー→超開花妖精ハイドロジア」）"],
   ["exileRecruitPerBattle","🌺【旧互換】自分のバトルゾーンの〔対象〕n枚につき、ゲーム外から指定カード1枚を出す"],
-  ["graveToDeckAll","🔀 墓地のカードをすべて山札に加えてシャッフル（条件欄が空で対戦中なら、どちらのプレイヤーか選ぶ／「自分」「相手」で固定・ポクチンちん型）"],
+  ["graveToDeckAll","🔀 墓地のカードをすべて山札に加えてシャッフル（条件欄が空＝自分の墓地／「相手」で相手だけ／「プレイヤー」でどちらの墓地か選ぶ・ポクチンちん型）"],
   ["foeGraveTopCostToDeck","🔀 相手の墓地から、コストの大きい順にn枚を山札に戻してシャッフル（同じコストが複数あればランダムに選ぶ・条件欄で対象を絞れる・ゼーハー型）"],
   ["suspenseReveal","🃏 相手のシールドn枚と手札n枚をランダムに公開→その中の呪文を好きな数コストを支払わず唱える→公開カードはすべて墓地へ（サスペンス型）"],
   ["sumRecruit","🌋 〔ゾーン〕から好きな数のクリーチャーをコスト合計n以下で選んでバトルゾーンへ（条件欄「マナ／墓地:クリーチャー」・nが合計上限）"],
@@ -11398,6 +11445,7 @@ const FX_TYPES=[
   ["grantTurnPick","✨ そのターン、自分のクリーチャーをn体選び、能力を与える（条件欄に「スピードアタッカー」「パワーアタッカー+2000」等を「／」区切りで・ヤヌスグレンオー型）"],
   ["grantTurnAll","✨ そのターン、自分のクリーチャーすべてに能力を与える（条件欄に「スレイヤー」「スピードアタッカー」「破壊時マナ」「ブロッカー」「パワー+3000」などを「／」区切りで・鎧亜の咆哮キリュー・ジルヴェス型）"],
   ["noAtkAllTurn","⛔ このターン、すべてのクリーチャーは攻撃できない（両プレイヤー・スローリー・チェーン型）"],
+  ["noSTAllTurn","🚫 このターンの終わりまで、誰も「S・トリガー」を使えない（両プレイヤー・無双恐皇ガラムタ型／G・ストライクとニンジャ・ストライクは使える）"],
   ["killThenPsyOut","💀 自分の他のクリーチャーを好きな数（n体まで）破壊し、破壊した数だけ超次元ゾーンからサイキック・クリーチャーを出す（条件欄＝出す対象・例：コスト6以下・ザビ・ミラ型）"],
   ["foeMaxCostDiscardRevive","🗑 相手の手札から最もコストの大きいカード1枚を捨てさせ、自分の墓地からそのコスト以下のクリーチャー1枚を出してもよい（雷獣ヴォルグ・ティーガー型）"],
   ["deckTopShieldRestMana","🛡🌱 自分の山札の上からn枚を見て、その中の1枚をシールド化し、残りをすべてマナゾーンに置く（フェニックス・ライフ型）"],
@@ -11435,7 +11483,7 @@ const FX_TYPES=[
   ["foeTopCostPickToDeck","🎰 相手の山札の上からn枚を表向きにし、自分はその中のコストを1つ選ぶ。選んだコストの相手クリーチャーすべてと表向きのn枚を、ランダムな順番で相手の山札の一番下に置く（7777777型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -14742,6 +14790,15 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("flip");renderAll();
       toast("⛔ このターン、すべてのクリーチャーは攻撃できません");
       logOnly("⛔ このターン、すべてのクリーチャーは攻撃できない");
+    }else if(f.t==="noSTAllTurn"){
+      // 🚫 このターンの終わりまで、誰も「S・トリガー」を使えない（無双恐皇ガラムタ型）
+      snap();
+      S.noSTTurn=S.noSTTurn||{};
+      S.noSTTurn.key=`${S.turn}`;
+      S.noSTTurn.on=true;
+      sfx("flip");renderAll();
+      toast("🚫 このターン、誰も「S・トリガー」を使えません（G・ストライク／ニンジャ・ストライクは使えます）");
+      logOnly("🚫 このターン、誰も「S・トリガー」を使えない");
     }else if(f.t==="grantTurnPick"){
       // ✨ 自分のクリーチャーをn体選び、そのターンだけ能力を与える（ヤヌスグレンオー型）
       const toksP=String(f.cond||"").split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
@@ -17916,7 +17973,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const sd=String(f.side||f.cond||"").trim();
         if(/相手/.test(sd))gp=S.vs?op:pi;
         else if(/自分/.test(sd))gp=pi;
-        else if(S.vs&&(/プレイヤー|選/.test(sd)||sd==="")){
+        else if(S.vs&&/プレイヤー|選/.test(sd)){
           const jg=await askChoice("🔀 どちらのプレイヤーの墓地を山札に加えてシャッフルしますか",
             [`${S.players[pi].label}（自分）`,`${S.players[op].label}（相手）`]);
           if(jg===null)continue;
@@ -21981,7 +22038,7 @@ async function processBroken(op,stack,label){
     //    S・トリガー／S・バック／サバキZ／条件達成のST付与＝タダで使える受けは使い、残りは手札へ。
     if(typeof isGhostSeat==="function"&&isGhostSeat(op)&&typeof GHOST_BUSY!=="undefined"&&GHOST_BUSY){
       (async()=>{
-        const stSealed=(S.expert&&S.vs)?zonesOf(op===0?1:0).battle.some(x=>{const rx=getReg(x);return rx&&rx.stNoST&&!isSealed(x);}):false;
+        const stSealed=noSTAllTurnOn()||((S.expert&&S.vs)?zonesOf(op===0?1:0).battle.some(x=>{const rx=getReg(x);return rx&&rx.stNoST&&!isSealed(x);}):false);
         const isTrig=c=>{
           const r=getReg(c);if(!r)return false;
           if(!stSealed&&((r.st)||shieldStGrantOk(op,c)))return true;   // S・トリガー
@@ -22050,7 +22107,7 @@ async function processBroken(op,stack,label){
     if(olRemoteReady()&&op!==olMySeat()){
       (async()=>{
         try{
-          const stSealed=(S.expert&&S.vs)?zonesOf(op===0?1:0).battle.some(x=>{const rx=getReg(x);return rx&&rx.stNoST&&!isSealed(x);}):false;
+          const stSealed=noSTAllTurnOn()||((S.expert&&S.vs)?zonesOf(op===0?1:0).battle.some(x=>{const rx=getReg(x);return rx&&rx.stNoST&&!isSealed(x);}):false);
           const usable=c=>{
             const r=getReg(c);if(!r)return false;
             if(r.sabaki||r.sback)return true;   // サバキZ／S・バックは手札に加えたあとに使うので確認する
@@ -22188,10 +22245,11 @@ async function processBroken(op,stack,label){
         mk(multi?`${selCards.length}枚まとめて手札に加える`:"手札に加える","hand","primary");
         // 🚫 ST封じ常在（カース・トーテム/ギガ・ボルバ型）：盾の持ち主から見て相手の場にあればST使用不可
         const stSealBy=(S.expert&&S.vs)?zonesOf(op===0?1:0).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoST&&!isSealed(x);}):null;
-        if(stSealBy){
+        const stSealNow=stSealBy||noSTAllTurnOn();
+        if(stSealNow){
           const warn=document.createElement("div");
           warn.style.cssText="font-size:11px;color:#f87171;font-weight:700;flex-basis:100%";
-          warn.textContent=`🚫 ${faceNameOf(stSealBy)}：S・トリガーは使えない！（G・ストライク/ニンジャは可）`;
+          warn.textContent=stSealBy?`🚫 ${faceNameOf(stSealBy)}：S・トリガーは使えない！（G・ストライク/ニンジャは可）`:"🚫 このターンは誰もS・トリガーを使えない！（G・ストライク/ニンジャは可）";
           bar.appendChild(warn);
         }else{
           // S・トリガーは1枚ずつ（唱える面や順番を決めるため）。複数選択時は注意書きを出す
@@ -30850,6 +30908,14 @@ async function stLeaveRepApply(pi,c,src){
   }
   const bkN=n;
   toast(`♻ ${faceNameOf(src)} の常在：${faceNameOf(c)} は離れるかわりに、自分のランダムなシールド${bkN}枚を同時にブレイク！`);
+  /* ⚓ v15.43：「離れない」の印は**ブレイクの前**に付ける。
+     以前は processBroken() を待ってから付けていたため、その待ち時間の間は
+     stLeaveRepSource() から見て「まだ置換していない」ままだった。
+     割れた盾のS・トリガーが同じクリーチャーをもう一度除去しようとすると、
+     destroyWithReplace() 側は _lrepBusy を見ないので置換がもう一度成立し、
+     盾2枚のブレイクが何度でも繰り返された。 */
+  c.buff=c.buff||{};c.buff.noLeave=true;
+  if(typeof markBuffTurn==="function")markBuffTurn(c,["noLeave"]);
   if(bkN){
     // 🛡 1枚ずつではなく同時にブレイクする（割れた盾はまとめて手札へ／S・トリガーもまとめて選べる）
     const idxs=[];
@@ -30877,8 +30943,6 @@ async function stLeaveRepApply(pi,c,src){
     logOnly(`♻ ${S.players[pi].label}：《${faceNameOf(src)}》の離場置換で自分のシールド${bkN}枚を同時ブレイク（《${faceNameOf(c)}》は離れない）`);
     await processBroken(pi,stack,`♻ 離場置換：ランダムに${bkN}枚を同時ブレイク（計${stack.length}枚・S・トリガー使用可）`);
   }
-  c.buff=c.buff||{};c.buff.noLeave=true;
-  if(typeof markBuffTurn==="function")markBuffTurn(c,["noLeave"]);
   renderAll();
   toast(`⚓ ${faceNameOf(c)} はこのターン、バトルゾーンを離れない`);
   return true;
@@ -35180,8 +35244,13 @@ async function recordMatch(winner,reason){
     if(db&&REPLAY.frames.length){
       // 最終盤面もフレームに含める
       const last=serializeState();
-      if(REPLAY.frames[REPLAY.frames.length-1]!==last&&REPLAY.frames.length<600)REPLAY.frames.push(last);
-      await idbPut("replays",String(id),{frames:REPLAY.frames.slice(),log:GAMELOG.slice()});
+      if(REPLAY.frames[REPLAY.frames.length-1]!==last&&REPLAY.frames.length<250)REPLAY.frames.push(last);
+      /* 🧠 v15.44：ここで .slice() すると、元・複製・IndexedDBへ渡す構造化複製で
+         リプレイが一瞬3重になる。実測で1フレーム約36KB、上限まで積むと3重で60MB超。
+         iPhoneが「勝敗が決した瞬間」に読み直していたのはこれ。
+         直後に REPLAY.frames=[] しているので、複製せずそのまま渡してよい。 */
+      await idbPut("replays",String(id),{frames:REPLAY.frames,log:GAMELOG});
+      REPLAY.frames=[];
       // 古いリプレイを整理（⭐お気に入りは保護し、それ以外を直近30件に）
       const favIds=new Set(MATCH_STATS.filter(m=>m.fav&&m.id).map(m=>String(m.id)));
       const keys=(await idbKeys("replays")).map(String).filter(k=>!favIds.has(k)).map(Number).filter(x=>!isNaN(x)).sort((a,b)=>a-b);
