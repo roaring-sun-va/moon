@@ -5268,7 +5268,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.70";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.71";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11711,9 +11711,11 @@ const FX_TYPES=[
   ["foePickReviveThenSeal","👁⚰🔏 相手のクリーチャーを1体選ぶ→そのコスト以下のクリーチャーを自分の墓地から出してもよい→相手は選んだクリーチャーに封印を1つ付ける（バロメアレディの黒像型／条件欄で選ぶ対象を絞れる）"],
   ["stackTopToGrave","🪦 一番上のカード（このクリーチャー）を墓地に置き、残った進化元をアンタップして場に残す（覇帝なき侵略 レッドゾーンF型）"],
   ["gachinkoFlipWin","🎲🔄 ガチンコ・ジャッジを1回行い、自分が勝ったら次の面に裏返す（STARSCREAM -ALT MODE- 型）"],
+  ["manaToDeckTopOrder","🌱📚 自分のマナゾーンからn枚を選び、好きな順序で山札の上に置く（薔薇の使者型／条件欄で対象を絞れる・最後に選んだカードが一番上）"],
+  ["grantTurnSelf","✨ そのターン、このクリーチャー自身に能力を与える（条件欄に「ブロックされない」「スピードアタッカー」等を「／」区切りで・サイバー・A・アイアンズ型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -13627,7 +13629,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -14421,7 +14423,7 @@ async function runFxList(pi,list,srcCard,inPump){
       for(let i=0;i<n;i++){
         const pool=Z.mana.filter(x=>{
           const rx=getReg(x);
-          if(!rx||!isCreatureReg(rx))return false;
+          if(!rx||!(isCreatureReg(rx)||(f.incAura&&/aura/i.test(String(rx.ctype||"")))))return false;   // 🔮 v15.71 行の欄「オーラも対象」
           if(put.some(y=>y.id===x.id))return false;
           return !filt||lockFilterOk(filt,rx,x);
         });
@@ -18736,6 +18738,58 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("flip");renderAll();
       toast(`🛡 次の自分のターン開始時まで、${_CIVS[_jc][1]}のクリーチャーに攻撃されません`);
       logOnly(`🛡 ${S.players[pi].label}：${_CIVS[_jc][1]}のクリーチャーに攻撃されない（次の自分のターン開始まで）`);
+    }else if(f.t==="manaToDeckTopOrder"){
+      /* 🌱📚 v15.71 自分のマナゾーンからn枚を選び、好きな順序で山札の上に置く（薔薇の使者型）。
+         選んだ順に山札の上へ重ねるので、**最後に選んだカードが一番上**になる。 */
+      const _fm=String(f.cond||"").trim();
+      const _pk=[];
+      for(let i=0;i<n;i++){
+        const pool=Z.mana.filter(x=>{
+          if(_pk.some(y=>y.id===x.id))return false;
+          if(!_fm)return true;
+          const rx=getReg(x);
+          return !!rx&&lockFilterOk(_fm,rx,x);
+        });
+        if(!pool.length){if(!_pk.length)toast(`🌱 マナゾーンに置けるカードがありません${_fm?`（${_fm}）`:""}`);break;}
+        const j=await pickCard(`📚 山札の上に置くカードを選択（${i+1}/${n}枚目・キャンセルで終了）\n最後に選んだカードが一番上になります`,pool,{hint:"タップで選択"});
+        if(j===null)break;
+        _pk.push(pool[j]);
+      }
+      if(!_pk.length){toast("（マナから山札の上には置きませんでした）");continue;}
+      snap();
+      for(const x of _pk){
+        const mi=Z.mana.findIndex(y=>y.id===x.id);
+        if(mi<0)continue;
+        const cc=Z.mana.splice(mi,1)[0];
+        cc.faceup=false;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;
+        Z.deck.unshift(cc);
+      }
+      sfx("move");renderAll();
+      toast(`📚 マナから${_pk.length}枚を山札の上に置いた（一番上：${faceNameOf(_pk[_pk.length-1])}）`);
+      logOnly(`📚 ${S.players[pi].label}：マナから ${_pk.map(x=>faceNameOf(x)).join("→")} を山札の上へ（右が一番上）`);
+    }else if(f.t==="grantTurnSelf"){
+      /* ✨ v15.71 そのターン、このクリーチャー自身に能力を与える（サイバー・A・アイアンズ型）。
+         「自分の他の◯◯が出た時、そのターン、このクリーチャーは〜」の後半に使う。 */
+      const _tk=String(f.cond||"").split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
+      if(!_tk.length){toast("✨ 与える能力が指定されていません（条件欄に「ブロックされない」等）");continue;}
+      if(!srcCard||!Z.battle.some(x=>x.id===srcCard.id)){toast("（このクリーチャーがバトルゾーンにいません）");continue;}
+      const _x=srcCard;
+      _x.buff=_x.buff||{};
+      const _keys=[];
+      for(const t2 of _tk){
+        if(/ブロックされない/.test(t2)){_x.buff.noBlock=true;_keys.push("noBlock");}
+        else if(/スレイヤー/.test(t2)){_x.buff.slayer=true;_keys.push("slayer");}
+        else if(/スピードアタッカー|SA/i.test(t2)){_x.buff.sa=true;_x.sick=false;_keys.push("sa");}
+        else if(/ブロッカー/.test(t2)){_x.buff.blocker=true;_keys.push("blocker");}
+        else if(/^パワー\+?(\d+)/.test(t2)){const v=+t2.match(/(\d+)/)[1];_x.buff.pow=(_x.buff.pow||0)+v;_keys.push("pow");}
+        else if(/アンタップ.*攻撃|攻撃できる/.test(t2)){_x.buff.attackUntapped=true;_keys.push("attackUntapped");}
+      }
+      if(!_keys.length){toast(`✨ 「${_tk.join("・")}」は付与に対応していません`);continue;}
+      snap();
+      markBuffTurn(_x,_keys);
+      sfx("ok");renderAll();
+      toast(`✨ このターン、${faceNameOf(_x)} は「${_tk.join("・")}」を得た`);
+      logOnly(`✨ ${S.players[pi].label}：《${faceNameOf(_x)}》に「${_tk.join("・")}」を付与（このターン）`);
     }else if(f.t==="sealThis"){
       /* 🔏 v15.69 このクリーチャー自身に封印をn個（燃える禁断 ドルマゲドンW型）。
          既存の sealSelf は「n体に1つずつ」なので別物。 */
@@ -26799,6 +26853,19 @@ function fxRowEl(faceIdx,i){
     ipWrap.appendChild(ip);
     ipWrap.appendChild(document.createTextNode("🔗 そうした場合（直前の効果を行った時だけ）"));
     bot.appendChild(ipWrap);
+  }
+  /* 🔮 v15.71「クリーチャーまたはオーラ」型：マナから出す効果でオーラも対象に含める */
+  if(f.t==="myManaRecruit"){
+    const iaWrap=document.createElement("label");
+    iaWrap.className="fx-cond";
+    iaWrap.style.cssText="flex:1 1 100%;display:flex;align-items:center;gap:6px;font-size:12px";
+    iaWrap.title="「クリーチャーまたはオーラを1つ」型のカードで使います。マナゾーンのオーラも選べるようになります";
+    const ia=document.createElement("input");
+    ia.type="checkbox";ia.checked=!!f.incAura;
+    ia.onchange=()=>{f.incAura=ia.checked;};
+    iaWrap.appendChild(ia);
+    iaWrap.appendChild(document.createTextNode("🔮 オーラも対象に含める"));
+    bot.appendChild(iaWrap);
   }
   row.appendChild(top);row.appendChild(bot);
   return row;
