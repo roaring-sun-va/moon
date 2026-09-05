@@ -1650,6 +1650,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <button class="btn small ghost bar-extra" id="btnLog">📜</button>
     <button class="btn small ghost bar-extra" id="btnStats" title="対戦戦績">📊</button>
     <button class="btn small bar-extra" id="btnFreePlay">踏倒:OFF</button>
+    <button class="btn small ghost bar-extra" id="btnDiag" title="🩺 診断：リプレイの枚数・画面のimg数・画像メモリ・誘発待ちの数を測ります。もう一度押すと止まります（iPhoneの再読み込みの原因を調べるため）">🩺</button>
     <button class="btn small warn" id="btnUnstick" title="🚑 処理リセット：効果処理が詰まって動かない時に、ロックと待ち状態を安全に解除します（盤面は変わりません）">🚑</button>
     <button class="btn" id="btnPause" title="処理中（誤操作防止ロック）">⏸ 処理中</button>
   </div>
@@ -5270,7 +5271,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.72";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.73";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8856,6 +8857,7 @@ function emergencyUnstick(){
   }
 }
 {const ub=document.getElementById("btnUnstick");if(ub)ub.addEventListener("click",emergencyUnstick);}
+{const bd=document.getElementById("btnDiag");if(bd)bd.addEventListener("click",()=>{try{diagToggle();}catch(e){}});}
 async function runLabyEnd(cur2){
   const ZL=zonesOf(cur2);
   const OZL=zonesOf(cur2===0?1:0);
@@ -9762,11 +9764,89 @@ function watchNamesTurnEnd(pi){
     .filter(c=>{const r=getReg(c);return r&&r.watch&&(r.watch.turnEndBoth||(isMine&&r.watch.turnEndMine)||(!isMine&&r.watch.turnEndOpp));})
     .map(c=>faceNameOf(c)))];
 }
+/* 🩺 v15.73 再読み込み対策の計測。
+   iPhone で「メモリの使用量が多すぎたため再読み込みされました」が出る原因を、
+   当て推量ではなく数字で見るための仕組み。🩺ボタンで測り始め、もう一度押すと止まる。
+   ・リプレイ … 溜まっているフレーム数と、その概算サイズ（文字列はUTF-16なので2倍で数える）
+   ・画像     … メモリに載っている枚数と合計サイズ（上限つき・古いものから捨てられる）
+   ・DOMの<img> … いま画面上にある img 要素の数（カード1枚ごとに作り直しているので、ここが増えると重い）
+   ・誘発待ち … 順番待ちの誘発ジョブの数（WATCH_DEPTH）と、出た時効果の待ち行列
+   ・カード   … 両者の全ゾーンのカード枚数
+   最大値（ピーク）を覚えておき、大きく伸びた時だけログに残す。
+   ログは試合終了時にリプレイと一緒に保存されるので、**読み直されたあとでも後から確認できる**。 */
+let DIAG_ON=false,DIAG_TIMER=null,DIAG_LOGGED=0;
+const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0};
+function diagNow(){
+  const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0};
+  try{out.img=document.querySelectorAll("img").length;}catch(e){}
+  try{
+    out.frames=(typeof REPLAY!=="undefined"&&REPLAY.frames)?REPLAY.frames.length:0;
+    let ch=0;
+    for(const f of ((typeof REPLAY!=="undefined"&&REPLAY.frames)||[]))if(typeof f==="string")ch+=f.length;
+    out.bytes=ch*2;   // UTF-16
+  }catch(e){}
+  try{out.memImg=imgURL.memCount();out.memBytes=imgURL.memBytes();}catch(e){}
+  try{out.watch=WATCH_DEPTH|0;}catch(e){}
+  try{const w=fxWaitState();out.fxQueue=(w.fxQueue|0)+(w.toGrave|0)+(w.trig|0);}catch(e){}
+  try{
+    let n2=0;
+    for(const pi of [0,1]){
+      const Z=zonesOf(pi);
+      if(!Z)continue;
+      for(const k of ["battle","hand","grave","mana","shield","deck","gr","hyper"])n2+=((Z[k]||[]).length);
+    }
+    out.cards=n2;
+  }catch(e){}
+  return out;
+}
+function diagTick(){
+  const d=diagNow();
+  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards"])
+    if(d[k]>DIAG_PEAK[k])DIAG_PEAK[k]=d[k];
+  // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
+  if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
+    DIAG_LOGGED=DIAG_PEAK.img;
+    try{logOnly(`🩺 診断：DOMの<img> ${d.img}（最大${DIAG_PEAK.img}）／リプレイ${d.frames}枚 ${Math.round(d.bytes/1048576)}MB（最大${Math.round(DIAG_PEAK.bytes/1048576)}MB）／画像${d.memImg}枚 ${Math.round(d.memBytes/1048576)}MB／誘発待ち${d.watch}／カード${d.cards}枚`);}catch(e){}
+  }
+  return d;
+}
+function diagText(){
+  const d=diagTick();
+  const mb=v=>`${Math.round(v/1048576*10)/10}MB`;
+  let cap={bytes:0,count:0};
+  try{cap=imgURL.memCap();}catch(e){}
+  return [
+    `🩺 診断（${DIAG_ON?"計測中":"停止中"}）`,
+    `DOMの<img>：${d.img}（最大 ${DIAG_PEAK.img}）`,
+    `リプレイ：${d.frames}枚／${mb(d.bytes)}（最大 ${mb(DIAG_PEAK.bytes)}）`,
+    `画像メモリ：${d.memImg}枚／${mb(d.memBytes)}（上限 ${cap.count}枚・${mb(cap.bytes)}）`,
+    `誘発待ち：${d.watch}件／出た時待ち：${d.fxQueue}件（最大 ${DIAG_PEAK.watch}件）`,
+    `カード総数：${d.cards}枚（最大 ${DIAG_PEAK.cards}枚）`,
+  ].join("\n");
+}
+function diagToggle(){
+  DIAG_ON=!DIAG_ON;
+  if(DIAG_TIMER){clearInterval(DIAG_TIMER);DIAG_TIMER=null;}
+  if(DIAG_ON){
+    DIAG_TIMER=setInterval(()=>{try{diagTick();}catch(e){}},5000);
+    try{logOnly("🩺 診断を開始しました（5秒ごとに計測・大きく伸びた時だけ記録します）");}catch(e){}
+  }else{
+    try{logOnly("🩺 診断を止めました");}catch(e){}
+  }
+  try{const b=$("btnDiag");if(b)b.classList.toggle("primary",DIAG_ON);}catch(e){}
+  toast(diagText());
+}
 /* ⚡ 誘発ジョブの直列化：出た時効果（pump）や他の誘発パネルが終わってから1件ずつ実行する */
 let WATCH_CHAIN=Promise.resolve();
+/* 🩺 v15.73 いま何件の誘発ジョブが順番待ちかを数える（診断表示で使う）。
+   ゾルザーク／ネルガルザーグ／マッドネスのように誘発が連鎖する場面で、
+   ここがどこまで伸びるかを見たい。 */
+let WATCH_DEPTH=0;
 function enqueueWatchJob(fn){
+  WATCH_DEPTH++;
   WATCH_CHAIN=WATCH_CHAIN.then(async()=>{
     try{await waitFxIdle();await fn();}catch(e){console.warn(e);}
+    finally{WATCH_DEPTH=Math.max(0,WATCH_DEPTH-1);}
   });
   return WATCH_CHAIN; // 呼び出し側で完了を待てるように返す
 }
