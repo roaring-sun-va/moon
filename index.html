@@ -2071,6 +2071,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <option value="psychic">サイキック</option>
       <option value="psyevo">進化サイキック</option>
       <option value="dragheart">ドラグハート</option>
+      <option value="dhfortress">ドラグハート・フォートレス（攻撃できない置物）</option>
       <option value="aura">オレガオーラ</option>
       <option value="d2">D2フィールド</option>
       <option value="castle">城</option>
@@ -2350,6 +2351,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <option value="psychic">サイキック</option>
         <option value="psyevo">進化サイキック</option>
         <option value="dragheart">ドラグハート</option>
+      <option value="dhfortress">ドラグハート・フォートレス（攻撃できない置物）</option>
         <option value="aura">オレガオーラ</option>
         <option value="d2">D2フィールド</option>
         <option value="castle">城</option>
@@ -2512,6 +2514,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="psyevo">進化サイキック・クリーチャー（超無限進化・召喚酔いなし・離れると超次元へ）</option>
           <option value="tamaseed">タマシード</option>
           <option value="dragheart">ドラグハート</option>
+      <option value="dhfortress">ドラグハート・フォートレス（攻撃できない置物）</option>
           <option value="castle">城</option>
           <option value="gcastle">G城</option>
           <option value="aura">オレガオーラ</option>
@@ -2620,6 +2623,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="条件式を満たしていない間は攻撃できない（例：墓地:ドラゴン>=5）"><span style="font-size:12px;font-weight:700">⛔ 条件を満たさないと攻撃できない</span><input type="text" id="fxCantAtkCond" placeholder="条件式（例：墓地:ドラゴン>=5・空欄＝なし）" style="width:230px"></label>
         <label><input type="checkbox" id="fxCantAtkP"> 相手プレイヤーを攻撃できない</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="ここに書いた対象（種族など・「／」区切り）以外のクリーチャーは、出たターン攻撃できない（両者・SAでも不可）"><span style="font-size:12px;font-weight:700">🥶 常在：対象以外は出たターン攻撃不可</span><input type="text" id="fxStSickAll" list="raceList" placeholder="対象（例：スノーフェアリー／オリジン・空欄＝無効）" style="width:230px"></label>
+        <label title="オンにすると、この常在は相手のクリーチャーにだけ効きます（爆熱王DX バトガイ銀河型）。オフだと両者に効きます"><input type="checkbox" id="fxStSickFoeOnly"> 🥶 相手のクリーチャーにだけ効く</label>
         <label><input type="checkbox" id="fxAtkUn"> タップしていないクリーチャーも攻撃できる</label>
         <label><input type="checkbox" id="fxMachF"> マッハファイター（出たターンでも相手獣を攻撃可・アンタップ獣も対象）</label>
       </div>
@@ -3222,6 +3226,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:4px">
           <span style="font-size:12px;font-weight:700;color:#4ade80">自分の召喚コスト −</span>
           <input type="number" id="fxStCostM" style="width:70px" placeholder="0" min="0">
+          <label title="この軽減が働く条件（例：マナ:ドラゴン&gt;=4）。空欄なら常に働きます"><span style="font-size:12px">💰 軽減の条件</span><input type="text" id="fxStCostMCond" placeholder="例：マナ:ドラゴン>=4" style="width:200px"></label>
           <select id="fxStCostT" style="width:auto;flex:0 0 130px">
             <option value="">タイプ不問</option>
             <option value="creature">クリーチャーのみ</option>
@@ -5271,7 +5276,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.73";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.74";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6082,7 +6087,7 @@ function fixPsyStray(){
           const c=arr[i];
           if(!c)continue;
           const r=getReg(c);
-          const isP=!!(c.isPsy||(r&&(r.ctype==="psychic"||r.ctype==="psyevo"||r.ctype==="dragheart")));
+          const isP=!!(c.isPsy||(r&&(r.ctype==="psychic"||r.ctype==="psyevo"||isDHType(r.ctype))));
           if(!isP)continue;
           arr.splice(i,1);
           c.face=0;c.rot=0;c.tapped=false;c.faceup=true;c.isPsy=false;c.buff=null;
@@ -6212,6 +6217,11 @@ function dreamDupOf(pi,c){
   return zonesOf(pi).battle.find(x=>x.id!==c.id&&normName(x.name)===nm)||null;
 }
 /* クリーチャー種別判定（呪文/クロスギア/タマシード/D2フィールド/城/オーラ等は非クリーチャー）。未設定は通常クリーチャー扱い */
+/* 🐉 v15.74 ドラグハート系の種類。ウエポン／フォートレス／クリーチャーはどれも
+   超次元ゾーンに置き、場を離れるとそこへ戻る。フォートレスだけは攻撃できない置物なので、
+   種類を分けて `isCreatureReg` から外してある。 */
+const DH_CTYPES=["dragheart","dhfortress"];
+function isDHType(t){return DH_CTYPES.includes(String(t||""));}
 const CRE_CTYPES=["creature","dream","evo","neoevo","starevo","charismaevo","smaxevo","onismaxevo","gneo","neodream","gneodream","psyevo","psychic","twinpact","lunatic","ultimate","exile","kindancre"];
 function isCreatureReg(r){
   if(!r||!r.ctype)return true;
@@ -10052,6 +10062,9 @@ function runWatchFx(pi,type,trigCard){
       let _onceSkipped=0;
       r.watchFx.forEach((w,wi)=>{
         if(w.ev!==type)return;
+        // 🪧 v15.74「クリーチャーが自分の手札から召喚によって出た時」（邪帝遺跡 ボアロパゴス型）。
+        //    踏み倒しで出たカードには _wasSummon=false が付くので、それを見て弾く。
+        if(w.entSumOnly&&trigCard&&trigCard._wasSummon===false)return;
         // 1️⃣ 各ターン1回のみ（同一ターン内はスキップ）
         const onceKey=`${c.id}:${type}:${wi}`;
         if(w.once){
@@ -11794,10 +11807,14 @@ const FX_TYPES=[
   ["stackTopToGrave","🪦 一番上のカード（このクリーチャー）を墓地に置き、残った進化元をアンタップして場に残す（覇帝なき侵略 レッドゾーンF型）"],
   ["gachinkoFlipWin","🎲🔄 ガチンコ・ジャッジを1回行い、自分が勝ったら次の面に裏返す（STARSCREAM -ALT MODE- 型）"],
   ["manaToDeckTopOrder","🌱📚 自分のマナゾーンからn枚を選び、好きな順序で山札の上に置く（薔薇の使者型／条件欄で対象を絞れる・最後に選んだカードが一番上）"],
+  ["handToHyper","🌌 自分の手札からn枚を選び、自分の超次元ゾーンに置く（双龍覇王 モルトVERSUS 型）"],
+  ["hyperOutByCount","🌌 自分のマナゾーンにある条件に合うカードの枚数以下のコストを持つエレメントを1つ、超次元ゾーンから出してもよい。出したのがドラグハート・ウエポンなら、このクリーチャーに装備する（条件欄＝数えるカード：例「ドラゴン」・双龍覇王 モルトVERSUS 型）"],
+  ["deckTopPlayOrElse","🎴 自分の山札の上から1枚を表向きにし、条件に合えばバトルゾーンに出す。合わなければ墓地（条件欄に「→山下」と足すと山札の一番下）へ（ボルシャック・ドリーム・ドラゴン／爆銀王剣 バトガイ刃斗 型）"],
+  ["chargeTapPlus","🌱 自分の山札の上から1枚をタップしてマナゾーンに置く。それが条件に合えば、もう1枚タップしてマナに置く（条件欄＝例「ドラゴン」・ボルシャック・栄光・ルピア型）"],
   ["grantTurnSelf","✨ そのターン、このクリーチャー自身に能力を与える（条件欄に「ブロックされない」「スピードアタッカー」等を「／」区切りで・サイバー・A・アイアンズ型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -12545,7 +12562,7 @@ async function autoTapCost(pi,c){
         return (rF&&raceMatch(rF,tk))||faceNameOf(c).includes(tk);
       });
     };
-    const ms=[...Z.battle,...evoBases].filter(b=>{const rb=getReg(b);return rb&&rb.stCostM>0&&b.id!==c.id&&!isSealed(b);});
+    const ms=[...Z.battle,...evoBases].filter(b=>{const rb=getReg(b);return rb&&rb.stCostM>0&&b.id!==c.id&&!isSealed(b)&&(!rb.stCostMCond||zoneCondOk(rb.stCostMCond,pi,b));});   // 💰 v15.74 条件つきの軽減
     for(const m2 of ms){
       const rb=getReg(m2);
       const tOK=!rb.stCostT||(rb.stCostT===paySide);
@@ -13711,7 +13728,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -18820,6 +18837,108 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("flip");renderAll();
       toast(`🛡 次の自分のターン開始時まで、${_CIVS[_jc][1]}のクリーチャーに攻撃されません`);
       logOnly(`🛡 ${S.players[pi].label}：${_CIVS[_jc][1]}のクリーチャーに攻撃されない（次の自分のターン開始まで）`);
+    }else if(f.t==="handToHyper"){
+      /* 🌌 v15.74 自分の手札からn枚を超次元ゾーンへ（双龍覇王 モルトVERSUS 型）。 */
+      if(!Z.hand.length){toast("（手札がありません）");continue;}
+      const _hp=[];
+      for(let i=0;i<n;i++){
+        const pool=Z.hand.filter(x=>!_hp.some(y=>y.id===x.id));
+        if(!pool.length)break;
+        const j=await pickCard(`🌌 超次元ゾーンに置くカードを選択（${i+1}/${n}枚目）`,pool,{hint:"タップで選択"});
+        if(j===null)break;
+        _hp.push(pool[j]);
+      }
+      if(!_hp.length){toast("（超次元ゾーンには置きませんでした）");continue;}
+      snap();
+      for(const x of _hp){
+        const hi=Z.hand.findIndex(y=>y.id===x.id);
+        if(hi<0)continue;
+        const cc=Z.hand.splice(hi,1)[0];
+        cc.faceup=true;cc.tapped=false;cc.face=0;cc.rot=0;cc.buff=null;
+        Z.hyper.push(cc);
+      }
+      sfx("move");renderAll();
+      toast(`🌌 ${_hp.map(x=>faceNameOf(x)).join("、")} を超次元ゾーンに置いた`);
+      logOnly(`🌌 ${S.players[pi].label}：手札から ${_hp.map(x=>faceNameOf(x)).join("、")} を超次元ゾーンへ`);
+    }else if(f.t==="hyperOutByCount"){
+      /* 🌌 v15.74 マナの〔条件〕の枚数を上限に、超次元ゾーンからエレメントを1つ出す。
+         出したのがドラグハート・ウエポンなら、このクリーチャーに装備する（モルトVERSUS 型）。
+         上限が0（数えるカードが1枚も無い）なら何も出せない。 */
+      const _cf=String(f.cond||"").trim();
+      const _cap=_cf?zoneFiltCount(Z.mana,_cf):Z.mana.length;
+      if(_cap<=0){toast(`🌌 マナゾーンに${_cf||"カード"}がないので出せません`);continue;}
+      const _pool=Z.hyper.filter(x=>{const rx=getReg(x);return rx&&rx.cost!=null&&rx.cost!==""&&(+rx.cost)<=_cap;});
+      if(!_pool.length){toast(`🌌 超次元ゾーンにコスト${_cap}以下のエレメントがありません`);continue;}
+      const _j=await pickCard(`🌌 超次元ゾーンから出すエレメントを選択（コスト${_cap}以下・キャンセルで出さない）`,_pool,{hint:"任意"});
+      if(_j===null)continue;
+      snap();
+      const _hi=Z.hyper.findIndex(x=>x.id===_pool[_j].id);
+      if(_hi<0)continue;
+      const _out=Z.hyper.splice(_hi,1)[0];
+      _out.faceup=true;_out.tapped=false;_out.face=0;
+      const _ro=getReg(_out);
+      if(_ro&&_ro.ctype==="dragheart"&&srcCard&&Z.battle.some(x=>x.id===srcCard.id)){
+        srcCard.gear=[...(srcCard.gear||[]),_out];   // ⚙ ウエポンはこのクリーチャーに装備
+        toast(`⚙ ${faceNameOf(_out)} を ${faceNameOf(srcCard)} に装備した`);
+        logOnly(`⚙ ${S.players[pi].label}：《${faceNameOf(_out)}》を《${faceNameOf(srcCard)}》に装備`);
+      }else{
+        _out.sick=true;
+        Z.battle.push(_out);markArrive(_out);
+        toast(`🌌 ${faceNameOf(_out)} を超次元ゾーンから出した（コスト${_cap}以下）`);
+        logOnly(`🌌 ${S.players[pi].label}：超次元から《${faceNameOf(_out)}》を出した`);
+        emitEvent(pi,"summon");enqueueFx(pi,_out);
+        await waitFxIdle(inPump);
+      }
+      sfx("ok");renderAll();
+    }else if(f.t==="deckTopPlayOrElse"){
+      /* 🎴 v15.74 山札の上から1枚を表向きにし、条件に合えば出す。合わなければ墓地（「→山下」で山札の下）。 */
+      if(!Z.deck.length){toast("（山札がありません）");continue;}
+      let _cd=String(f.cond||"").trim();
+      const _toBottom=/→\s*山下|→\s*山札の下/.test(_cd);
+      _cd=_cd.replace(/→\s*(山下|山札の下)/,"").replace(/[／\/]\s*$/,"").trim();
+      snap();
+      const _top=Z.deck.shift();
+      _top.faceup=true;
+      const _rt=getReg(_top);
+      const _hit=!!(_rt&&isCreatureReg(_rt)&&(!_cd||lockFilterOk(_cd,_rt,_top)));
+      toast(`🎴 表向き：${faceNameOf(_top)}`);
+      if(_hit){
+        _top.tapped=false;_top.sick=true;
+        Z.battle.push(_top);markArrive(_top);
+        toast(`🎴 ${faceNameOf(_top)} をバトルゾーンに出した`);
+        logOnly(`🎴 ${S.players[pi].label}：山札の上の《${faceNameOf(_top)}》を出した`);
+        emitEvent(pi,"summon");enqueueFx(pi,_top);
+        await waitFxIdle(inPump);
+      }else if(_toBottom){
+        _top.faceup=false;Z.deck.push(_top);
+        toast(`⬇ ${faceNameOf(_top)} を山札の一番下に置いた`);
+      }else{
+        Z.grave.push(_top);
+        toast(`🪦 ${faceNameOf(_top)} を墓地に置いた`);
+      }
+      sfx(_hit?"ok":"move");renderAll();
+    }else if(f.t==="chargeTapPlus"){
+      /* 🌱 v15.74 山札の上から1枚をタップしてマナへ。それが条件に合えば、もう1枚タップしてマナへ
+         （ボルシャック・栄光・ルピア型）。使用可能マナは増えない。 */
+      if(!Z.deck.length){toast("（山札がありません）");continue;}
+      const _cc2=String(f.cond||"").trim();
+      snap();
+      const _m1=Z.deck.shift();
+      _m1.faceup=true;_m1.tapped=true;_m1.sideways=false;
+      Z.mana.push(_m1);
+      const _r1=getReg(_m1);
+      const _ok1=!!(_r1&&(!_cc2||lockFilterOk(_cc2,_r1,_m1)));
+      toast(`🌱 ${faceNameOf(_m1)} をタップしてマナに置いた`);
+      if(_ok1&&Z.deck.length){
+        const _m2=Z.deck.shift();
+        _m2.faceup=true;_m2.tapped=true;_m2.sideways=false;
+        Z.mana.push(_m2);
+        toast(`🌱 ${_cc2||"条件"}だったので、${faceNameOf(_m2)} ももう1枚タップしてマナに置いた`);
+        logOnly(`🌱 ${S.players[pi].label}：${faceNameOf(_m1)}（${_cc2}）＋${faceNameOf(_m2)} をタップしてマナへ`);
+      }else{
+        logOnly(`🌱 ${S.players[pi].label}：${faceNameOf(_m1)} をタップしてマナへ`);
+      }
+      sfx("move");renderAll();
     }else if(f.t==="manaToDeckTopOrder"){
       /* 🌱📚 v15.71 自分のマナゾーンからn枚を選び、好きな順序で山札の上に置く（薔薇の使者型）。
          選んだ順に山札の上へ重ねるので、**最後に選んだカードが一番上**になる。 */
@@ -21363,7 +21482,7 @@ function afterHandDiscard(owner,c,byPi){
     /* 🎪 v15.27 ビッグ1は「出た時」能力を使う効果なので、呪文やクロスギアでは起きない。
        ジョーカーズの呪文を捨てた時にも確認が出ていた。
        ctype が空（種類を登録していない）ものは今までどおり聞く。 */
-    const _ctNoCre=["spell","crossgear","evocrossgear","castle","gcastle","field","tamaseed","dragheart","exile"];
+    const _ctNoCre=["spell","crossgear","evocrossgear","castle","gcastle","field","tamaseed","dragheart","dhfortress","exile"];
     const isCre=!_ctNoCre.includes(String((rd&&rd.ctype)||""));
     if((isJok||!rd)&&isCre){
       /* 🎪 v15.12：いま解決中の効果に割り込まないよう、効果キューに積む。
@@ -22087,6 +22206,7 @@ function dispCost(c,pi){
       const rb=getReg(b);
       if(!rb||!rb.stCostM||rb.stCostM<=0)continue;
       if(isIgnored(b,pi))continue;
+      if(rb.stCostMCond&&!zoneCondOk(rb.stCostMCond,pi,b))continue;   // 💰 v15.74 条件つきの軽減（マナにドラゴン4枚以上、など）
       if(rb.stCostT&&(rb.stCostT==="spell"?(r.ctype!=="spell"):(r.ctype==="spell")))continue;
       let ok=true;
       if(rb.stCostF){
@@ -24704,15 +24824,15 @@ async function startAttack(pi,id){
     await offerOniEnd();
     // 🥶 常在：〔対象〕以外のクリーチャーは出たターン攻撃できない（両者のバトルゾーンを確認・SAでも不可）
     {
-      let sickSrc=null,sickFilt="";
+      let sickSrc=null,sickFilt="",sickPi=-1,sickFoeOnly=false;
       for(const pp of [0,1]){
         for(const b of zonesOf(pp).battle){
           const rb=getReg(b);
-          if(rb&&rb.stSickAll&&!isSealed(b)&&!isIgnored(b,pp)){sickSrc=b;sickFilt=rb.stSickAll;break;}
+          if(rb&&rb.stSickAll&&!isSealed(b)&&!isIgnored(b,pp)){sickSrc=b;sickFilt=rb.stSickAll;sickPi=pp;sickFoeOnly=!!rb.stSickFoeOnly;break;}   // 🥶 v15.74 「相手だけ」
         }
         if(sickSrc)break;
       }
-      if(sickSrc&&c.bornTurn===S.turn&&!(rA&&lockFilterOk(sickFilt,rA,c))){
+      if(sickSrc&&(!sickFoeOnly||sickPi!==pi)&&c.bornTurn===S.turn&&!(rA&&lockFilterOk(sickFilt,rA,c))){
         const go=await ask(`🥶 ${faceNameOf(sickSrc)} の常在効果：${sickFilt}以外のクリーチャーは、バトルゾーンに出たターン攻撃できません。\n《${faceNameOf(c)}》はこのターンに出ています。それでも攻撃しますか？（通常は「いいえ」）`);
         if(!go){renderAll();return;}
       }
@@ -25693,7 +25813,7 @@ async function execAttack(pi,id,tg){
             else if(r.pKakumei){bc.face=0;bc.rot=0;bc.isPsy=false;bc.under=[];Z.hyper.push(bc);} // 🌌 P革命チェンジ：チェンジ元は超次元ゾーンへ送られる
             else if(isJ){bc.faceup=true;bc.under=[];manaTapIn(bc,pi);Z.mana.push(bc);}   // 🃏 J・チェンジ：入れ替え元はマナゾーンへ
             else if(bc.isGR){bc.faceup=false;bc.under=[];Z.gr.push(bc);}
-            else if(rb&&rb.ctype==="dragheart"){bc.face=0;bc.rot=0;Z.hyper.push(bc);}
+            else if(rb&&isDHType(rb.ctype)){bc.face=0;bc.rot=0;Z.hyper.push(bc);}
             else Z.hand.push(bc);
           });
           /* 🔔 v15.7：入れ替えで場を離れたカードの「離れた時」を誘発させる。
@@ -25804,7 +25924,7 @@ async function execAttack(pi,id,tg){
           Z.grave.push(t);
           toast(`⬛ ${t.name} を墓地へ（下は残り${c.under.length}枚）`);
           const rT=getReg(t);
-          const isCr=!rT||!rT.ctype||!["spell","crossgear","aura","gigaaura","dragheart","field","castle","tamaseed"].includes(rT.ctype);
+          const isCr=!rT||!rT.ctype||!["spell","crossgear","aura","gigaaura","dragheart","dhfortress","field","castle","tamaseed"].includes(rT.ctype);
           if(isCr){
             const yes=await ask(`《${t.name}》はクリーチャー。墓地から出しますか？`);
             if(yes){
@@ -26984,6 +27104,19 @@ function fxRowEl(faceIdx,i){
     ipWrap.appendChild(document.createTextNode("🔗 そうした場合（直前の効果を行った時だけ）"));
     bot.appendChild(ipWrap);
   }
+  /* 🪧 v15.74「召喚によって出た時」だけ動く誘発（出たクリーチャー側を見る） */
+  {
+    const esWrap=document.createElement("label");
+    esWrap.className="fx-cond";
+    esWrap.style.cssText="flex:1 1 100%;display:flex;align-items:center;gap:6px;font-size:12px";
+    esWrap.title="誘発した相手（出たクリーチャー）が【召喚】で出た時だけ動きます。踏み倒しで出たクリーチャーでは動きません（邪帝遺跡 ボアロパゴス型）";
+    const es=document.createElement("input");
+    es.type="checkbox";es.checked=!!f.entSumOnly;
+    es.onchange=()=>{f.entSumOnly=es.checked;};
+    esWrap.appendChild(es);
+    esWrap.appendChild(document.createTextNode("🪧 出たクリーチャーが「召喚によって出た時」だけ"));
+    bot.appendChild(esWrap);
+  }
   /* 🔮 v15.71「クリーチャーまたはオーラ」型：マナから出す効果でオーラも対象に含める */
   if(f.t==="myManaRecruit"){
     const iaWrap=document.createElement("label");
@@ -28050,6 +28183,7 @@ function renderFxEditor(){
   {const e=$("fxAtkPSelfKill");if(e)e.checked=!!FXEDIT.atkPSelfKill;}
   {const e=$("fxCantAtkCond");if(e)e.value=FXEDIT.cantAtkCond||"";}
   {const e=$("fxStSickAll");if(e)e.value=FXEDIT.stSickAll||"";}
+  {const e=$("fxStSickFoeOnly");if(e)e.checked=!!FXEDIT.stSickFoeOnly;}
   {const e=$("fxStShieldStG");if(e)e.value=FXEDIT.stShieldStG||"";}
   {const e=$("fxStAuraPow");if(e)e.value=FXEDIT.stAuraPow||"";}
   {const e=$("fxStAuraPowFoe");if(e)e.value=FXEDIT.stAuraPowFoe||"";}
@@ -28406,6 +28540,7 @@ function renderFxEditor(){
   $("fxCivilCiv").value=FXEDIT.civilCiv||"";
   $("fxIgnoreN").value=FXEDIT.ignoreN||"";
   $("fxStCostM").value=FXEDIT.stCostM||"";
+  {const e=$("fxStCostMCond");if(e)e.value=FXEDIT.stCostMCond||"";}
   $("fxStCostUp").value=FXEDIT.stCostUp||"";
   $("fxStCostUpF").value=FXEDIT.stCostUpF||"";
   $("fxStCostUpT").value=FXEDIT.stCostUpT||"";
@@ -30329,6 +30464,7 @@ function openFxEditor(key){
     atkPSelfKill:cur?!!cur.atkPSelfKill:false,
     cantAtkCond:cur&&cur.cantAtkCond||"",
     stSickAll:cur&&cur.stSickAll||"",
+    stSickFoeOnly:cur?!!cur.stSickFoeOnly:false,
     stShieldStG:cur&&cur.stShieldStG||"",
     stAuraPow:cur&&(+cur.stAuraPow||0)||0,
     stAuraPowFoe:cur&&(+cur.stAuraPowFoe||0)||0,
@@ -30689,6 +30825,7 @@ function openFxEditor(key){
     civil:cur&&(+cur.civil||0)||0,
     civilCiv:cur&&cur.civilCiv||"",
     stCostM:cur&&cur.stCostM||0,
+    stCostMCond:cur&&cur.stCostMCond||"",
     stCostUp:cur&&(+cur.stCostUp||0)||0,
     stCostUpF:cur&&cur.stCostUpF||"",
     stCostUpT:cur&&cur.stCostUpT||"",
@@ -30903,6 +31040,7 @@ $("fxSave").addEventListener("click",async ()=>{
     atkPSelfKill:$("fxAtkPSelfKill")?$("fxAtkPSelfKill").checked:false,
     cantAtkCond:($("fxCantAtkCond")?$("fxCantAtkCond").value:"").trim(),
     stSickAll:($("fxStSickAll")?$("fxStSickAll").value:"").trim(),
+    stSickFoeOnly:$("fxStSickFoeOnly")?$("fxStSickFoeOnly").checked:false,
     stShieldStG:($("fxStShieldStG")?$("fxStShieldStG").value:"").trim(),
     stAuraPow:+($("fxStAuraPow")?$("fxStAuraPow").value:0)||0,
     stAuraPowFoe:+($("fxStAuraPowFoe")?$("fxStAuraPowFoe").value:0)||0,
@@ -31261,6 +31399,7 @@ $("fxSave").addEventListener("click",async ()=>{
     civil:+$("fxCivil").value||0,
     civilCiv:$("fxCivilCiv").value||"",
     stCostM:Math.abs(+$("fxStCostM").value)||0,
+    stCostMCond:($("fxStCostMCond")?$("fxStCostMCond").value:"").trim(),
     stCostUp:Math.abs(+$("fxStCostUp").value)||0,
     stCostUpF:$("fxStCostUpF").value.trim(),
     stCostUpT:$("fxStCostUpT").value||"",
@@ -31536,7 +31675,7 @@ $("btnLinkReg").addEventListener("click",async ()=>{
 function openCardCivSearch(){
   if(!FXDB.size){toast("登録済みカードがありません（先に⚡カード効果を登録してください）");return;}
   const CV={light:["光","#ffe082"],water:["水","#7fd7ff"],dark:["闇","#c58cff"],fire:["火","#ff8a80"],nature:["自然","#a5e88a"],zero:["ゼロ","#cfd8dc"]};
-  const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",evocrossgear:"進化クロスギア",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",aura:"オレガオーラ",evo:"進化",neoevo:"NEOクリーチャー",ultimate:"究極進化",lunatic:"ルナティック進化",kindancre:"禁断クリーチャー",kindanbeat:"禁断の鼓動"};
+  const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",evocrossgear:"進化クロスギア",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",dhfortress:"ドラグハート・フォートレス",castle:"城",gcastle:"G城",dream:"ドリーム",aura:"オレガオーラ",evo:"進化",neoevo:"NEOクリーチャー",ultimate:"究極進化",lunatic:"ルナティック進化",kindancre:"禁断クリーチャー",kindanbeat:"禁断の鼓動"};
   const sel=new Set();  // 選択中の文明フィルタ（空＝すべて）
   let multi=false;      // 多色のみ表示
   const wrap=document.createElement("div");
@@ -31780,7 +31919,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gimmick==="dorma")attrs.push("ドルマゲドン型");
     if(v.gimmick==="zeron")attrs.push("零龍型");
     if(v.cost!=null)attrs.push(`コスト${v.cost}${v.cost2!=null?"/"+v.cost2:""}`);
-    if(v.ctype){const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",evocrossgear:"進化クロスギア",d2:"D2",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",castle:"城",gcastle:"G城",dream:"ドリーム",neodream:"NEOドリーム",gneodream:"G-NEOドリーム",aura:"オレガオーラ",evo:"進化",neoevo:"NEOクリーチャー",ultimate:"究極進化",lunatic:"ルナティック進化",other:"その他",kindancre:"禁断クリーチャー",kindanbeat:"禁断の鼓動"};attrs.push(CT[v.ctype]||v.ctype);}
+    if(v.ctype){const CT={creature:"クリーチャー",spell:"呪文",crossgear:"クロスギア",evocrossgear:"進化クロスギア",d2:"D2",psychic:"サイキック",psyevo:"進化サイキック",tamaseed:"タマシード",dragheart:"ドラグハート",dhfortress:"ドラグハート・フォートレス",castle:"城",gcastle:"G城",dream:"ドリーム",neodream:"NEOドリーム",gneodream:"G-NEOドリーム",aura:"オレガオーラ",evo:"進化",neoevo:"NEOクリーチャー",ultimate:"究極進化",lunatic:"ルナティック進化",other:"その他",kindancre:"禁断クリーチャー",kindanbeat:"禁断の鼓動"};attrs.push(CT[v.ctype]||v.ctype);}
     if(v.lunaTarget)attrs.push(`🌙ルナティック進化→《${v.lunaTarget}》${v.lunaCost?`(コスト${v.lunaCost})`:""}`);
     if(v.civs&&v.civs.length){const CV={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};attrs.push(v.civs.map(x=>CV[x]||x).join("/"));}
     if(v.st)attrs.push("⚡ST");
@@ -31801,6 +31940,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gs)attrs.push("Gストライク");
     if(v.noGSAtk)attrs.push("🚫 攻撃中は相手のG・ストライク不可");
     if(v.castleBreakRep)attrs.push("🏰 要塞化した盾のブレイクを肩代わり");
+    if(v.stSickFoeOnly)attrs.push("🥶 出たターン攻撃不可は相手だけ");
+    if(v.stCostMCond)attrs.push(`💰 軽減の条件：${v.stCostMCond}`);
     if(v.hyperSummon)attrs.push("🌌 超次元から召喚できる");
     if(v.atkedFlipBack)attrs.push("🔄 攻撃された時に裏返して攻撃中止");
     if(v.psyLinkKind)attrs.push(v.psyLinkKind==="awake"?"🔗 覚醒リンク（そろったら自動）":"🔗 ゴッド・リンク（そろったら確認）");
@@ -33966,7 +34107,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   }
   if(toZone==="battle"&&fromZone==="hyper"){
     const rP=getReg(c);
-    if(!rP||rP.ctype!=="dragheart")c.isPsy=true;  // サイキック/進化サイキックは離れると超次元へ
+    if(!rP||!isDHType(rP.ctype))c.isPsy=true;  // サイキック/進化サイキックは離れると超次元へ
   }
   if(toZone==="battle"&&S.turn>0){
     const rS=getReg(c);
@@ -34031,7 +34172,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
           const rT=getReg(top);
           let isHit=false;
           if(rT&&rT.cost!=null){
-            const isCr=!rT.ctype||!["spell","crossgear","aura","gigaaura","dragheart","field","castle","tamaseed"].includes(rT.ctype);
+            const isCr=!rT.ctype||!["spell","crossgear","aura","gigaaura","dragheart","dhfortress","field","castle","tamaseed"].includes(rT.ctype);
             isHit=isCr&&rT.cost<myCost;
           }else{
             const j=await askChoice(`表向き：${top.name}\nこれは「コスト${myCost}未満のクリーチャー」ですか？（効果未登録のため判断してください）`,
@@ -34762,7 +34903,7 @@ async function gearMenu(pi,host,g){
     opts.push(["move","⚙ クロス先を変更（別の自分のクリーチャーに付け替え）"]);
     opts.push(["off","⚙ クロスを外す（独立ギアとしてバトルゾーンへ）"]);
   }
-  const isDH=rg&&rg.ctype==="dragheart";
+  const isDH=rg&&isDHType(rg.ctype);
   if(isDH)opts.push(["hyper","🌀 超次元ゾーンに戻す（ドラグハートの離脱先）"]);
   else opts.push(["grave","🪦 墓地に置く"+((g.under&&g.under.length)?`（下のカード${g.under.length}枚ごと）`:"")]);
   opts.push(["host",`👤 ${faceNameOf(host)} のメニューを開く`]);
@@ -35434,7 +35575,7 @@ function cardEl(pi,zone,c){
       ||/禁断/.test(String(c.name||""));
     const _backWord=_isPsy?"解除":"戻す";
     const _lk=LINKS.get(normName(c.name))||null;
-    const _isDrg=(()=>{const r0=FXDB.get(_lk&&_lk[0]);return !!(r0&&r0.ctype==="dragheart");})();
+    const _isDrg=(()=>{const r0=FXDB.get(_lk&&_lk[0]);return !!(r0&&isDHType(r0.ctype));})();
     const _flipWord=_isKindan?"禁断解放":(_isPsy?"覚醒":(_isDrg?"龍解":"変身"));
     // 🔗 覚醒リンク中のカードは、右側に「リンク解除」ボタンを出す
     if(c.gl&&Array.isArray(c.under)&&c.under.length){
@@ -39760,7 +39901,7 @@ function openCardSheet(ctx){
       if(ctx.zone==="battle"&&c.sick){c.sick=false;toast("⚡ 変形（覚醒/龍解など）：召喚酔いが解けた");}
       sfx("flip");
       {const _rf=FXDB.get(link[0])||{};
-       const _w=(_rf.ctype==="dragheart")?"龍解":((_rf.ctype==="psychic"||_rf.ctype==="psyevo")?"覚醒":"変形");
+       const _w=(isDHType(_rf.ctype))?"龍解":((_rf.ctype==="psychic"||_rf.ctype==="psyevo")?"覚醒":"変形");
        try{fxShare("awake",`${_w}！`,`${S.players[ctx.p].label}`,true,c.name,ctx.p);}catch(e){}}
       // 覚醒/龍解/究極進化など「裏返った時」の効果：変形後の面の出た時効果を発動できる
       if(ctx.zone==="battle"){
@@ -46826,7 +46967,20 @@ function zoneCondOk(expr,pi,selfCard){
          if(!src2.length)return false;   // 1枚も無ければ「すべて」とは言わない
          return zoneFiltCount(src2,mAll[2].trim())===src2.length;
        }}
-      // 🕐 そのターンに攻撃した回数（例：攻撃回数自分=3）
+      /* 💰 v15.74 バトルゾーンにある自分（相手）のクリーチャーのコストの合計（例：コスト合計自分>=20）。
+       ドラグハートの龍解条件に使う。 */
+    {const mCS=t.match(/^コスト合計(自分|相手)(>=|<=|=)(\d+)$/);
+     if(mCS){
+       const sideC=mCS[1]==="自分"?pi:(pi===0?1:0);
+       let sum=0;
+       for(const b of zonesOf(sideC).battle){
+         const rb=getReg(b);
+         if(!rb||!isCreatureReg(rb)||rb.cost==null||rb.cost==="")continue;
+         sum+=(+rb.cost||0);
+       }
+       return mCS[2]===">="?sum>=+mCS[3]:mCS[2]==="<="?sum<=+mCS[3]:sum===+mCS[3];
+     }}
+    // 🕐 そのターンに攻撃した回数（例：攻撃回数自分=3）
       {const mA=t.match(/^攻撃回数(自分|相手)(>=|<=|=)(\d+)$/);
        if(mA){
          const side=mA[1]==="自分"?pi:(pi===0?1:0);
