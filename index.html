@@ -5253,7 +5253,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.61";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.64";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6702,6 +6702,54 @@ function isNeoEvoInstance(c){return !!(c&&(c.neoEvo||(c.under&&c.under.length)))
    ここで一本化しておく（新しい進化の種類が増えたらここに足す）。 */
 function isEvoCtype(ct){
   return ["evo","neoevo","ultimate","starevo","psyevo","lunatic","gneo","neodream","gneodream","smaxevo","onismaxevo","charismaevo"].includes(String(ct||""));
+}
+/* ⛔ v15.63：常在「パワーn以上のクリーチャーは攻撃できない」（予言者マリエル型）。
+   **両プレイヤーに効く**ので、どちらの場にある付与元も見る。
+   パワーは登録値＋一時付与で見る（effPower は async なので攻撃判定からは呼べない）。
+   条件欄 stNoAtkPowFilt でさらに絞れる。 */
+function noAtkPowBlock(pi,c){
+  try{
+    const r=getReg(c);
+    if(!r||r.power==null||r.power==="")return false;
+    let p=+r.power;
+    if(c.buff)p+=(+c.buff.pa||0)+(+c.buff.pm||0)+(+c.buff.pow||0);
+    for(const sd of [0,1]){
+      const ZS=zonesOf(sd);if(!ZS||!ZS.battle)continue;
+      for(const b of ZS.battle){
+        if(b.id===c.id)continue;
+        const rb=getReg(b);
+        if(!rb||!(+rb.stNoAtkPow>0))continue;
+        if(isSealed(b)||isIgnored(b,sd))continue;
+        if(rb.stNoAtkPowFilt&&!lockFilterOk(rb.stNoAtkPowFilt,r,c))continue;
+        if(p>=(+rb.stNoAtkPow))return true;
+      }
+    }
+  }catch(e){}
+  return false;
+}
+/* 🛡 v15.64：「自分のクリーチャーは、それよりパワーの小さいクリーチャーにブロックされない」
+   （密林の総督ハックル・キリンソーヤ型／シールド・フォース）。
+   ブロック候補から外すのではなく「ブロックする側のパワーが攻撃側より小さいか」で判定するので、
+   ブロック候補の絞り込み（_blkOk）に合流させる。付与元は自分の場のS・フォース発動中のカード。
+   パワーは登録値＋一時付与で見る（ブロック判定は同期処理で effPower を呼べない）。 */
+function powSyncOf(c){
+  try{
+    const r=getReg(c);
+    let p=(r&&r.power!=null&&r.power!=="")?+r.power:0;
+    if(c.buff)p+=(+c.buff.pa||0)+(+c.buff.pm||0)+(+c.buff.pow||0);
+    return p;
+  }catch(e){return 0;}
+}
+function noBlockSmallerOn(pi,atk){
+  try{
+    for(const b of zonesOf(pi).battle){
+      const rb=getReg(b);
+      if(!rb||rb.sforceFx!=="noBlockSmaller"||!b.sfActive)continue;
+      if(isSealed(b)||isIgnored(b,pi))continue;
+      if(rb.sforceAll||b.id===atk.id)return true;
+    }
+  }catch(e){}
+  return false;
 }
 function evoSrcOk(rEvo,x){
   try{
@@ -11450,6 +11498,10 @@ const FX_TYPES=[
   ["hakiJudge","🎲 相手のシールドの数だけガチンコ・ジャッジし、勝った回数まで自分の手札／墓地／マナから進化ではないクリーチャーを出す（刃鬼型／条件欄＝出す対象・例：ハンター）"],
   ["matenSwap","🌀 各プレイヤーは手札とマナゾーンをまるごと交換し、その後マナをすべてタップする（魔天降臨型）"],
   ["nWorldShuffle","🌐 各プレイヤーは手札と墓地をすべて山札に加えてシャッフルし、その後それぞれn枚引く（サイバー・N・ワールド型）"],
+  ["graveCreToHandThenEvo","⚰⤴ 自分の墓地からクリーチャー1枚を手札に戻す。それがこのクリーチャーと**同じ種族を持つ進化クリーチャー**なら、進化元を選んでバトルゾーンに出してもよい（魔光蟲ヴィルジニア卿型）"],
+  ["handesPerSameNameGrave","🗑 相手の手札をランダムにn枚＋**すべての墓地にあるこのカードと同じ名前のカード1枚につき1枚**捨てさせる（クローン・バイス型）"],
+  ["foePickDo","🫵 相手が、自身の〔ゾーン〕から条件に合うカードをn個選び、〔動作〕する（聖竜鎧 シデンズ・ソウル型／条件欄＝「ゾーン＠動作|絞り込み」・例：バトル＠タップ|アンタップ・マナ＠墓地。ソロとゴースト戦では自分が代わりに選ぶ）"],
+  ["pickThenFoeSplit","🫵 自分が相手の〔ゾーン〕からn個選ぶ。相手はその中から1つを〔動作A〕、残りを〔動作B〕にする（英知と追撃の宝剣型／条件欄＝「ゾーン＠動作A／動作B|絞り込み」・例：バトル＠手札／破壊）"],
   ["deckAnyToGraveN","🗑 自分または相手の山札を見てカードをn枚まで選び、持ち主の墓地に置く→シャッフル（ヘル・スラッシュ／フューチャー・スラッシュ型／条件欄で対象を絞れる）"],
   ["deckSearchHand","🔎 自分の山札から条件に合うカードを1枚探し、公開して手札に加えてもよい→シャッフル（進化の化身型／条件欄で対象を指定）"],
   ["deckSearchMana","🔎🌱 自分の山札から条件に合うカードを1枚探し、自分のマナゾーンに置いてもよい→シャッフル（神秘の宝箱型／条件欄で対象を指定・例：自然以外）"],
@@ -13459,7 +13511,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
 const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
-  "manaAllFilt","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
+  "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
   "graveToShield",
   "manaPlusPerZone","destroyWeakerPick","manaAllWeaker","exileToGrave","handToManaBreakPlus","deckTopShieldRestMana","foeDeckBottomOverMaxMana",
@@ -18555,6 +18607,161 @@ async function runFxList(pi,list,srcCard,inPump){
       const TZ=zonesOf(tp);if(!TZ.deck.length){toast("山札がありません");continue;}
       const j=await pickCard(`🗑 ${S.players[tp].label}の山札から墓地に置くカードを選択`,TZ.deck,{hint:"山札全体を確認中／タップで選択"});if(j===null)continue;
       snap();const cc=TZ.deck.splice(j,1)[0];cc.faceup=true;cc.tapped=false;TZ.grave.push(cc);shuffle(TZ.deck);logPriv(pi,`🗑 ${S.players[tp].label}の山札から《${faceNameOf(cc)}》を墓地へ→シャッフル`,`${S.players[tp].label}の山札から1枚を墓地へ→シャッフル`);sfx("grave");renderAll();
+    }else if(f.t==="graveCreToHandThenEvo"){
+      /* ⚰⤴ 自分の墓地からクリーチャー1枚を手札に戻す。
+         それがこのクリーチャーと**同じ種族を持つ進化クリーチャー**なら、
+         進化元を選んでバトルゾーンに出してもよい（魔光蟲ヴィルジニア卿型）。
+         進化クリーチャーを出すには進化元が要るので、条件に合う自分のクリーチャーを選んでもらう。 */
+      const _fv=String(f.cond||"").trim();
+      const _gp=Z.grave.filter(x=>{const rx=getReg(x);
+        return rx&&isCreatureReg(rx)&&(!_fv||lockFilterOk(_fv,rx,x));});
+      if(!_gp.length){toast("⚰ 墓地にクリーチャーがいません");continue;}
+      const _jg=await pickCard("⚰ 手札に戻すクリーチャーを選択（自分の墓地）",_gp,{hint:"タップで選択・キャンセルで戻さない"});
+      if(_jg===null)continue;
+      snap();
+      const _gc=_gp[_jg];
+      const _gi=Z.grave.findIndex(x=>x.id===_gc.id);if(_gi>=0)Z.grave.splice(_gi,1);
+      _gc.faceup=true;_gc.tapped=false;_gc.sideways=false;_gc.buff=null;_gc.seals=[];_gc.face=0;
+      if(typeof toHand==="function")toHand(Z,_gc);else Z.hand.push(_gc);
+      sfx("move");renderAll();
+      toast(`⚰ ${faceNameOf(_gc)} を手札に戻した`);
+      const _rg2=getReg(_gc);
+      if(!srcCard||!_rg2||!isEvoCtype(_rg2.ctype)){continue;}
+      /* このクリーチャーと共通の種族を持つか */
+      const _rs2=getReg(srcCard);
+      const _mine=[...((_rs2&&_rs2.races)||[]),...((_rs2&&_rs2.races2)||[])].filter(Boolean).map(x=>normName(x));
+      const _his=[...((_rg2.races)||[]),...((_rg2.races2)||[])].filter(Boolean).map(x=>normName(x));
+      const _same=_mine.some(x=>_his.includes(x));
+      if(!_same){toast(`⤴ ${faceNameOf(_gc)} は《${faceNameOf(srcCard)}》と共通の種族が無いため、手札に残ります`);continue;}
+      if(!await ask(`⤴ ${faceNameOf(_gc)} をバトルゾーンに出しますか？（進化元を選びます）`))continue;
+      const _pool3=Z.battle.filter(x=>{const rx=getReg(x);
+        return rx&&isCreatureReg(rx)&&evoSrcOk(_rg2,x);});
+      if(!_pool3.length){toast("⤴ 進化元にできるクリーチャーがいないため、手札に残ります");continue;}
+      const _js=_pool3.length===1?0:await pickCard(`⤴ 進化元を選択（${faceNameOf(_gc)}）`,_pool3,{hint:"タップで選択・キャンセルで出さない"});
+      if(_js===null)continue;
+      const _host=_pool3[_js];
+      const _hi2=Z.hand.findIndex(x=>x.id===_gc.id);if(_hi2>=0)Z.hand.splice(_hi2,1);
+      const _bi=Z.battle.findIndex(x=>x.id===_host.id);if(_bi>=0)Z.battle.splice(_bi,1);
+      _gc.faceup=true;_gc.tapped=_host.tapped;_gc.sideways=false;_gc.rot=0;_gc.face=0;_gc.sick=false;
+      _gc.under=[_host,...(_host.under||[]).splice(0),...(_gc.under||[])];
+      Z.battle.splice(Math.max(0,_bi),0,_gc);
+      markArrive(_gc);emitEvent(pi,"summon");enqueueFx(pi,_gc);
+      sfx("ok");renderAll();
+      toast(`⤴ ${faceNameOf(_gc)} を《${faceNameOf(_host)}》の上に置いた（進化）`);
+    }else if(f.t==="handesPerSameNameGrave"){
+      /* 🗑 相手の手札をランダムにn枚＋「すべての墓地にあるこのカードと同じ名前のカード」1枚につき1枚
+         捨てさせる（クローン・バイス型）。墓地は**両プレイヤーぶん**を数える。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _selfNm=srcCard?normName(faceNameOf(srcCard)):"";
+      let _extra=0;
+      if(_selfNm){
+        for(const sd of [0,1]){
+          const ZS=zonesOf(sd);if(!ZS||!ZS.grave)continue;
+          for(const x of ZS.grave)if(normName(faceNameOf(x))===_selfNm)_extra++;
+        }
+      }
+      const _tot=n+_extra;
+      if(!OZ.hand.length){toast("🗑 相手の手札がありません");continue;}
+      snap();
+      let _dn=0;
+      for(let i=0;i<_tot;i++){
+        if(!OZ.hand.length)break;
+        const _k=Math.floor(Math.random()*OZ.hand.length);
+        const _c=OZ.hand.splice(_k,1)[0];
+        _c.faceup=true;_c.tapped=false;OZ.grave.push(_c);_dn++;
+        if(typeof afterHandDiscard==="function")afterHandDiscard(op,_c,pi);
+      }
+      sfx("grave");renderAll();
+      toast(`🗑 相手の手札を${_dn}枚捨てさせた（基本${n}枚＋墓地の同名${_extra}枚）`);
+      logOnly(`🗑 ${S.players[pi].label}：${_dn}枚ハンデス（墓地の《${srcCard?faceNameOf(srcCard):"?"}》${_extra}枚ぶん加算）`);
+    }else if(f.t==="foePickDo"||f.t==="pickThenFoeSplit"){
+      /* 🫵 「相手が選ぶ」の汎用形（最初の宿題）。
+         foePickDo         … 相手が自身の〔ゾーン〕から n 個選び、〔動作〕する（シデンズ・ソウル型）
+         pickThenFoeSplit  … 自分が相手の〔ゾーン〕から n 個選び、相手がその中の1つを〔動作A〕、
+                             残りを〔動作B〕にする（英知と追撃の宝剣型）
+         条件欄の書き方：「ゾーン＠動作|絞り込み」／「ゾーン＠動作A／動作B|絞り込み」
+         ゾーン … バトル／手札／マナ／墓地／盾
+         動作   … タップ／破壊／手札／マナ／墓地／山札の下
+         ソロとゴースト戦では相手に聞けないので、自分が代わりに選ぶ（効果が丸ごと消えないように）。 */
+      const _spl=(f.t==="pickThenFoeSplit");
+      const _raw=String(f.cond||"").trim();
+      const _mm=_raw.match(/^([^@＠]*)[@＠]([^|｜]*)(?:[|｜](.*))?$/);
+      const _zn=(_mm?_mm[1]:"バトル").trim()||"バトル";
+      const _acts=(_mm?_mm[2]:"タップ").split(/[／\/]/).map(x=>x.trim()).filter(Boolean);
+      const _flt=(_mm&&_mm[3])?_mm[3].trim():"";
+      const _zk={"バトル":"battle","手札":"hand","マナ":"mana","墓地":"grave","盾":"shield","シールド":"shield"}[_zn]||"battle";
+      const _OZ2=zonesOf(op);
+      const _pool=(_OZ2[_zk]||[]).filter(x=>{
+        const rx=getReg(x);
+        if(_zk==="battle"&&(!rx||!isCreatureReg(rx)))return false;
+        return !_flt||(rx&&lockFilterOk(_flt,rx,x));
+      });
+      if(!_pool.length){toast(`🫵 相手の${_zn}に対象がありません${_flt?`（${_flt}）`:""}`);continue;}
+      /* 相手に聞けるか（オンライン対戦のみ）。ソロ・ゴーストは自分が代わりに選ぶ。 */
+      const _byFoe=!!S.vs;
+      const _who=_byFoe?S.players[op].label:`${S.players[pi].label}（相手の代わり）`;
+      snap();
+      let _chosen=[];
+      if(_spl){
+        /* ① まず自分が n 個選ぶ */
+        const _mine=[];
+        for(let i=0;i<n;i++){
+          const _left=_pool.filter(x=>!_mine.some(y=>y.id===x.id)&&(_OZ2[_zk]||[]).some(y=>y.id===x.id));
+          if(!_left.length)break;
+          const _j=await pickCard(`🫵 相手の${_zn}から選択（${i+1}/${n}）`,_left,{hint:"タップで選択・キャンセルで終了"});
+          if(_j===null)break;
+          _mine.push(_left[_j]);
+        }
+        if(!_mine.length){toast("🫵 選ばなかったため何も起きません");continue;}
+        if(_mine.length===1){
+          /* 1つしか選べなかった時は、相手に選ばせるまでもなく動作Aを適用 */
+          _chosen=[{c:_mine[0],act:_acts[0]||"手札"}];
+        }else{
+          const _k=await pickCard(`🫵 ${_who}：この中から「${_acts[0]||"手札"}」にする1つを選択（残りは「${_acts[1]||"破壊"}」）`,
+            _mine,{hint:"タップで選択"});
+          const _ki=(_k===null)?0:_k;
+          _chosen=_mine.map((c,ix)=>({c,act:(ix===_ki)?(_acts[0]||"手札"):(_acts[1]||"破壊")}));
+        }
+      }else{
+        /* 相手が自身の〔ゾーン〕から n 個選ぶ */
+        for(let i=0;i<n;i++){
+          const _left=_pool.filter(x=>!_chosen.some(y=>y.c.id===x.id)&&(_OZ2[_zk]||[]).some(y=>y.id===x.id));
+          if(!_left.length)break;
+          const _j=await pickCard(`🫵 ${_who}：自身の${_zn}から選択（${i+1}/${n}）${_flt?`\n条件：${_flt}`:""}`,
+            _left,{hint:"タップで選択"});
+          if(_j===null)break;
+          _chosen.push({c:_left[_j],act:_acts[0]||"タップ"});
+        }
+      }
+      if(!_chosen.length){toast("🫵 選ばれませんでした");continue;}
+      if(!_byFoe)toast("🫵 ソロ／ゴースト戦のため、相手の選択を代わりに行いました");
+      for(const {c:_c,act:_a} of _chosen){
+        const _arr=_OZ2[_zk];
+        const _ix=_arr.findIndex(x=>x.id===_c.id);
+        if(_ix<0)continue;
+        if(_a==="タップ"){_c.tapped=true;toast(`🫵 ${faceNameOf(_c)} をタップした`);continue;}
+        if(_zk==="battle"){
+          if(_a==="破壊"){await destroyWithReplace(op,_c);toast(`💥 ${faceNameOf(_c)} を破壊した`);continue;}
+          if(_a==="手札"){await bounceOneToHand(op,_c);continue;}
+          if(cantLeaveBattle(op,_c))continue;
+          if(await offerTrueEscape(op,_c)){renderAll();continue;}
+        }
+        const _ix2=_arr.findIndex(x=>x.id===_c.id);if(_ix2<0)continue;
+        _arr.splice(_ix2,1);
+        const _u=(_c.under&&_c.under.length)?_c.under.splice(0):[];
+        if(_c.gear&&_c.gear.length)_c.gear.splice(0).forEach(gg=>gearOut(_OZ2,gg));
+        if(_c.seals&&_c.seals.length)_c.seals.splice(0).forEach(sx=>{sx.faceup=true;_OZ2.grave.push(sx);});
+        _c.tapped=false;_c.sideways=false;_c.rot=0;_c.buff=null;_c.seals=[];_c.mark=false;_c.neoEvo=false;_c.face=0;
+        if(_a==="手札"){_c.faceup=true;if(typeof toHand==="function")toHand(_OZ2,_c);else _OZ2.hand.push(_c);}
+        else if(_a==="マナ"){_c.faceup=true;manaTapIn(_c,op);_OZ2.mana.push(_c);}
+        else if(_a==="山札の下"){_c.faceup=false;_OZ2.deck.push(_c);}
+        else{_c.faceup=true;_OZ2.grave.push(_c);}
+        _u.forEach(y=>{y.faceup=true;y.tapped=false;y.buff=null;y.seals=[];_OZ2.grave.push(y);});
+        toast(`🫵 ${faceNameOf(_c)} を${_a}へ`);
+        renderAll();
+      }
+      sfx("move");renderAll();
+      logOnly(`🫵 ${_who}：${_zn}から${_chosen.length}枚を処理（${_acts.join("／")}）`);
     }else if(f.t==="deckAnyToGraveN"){
       /* 🗑 自分または相手の山札を見てn枚まで選び、持ち主の墓地に置く→シャッフル。
          既存の deckAnyToGrave（ロスト・チャージャー型）は1枚固定なので、枚数を取る版として作った。 */
@@ -23904,7 +24111,7 @@ async function startAttack(pi,id){
     if(rA&&rA.gggCantAtk&&!gggOn(pi)){toast(`⛔ ${faceNameOf(c)} はG・G・G未達（手札2枚以上）のため攻撃できない`);return;}
     if(rA&&rA.needOtherAtk&&!otherAttackedThisTurn(pi,c)){toast(`⛔ ${faceNameOf(c)} は、このターン他の自分のクリーチャーが先に攻撃していないため攻撃できない`);return;}
     const _diaSword=!!(S._diamondSword&&S._diamondSword[pi]===`${S.turn}:${S.who}`);
-    if(!_diaSword&&((rA&&rA.cantAtk&&!isIgnored(c,pi))||(c.buff&&c.buff.cantAtk)||(S._cantAtkAllTurn&&S._cantAtkAllTurn[pi]===`${S.turn}:${S.who}`))){toast(`⛔ ${faceNameOf(c)} は攻撃できない`);return;}
+    if(!_diaSword&&((rA&&rA.cantAtk&&!isIgnored(c,pi))||(c.buff&&c.buff.cantAtk)||(S._cantAtkAllTurn&&S._cantAtkAllTurn[pi]===`${S.turn}:${S.who}`)||noAtkPowBlock(pi,c))){toast(`⛔ ${faceNameOf(c)} は攻撃できない`);return;}
     // 🌟 モモキングダム✕型：含まれるカードが6枚未満なら攻撃できない
     if(rA&&rA.momoKingX&&!isIgnored(c,pi)&&stackCountOf(c)<6){toast(`⛔ ${faceNameOf(c)} は含まれるカードが6枚未満なので攻撃できない（現在${stackCountOf(c)}枚）`);return;}
     if(rA&&+rA.atkWinIncludedN>0&&stackCountOf(c)>=+rA.atkWinIncludedN){
@@ -25426,6 +25633,7 @@ async function execAttack(pi,id,tg){
   };
   // ⚙ クロスされていないクロスギアによるブロック禁止／クロスギアで守られている攻撃側はブロックされない
   const _blkOk=b=>{
+    if(noBlockSmallerOn(pi,c)&&powSyncOf(b)<powSyncOf(c))return false; // 🛡 v15.64 キリンソーヤ型
     if(uncrossedGearLock(b))return false;              // ノーブル・エンフォーサー型：ブロックもできない
     if(gearProtectsFrom(c,b))return false;              // 攻撃側がクロスギアで守られている
     return true;
