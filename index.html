@@ -5253,7 +5253,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.64";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.65";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6707,6 +6707,22 @@ function isEvoCtype(ct){
    **両プレイヤーに効く**ので、どちらの場にある付与元も見る。
    パワーは登録値＋一時付与で見る（effPower は async なので攻撃判定からは呼べない）。
    条件欄 stNoAtkPowFilt でさらに絞れる。 */
+/* 🛡 v15.65：「次の自分のターン開始時まで、自分はその文明を持つクリーチャーに攻撃されない」
+   （調和と繁栄の罠型）。守る側ごとに「文明」と「いつまで」を持つ。
+   ターン番号をキーにするのは noAtkAllTurn 型と同じだが、こちらは**次の自分のターン開始まで**
+   なので、切り替え回数（S.pturn）で数える。
+   pi＝攻撃している側、c＝攻撃しているクリーチャー。守られているのは相手（＝op）。 */
+function civAtkGuardOn(pi,c){
+  try{
+    const dp=pi===0?1:0;
+    const g=S._civAtkGuard&&S._civAtkGuard[dp];
+    if(!g||!g.civ)return false;
+    if((S.pturn|0)>(g.until|0))return false;
+    const r=getReg(c);
+    if(!r)return false;
+    return (r.civs||[]).includes(g.civ);
+  }catch(e){return false;}
+}
 function noAtkPowBlock(pi,c){
   try{
     const r=getReg(c);
@@ -11498,6 +11514,8 @@ const FX_TYPES=[
   ["hakiJudge","🎲 相手のシールドの数だけガチンコ・ジャッジし、勝った回数まで自分の手札／墓地／マナから進化ではないクリーチャーを出す（刃鬼型／条件欄＝出す対象・例：ハンター）"],
   ["matenSwap","🌀 各プレイヤーは手札とマナゾーンをまるごと交換し、その後マナをすべてタップする（魔天降臨型）"],
   ["nWorldShuffle","🌐 各プレイヤーは手札と墓地をすべて山札に加えてシャッフルし、その後それぞれn枚引く（サイバー・N・ワールド型）"],
+  ["civAtkGuardTurn","🛡 文明を1つ選ぶ。次の自分のターン開始時まで、自分はその文明を持つクリーチャーに攻撃されない（調和と繁栄の罠型）"],
+  ["destroyThenDeckSameCostPlay","💥🔎 条件に合う相手のクリーチャーを1体破壊する。その後、自分の山札から**そのクリーチャーと同じコスト**のクリーチャーを1枚選んでバトルゾーンに出してもよい→シャッフル（破壊と誕生の神殿型／条件欄で破壊の対象を絞る・例：パワー5000以下）"],
   ["graveCreToHandThenEvo","⚰⤴ 自分の墓地からクリーチャー1枚を手札に戻す。それがこのクリーチャーと**同じ種族を持つ進化クリーチャー**なら、進化元を選んでバトルゾーンに出してもよい（魔光蟲ヴィルジニア卿型）"],
   ["handesPerSameNameGrave","🗑 相手の手札をランダムにn枚＋**すべての墓地にあるこのカードと同じ名前のカード1枚につき1枚**捨てさせる（クローン・バイス型）"],
   ["foePickDo","🫵 相手が、自身の〔ゾーン〕から条件に合うカードをn個選び、〔動作〕する（聖竜鎧 シデンズ・ソウル型／条件欄＝「ゾーン＠動作|絞り込み」・例：バトル＠タップ|アンタップ・マナ＠墓地。ソロとゴースト戦では自分が代わりに選ぶ）"],
@@ -11599,7 +11617,7 @@ const FX_TYPES=[
   ["foeTopCostPickToDeck","🎰 相手の山札の上からn枚を表向きにし、自分はその中のコストを1つ選ぶ。選んだコストの相手クリーチャーすべてと表向きのn枚を、ランダムな順番で相手の山札の一番下に置く（7777777型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -13511,7 +13529,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
 const FILT_COND_SET=new Set(["shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
-  "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
+  "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
   "graveToShield",
   "manaPlusPerZone","destroyWeakerPick","manaAllWeaker","exileToGrave","handToManaBreakPlus","deckTopShieldRestMana","foeDeckBottomOverMaxMana",
@@ -18607,6 +18625,51 @@ async function runFxList(pi,list,srcCard,inPump){
       const TZ=zonesOf(tp);if(!TZ.deck.length){toast("山札がありません");continue;}
       const j=await pickCard(`🗑 ${S.players[tp].label}の山札から墓地に置くカードを選択`,TZ.deck,{hint:"山札全体を確認中／タップで選択"});if(j===null)continue;
       snap();const cc=TZ.deck.splice(j,1)[0];cc.faceup=true;cc.tapped=false;TZ.grave.push(cc);shuffle(TZ.deck);logPriv(pi,`🗑 ${S.players[tp].label}の山札から《${faceNameOf(cc)}》を墓地へ→シャッフル`,`${S.players[tp].label}の山札から1枚を墓地へ→シャッフル`);sfx("grave");renderAll();
+    }else if(f.t==="civAtkGuardTurn"){
+      /* 🛡 文明を1つ選ぶ。次の自分のターン開始時まで、自分はその文明を持つクリーチャーに攻撃されない。 */
+      const _CIVS=[["light","光"],["water","水"],["dark","闇"],["fire","火"],["nature","自然"],["zero","ゼロ"]];
+      const _jc=await askChoice("🛡 攻撃されたくない文明を1つ選択",_CIVS.map(x=>x[1]));
+      if(_jc===null)continue;
+      snap();
+      S._civAtkGuard=S._civAtkGuard||{};
+      S._civAtkGuard[pi]={civ:_CIVS[_jc][0],until:(S.pturn|0)+1};
+      sfx("flip");renderAll();
+      toast(`🛡 次の自分のターン開始時まで、${_CIVS[_jc][1]}のクリーチャーに攻撃されません`);
+      logOnly(`🛡 ${S.players[pi].label}：${_CIVS[_jc][1]}のクリーチャーに攻撃されない（次の自分のターン開始まで）`);
+    }else if(f.t==="destroyThenDeckSameCostPlay"){
+      /* 💥🔎 条件に合う相手のクリーチャーを1体破壊し、その後、自分の山札から
+         **そのクリーチャーと同じコスト**のクリーチャーを1枚出してもよい（破壊と誕生の神殿型）。
+         v15.57 のハンプティ・ルピア（同コストで破壊）と同じ「ちょうど同じコスト」の判定。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _fd2=String(f.cond||"").trim();
+      const _tp2=OZ.battle.filter(x=>{const rx=getReg(x);
+        return rx&&isCreatureReg(rx)&&(!_fd2||lockFilterOk(_fd2,rx,x));});
+      if(!_tp2.length){toast(`💥 対象の相手クリーチャーがいません${_fd2?`（${_fd2}）`:""}`);continue;}
+      const _jd2=_tp2.length===1?0:await pickCard(`💥 破壊する相手クリーチャーを選択${_fd2?`（${_fd2}）`:""}`,_tp2,{hint:"タップで選択"});
+      if(_jd2===null)continue;
+      snap();
+      const _vc=_tp2[_jd2];
+      const _rv=getReg(_vc);
+      const _cost=(_rv&&_rv.cost!=null&&_rv.cost!=="")?(+_rv.cost):null;
+      const _nm2=faceNameOf(_vc);
+      await destroyWithReplace(op,_vc);
+      renderAll();
+      if(zonesOf(op).battle.some(x=>x.id===_vc.id)){toast("💥 破壊されなかったため、山札は見ません");continue;}
+      if(_cost==null||isNaN(_cost)){toast("🔎 破壊したカードのコストが未登録のため、山札からの踏み倒しは手動で行ってください");continue;}
+      const _pl=Z.deck.filter(x=>{const rx=getReg(x);
+        return rx&&isCreatureReg(rx)&&rx.cost!=null&&rx.cost!==""&&(+rx.cost)===_cost;});
+      if(!_pl.length){toast(`🔎 山札にコスト${_cost}のクリーチャーがいません（シャッフル）`);shuffle(Z.deck);renderAll();continue;}
+      const _jp2=await pickCard(`🔎 バトルゾーンに出すクリーチャーを選択（コスト${_cost}ちょうど・${_nm2}と同じ・キャンセルで出さない）`,
+        _pl,{hint:"山札全体を確認中／タップで選択"});
+      if(_jp2===null){shuffle(Z.deck);renderAll();toast("🔎 出さなかった（山札をシャッフル）");continue;}
+      const _pc=_pl[_jp2];
+      const _pix=Z.deck.findIndex(x=>x.id===_pc.id);if(_pix>=0)Z.deck.splice(_pix,1);
+      _pc.faceup=true;_pc.seen=false;_pc.tapped=false;_pc.sideways=false;_pc.face=0;
+      if(!cheatEnterBattle(pi,_pc)){Z.deck.push(_pc);shuffle(Z.deck);renderAll();continue;}
+      {const _rp2=getReg(_pc);_pc.sick=!(_rp2&&_rp2.sa);_pc.bornTurn=S.turn;}
+      markArrive(_pc);emitEvent(pi,"summon");enqueueFx(pi,_pc);
+      shuffle(Z.deck);sfx("ok");renderAll();
+      toast(`🔎 ${faceNameOf(_pc)}（コスト${_cost}）をバトルゾーンに出した`);
     }else if(f.t==="graveCreToHandThenEvo"){
       /* ⚰⤴ 自分の墓地からクリーチャー1枚を手札に戻す。
          それがこのクリーチャーと**同じ種族を持つ進化クリーチャー**なら、
@@ -25905,6 +25968,7 @@ async function execAttack(pi,id,tg){
     const bk=_bc.bk;let n=_bc.n;
     if(S.expert){
       const rA=getReg(c);
+      if(civAtkGuardOn(pi,c)){toast(`🛡 ${faceNameOf(c)} は、選ばれた文明のクリーチャーなので相手プレイヤーを攻撃できない（攻撃中止）`);renderAll();return;}
       if(!(S._diamondSword&&S._diamondSword[pi]===`${S.turn}:${S.who}`)&&((rA&&rA.cantAtkP)||(c.buff&&c.buff.cantAtkP))&&!isIgnored(c,pi)&&!blockerAtkPFree(pi,c)){
         toast(`⛔ ${faceNameOf(c)} は相手プレイヤーを攻撃できない！（攻撃中止）`);
         renderAll();
@@ -25965,6 +26029,7 @@ async function execAttack(pi,id,tg){
   else{
     if(S.expert){
       const rA=getReg(c);
+      if(civAtkGuardOn(pi,c)){toast(`🛡 ${faceNameOf(c)} は、選ばれた文明のクリーチャーなので相手プレイヤーを攻撃できない（攻撃中止）`);renderAll();return;}
       if(!(S._diamondSword&&S._diamondSword[pi]===`${S.turn}:${S.who}`)&&((rA&&rA.cantAtkP)||(c.buff&&c.buff.cantAtkP))&&!isIgnored(c,pi)&&!blockerAtkPFree(pi,c)){
         toast(`⛔ ${faceNameOf(c)} は相手プレイヤーを攻撃できない！（攻撃中止）`);
         renderAll();
