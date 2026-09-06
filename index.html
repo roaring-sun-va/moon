@@ -5373,7 +5373,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.92";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.93";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8259,7 +8259,13 @@ async function loadAllImages(){
     // 以前は全画像をここでメモリへ複製していた。大容量になるほど起動・復元が
     // 遅くなるため、まずキーだけ読み、画像本体は画面に必要になった時に読む。
     for(const k of await idbKeys("images"))imgURL.addKey(k);
-    if(!imageLoadingIsLazy())await imgURL.preloadAll();
+    /* 🧠 v15.93 iPhone・iPad では、起動時の全部読みをしない。
+       設定の「画像の読み込み」が「速い」だと、ここで登録画像を端から読み込み、
+       上限（64MB＝約810枚）まで一気に埋めていた。
+       実測で「対戦を始める前から813枚を抱えている」状態になり、
+       効果が重なった瞬間の山を吸収する余裕がゼロのまま戦っていた。
+       必要になった画像だけ読む形にすれば、対戦中は150枚前後で足りる。 */
+    if(!imageLoadingIsLazy()&&!deviceIsSmall())await imgURL.preloadAll();
   }else memImages.forEach((b,k)=>imgURL.setBlob(k,b));
   $("imgStatus").textContent=`登録済み画像：${imgURL.size} 枚`;
 }
