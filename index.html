@@ -5184,11 +5184,18 @@ const S={
 function preloadBoardImages(){
   try{
     if(!db)return 0;
-    const keys=new Set(protectedImageKeys());
+    /* 🖼 v16.6 読み込む順番を「見えているものが先」にする。
+       これまでは山札から順に頼んでいたので、両者の山札60枚が行列の前に並び、
+       手札や盾が後ろに回っていた（盾は出るのに手札の一部が出ない、の正体）。
+       画面に出ているのは30枚ほどなので、順番を変えるだけで開始直後にほぼ揃う。
+       山札・墓地も行列の後ろで読み続けるため、開いた時に困ることはない。 */
+    const front=new Set(protectedImageKeys());   // 見えているもの（先に読む）
+    const back=new Set();                        // 中身が見えていないもの（後で読む）
     for(const pi of [0,1]){
       const Z=zonesOf(pi);
       if(!Z)continue;
-      for(const zn of ["deck","hand","shield","mana","grave","battle","hyper","gr"]){
+      for(const zn of ["hand","shield","battle","mana","hyper","gr","deck","grave"]){
+        const keys=(zn==="deck"||zn==="grave")?back:front;
         for(const c of (Z[zn]||[])){
           if(!c)continue;
           /* 🖼 v16.2 画面が使うのと同じ鍵で集める。
@@ -5202,10 +5209,11 @@ function preloadBoardImages(){
         }
       }
     }
-    const list=[...keys];
-    imgURL.pin(list);            // 📌 v15.98 盤面のぶんは捨てない
-    imgURL.preloadKeys(list);
-    return list.length;
+    const listF=[...front],listB=[...back].filter(k=>!front.has(k));
+    imgURL.pin([...listF,...listB]);   // 📌 v15.98 盤面のぶんは捨てない（山札・墓地も含めて固定）
+    imgURL.preloadKeys(listF);         // 見えているものを先に頼む
+    imgURL.preloadKeys(listB);         // 山札・墓地は行列の後ろへ
+    return listF.length+listB.length;
   }catch(e){return 0;}
 }
 function protectedImageKeys(){
@@ -5459,7 +5467,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.5";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.6";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36742,8 +36750,11 @@ function renderAll(){
      という差が出ていた。1操作の中で描き直しが何回も走るためで、
      重い場面ほど負担が大きい。処理中だけ間引き、
      一区切りついたところで必ず1回描き直すので、途中経過は今までどおり見える。 */
-    const _busy=(typeof FX_DEPTH!=="undefined"&&FX_DEPTH>0);
-    const _gap=(typeof deviceIsPhone==="function"&&deviceIsPhone())?(_busy?250:100):(_busy?120:50);
+  /* ⛔ v16.6 v16.4 の「効果の処理中はさらに間引く」を取り消し。
+     実測で1操作あたり 1.8回 → 2.1回 と、減るどころか増えていた。
+     効果の処理は待ちを挟むので、待つたびに間隔の起点が戻り、間引きが素通りしていたためと見ている。
+     効かない仕掛けを残すと、あとで原因を追う時に邪魔になるので外す。 */
+  const _gap=(typeof deviceIsPhone==="function"&&deviceIsPhone())?100:50;
   if(now-_raLast>=_gap){
     if(_raTm){clearTimeout(_raTm);_raTm=null;}
     _raLast=now;RENDER_CNT++;renderAllNow();
