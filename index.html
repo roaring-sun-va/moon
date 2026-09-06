@@ -5190,9 +5190,14 @@ function preloadBoardImages(){
       for(const zn of ["deck","hand","shield","mana","grave","battle","hyper","gr"]){
         for(const c of (Z[zn]||[])){
           if(!c)continue;
-          try{keys.add(faceKeyOf(c));}catch(e){}
-          try{keys.add(canonicalCardKey(c.name));}catch(e){}
-          for(const u of (c.under||[])){try{keys.add(canonicalCardKey(u.name));}catch(e){}}
+          /* 🖼 v16.2 画面が使うのと同じ鍵で集める。
+             これまでは faceKeyOf／canonicalCardKey をそのまま入れていたが、
+             画像は imageKeyForName() が選んだ鍵で保存されている。
+             一致しないと1枚も読み込まれず、実測でカード104枚の盤面に対して
+             画像メモリが7枚（0.4MB）しか無かった（＝最初に名前だけで出る原因）。 */
+          try{keys.add(imageKeyForName(faceNameOf(c)));}catch(e){}
+          try{keys.add(imageKeyForName(c.name));}catch(e){}
+          for(const u of (c.under||[])){try{keys.add(imageKeyForName(u.name));}catch(e){}}
         }
       }
     }
@@ -5451,7 +5456,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.1";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.2";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
