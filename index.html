@@ -5336,7 +5336,9 @@ const imgURL=(()=>{
      ちらつかず、描き直しの負荷も要らない。 */
   const redraw=()=>{if(renderTimer)return;renderTimer=setTimeout(()=>{renderTimer=null;try{refreshLazyImages();}catch(e){}},120);};
   const pump=()=>{
-    while(active<12&&queue.length){
+    /* 🖼 v16.3 同時に読む数を12→24に。IndexedDBからの読み出しは待ち時間がほとんどで、
+       並べて投げても負荷は増えない。対戦開始直後にまとめて要る場面が速くなる。 */
+    while(active<24&&queue.length){
       const k=queue.shift();active++;
       idbGet("images",k).then(b=>{if(b&&known.has(k))put(k,b);}).finally(()=>{active--;loading.delete(k);redraw();pump();});
     }
@@ -5456,7 +5458,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.2";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.4";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8353,7 +8355,10 @@ async function loadAllImages(){
        実測で「対戦を始める前から813枚を抱えている」状態になり、
        効果が重なった瞬間の山を吸収する余裕がゼロのまま戦っていた。
        必要になった画像だけ読む形にすれば、対戦中は150枚前後で足りる。 */
-    if(!imageLoadingIsLazy()&&!deviceIsSmall())await imgURL.preloadAll();
+    /* 🖼 v16.3 起動時の全部読みを止めるのは **iPhone だけ** にする。
+       iPad は1タブに使えるメモリがずっと大きく、上限も96MBあるので、
+       今までどおり先に読んだほうが速い（「カードが出るのが遅い」の対策）。 */
+    if(!imageLoadingIsLazy()&&!deviceIsPhone())await imgURL.preloadAll();
     /* 📥 v15.97 いちど空にしてから読み直すので、盤面のぶんはここで戻す。
        カード登録の一覧を開いた時などにこの関数が走り、
        以前は直後の全部読みで一瞬で戻っていた。v15.93 でそれをやめたため、
@@ -8819,8 +8824,9 @@ function startGame(picks){
   dealPlayer(0,picks&&picks[0]||null);
   if(S.vs&&S.players[1].mainList.length)dealPlayer(1,picks&&picks[1]||null);
   S.turn=1;S.sel=null;S.msel=[];S.who=0;
-  // 📥 v15.96 この試合で使う画像を先に読む（点滅・待ち時間の対策）
-  try{if(deviceIsSmall())setTimeout(()=>{try{preloadBoardImages();}catch(e){}},0);}catch(e){}
+  /* 📥 v16.3 この試合で使う画像を先に読む。
+     配り終えた直後に呼ぶので、山札・手札・盾のぶんが最初からそろう。 */
+  try{if(deviceIsSmall())preloadBoardImages();}catch(e){}
   S.pturn=0;S.turnLock=[];ENTERED_CNT=0;S.finalRevUsed={};S.exRevPSUsed={};S.sumTurn={};S.firstSumUsed={};
   // 🔏 ゲーム開始時のセットアップ：禁断の鼓動（ctype＝禁断の鼓動）は、山札から出して
   //    バトルゾーンに置き、登録の「🔏 自分に封印n個」の数だけ封印を付ける。
@@ -14184,6 +14190,7 @@ async function runFxList(pi,list,srcCard,inPump){
   //    ツインパクトは唱えている面（face=1＝下面の呪文）で判定する。
   const _prevFromSpell=FX_FROM_SPELL;
   const _prevActor=FX_ACTOR;FX_ACTOR=pi;
+  FX_DEPTH++;   // 🖼 v16.4 効果の処理中は描き直しを間引く
   const _prevFromCre=FX_FROM_CRE;
   const _prevSpellCost=FX_SPELL_COST;
   try{
@@ -21450,7 +21457,11 @@ async function runFxList(pi,list,srcCard,inPump){
     _fxAct();   // ✨ この行の処理が終わったので演出を出す（対象を選び終えたあと）
   }
   try{stampShieldSrc(_srcLbl);}catch(e){} // 🛡 最後の効果で増えた盾にも追加元を刻む
-  }finally{FX_FROM_SPELL=_prevFromSpell;FX_FROM_CRE=_prevFromCre;FX_SPELL_COST=_prevSpellCost;FX_ACTOR=_prevActor;} // 🔮 入れ子で呼ばれても元に戻す
+  }finally{FX_FROM_SPELL=_prevFromSpell;FX_FROM_CRE=_prevFromCre;FX_SPELL_COST=_prevSpellCost;FX_ACTOR=_prevActor;
+    FX_DEPTH=Math.max(0,FX_DEPTH-1);
+    /* 🖼 v16.4 一連の効果が終わったら、間引いて飛ばした分をここで必ず描き直す。 */
+    if(FX_DEPTH===0){try{_raLast=0;renderAll();}catch(e){}}
+  } // 🔮 入れ子で呼ばれても元に戻す
 }
 /* 1️⃣ 各ターン1回（w.once）を、runWatchFx を通らない誘発の入口でも効かせる。
    鍵は runWatchFx と同じ「カード個体id:イベント名:登録の並び順」。
@@ -36686,6 +36697,7 @@ function checkLibWin(){
 /* ⚡ 描画の間引き：効果チェーン中にrenderAllが連続で呼ばれた時、50msに1回へまとめて全盤面再構築の負荷を削減。
    アイドル時（前回描画から50ms以上）は従来どおり即時描画＝通常操作の体感は不変。末尾は必ず描画される。 */
 let _raLast=0,_raTm=null;
+let FX_DEPTH=0;   // 🖼 v16.4 効果の処理が何重に走っているか（0なら処理していない）
 let RENDER_CNT=0;   // 🩺 v16.1 盤面を丸ごと描き直した回数（1回で約2800要素＋画像40枚を作り直す）
 function renderAll(){
   const now=(typeof performance!=="undefined"&&performance.now)?performance.now():Date.now();
@@ -36693,7 +36705,13 @@ function renderAll(){
      描き直しは1回あたり約2800個の要素と画像40枚ぶんの展開を作り直す、いちばん重い処理。
      「操作50〜55回で落ちる」という報告と、行動回数で決まるという感触に合う。
      間隔を倍にすれば、同じ操作でも描き直しの回数がおよそ半分になる。 */
-  const _gap=(typeof deviceIsPhone==="function"&&deviceIsPhone())?100:50;
+  /* 🖼 v16.4 効果の処理が続いている間は、さらに間隔を広げる。
+     簡単な操作の連打では95回もつのに、アタックチャンスのような連続処理では75回で落ちる、
+     という差が出ていた。1操作の中で描き直しが何回も走るためで、
+     重い場面ほど負担が大きい。処理中だけ間引き、
+     一区切りついたところで必ず1回描き直すので、途中経過は今までどおり見える。 */
+    const _busy=(typeof FX_DEPTH!=="undefined"&&FX_DEPTH>0);
+    const _gap=(typeof deviceIsPhone==="function"&&deviceIsPhone())?(_busy?250:100):(_busy?120:50);
   if(now-_raLast>=_gap){
     if(_raTm){clearTimeout(_raTm);_raTm=null;}
     _raLast=now;RENDER_CNT++;renderAllNow();return;
