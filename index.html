@@ -2144,7 +2144,6 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="file" id="artInput" accept="image/*" multiple style="display:none">
         <button class="btn small" id="btnArtImages" title="スリーブやプレイマットに使う画像を選びます。印を付けた画像はカードの一覧（デッキ編成・効果登録）に出なくなります">🎴 スリーブ・プレマ用の印</button>
         <button class="btn small" id="btnSendArtImages" title="スリーブ・プレマ用の画像を、オンラインでつながっている相手に送ります">📤 相手に送る</button>
-        <button class="btn small" id="btnCompactImages" title="登録済みの画像を横320pxに縮めて保存し直します。1枚あたりの容量が減るので、iPhoneでの再読み込み（メモリ不足）が起きにくくなります。盤面の見た目はほとんど変わりません">🗜 画像を軽くする</button>
         <button class="btn small warn" id="btnClearImages">画像を全削除</button>
         <input type="file" id="imgInput" accept="image/*" multiple style="display:none">
       </div>
@@ -5327,7 +5326,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.87";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.88";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -37065,36 +37064,6 @@ function olLeaveRoom(){
   ONLINE.conn=null;ONLINE.peer=null;
   const b=$("olLeave");if(b)b.style.display="none";
 }
-/* 🗜 v15.87 登録済みの画像をまとめて小さくする。
-   400×558（1枚およそ170KB）で持っていると、iPhoneではメモリの上限にすぐ届く。
-   横320pxにすると1枚110KBほどになり、同じ容量で1.5倍の枚数を持てる。
-   盤面ではカードを幅100px程度で描いているので、見た目はほとんど変わらない。 */
-async function compactAllImages(){
-  const keys=[...imgURL.keys()];
-  if(!keys.length){toast("🗜 登録済みの画像がありません");return;}
-  if(!await ask(`🗜 登録済みの画像 ${keys.length}枚を、横320pxに縮めて保存し直します。\n（元のサイズには戻せません。数分かかることがあります）\n続けますか？`))return;
-  let done=0,changed=0,before=0,after=0;
-  for(const k of keys){
-    try{
-      const blob=db?await idbGet("images",k):memImages.get(k);
-      if(!blob){done++;continue;}
-      before+=blob.size|0;
-      const small=await shrinkImageBlob(blob,320,0.78);
-      if(small&&small.size<(blob.size*0.9)){
-        await idbPutImageRows([{x:{key:k},b:small}]);
-        imgURL.delete(k);imgURL.addKey(k);
-        after+=small.size|0;changed++;
-      }else after+=blob.size|0;
-    }catch(e){}
-    done++;
-    if(done%20===0)toast(`🗜 画像を軽くしています… ${done}/${keys.length}`);
-  }
-  const mb=v=>`${Math.round(v/1048576*10)/10}MB`;
-  toast(`🗜 完了：${changed}枚を小さくしました（${mb(before)} → ${mb(after)}）`);
-  logOnly(`🗜 画像の圧縮：${changed}/${keys.length}枚（${mb(before)} → ${mb(after)}）`);
-  try{$("imgStatus").textContent=`登録済み画像：${imgURL.size} 枚`;}catch(e){}
-  renderAll();
-}
 async function shrinkImageBlob(blob,maxW=480,q=0.8){
   let tmpURL=null;
   try{
@@ -42981,9 +42950,10 @@ function openImageManager(){
         if(!keys.length){toast("登録画像がありません");return;}
         let before=0;for(const k of keys){const b=db?await idbGet("images",k):imgURL.getBlob(k);if(b)before+=(b.size|0);}
         const j=await askChoice(`🗜 登録画像を小さく保存し直します\n${keys.length}枚・現在の合計サイズ 約${(before/1048576).toFixed(1)}MB\n\n表示に使う横幅の上限を選んでください（元より大きくはなりません）。\n※元の画質には戻せません。画像ファイルは手元に残しておいてください。`,
-          ["高画質（横720px）","標準（横560px）※おすすめ","軽量（横420px）"]);
+          ["高画質（横720px）","標準（横560px）","軽量（横420px）",
+           "最軽量（横320px）※iPhoneで落ちるならこれ"]);
         if(j===null)return;
-        const maxW=[720,560,420][j];
+        const maxW=[720,560,420,320][j];
         let after=0,done=0,changed=0;
         for(const k of keys){
           const b=db?await idbGet("images",k):imgURL.getBlob(k);
@@ -45464,7 +45434,6 @@ $("btnManageImages").addEventListener("click",()=>{
   $("deckOlay").classList.remove("open");
   openImageManager();
 });
-{const _bc=$("btnCompactImages");if(_bc)_bc.addEventListener("click",()=>{compactAllImages().catch(e=>toast("🗜 失敗しました"));});}
 $("btnClearImages").addEventListener("click",async ()=>{
   if(!await ask("登録済みの画像をすべて削除しますか？"))return;
   if(db){await idbClear("images");await idbDel("misc","nameMap");}
