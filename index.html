@@ -1675,7 +1675,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <select id="deckSelect"></select>
         <div class="dhBtns">
           <button class="btn small" id="btnPickDeckSel" title="表紙つきの一覧から選んで、そのまま編集欄に読み込みます">🗂 一覧</button>
-          <button class="btn small" id="btnLoadDeck" title="このデッキを下の編集欄に読み込みます">✏ 編集欄</button>
+          <button class="btn small" id="btnLoadDeck" title="このデッキを下の編集欄に読み込みます" style="display:none">✏ 編集欄</button>
           <button class="btn small" id="btnViewDeck" title="デッキの中身を画像で見る">👁 見る</button>
           <button class="btn small warn" id="btnDeleteDeck" title="このデッキを削除します">🗑 削除</button>
         </div>
@@ -5181,6 +5181,19 @@ function deviceIsSmall(){
     return !!(ios||mobile||lowMem);
   }catch(e){return false;}
 }
+/* 🧹 v15.86 アプリが裏に回ったら画像のメモリを手放す。
+   iPhone は裏に回ったタブから先にメモリを取り上げるので、
+   自分から空けておくと「戻ったら再読み込みされていた」が起きにくくなる。 */
+try{
+  document.addEventListener("visibilitychange",()=>{
+    try{
+      if(document.visibilityState!=="hidden")return;
+      if(!deviceIsSmall())return;
+      const freed=imgURL.releaseAll();
+      if(freed>0)logOnly(`🧹 画面を離れたので画像メモリを解放（${Math.round(freed/1048576)}MB）`);
+    }catch(e){}
+  });
+}catch(e){}
 function imageLoadingIsLazy(){
   if(S.imageLoadMode==="lazy")return true;
   if(S.imageLoadMode==="fast")return false;
@@ -5210,7 +5223,11 @@ const imgURL=(()=>{
      512MB・2000枚まで載ってしまった。実測で 1355枚・261.6MB まで膨らんでいて、
      これが「メモリの使用量が多すぎたため再読み込みされました」の直接の原因。
      iPhone等では、モードに関係なく小さい上限を使う。 */
-  const capBytes=()=>(deviceIsSmall()||imageLoadingIsLazy())?96*1048576:512*1048576;
+  /* 🧠 v15.86 96MBでもまだ落ちたので64MBに下げる。
+     565枚・96MB まで積んだところで再読み込みが起きた（実測）。
+     画像そのもののほかに、画面に貼った分の展開後のデータ・DOM・スクリプトの分も要るので、
+     ブラウザの持ち分としては96MBでは足りない。 */
+  const capBytes=()=>(deviceIsSmall()||imageLoadingIsLazy())?64*1048576:512*1048576;
   /* 🔢 v15.85 枚数の上限は緩める。
      実測で 260枚＝45MB（1枚あたり約177KB）。サイズは96MBまで倍の余裕があるのに、
      枚数の上限が先に当たって画像を捨てていた。捨てた画像はIndexedDBから読み直すので、
@@ -5281,6 +5298,14 @@ const imgURL=(()=>{
     memCount(){return blobs.size;},        // メモリに載っている枚数
     memBytes(){return bytes;},             // メモリに載っている合計サイズ
     memCap(){return {bytes:capBytes(),count:capCount()};},
+    /* 🧹 v15.86 画面を離れた時などに、画像のメモリをまとめて解放する。
+       IndexedDB には残っているので、戻ってきたら必要なぶんだけ読み直す。 */
+    releaseAll(){
+      const before=bytes;
+      urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();
+      blobs.clear();used.clear();bytes=0;
+      return before;
+    },
   };
   return api;
 })();
@@ -5301,7 +5326,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.85";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.86";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -41602,7 +41627,15 @@ function openRevealPanel(pi,mode="reveal",opt){
   /* 🗑 v15.76 ハンデスで公開した時は、パネルから直接「捨てさせる」ができるようにする。
      opt.discardBy に捨てさせた側のプレイヤー番号を渡すと、墓地へ送ると同時に
      「手札を捨てた時」の誘発（刻解人形ジェニー・ジェーンのドローなど）が鳴る。 */
-  rvDiscardBy=(opt&&opt.discardBy!=null)?(opt.discardBy|0):null;
+  /* 🗑 v15.86 「捨てさせる」の状態は覚えておく。
+     パネルを閉じて公開ゾーンから開き直すと、行き先のボタンが戻ってしまっていた。 */
+  if(opt&&opt.discardBy!=null){
+    rvDiscardBy=opt.discardBy|0;
+    S._rvDiscardBy={pi,by:rvDiscardBy};
+  }else{
+    rvDiscardBy=(S._rvDiscardBy&&S._rvDiscardBy.pi===pi)?(S._rvDiscardBy.by|0):null;
+  }
+  try{if(!(zonesOf(pi)[mode]||[]).length){rvDiscardBy=null;S._rvDiscardBy=null;}}catch(e){}
   rvPi=pi;rvSel=null;rvMode=mode;rvMulti=new Set();
   RV_CIP_DEFER=[]; // 🔀 このパネルを開いている間、パネルから出したカードの出た時は閉じるまで保留
   renderRevealPanel();
@@ -41699,6 +41732,7 @@ function renderRevealPanel(){
       toast(`🗑 ${done}枚を捨てさせた（手札を捨てた時の効果も確認します）`);
       logOnly(`🗑 ${S.players[rvPi].label}：公開されたカード${done}枚を墓地へ（捨てさせた）`);
       const rest=rvArr();
+      if(!rest.length)S._rvDiscardBy=null;   // 🗑 v15.86 出し切ったら「捨てさせる」の状態も終わり
       if(rest.length)renderRevealPanel();else closeRevealPanel();
       renderAll();
     });
