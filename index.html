@@ -5171,6 +5171,16 @@ const S={
    「メモリの使用量が多すぎたため、このWebページが再読み込みされました」が出やすかった。
    → 画像データだけを持っておき、実際に表示を求められたキーの一時URLだけを作る。
    使い方は今までのMapと同じ（get/has/keys/size/delete/clear）。登録は setBlob（またはset）に画像データを渡す。 */
+/* 📱 v15.83 メモリの少ない端末か（設定の読み込みモードに左右されない判定）。 */
+function deviceIsSmall(){
+  try{
+    const ua=navigator.userAgent||"",p=navigator.platform||"";
+    const ios=/iPhone|iPad|iPod/i.test(ua)||(p==="MacIntel"&&navigator.maxTouchPoints>1);
+    const mobile=/Android|Mobile/i.test(ua);
+    const lowMem=Number(navigator.deviceMemory||8)<=4;
+    return !!(ios||mobile||lowMem);
+  }catch(e){return false;}
+}
 function imageLoadingIsLazy(){
   if(S.imageLoadMode==="lazy")return true;
   if(S.imageLoadMode==="fast")return false;
@@ -5195,8 +5205,13 @@ const imgURL=(()=>{
      → 合計サイズと枚数に上限を設け、古いものから捨てる。
      捨てても IndexedDB には残っているので、必要になればまた読み直すだけ。
      画面に出ているものは毎回の描画で触られるので、捨てられるのは画面外のものになる。 */
-  const capBytes=()=>imageLoadingIsLazy()?96*1048576:512*1048576;
-  const capCount=()=>imageLoadingIsLazy()?260:2000;
+  /* 🧠 v15.83 上限は「端末」で決める。
+     これまでは読み込みモード（速い/遅い）で決めていたので、iPhoneでも「速い」にすると
+     512MB・2000枚まで載ってしまった。実測で 1355枚・261.6MB まで膨らんでいて、
+     これが「メモリの使用量が多すぎたため再読み込みされました」の直接の原因。
+     iPhone等では、モードに関係なく小さい上限を使う。 */
+  const capBytes=()=>(deviceIsSmall()||imageLoadingIsLazy())?96*1048576:512*1048576;
+  const capCount=()=>(deviceIsSmall()||imageLoadingIsLazy())?260:2000;
   const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));urls.delete(k);}};
   const forget=k=>{const b=blobs.get(k);if(b)bytes-=(b.size|0);drop(k);blobs.delete(k);used.delete(k);};
   const put=(k,b)=>{
@@ -5281,7 +5296,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.82";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.84";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11804,6 +11819,8 @@ const FX_TYPES=[
   ["foeTopCostPickToDeck","🎰 相手の山札の上からn枚を表向きにし、自分はその中のコストを1つ選ぶ。選んだコストの相手クリーチャーすべてと表向きのn枚を、ランダムな順番で相手の山札の一番下に置く（7777777型）"],
   ["sealThis","🔏 このクリーチャー自身に封印をn個付ける（燃える禁断 ドルマゲドンW型／自分の山札の上から裏向きで置く）"],
   ["millSelf","🪦 自分の山札の上からn枚を墓地に置く（ドキンダムの禁炎霊型）"],
+  ["foeToDeckTop","📚 相手のクリーチャーを1体選び、相手の山札の一番上に置く（条件欄で対象を絞れる・コーライル型）"],
+  ["destroyAllCondDrawPer","💥🃏 条件に合うクリーチャーを両者すべて破壊し、こうして破壊した数だけカードを引いてもよい（炎槍と水剣の裁型）"],
   ["battleWithPick","⚔ 相手のクリーチャーを1体選び、このクリーチャーとバトルさせてもよい（条件欄で対象を絞れる・\"乱振\"舞神 G・W・D 型）"],
   ["deckLookPlayRestBottom","🎴 自分の山札の上からn枚を見る。その中から条件に合う1枚をバトルゾーンに出してもよい。残りをランダムな順番で山札の一番下に置く（\"末法\"チュリス型・条件欄に「ターン終了時に破壊」と足すと、出したカードをターンの終わりに破壊する）"],
   ["meteorBurnX","☄ メテオバーンX：このカードの下にあるドラゴンをすべて墓地に置いてもよい。置いた枚数で、9枚以上＝相手のシールドをすべて墓地／6枚以上＝相手のブロッカーをすべて破壊／3枚以上＝相手のシールドをすべてブレイク（枚数を満たすものは全部起きる・超無限神星 アポロヌス・アガペリオス型）"],
@@ -11824,7 +11841,7 @@ const FX_TYPES=[
   ["grantTurnSelf","✨ そのターン、このクリーチャー自身に能力を与える（条件欄に「ブロックされない」「スピードアタッカー」等を「／」区切りで・サイバー・A・アイアンズ型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["battleWithPick","meteorBurnX","motherSeiiki","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["foeToDeckTop","destroyAllCondDrawPer","battleWithPick","meteorBurnX","motherSeiiki","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -11833,7 +11850,7 @@ const EV_LABEL={
   selfLeave:"このカードが離れた時",myLeave:"自分のが離れた時",oppLeave:"相手のが離れた時",
   anyLeave:"どれかが離れた時",selfAtk:"攻撃する時",selfAtkC:"クリーチャーを攻撃する時",
   selfAtkEnd:"攻撃の終わりに",allyAtk:"味方が攻撃する時",anyAtk:"どれかが攻撃する時",
-  atkP:"プレイヤーを攻撃する時",onBreak:"ブレイクされた時",toGrave:"墓地に置かれた時",
+  atkP:"プレイヤーを攻撃する時",onBreak:"ブレイクされた時",allyBreak:"味方がブレイクした時",toGrave:"墓地に置かれた時",
   toGraveBattle:"バトルで墓地に置かれた時",myDestroyed:"自分のが破壊された時",pig:"破壊された時",
   turnStartMine:"自分のターンのはじめ",turnEndMine:"自分のターンの終わり",
   turnEndOpp:"相手のターンの終わり",turnEndBoth:"ターンの終わり",
@@ -13741,7 +13758,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -19058,6 +19075,61 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!_mn.length){toast("（山札がありません）");continue;}
       toast(`🪦 自分の山札の上から${_mn.length}枚を墓地に置いた`);
       logOnly(`🪦 ${S.players[pi].label}：山札から ${_mn.join("、")} を墓地へ`);
+      sfx("grave");renderAll();
+    }else if(f.t==="foeToDeckTop"){
+      /* 📚 v15.84 相手のクリーチャーを1体選び、相手の山札の一番上に置く（コーライル型）。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _fd=String(f.cond||"").trim();
+      const _pd=OZ.battle.filter(x=>{
+        const rx=getReg(x);
+        if(!rx||!isCreatureReg(rx))return false;
+        if(_fd&&!lockFilterOk(_fd,rx,x))return false;
+        return !(((rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,op));
+      });
+      if(!_pd.length){toast(`📚 選べる相手クリーチャーがいません${_fd?`（${_fd}）`:""}`);continue;}
+      const _jd=_pd.length===1?0:await pickCard("📚 相手の山札の一番上に置くクリーチャーを選択",_pd,{hint:"タップで選択"});
+      if(_jd===null)continue;
+      snap();
+      const _t=_pd[_jd],_bi=OZ.battle.findIndex(x=>x.id===_t.id);
+      if(_bi<0)continue;
+      const _cc=OZ.battle.splice(_bi,1)[0];
+      const _st=[_cc,...(_cc.under?_cc.under.splice(0):[])];
+      for(const x of _st){x.faceup=false;x.tapped=false;x.buff=null;x.mark=false;OZ.deck.unshift(x);}
+      toast(`📚 ${faceNameOf(_cc)} を相手の山札の一番上に置いた`);
+      logOnly(`📚 ${S.players[pi].label}：${S.players[op].label} の《${faceNameOf(_cc)}》を山札の一番上へ`);
+      sfx("move");renderAll();
+    }else if(f.t==="destroyAllCondDrawPer"){
+      /* 💥🃏 v15.84 条件に合うクリーチャーを両者すべて破壊し、破壊した数だけ引いてもよい
+         （炎槍と水剣の裁型）。 */
+      const _fw=String(f.cond||"").trim();
+      const _hit=[];
+      for(const pp of [0,1]){
+        for(const x of zonesOf(pp).battle){
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))continue;
+          if(_fw&&!lockFilterOk(_fw,rx,x))continue;
+          _hit.push({pp,x});
+        }
+      }
+      if(!_hit.length){toast(`💥 対象のクリーチャーがいません${_fw?`（${_fw}）`:""}`);continue;}
+      snap();
+      let _kn=0;
+      for(const h of _hit){
+        if(!zonesOf(h.pp).battle.some(y=>y.id===h.x.id))continue;
+        await destroyWithReplace(h.pp,h.x);
+        _kn++;
+      }
+      toast(`💥 ${_fw||"すべて"}のクリーチャー${_kn}体を破壊した`);
+      renderAll();
+      if(_kn>0){
+        const _y=await ask(`🃏 破壊した${_kn}体ぶん、カードを${_kn}枚引きますか？`);
+        if(_y){
+          let _dn=0;
+          for(let i=0;i<_kn&&Z.deck.length;i++){const c2=Z.deck.shift();c2.faceup=true;Z.hand.push(c2);_dn++;}
+          toast(`🃏 ${_dn}枚引いた`);
+          logOnly(`🃏 ${S.players[pi].label}：破壊した${_kn}体ぶん ${_dn}枚ドロー`);
+        }
+      }
       sfx("grave");renderAll();
     }else if(f.t==="battleWithPick"){
       /* ⚔ v15.80 相手のクリーチャーを1体選び、このクリーチャーとバトルさせてもよい（G・W・D型）。 */
@@ -26683,6 +26755,7 @@ async function execAttack(pi,id,tg){
     await breakShields(op,n,c,undefined,{skipBonus:true});   // 攻撃側は上で加算済み
     if(S.expert&&brokeN>0&&Z.battle.find(x=>x.id===id)){
       const rBB=getReg(c);
+      try{runWatchFx(pi,"allyBreak",c);}catch(e){}   // ⚡ v15.84 自分のクリーチャーがブレイクした時（ターボラッシュ型）
       const fxAll=rBB&&rBB.watchFx?rBB.watchFx.filter(w=>w.ev==="onBreak"):[];
       if(fxAll.length){
         toast(`💥 ブレイク・ボーナス！（${brokeN}回）`);
@@ -27323,6 +27396,7 @@ const TRIG_EVS=[
   ["revFinal","⚡ ファイナル革命（革命チェンジで出た時・各ターン1回・他のファイナル革命が未使用なら）"],
   ["revFinalPS","⚡ 極限ファイナル革命P'S（出た時＝どんな出方でも・このゲーム中に自分は1回だけ・任意／複数登録すればモード選択に）"],
   ["onBreak","このクリーチャーがシールドをブレイクした時（ブレイク1枚ごとに1回・ブレイクボーナス）"],
+  ["allyBreak","自分のクリーチャーがシールドをブレイクした時（条件欄に「他の」でこのクリーチャー自身を除く・ターボラッシュ型）"],
   ["pig","このクリーチャーが破壊された時"],
   ["selfLeave","このクリーチャーがバトルゾーンを離れる時（破壊・手札・マナ・山札・盾送りすべて・ヴィーナス型メテオバーン）"],
   ["toGraveBattle","このクリーチャーがバトルゾーンから墓地に置かれた時（破壊・離場で墓地へ。手札やマナ・山札から捨てられた時は発動しない）"],
@@ -41625,6 +41699,18 @@ function renderRevealPanel(){
     });
     bar.appendChild(db);
   }
+  /* 🗑 v15.83 ハンデスで公開した時は、行き先のボタンを出さない。
+     公開されたカードを選んで「捨てさせる」だけの、シンプルな形にする。 */
+  if(rvDiscardBy!=null){
+    if(!(rvSel||rvMulti.size)){
+      bar.style.display="";
+      const hint=document.createElement("span");
+      hint.style.cssText="font-size:12px;font-weight:700;align-self:center";
+      hint.textContent="公開されたカードを選んでください";
+      bar.appendChild(hint);
+    }
+    return;
+  }
   if(rvMulti.size){
     bar.style.display="";
     const info=document.createElement("span");
@@ -45015,6 +45101,21 @@ $("btnNewDeck").addEventListener("click",async ()=>{
 $("btnSaveDeck").addEventListener("click",()=>doSaveDeck(false));
 $("deckText").addEventListener("input",renderCostCurve);
 $("btnSaveUseDeck").addEventListener("click",()=>doSaveDeck(true));
+/* ✏ v15.83 デッキを選んだら、そのまま編集欄に読み込む。
+   これまでは選んだあと「✏ 編集欄」を押す必要があった。
+   押した時と同じ処理（未保存の確認などのガードも含む）を通す。 */
+{const _ds=$("deckSelect");
+ if(_ds)_ds.addEventListener("change",()=>{
+   try{
+     if(!_ds.value)return;
+     if(_ds.dataset.autoLoading==="1")return;
+     const cur=($("deckName")&&$("deckName").value||"").trim();
+     if(cur&&cur===_ds.value)return;   // すでにそのデッキを編集中なら何もしない
+     _ds.dataset.autoLoading="1";
+     const b=$("btnLoadDeck");if(b)b.click();
+     setTimeout(()=>{_ds.dataset.autoLoading="";},0);
+   }catch(e){_ds.dataset.autoLoading="";}
+ });}
 $("btnLoadDeck").addEventListener("click",async ()=>{
   const name=$("deckSelect").value;if(!name)return;
   if(DECK_DIRTY&&!await ask("未保存の変更があります。破棄して別のデッキを読み込みますか？"))return;
