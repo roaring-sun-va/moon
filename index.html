@@ -5211,7 +5211,12 @@ const imgURL=(()=>{
      これが「メモリの使用量が多すぎたため再読み込みされました」の直接の原因。
      iPhone等では、モードに関係なく小さい上限を使う。 */
   const capBytes=()=>(deviceIsSmall()||imageLoadingIsLazy())?96*1048576:512*1048576;
-  const capCount=()=>(deviceIsSmall()||imageLoadingIsLazy())?260:2000;
+  /* 🔢 v15.85 枚数の上限は緩める。
+     実測で 260枚＝45MB（1枚あたり約177KB）。サイズは96MBまで倍の余裕があるのに、
+     枚数の上限が先に当たって画像を捨てていた。捨てた画像はIndexedDBから読み直すので、
+     カードの表示に遅れが出る。**守るのはサイズの上限のほう**なので、枚数は目安まで上げる。
+     900枚でも約155MB分に相当し、96MBのほうが先に当たる。 */
+  const capCount=()=>(deviceIsSmall()||imageLoadingIsLazy())?900:2000;
   const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));urls.delete(k);}};
   const forget=k=>{const b=blobs.get(k);if(b)bytes-=(b.size|0);drop(k);blobs.delete(k);used.delete(k);};
   const put=(k,b)=>{
@@ -5296,7 +5301,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.84";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.85";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
