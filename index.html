@@ -5323,7 +5323,13 @@ const imgURL=(()=>{
       forget(k);
     }
   };
-  const redraw=()=>{if(renderTimer)return;renderTimer=setTimeout(()=>{renderTimer=null;try{renderAll();}catch(e){}try{refreshLazyImages();}catch(e){}},180);};
+  /* 🖼 v15.99 画像が届いた時は、届いた絵を貼るだけにする。
+     これまでは0.18秒ごとに盤面を丸ごと描き直していたので、
+     読み込みが終わるまでの間、間に合っていない絵が入れ替わって見えていた
+     （「交互に変わるように点滅する」）。
+     refreshLazyImages() は data-img-key を見て**その要素だけ**差し替えるので、
+     ちらつかず、描き直しの負荷も要らない。 */
+  const redraw=()=>{if(renderTimer)return;renderTimer=setTimeout(()=>{renderTimer=null;try{refreshLazyImages();}catch(e){}},120);};
   const pump=()=>{
     while(active<12&&queue.length){
       const k=queue.shift();active++;
@@ -5445,7 +5451,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.98";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.0";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8090,8 +8096,10 @@ function chatToggle(open){
 }
 const SCORE=[0,0];
 function serializeState(){return JSON.stringify({t:S.turn,w:S.who,z:S.players.map(p=>p.zones),ec:ENTERED_CNT,pt:S.pturn,wo:S._watchOnce||{},fs:S.firstSumUsed||{},su:S.sumTurn||{},nl:S.noLoseCnt||{},nlf:S.noLeaveFoeCnt||{},g1:S._once1G||{}});}
+let SNAP_CNT=0,SNAP_CHARS=0;   // 🩺 v15.100 1手ごとに必ず走る処理を数える（診断用）
 function snap(){
   const s=serializeState();
+  SNAP_CNT++;SNAP_CHARS+=(s&&s.length)|0;
   if(HIST.length&&HIST[HIST.length-1]===s)return;
   HIST.push(s);
   HIST_LOG.push(typeof GAMELOG!=="undefined"?GAMELOG.length:0);
@@ -9990,10 +9998,10 @@ function watchNamesTurnEnd(pi){
    ログは試合終了時にリプレイと一緒に保存されるので、**読み直されたあとでも後から確認できる**。 */
 let DIAG_ON=false,DIAG_TIMER=null,DIAG_LOGGED=0;
 const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
-                 nodes:0,hist:0,histBytes:0,log:0};
+                 nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0};
 function diagNow(){
   const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
-             nodes:0,hist:0,histBytes:0,log:0};
+             nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
   /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
      操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
@@ -10006,6 +10014,11 @@ function diagNow(){
     out.histBytes=hb*2;   // UTF-16
   }catch(e){}
   try{out.log=(typeof GAMELOG!=="undefined"&&GAMELOG)?GAMELOG.length:0;}catch(e){}
+  /* 🩺 v15.100 「一定数の行動で落ちる」を確かめるための数字。
+     snaps＝盤面の写しを取った回数（＝ほぼ操作の回数）。
+     snapMB＝そのたびに作った文字列の累計。作っては捨てているので今その量を持っているわけではないが、
+     ブラウザにどれだけ確保と解放をさせたかの目安になる。 */
+  try{out.snaps=SNAP_CNT|0;out.snapMB=(SNAP_CHARS*2);}catch(e){}
   try{
     out.frames=(typeof REPLAY!=="undefined"&&REPLAY.frames)?REPLAY.frames.length:0;
     let ch=0;
@@ -10028,7 +10041,7 @@ function diagNow(){
 }
 function diagTick(){
   const d=diagNow();
-  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","hist","histBytes","log"])
+  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","hist","histBytes","log","snaps","snapMB"])
     if(d[k]>(DIAG_PEAK[k]|0))DIAG_PEAK[k]=d[k];
   // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
   if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
@@ -10052,6 +10065,7 @@ function diagText(){
     `画面の要素：${d.nodes}個（最大 ${DIAG_PEAK.nodes}個）`,
     `巻き戻し履歴：${d.hist}手／${mb(d.histBytes)}（最大 ${mb(DIAG_PEAK.histBytes)}）`,
     `ログ：${d.log}行（最大 ${DIAG_PEAK.log}行）`,
+    `操作の回数：${d.snaps}回／作った写しの累計 ${mb(d.snapMB)}`,
   ].join("\n");
 }
 function diagToggle(){
@@ -43146,7 +43160,10 @@ function openImageManager(){
         const _prot=new Set(protectedImageKeys());
         let skipped=0;
         for(const k of keys){
-          if(_prot.has(k)||String(k).startsWith("__mat")){skipped++;done++;continue;}
+          /* 🖼 v15.100 スリーブ・プレマ用に登録した画像は**すべて**縮めない。
+             v15.94 では「いま選んでいる1枚」しか守っていなかったので、
+             候補として登録した他のプレマ・スリーブが縮んでいた。 */
+          if(_prot.has(k)||isSystemKey(k)||isArtKey(k)){skipped++;done++;continue;}
           const b=db?await idbGet("images",k):imgURL.getBlob(k);
           if(!b){done++;continue;}
           const nb=await shrinkImageBlob(b,maxW,0.82);
@@ -43159,6 +43176,7 @@ function openImageManager(){
           if(done%4===0){$("vStatus").textContent=`🗜 保存し直し中… ${done}/${keys.length}枚`;await new Promise(r=>setTimeout(r,0));}
         }
         $("vStatus").textContent=`🗜 完了：${changed}枚を保存し直しました（約${(before/1048576).toFixed(1)}MB → 約${(after/1048576).toFixed(1)}MB）`+(skipped?`／プレマ・スリーブ ${skipped}枚はそのまま`:"");
+        if(skipped)logOnly(`🗜 スリーブ・プレマ用の画像 ${skipped}枚は縮めませんでした`);
         toast(`🗜 ${changed}枚を軽くしました（約${(before/1048576).toFixed(1)}MB → 約${(after/1048576).toFixed(1)}MB）`);
         render();renderAll();
       };
