@@ -1757,6 +1757,14 @@ body.shake{animation:bodyShake .4s ease-out}
     </div></details>
 
     <details class="setSect"><summary>🃏 盤面・演出</summary><div class="setSectBody">
+    <div class="row" style="flex-direction:column;align-items:flex-start;gap:2px">
+      <label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="スマホで長い試合になった時、ターンの区切りで読み直しを勧めます。盤面はそのまま戻ります"><input type="checkbox" id="optReloadHint" checked> ♻ 長い試合で読み直しを勧める（スマホのみ）</label>
+      <div class="hint" style="margin:0 0 0 24px;font-size:10.5px;line-height:1.45">
+        スマホは長い試合になるとブラウザに読み直されることがあります。オンにしておくと、
+        操作が60回を超えたあたりでターンの区切りに「読み直しますか」と出ます。
+        読み直す前に盤面を保存するので、そのまま続きから遊べます。PC・iPad では何も出ません。
+      </div>
+    </div>
 <div class="row" style="flex-direction:column;align-items:flex-start;gap:2px">
       <label style="font-size:12px;display:inline-flex;align-items:center;gap:6px">💠 マナゾーンの文明表示：
         <select id="optManaCiv" style="width:auto;font-size:12px">
@@ -2144,7 +2152,6 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="file" id="artInput" accept="image/*" multiple style="display:none">
         <button class="btn small" id="btnArtImages" title="スリーブやプレイマットに使う画像を選びます。印を付けた画像はカードの一覧（デッキ編成・効果登録）に出なくなります">🎴 スリーブ・プレマ用の印</button>
         <button class="btn small" id="btnSendArtImages" title="スリーブ・プレマ用の画像を、オンラインでつながっている相手に送ります">📤 相手に送る</button>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px" title="スマホで長い試合になった時、ターンの区切りで読み直しを勧めます（盤面はそのまま戻ります）。PC・iPadでは何もしません"><input type="checkbox" id="optReloadHint" checked> ♻ 長い試合で読み直しを勧める（スマホのみ）</label>
         <button class="btn small warn" id="btnClearImages">画像を全削除</button>
         <input type="file" id="imgInput" accept="image/*" multiple style="display:none">
       </div>
@@ -5475,7 +5482,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.8";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.9";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
