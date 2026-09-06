@@ -5172,6 +5172,17 @@ const S={
    → 画像データだけを持っておき、実際に表示を求められたキーの一時URLだけを作る。
    使い方は今までのMapと同じ（get/has/keys/size/delete/clear）。登録は setBlob（またはset）に画像データを渡す。 */
 /* 📱 v15.83 メモリの少ない端末か（設定の読み込みモードに左右されない判定）。 */
+/* 📱 v15.89 iPhone か iPad かを分ける。
+   iPad は1タブに使えるメモリが iPhone よりずっと大きいので、同じ上限にする必要がない。 */
+function deviceIsPhone(){
+  try{
+    const ua=navigator.userAgent||"";
+    if(/iPad/i.test(ua))return false;
+    if((navigator.platform||"")==="MacIntel"&&navigator.maxTouchPoints>1)return false;   // iPadOS
+    if(/iPhone|iPod/i.test(ua))return true;
+    return /Android/i.test(ua)&&/Mobile/i.test(ua);
+  }catch(e){return false;}
+}
 function deviceIsSmall(){
   try{
     const ua=navigator.userAgent||"",p=navigator.platform||"";
@@ -5227,7 +5238,19 @@ const imgURL=(()=>{
      565枚・96MB まで積んだところで再読み込みが起きた（実測）。
      画像そのもののほかに、画面に貼った分の展開後のデータ・DOM・スクリプトの分も要るので、
      ブラウザの持ち分としては96MBでは足りない。 */
-  const capBytes=()=>(deviceIsSmall()||imageLoadingIsLazy())?64*1048576:512*1048576;
+  /* 🧠 v15.89 画像を320pxに圧縮したら1枚78KBになった（実測813枚で63.9MB）。
+     1枚が軽くなったぶん、上限を下げても持てる枚数はむしろ増える。
+       圧縮前：170KB × 380枚 ＝ 64MB
+       圧縮後： 78KB × 510枚 ＝ 40MB
+     体感を落とさずにブラウザへ24MB返せるので、iPhoneは40MBにする。
+     iPad はメモリの余裕が大きいので96MBのまま。 */
+  /* 🧠 v15.90 上限は64MBに戻す。
+     40MB（圧縮後で約510枚）はデッキ編集で見る枚数と際どく、捨てては読み直す往復が復活する。
+     往復のたびに新しいメモリを取っては返すので、**上限を下げるとかえって山が高くなる**。
+     いまは圧縮後1枚78KBで、64MB＝約810枚。1試合に要る150枚に対して十分な余裕があり、
+     ゲーム中はほとんど捨てずに済む。
+     減らすべきは上限ではなく「ゲームに要らない画像を抱えたままにしないこと」（下の trimToBoard）。 */
+  const capBytes=()=>deviceIsPhone()?64*1048576:((deviceIsSmall()||imageLoadingIsLazy())?96*1048576:512*1048576);
   /* 🔢 v15.85 枚数の上限は緩める。
      実測で 260枚＝45MB（1枚あたり約177KB）。サイズは96MBまで倍の余裕があるのに、
      枚数の上限が先に当たって画像を捨てていた。捨てた画像はIndexedDBから読み直すので、
@@ -5300,6 +5323,30 @@ const imgURL=(()=>{
     memCap(){return {bytes:capBytes(),count:capCount()};},
     /* 🧹 v15.86 画面を離れた時などに、画像のメモリをまとめて解放する。
        IndexedDB には残っているので、戻ってきたら必要なぶんだけ読み直す。 */
+    /* 🧹 v15.90 いま画面に出ている画像だけ残して、あとは手放す。
+       デッキ編集やカード検索を開くと数百枚を見に行くので、閉じたあともそれを抱えたままだった
+       （盤面は44枚しか出ていないのに813枚持っていた）。
+       ゲーム中の往復を増やさずに、抱えている量だけ減らせる。 */
+    /* 直近に使ったものだけ残す（DOMの属性に頼らないので、どの画面からでも呼べる）。 */
+    trimRecent(keepN){
+      const n=Math.max(1,keepN|0);
+      if(blobs.size<=n)return 0;
+      const order=[...used.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n).map(x=>x[0]);
+      return this.trimTo(order);
+    },
+    trimTo(keepKeys){
+      const keep=new Set(keepKeys||[]);
+      let freed=0;
+      for(const k of [...blobs.keys()]){
+        if(keep.has(k))continue;
+        const b=blobs.get(k);
+        freed+=(b&&b.size)|0;
+        const u=urls.get(k);if(u)URL.revokeObjectURL(u);
+        urls.delete(k);blobs.delete(k);used.delete(k);
+      }
+      bytes=Math.max(0,bytes-freed);
+      return freed;
+    },
     releaseAll(){
       const before=bytes;
       urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();
@@ -5326,7 +5373,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.88";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.91";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7976,7 +8023,10 @@ function snap(){
   if(HIST.length&&HIST[HIST.length-1]===s)return;
   HIST.push(s);
   HIST_LOG.push(typeof GAMELOG!=="undefined"?GAMELOG.length:0);
-  if(HIST.length>50){HIST.shift();HIST_LOG.shift();}
+  /* 🧹 v15.91 巻き戻し履歴は盤面まるごとの写し。カード80枚なら1手40〜60KBあり、
+     操作を重ねるほど確実に増える。iPhoneでは20手までにする（PCは50手のまま）。 */
+  {const _cap=deviceIsPhone()?20:50;
+   while(HIST.length>_cap){HIST.shift();HIST_LOG.shift();}}
   REDO.length=0;REDO_LOG.length=0;
   // 📽 リプレイ：試合中はフレームも蓄積（リプレイ再生中は記録しない・上限250）
   if(typeof MATCH_CTX!=="undefined"&&MATCH_CTX&&!REPLAY.on){
@@ -9835,10 +9885,23 @@ function watchNamesTurnEnd(pi){
    最大値（ピーク）を覚えておき、大きく伸びた時だけログに残す。
    ログは試合終了時にリプレイと一緒に保存されるので、**読み直されたあとでも後から確認できる**。 */
 let DIAG_ON=false,DIAG_TIMER=null,DIAG_LOGGED=0;
-const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0};
+const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
+                 nodes:0,hist:0,histBytes:0,log:0};
 function diagNow(){
-  const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0};
+  const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
+             nodes:0,hist:0,histBytes:0,log:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
+  /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
+     操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
+  try{out.nodes=document.getElementsByTagName("*").length;}catch(e){}
+  try{
+    out.hist=(typeof HIST!=="undefined"&&HIST)?HIST.length:0;
+    let hb=0;
+    for(const h of ((typeof HIST!=="undefined"&&HIST)||[]))if(typeof h==="string")hb+=h.length;
+    for(const h of ((typeof REDO!=="undefined"&&REDO)||[]))if(typeof h==="string")hb+=h.length;
+    out.histBytes=hb*2;   // UTF-16
+  }catch(e){}
+  try{out.log=(typeof GAMELOG!=="undefined"&&GAMELOG)?GAMELOG.length:0;}catch(e){}
   try{
     out.frames=(typeof REPLAY!=="undefined"&&REPLAY.frames)?REPLAY.frames.length:0;
     let ch=0;
@@ -9861,12 +9924,12 @@ function diagNow(){
 }
 function diagTick(){
   const d=diagNow();
-  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards"])
-    if(d[k]>DIAG_PEAK[k])DIAG_PEAK[k]=d[k];
+  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","hist","histBytes","log"])
+    if(d[k]>(DIAG_PEAK[k]|0))DIAG_PEAK[k]=d[k];
   // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
   if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
     DIAG_LOGGED=DIAG_PEAK.img;
-    try{logOnly(`🩺 診断：DOMの<img> ${d.img}（最大${DIAG_PEAK.img}）／リプレイ${d.frames}枚 ${Math.round(d.bytes/1048576)}MB（最大${Math.round(DIAG_PEAK.bytes/1048576)}MB）／画像${d.memImg}枚 ${Math.round(d.memBytes/1048576)}MB／誘発待ち${d.watch}／カード${d.cards}枚`);}catch(e){}
+    try{logOnly(`🩺 診断：DOMの<img> ${d.img}（最大${DIAG_PEAK.img}）／要素${d.nodes}個（最大${DIAG_PEAK.nodes}）／画像${d.memImg}枚 ${Math.round(d.memBytes/1048576)}MB／巻き戻し${d.hist}手 ${Math.round(d.histBytes/1048576)}MB／ログ${d.log}行／誘発待ち${d.watch}／カード${d.cards}枚`);}catch(e){}
   }
   return d;
 }
@@ -9882,6 +9945,9 @@ function diagText(){
     `画像メモリ：${d.memImg}枚／${mb(d.memBytes)}（上限 ${cap.count}枚・${mb(cap.bytes)}）`,
     `誘発待ち：${d.watch}件／出た時待ち：${d.fxQueue}件（最大 ${DIAG_PEAK.watch}件）`,
     `カード総数：${d.cards}枚（最大 ${DIAG_PEAK.cards}枚）`,
+    `画面の要素：${d.nodes}個（最大 ${DIAG_PEAK.nodes}個）`,
+    `巻き戻し履歴：${d.hist}手／${mb(d.histBytes)}（最大 ${mb(DIAG_PEAK.histBytes)}）`,
+    `ログ：${d.log}行（最大 ${DIAG_PEAK.log}行）`,
   ].join("\n");
 }
 function diagToggle(){
@@ -42273,7 +42339,20 @@ function vCardEl(name,opts={}){
   const nm=document.createElement("div");nm.className="vname";nm.textContent=name;el.appendChild(nm);
   return el;
 }
+/* 🧹 v15.90 画面に出ている <img> のぶんだけ残して、ほかの画像を手放す。
+   デッキ編集・カード検索・画像管理を閉じた時に呼ぶ。 */
+function trimImagesToScreen(){
+  try{
+    if(!deviceIsSmall())return 0;
+    /* 直近に使った150枚だけ残す。盤面に出ているのは40〜50枚なので、
+       ゲーム中に使う画像はまず残り、デッキ編集で見に行ったぶんが落ちる。 */
+    const freed=imgURL.trimRecent(150);
+    if(freed>1048576)logOnly(`🧹 使っていない画像を手放した（${Math.round(freed/1048576)}MB）`);
+    return freed;
+  }catch(e){return 0;}
+}
 function closeViewer(){
+  try{setTimeout(trimImagesToScreen,300);}catch(e){}   // 🧹 v15.90 閉じたら抱えていた画像を手放す
   VIEWER_BROWSE=false;   // 👁 閉じたら「眺めるだけ」の印は必ず外す（次の選択パネルを塞がないため）
   if(typeof B!=="undefined"&&B)B._viewerBack=null;
   if(typeof updateVPeek==="function")try{updateVPeek();}catch(e){}
