@@ -5176,6 +5176,29 @@ const S={
    iPad は1タブに使えるメモリが iPhone よりずっと大きいので、同じ上限にする必要がない。 */
 /* 🖼 v15.94 捨ててはいけない画像のキー（プレマ・スリーブ・裏面）。
    カードと違って背景に貼りっぱなしなので、手放すと画面から消えてしまう。 */
+/* 📥 v15.96 いまの試合で使う画像を先に読む。
+   両者の全ゾーン（山札・手札・盾・マナ・墓地・バトル・超次元・GR）のカードと、
+   プレマ・スリーブを対象にする。150枚ほど・圧縮後で12MB程度に収まる。
+   これで「必要になった瞬間に読みに行く待ち時間（点滅）」が無くなる。 */
+function preloadBoardImages(){
+  try{
+    if(!db)return 0;
+    const keys=new Set(protectedImageKeys());
+    for(const pi of [0,1]){
+      const Z=zonesOf(pi);
+      if(!Z)continue;
+      for(const zn of ["deck","hand","shield","mana","grave","battle","hyper","gr"]){
+        for(const c of (Z[zn]||[])){
+          if(!c)continue;
+          try{keys.add(faceKeyOf(c));}catch(e){}
+          try{keys.add(canonicalCardKey(c.name));}catch(e){}
+          for(const u of (c.under||[])){try{keys.add(canonicalCardKey(u.name));}catch(e){}}
+        }
+      }
+    }
+    return imgURL.preloadKeys([...keys]),keys.size;
+  }catch(e){return 0;}
+}
 function protectedImageKeys(){
   const out=[];
   try{
@@ -5320,6 +5343,18 @@ const imgURL=(()=>{
     setBlob(k,b){known.add(k);put(k,b);return api;},
     set(k,b){return api.setBlob(k,b);},
     getBlob(k){if(blobs.has(k))used.set(k,++useSeq);return blobs.get(k);},
+    /* 📥 v15.96 指定したキーだけ先に読む。
+       起動時の全部読み（1355枚）は重すぎ、何も読まないと必要になるたびに待たされて点滅する。
+       その試合で使うぶん（両者のデッキ＝150枚ほど）だけ先に読めば、どちらも起きない。 */
+    preloadKeys(keys){
+      if(!db)return Promise.resolve(0);
+      let asked=0;
+      for(const k of (keys||[])){
+        if(!k||blobs.has(k)||!known.has(k))continue;
+        request(k);asked++;
+      }
+      return Promise.resolve(asked);
+    },
     preloadAll(){
       if(!db)return Promise.resolve();
       return new Promise(resolve=>{
@@ -5393,7 +5428,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v15.95";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v15.97";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8286,6 +8321,11 @@ async function loadAllImages(){
        効果が重なった瞬間の山を吸収する余裕がゼロのまま戦っていた。
        必要になった画像だけ読む形にすれば、対戦中は150枚前後で足りる。 */
     if(!imageLoadingIsLazy()&&!deviceIsSmall())await imgURL.preloadAll();
+    /* 📥 v15.97 いちど空にしてから読み直すので、盤面のぶんはここで戻す。
+       カード登録の一覧を開いた時などにこの関数が走り、
+       以前は直後の全部読みで一瞬で戻っていた。v15.93 でそれをやめたため、
+       空のまま盤面に戻り、カードが一枚ずつ読み直されて点滅・入れ替わって見えていた。 */
+    if(deviceIsSmall()&&S.turn>0){try{preloadBoardImages();}catch(e){}}
   }else memImages.forEach((b,k)=>imgURL.setBlob(k,b));
   $("imgStatus").textContent=`登録済み画像：${imgURL.size} 枚`;
 }
@@ -8746,6 +8786,8 @@ function startGame(picks){
   dealPlayer(0,picks&&picks[0]||null);
   if(S.vs&&S.players[1].mainList.length)dealPlayer(1,picks&&picks[1]||null);
   S.turn=1;S.sel=null;S.msel=[];S.who=0;
+  // 📥 v15.96 この試合で使う画像を先に読む（点滅・待ち時間の対策）
+  try{if(deviceIsSmall())setTimeout(()=>{try{preloadBoardImages();}catch(e){}},0);}catch(e){}
   S.pturn=0;S.turnLock=[];ENTERED_CNT=0;S.finalRevUsed={};S.exRevPSUsed={};S.sumTurn={};S.firstSumUsed={};
   // 🔏 ゲーム開始時のセットアップ：禁断の鼓動（ctype＝禁断の鼓動）は、山札から出して
   //    バトルゾーンに置き、登録の「🔏 自分に封印n個」の数だけ封印を付ける。
@@ -9212,6 +9254,8 @@ function nextTurn(){
 }
 /* ⏳ ターン終了時誘発を直列処理。完了するまでターンは切り替わらない */
 async function runTurnEndTriggers(cur2){
+    // 📥 v15.96 次のターンで使う画像を先に読んでおく（すでに読んだものは何もしない）
+    try{if(deviceIsSmall())preloadBoardImages();}catch(e){}
     /* ⛔ v15.95 取り消し（下の説明のとおり、やめました）
        🧹 v15.92 ターンの変わり目に、抱えている画像を減らす。
        実測では、遊んでいるだけで上限いっぱい（813枚・64MB）まで膨らんでいた。
