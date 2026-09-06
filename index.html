@@ -1650,6 +1650,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <button class="btn small ghost bar-extra" id="btnLog">📜</button>
     <button class="btn small ghost bar-extra" id="btnStats" title="対戦戦績">📊</button>
     <button class="btn small bar-extra" id="btnFreePlay">踏倒:OFF</button>
+    <button class="btn small ghost bar-extra" id="btnReloadHint" title="♻ 長い試合で読み直しを勧める（スマホのみ）。押すたびに入／切が変わります。盤面はそのまま戻ります">♻</button>
     <button class="btn small ghost bar-extra" id="btnDiag" title="🩺 診断：リプレイの枚数・画面のimg数・画像メモリ・誘発待ちの数を測ります。もう一度押すと止まります（iPhoneの再読み込みの原因を調べるため）">🩺</button>
     <button class="btn small warn" id="btnUnstick" title="🚑 処理リセット：効果処理が詰まって動かない時に、ロックと待ち状態を安全に解除します（盤面は変わりません）">🚑</button>
     <button class="btn" id="btnPause" title="処理中（誤操作防止ロック）">⏸ 処理中</button>
@@ -5458,7 +5459,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.4";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.5";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9074,6 +9075,12 @@ function emergencyUnstick(){
   }
 }
 {const ub=document.getElementById("btnUnstick");if(ub)ub.addEventListener("click",emergencyUnstick);}
+{const _rh=document.getElementById("btnReloadHint");
+ if(_rh)_rh.addEventListener("click",()=>{
+   S.reloadHint=(S.reloadHint===false);
+   _rh.classList.toggle("primary",S.reloadHint!==false);
+   toast(S.reloadHint===false?"♻ 読み直しの案内を切りました":"♻ 長い試合で読み直しを勧めます（スマホのみ）");
+ });}
 {const bd=document.getElementById("btnDiag");if(bd)bd.addEventListener("click",()=>{try{diagToggle();}catch(e){}});}
 async function runLabyEnd(cur2){
   const ZL=zonesOf(cur2);
@@ -9292,7 +9299,29 @@ function nextTurn(){
   })();
 }
 /* ⏳ ターン終了時誘発を直列処理。完了するまでターンは切り替わらない */
+/* ♻ v16.5 落ちる前に、自分から安全に読み直す（スマホのみ・既定でON）。
+   突然落ちるのを、ターンの区切りでの2秒の読み直しに変えるだけ。
+   自動保存があるので盤面はそのまま戻る。
+   PC・iPadでは何もしない（落ちないため）。設定の「♻ 長い試合で読み直しを勧める」で切れる。 */
+let RELOAD_ASKED=0;
+async function maybeSuggestReload(){
+  try{
+    if(!deviceIsPhone())return;
+    if(S.reloadHint===false)return;          // 設定で切っている
+    if((S.turn|0)<=0)return;
+    const th=60;
+    if(SNAP_CNT<th)return;
+    if(SNAP_CNT-RELOAD_ASKED<30)return;      // 断られたら30操作は聞かない
+    RELOAD_ASKED=SNAP_CNT;
+    const y=await ask(`♻ 操作が${SNAP_CNT}回になりました。\nこのあたりで一度読み直すと、対戦中に落ちるのを避けられます。\n（盤面はそのまま戻ります。数秒で済みます）\n読み直しますか？`);
+    if(!y)return;
+    toast("♻ 盤面を保存して読み直します…");
+    try{await autoSaveNow();}catch(e){}
+    setTimeout(()=>location.reload(),400);
+  }catch(e){}
+}
 async function runTurnEndTriggers(cur2){
+    try{await maybeSuggestReload();}catch(e){}
     // 📥 v15.96 次のターンで使う画像を先に読んでおく（すでに読んだものは何もしない）
     try{if(deviceIsSmall())preloadBoardImages();}catch(e){}
     /* ⛔ v15.95 取り消し（下の説明のとおり、やめました）
@@ -10009,10 +10038,10 @@ function watchNamesTurnEnd(pi){
    ログは試合終了時にリプレイと一緒に保存されるので、**読み直されたあとでも後から確認できる**。 */
 let DIAG_ON=false,DIAG_TIMER=null,DIAG_LOGGED=0;
 const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
-                 nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0};
+                 nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0};
 function diagNow(){
   const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
-             nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0};
+             nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
   /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
      操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
@@ -10032,6 +10061,7 @@ function diagNow(){
   try{out.snaps=SNAP_CNT|0;out.snapMB=(SNAP_CHARS*2);}catch(e){}
   /* 🩺 v16.1 盤面を丸ごと描き直した回数。1操作で何回描き直しているかが分かる。 */
   try{out.renders=(typeof RENDER_CNT!=="undefined")?(RENDER_CNT|0):0;}catch(e){}
+  try{out.made=(typeof ELEM_MADE!=="undefined")?(ELEM_MADE|0):0;}catch(e){}
   try{
     out.frames=(typeof REPLAY!=="undefined"&&REPLAY.frames)?REPLAY.frames.length:0;
     let ch=0;
@@ -10054,7 +10084,7 @@ function diagNow(){
 }
 function diagTick(){
   const d=diagNow();
-  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","hist","histBytes","log","snaps","snapMB","renders"])
+  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","hist","histBytes","log","snaps","snapMB","renders","made"])
     if(d[k]>(DIAG_PEAK[k]|0))DIAG_PEAK[k]=d[k];
   // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
   if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
@@ -10080,6 +10110,7 @@ function diagText(){
     `ログ：${d.log}行（最大 ${DIAG_PEAK.log}行）`,
     `操作の回数：${d.snaps}回／作った写しの累計 ${mb(d.snapMB)}`,
     `描き直し：${d.renders}回（1操作あたり ${d.snaps?(d.renders/d.snaps).toFixed(1):0}回）`,
+    `作り直した要素の累計：${(d.made/10000).toFixed(1)}万個`,
   ].join("\n");
 }
 function diagToggle(){
@@ -36697,6 +36728,7 @@ function checkLibWin(){
 /* ⚡ 描画の間引き：効果チェーン中にrenderAllが連続で呼ばれた時、50msに1回へまとめて全盤面再構築の負荷を削減。
    アイドル時（前回描画から50ms以上）は従来どおり即時描画＝通常操作の体感は不変。末尾は必ず描画される。 */
 let _raLast=0,_raTm=null;
+let ELEM_MADE=0;   // 🩺 v16.5 作り直した要素の累計
 let FX_DEPTH=0;   // 🖼 v16.4 効果の処理が何重に走っているか（0なら処理していない）
 let RENDER_CNT=0;   // 🩺 v16.1 盤面を丸ごと描き直した回数（1回で約2800要素＋画像40枚を作り直す）
 function renderAll(){
@@ -36714,7 +36746,14 @@ function renderAll(){
     const _gap=(typeof deviceIsPhone==="function"&&deviceIsPhone())?(_busy?250:100):(_busy?120:50);
   if(now-_raLast>=_gap){
     if(_raTm){clearTimeout(_raTm);_raTm=null;}
-    _raLast=now;RENDER_CNT++;renderAllNow();return;
+    _raLast=now;RENDER_CNT++;renderAllNow();
+    /* 🩺 v16.5 描き直しで**作り直した要素の累計**。
+       いまの作りは毎回すべて捨てて作り直すので、1回ぶん＝そのときの要素数として数える。
+       捨てた要素は「画面の要素」には出ないため、これまで見えていなかった量。
+       この数字が大きければ「作り直しをやめる」改修（差し替え方式）に効き目があり、
+       小さければ効かないと判断できる。 */
+    try{ELEM_MADE+=document.getElementsByTagName("*").length;}catch(e){}
+    return;
   }
   if(!_raTm)_raTm=setTimeout(()=>{
     _raTm=null;
