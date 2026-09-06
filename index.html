@@ -5451,7 +5451,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.0";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.1";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9998,10 +9998,10 @@ function watchNamesTurnEnd(pi){
    ログは試合終了時にリプレイと一緒に保存されるので、**読み直されたあとでも後から確認できる**。 */
 let DIAG_ON=false,DIAG_TIMER=null,DIAG_LOGGED=0;
 const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
-                 nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0};
+                 nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0};
 function diagNow(){
   const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
-             nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0};
+             nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
   /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
      操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
@@ -10019,6 +10019,8 @@ function diagNow(){
      snapMB＝そのたびに作った文字列の累計。作っては捨てているので今その量を持っているわけではないが、
      ブラウザにどれだけ確保と解放をさせたかの目安になる。 */
   try{out.snaps=SNAP_CNT|0;out.snapMB=(SNAP_CHARS*2);}catch(e){}
+  /* 🩺 v16.1 盤面を丸ごと描き直した回数。1操作で何回描き直しているかが分かる。 */
+  try{out.renders=(typeof RENDER_CNT!=="undefined")?(RENDER_CNT|0):0;}catch(e){}
   try{
     out.frames=(typeof REPLAY!=="undefined"&&REPLAY.frames)?REPLAY.frames.length:0;
     let ch=0;
@@ -10041,7 +10043,7 @@ function diagNow(){
 }
 function diagTick(){
   const d=diagNow();
-  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","hist","histBytes","log","snaps","snapMB"])
+  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","hist","histBytes","log","snaps","snapMB","renders"])
     if(d[k]>(DIAG_PEAK[k]|0))DIAG_PEAK[k]=d[k];
   // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
   if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
@@ -10066,6 +10068,7 @@ function diagText(){
     `巻き戻し履歴：${d.hist}手／${mb(d.histBytes)}（最大 ${mb(DIAG_PEAK.histBytes)}）`,
     `ログ：${d.log}行（最大 ${DIAG_PEAK.log}行）`,
     `操作の回数：${d.snaps}回／作った写しの累計 ${mb(d.snapMB)}`,
+    `描き直し：${d.renders}回（1操作あたり ${d.snaps?(d.renders/d.snaps).toFixed(1):0}回）`,
   ].join("\n");
 }
 function diagToggle(){
@@ -36678,11 +36681,17 @@ function checkLibWin(){
 /* ⚡ 描画の間引き：効果チェーン中にrenderAllが連続で呼ばれた時、50msに1回へまとめて全盤面再構築の負荷を削減。
    アイドル時（前回描画から50ms以上）は従来どおり即時描画＝通常操作の体感は不変。末尾は必ず描画される。 */
 let _raLast=0,_raTm=null;
+let RENDER_CNT=0;   // 🩺 v16.1 盤面を丸ごと描き直した回数（1回で約2800要素＋画像40枚を作り直す）
 function renderAll(){
   const now=(typeof performance!=="undefined"&&performance.now)?performance.now():Date.now();
-  if(now-_raLast>=50){
+  /* 🖼 v16.1 iPhoneでは描き直しの間隔を広げる（50ms→100ms）。
+     描き直しは1回あたり約2800個の要素と画像40枚ぶんの展開を作り直す、いちばん重い処理。
+     「操作50〜55回で落ちる」という報告と、行動回数で決まるという感触に合う。
+     間隔を倍にすれば、同じ操作でも描き直しの回数がおよそ半分になる。 */
+  const _gap=(typeof deviceIsPhone==="function"&&deviceIsPhone())?100:50;
+  if(now-_raLast>=_gap){
     if(_raTm){clearTimeout(_raTm);_raTm=null;}
-    _raLast=now;renderAllNow();return;
+    _raLast=now;RENDER_CNT++;renderAllNow();return;
   }
   if(!_raTm)_raTm=setTimeout(()=>{
     _raTm=null;
