@@ -5503,7 +5503,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.14";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.16";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10122,11 +10122,44 @@ function watchNamesTurnEnd(pi){
    最大値（ピーク）を覚えておき、大きく伸びた時だけログに残す。
    ログは試合終了時にリプレイと一緒に保存されるので、**読み直されたあとでも後から確認できる**。 */
 let DIAG_ON=false,DIAG_TIMER=null,DIAG_LOGGED=0;
+/* 🩺 v16.15 「操作の回数だけで落ちる」（何もしないターン送りでも60回）の切り分けのため、
+   これまで測れていなかった2つを測る。どちらも数えるだけで、動きは変えない。
+
+   ① 作った札が**片づいているか**。描き直しのたびにカードの要素を作り直しているが、
+      捨てたはずの古い要素をどこかが掴んだままなら、ブラウザは解放できず積み上がる。
+      作った数と、ブラウザが実際に回収した数の差で分かる。
+      （回収は好きな時に起きるので差がそのまま残量ではない。
+        操作を重ねても回収が**まったく増えない**なら掴みっぱなし、が見どころ）
+   ② 済んでいない待ち（setTimeout／setInterval）の数。
+      待ちが残ると、その中で使っているものも一緒に残る。増え続けるなら取り消し漏れ。 */
+let EL_MADE_N=0,EL_FREED_N=0,EL_REG=null;
+try{ if(typeof FinalizationRegistry==="function")EL_REG=new FinalizationRegistry(()=>{EL_FREED_N++;}); }catch(e){}
+let TMR_LIVE=0,TMR_MADE=0;
+(function(){
+  try{
+    const _st=window.setTimeout,_ct=window.clearTimeout,_si=window.setInterval,_ci=window.clearInterval;
+    const live=new Set();
+    window.setTimeout=function(fn,ms){
+      const rest=Array.prototype.slice.call(arguments,2);
+      let id;
+      id=_st.call(window,function(){live.delete(id);TMR_LIVE=live.size;
+        if(typeof fn==="function")fn.apply(null,rest);},ms);
+      live.add(id);TMR_LIVE=live.size;TMR_MADE++;return id;
+    };
+    window.clearTimeout=function(id){live.delete(id);TMR_LIVE=live.size;return _ct.call(window,id);};
+    window.setInterval=function(fn,ms){
+      const rest=Array.prototype.slice.call(arguments,2);
+      const id=_si.call(window,function(){if(typeof fn==="function")fn.apply(null,rest);},ms);
+      live.add(id);TMR_LIVE=live.size;TMR_MADE++;return id;
+    };
+    window.clearInterval=function(id){live.delete(id);TMR_LIVE=live.size;return _ci.call(window,id);};
+  }catch(e){}
+})();
 const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
-                 nodes:0,bnodes:0,urls:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
+                 nodes:0,bnodes:0,urls:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
 function diagNow(){
   const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
-             nodes:0,bnodes:0,urls:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
+             nodes:0,bnodes:0,urls:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
   /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
      操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
@@ -10136,6 +10169,9 @@ function diagNow(){
   try{const _bd=document.getElementById("board");out.bnodes=_bd?_bd.getElementsByTagName("*").length:0;}catch(e){}
   /* 🩺 v16.14 画像用に作った一時URLの数。作りっぱなしだと画像が解放されない。 */
   try{out.urls=imgURL.liveCount();}catch(e){}
+  /* 🩺 v16.15 作った札と、そのうちブラウザが回収した数／済んでいない待ちの数 */
+  try{out.elMade=EL_MADE_N|0;out.elFreed=EL_FREED_N|0;}catch(e){}
+  try{out.tmrLive=TMR_LIVE|0;out.tmrMade=TMR_MADE|0;}catch(e){}
   try{
     out.hist=(typeof HIST!=="undefined"&&HIST)?HIST.length:0;
     let hb=0;
@@ -10178,7 +10214,7 @@ function diagNow(){
 }
 function diagTick(){
   const d=diagNow();
-  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","bnodes","urls","hist","histBytes","log","snaps","snapMB","renders","made"])
+  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","bnodes","urls","tmrLive","hist","histBytes","log","snaps","snapMB","renders","made"])
     if(d[k]>(DIAG_PEAK[k]|0))DIAG_PEAK[k]=d[k];
   // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
   if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
@@ -10207,6 +10243,8 @@ function diagText(){
     `作り直した要素の累計：${(d.made/10000).toFixed(1)}万個`,
     `画像の読み出し：${d.readN}枚／1枚あたり ${d.readN?(d.readMs/d.readN).toFixed(0):0}ms`,
     `画像の一時URL：${d.urls}本`,
+    `作った札：${d.elMade}枚（回収済み ${d.elFreed}枚／未回収 ${d.elMade-d.elFreed}枚）`,
+    `済んでいない待ち：${d.tmrLive}件（のべ ${d.tmrMade}件）`,
     `捨てた画像：上限超え ${d.dropCap||0}枚／まとめて解放 ${d.dropTrim||0}枚`,
   ].join("\n");
 }
@@ -18068,6 +18106,21 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`☄ 《${faceNameOf(srcLive)}》のメテオバーン：${dropped.map(x=>`《${x}》`).join("")} を墓地へ（進化元にした順・残り${un.length}枚）`);
         sfx("grave");
       }else{
+        /* ☄ v16.16 「場にいない＝離場時のメテオバーン（支払い済み）」と決めつけていたのを直す。
+           下のカードを墓地に置くのがメテオバーンの支払いなので、
+           **別のきっかけ**で誘発したのに、その前に自分が破壊されていたら、もう払えない。
+           例：《超神星HADES・ドラゲリオン》がいる時に《龍装鬼オブザ08号》を出し、
+           オブザの効果でHADESを破壊すると、HADESのメテオバーン（相手のクリーチャーが出た時）が
+           払えないはずなのに成立して、−9000でオブザまで破壊されていた。
+           自分が離れたことが誘発のきっかけ（selfLeave＝きっかけのカード＝自分）の時だけ、
+           離れる時に下が墓地へ行ったぶんを支払い済みとみなす。
+           きっかけが分からない時（FX_TRIGなし）は、これまでどおり離場時として扱う。 */
+        const mbSelfLeave=!FX_TRIG||!!(srcCard&&FX_TRIG.id===srcCard.id);
+        if(!mbSelfLeave){
+          toast(`☄ メテオバーン：《${srcCard?faceNameOf(srcCard):"このカード"}》はもうバトルゾーンにいないため、下のカードを置けず、この効果は発動しない`);
+          logOnly(`☄ メテオバーン不成立：《${srcCard?faceNameOf(srcCard):"?"}》は誘発の解決前にバトルゾーンを離れていた`);
+          break;
+        }
         // 離場時（selfLeave）：下敷きは既に墓地へ移動済み。退避した枚数で判定（コストは離場で支払い済み）
         const had=(srcCard&&srcCard._leaveUnder)||0;
         if(had<n){toast(`☄ メテオバーン：離れた時、下のカードが${n}枚なかったため効果は発動しない（${had}枚）`);break;}
@@ -35773,6 +35826,8 @@ function glOrderParts(c){
 function cardEl(pi,zone,c){
   const el=document.createElement("div");
   el.className="card";
+  /* 🩺 v16.15 作った札を数え、ブラウザが回収したかを見る（診断中だけ） */
+  if(DIAG_ON){EL_MADE_N++;try{if(EL_REG)EL_REG.register(el,1);}catch(e){}}
   if(HILITE_ID&&c.id===HILITE_ID){el.style.outline="4px solid #ffcf3a";el.style.outlineOffset="1px";el.style.boxShadow="0 0 18px 5px rgba(255,207,58,.8)";el.style.zIndex="30";}
   // 🛡✨ シールド・フォースで指定されている盾は水色の枠で示す（オレンジは他の印で使っている）
   if(zone==="shield"&&c.sfMark){
@@ -42108,7 +42163,7 @@ function renderRevealPanel(){
       const rest=rvArr();
       if(rest.length){
         const back=rest.splice(0);
-        for(const x of back){x.faceup=false;x.tapped=false;x.mark=false;Z2.hand.push(x);}
+        for(const x of back){x.faceup=true;x.tapped=false;x.mark=false;Z2.hand.push(x);}
         toast(`🔙 残り${back.length}枚は手札に戻しました`);
         logOnly(`🔙 ${S.players[rvPi].label}：公開の残り${back.length}枚を手札へ`);
       }
@@ -42284,6 +42339,9 @@ $("rvAllBottom").addEventListener("click",()=>rvBulk(async(Z,arr)=>{
 }));
 $("rvAllHand").addEventListener("click",()=>rvBulk((Z,arr)=>{
   const nms=arr.map(faceNameOf);
+  /* 🂠 v16.16 手札に入れるカードは必ず表向きに戻す。
+     山札を見ている時のカードは裏向きのままなので、そのまま入れると手札で裏向きになっていた。 */
+  arr.forEach(c=>{c.faceup=true;c.tapped=false;});
   Z.hand.push(...arr);
   logOnly(`📥 ${S.players[rvPi].label}：公開ゾーンの${nms.length}枚を手札へ → ${cnList(nms)}`);
 }));
