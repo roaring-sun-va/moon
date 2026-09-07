@@ -2640,7 +2640,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="条件式を満たしていない間は攻撃できない（例：墓地:ドラゴン>=5）"><span style="font-size:12px;font-weight:700">⛔ 条件を満たさないと攻撃できない</span><input type="text" id="fxCantAtkCond" placeholder="条件式（例：墓地:ドラゴン>=5・空欄＝なし）" style="width:230px"></label>
         <label><input type="checkbox" id="fxCantAtkP"> 相手プレイヤーを攻撃できない</label>
         <label title="可能なら毎ターン、相手プレイヤーを攻撃します（\"乱振\"舞神 G・W・D 型）。自分のターンのはじめに知らせます"><input type="checkbox" id="fxMustAtkP"> ⚔ 可能なら毎ターン、相手プレイヤーを攻撃する</label>
-        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="ここに書いた対象（種族など・「／」区切り）以外のクリーチャーは、出たターン攻撃できない（両者・SAでも不可）"><span style="font-size:12px;font-weight:700">🥶 常在：対象以外は出たターン攻撃不可</span><input type="text" id="fxStSickAll" list="raceList" placeholder="対象（例：スノーフェアリー／オリジン・空欄＝無効）" style="width:230px"></label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="ここに書いた対象（種族など・「／」区切り）以外のクリーチャーは、出たターン攻撃できない（両者・SAでも不可）。空欄＝この常在は無効。「なし」＝除外なしで全部が対象（右の「相手のクリーチャーにだけ効く」と組み合わせるとコスモ アンタッチャブル型）"><span style="font-size:12px;font-weight:700">🥶 常在：対象以外は出たターン攻撃不可</span><input type="text" id="fxStSickAll" list="raceList" placeholder="対象（例：スノーフェアリー／なし＝全部が対象）" style="width:230px"></label>
         <label title="オンにすると、この常在は相手のクリーチャーにだけ効きます（爆熱王DX バトガイ銀河型）。オフだと両者に効きます"><input type="checkbox" id="fxStSickFoeOnly"> 🥶 相手のクリーチャーにだけ効く</label>
         <label><input type="checkbox" id="fxAtkUn"> タップしていないクリーチャーも攻撃できる</label>
         <label><input type="checkbox" id="fxMachF"> マッハファイター（出たターンでも相手獣を攻撃可・アンタップ獣も対象）</label>
@@ -3047,7 +3047,7 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="manaAddMine">自分のマナゾーンにカードが置かれた時（条件欄に「マナ&gt;=6」等）</option>
             <option value="shieldBrokeMine">自分のクリーチャーが相手のシールドをブレイクした時（条件欄に「ブレイク数&gt;=2」等）</option>
           </select>
-          <input type="text" id="fxAwakenFilt" placeholder="出たクリーチャーの条件（例：ブロッカー／コスト4以上）" title="「自分のクリーチャーが出た時」を選んだ場合に、出たクリーチャーを絞ります。／＝AND、｜＝OR" style="font-size:12px;width:230px">
+          <input type="text" id="fxAwakenFilt" placeholder="出たクリーチャーの条件（例：他の／ブロッカー／コスト4以上）" title="「自分のクリーチャーが出た時」を選んだ場合に、出たクリーチャーを絞ります。／＝AND、｜＝OR。先頭に「他の」と書くと、このクリーチャー自身が出た時は覚醒しません（「他の」だけでも可）" style="font-size:12px;width:230px">
           <label style="font-size:12px" title="自分のターン中に出た時だけ裏返ります（ループ覚醒でよく使います）"><input type="checkbox" id="fxAwakenMyTurn"> 自分のターン中だけ</label>
           <label style="font-size:12px" title="裏返ったあとの面にもこれを入れておくと、条件を満たすたびに表と裏を行き来します（時空の戦猫ヤヌス型のループ覚醒）"><input type="checkbox" id="fxAwakenLoop"> ループ覚醒（表へも戻す）</label>
           <input type="text" id="fxAwakenCond" data-fxlabel="覚醒の条件式" placeholder="条件式（例：バトル:パワー6000以上>=1・空欄=無条件）" title="このタイミングで条件を満たしていれば、多面登録の次の面に自動で裏返ります" style="flex:1;min-width:200px">
@@ -5082,7 +5082,18 @@ function normName(s){
     .toLowerCase();
 }
 window.addEventListener("error",ev=>{
-  try{toast(`⚠ 内部エラー：${(ev.message||"不明").slice(0,80)}`);}catch(e){}
+  try{
+    /* 🕵 v16.23 別ドメインのスクリプト（PeerJSのCDN等）で起きたエラーは、ブラウザが中身を伏せて
+       message だけ "Script error." で届く。行番号もファイル名も無いので、こちらでは何も直せない。
+       それでも毎回「⚠ 内部エラー」と出ると壊れたように見えるため、記録だけ残して黙る。
+       （中身が見えるようにするため、CDNの読み込みには crossOrigin を付けてある） */
+    const _m=String(ev.message||"");
+    if(!ev.filename&&!ev.lineno&&/^script error/i.test(_m)){
+      try{logOnly("🕵 別ドメインのスクリプトでエラー（中身はブラウザが伏せています）");}catch(e){}
+      return;
+    }
+    toast(`⚠ 内部エラー：${(_m||"不明").slice(0,80)}`);
+  }catch(e){}
 });
 window.addEventListener("unhandledrejection",ev=>{
   try{toast(`⚠ 非同期エラー：${String(ev.reason&&ev.reason.message||ev.reason||"不明").slice(0,80)}`);}catch(e){}
@@ -5523,7 +5534,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.22";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.23";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6651,7 +6662,13 @@ async function checkAwaken(pi,ev,trigCard){
         // ⏳ 「自分のターン中」だけ働く覚醒（ループ覚醒でよく使う）
         if(r.awakenMyTurn&&S.who!==side)continue;
         // 🎯 出たクリーチャーを条件で絞る（マティーニ型「ブロッカーを持つコスト4以上」など）
-        const filt=String(r.awakenFilt||"").trim();
+        // 🚫 v16.23 「他の」＝このクリーチャー自身が出た時は覚醒しない（カツドン型）。
+        //    誘発（watchFx）の条件欄と同じ書き方。「他の」だけ書けば絞り込み無しで自身だけ除ける。
+        let filt=String(r.awakenFilt||"").trim();
+        if(/^他の/.test(filt)){
+          if((r.awakenEv==="allyEnter"||r.awakenEv==="allyEvo")&&trigCard&&trigCard.id===c.id)continue;
+          filt=filt.replace(/^他の/,"").trim();
+        }
         if(filt){
           if(!trigCard)continue;
           const rt=getReg(trigCard);
@@ -8310,6 +8327,11 @@ async function autoSaveNow(){
   const snap=autoSaveSnapshot();
   if(!snap)return;
   AUTOSAVE.busy=true;
+  /* 💥 v16.23 「このタブで対戦中」の印。
+     sessionStorage はタブが読み直されても残る（閉じると消える）ので、
+     起動時にこれがあれば＝同じタブが読み直された＝落ちた／自分で読み直した、と分かる。
+     手で開き直した時・別のタブでは残っていないので、そちらは今までどおり確認を出す。 */
+  try{sessionStorage.setItem("dmrvInGame","1");}catch(e){}
   try{ await idbPut("misc","autosave",JSON.stringify(snap)); AUTOSAVE.last=Date.now(); }
   catch(e){}
   finally{ AUTOSAVE.busy=false; }
@@ -8319,7 +8341,7 @@ function autoSaveSchedule(){
   if(AUTOSAVE.timer)return;
   AUTOSAVE.timer=setTimeout(()=>{AUTOSAVE.timer=null;autoSaveNow();},2500);
 }
-async function autoSaveClear(){try{if(db)await idbPut("misc","autosave","");}catch(e){}}
+async function autoSaveClear(){try{sessionStorage.removeItem("dmrvInGame");}catch(e){}try{if(db)await idbPut("misc","autosave","");}catch(e){}}
 /* 画面を離れる・隠れる時は必ず書き込む（Safariが破棄する直前の最後の砦） */
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")autoSaveNow();});
 window.addEventListener("pagehide",()=>{autoSaveNow();});
@@ -8336,12 +8358,15 @@ async function autoSaveOfferRestore(){
   if(ageMin>720){await autoSaveClear();return false;} // 12時間以上前のものは破棄
   const when=ageMin<1?"1分以内":ageMin<60?`約${ageMin}分前`:`約${Math.round(ageMin/60)}時間前`;
   /* ♻ v16.22 自分から読み直した時（♻ の案内で「はい」を押した時）は確認しない。
-     何が起きたか分かっているので、聞かずにそのまま戻すほうが速い。
-     ブラウザに勝手に落とされた時は、これまでどおり確認を出す
-     （何が起きたか分からないまま盤面が変わるのは怖いため）。 */
-  let selfReload=false;
+     💥 v16.23 ブラウザに落とされた時も確認しない。
+     落ちたあとに表紙と「復元しますか？」を通ってから盤面、では戻るのが遅すぎる。
+     同じタブが読み直された（＝sessionStorage の印が残っている）なら、対戦の続きに決まっているので直行する。
+     手で開き直した時・別のタブ・別の日の起動では印が無いので、これまでどおり確認を出す
+     （何もしていないのに古い盤面が出てくるのは怖いため）。 */
+  let selfReload=false,crashReload=false;
   try{selfReload=!!sessionStorage.getItem("dmrvSelfReload");sessionStorage.removeItem("dmrvSelfReload");}catch(e){}
-  const yes=selfReload?true:await ask(`💾 前回の対戦の途中データが見つかりました（${when}・ターン${s.turn}${s.vs?`／${s.labels&&s.labels[s.who]||""}の番`:""}）。\n盤面を復元しますか？\n\n※画面が勝手に読み直された時の復帰用です。「いいえ」を選ぶと破棄されます`);
+  try{crashReload=!selfReload&&!!sessionStorage.getItem("dmrvInGame");}catch(e){}
+  const yes=(selfReload||crashReload)?true:await ask(`💾 前回の対戦の途中データが見つかりました（${when}・ターン${s.turn}${s.vs?`／${s.labels&&s.labels[s.who]||""}の番`:""}）。\n盤面を復元しますか？\n\n※画面が勝手に読み直された時の復帰用です。「いいえ」を選ぶと破棄されます`);
   if(!yes){await autoSaveClear();return false;}
   try{
     S.turn=s.turn|0;S.who=s.who|0;S.seat=s.seat|0;S.vs=!!s.vs;
@@ -8402,6 +8427,8 @@ async function autoSaveOfferRestore(){
     logOnly(`💾 途中データから盤面を復元しました（${when}の記録・ターン${S.turn}）`);
     toast(selfReload
       ?`♻ 続きから再開しました（ターン${S.turn}）`
+      :crashReload
+      ?`💥 読み直されたので、続きから戻しました（ターン${S.turn}）\n※オンライン対戦だった場合は、もう一度接続してください`
       :`💾 盤面を復元しました（ターン${S.turn}）\n※オンライン対戦だった場合は、もう一度接続してください`);
     return true;
   }catch(e){
@@ -14371,7 +14398,7 @@ function fxBoardSig(pi){
       for(const k of ["battle","hand","mana","grave","shield","deck","gr","hyper","exile","resolve","reveal","look"]){
         const a=Zx[k];parts.push(k+(a?a.length:0));
       }
-      parts.push("B"+(Zx.battle||[]).map(x=>`${x.id}${x.tapped?"t":""}${(x.under||[]).length}`).join(","));
+      parts.push("B"+(Zx.battle||[]).map(x=>`${x.id}${x.tapped?"t":""}${x.dSw?"d":""}${(x.under||[]).length}`).join(","));
       parts.push("M"+(Zx.mana||[]).map(x=>`${x.id}${x.tapped?"t":""}`).join(","));
     }
     return parts.join("|");
@@ -14598,10 +14625,12 @@ async function runFxList(pi,list,srcCard,inPump){
     }
     if(f.cond&&!FILT_COND.has(f.t)&&!(typeof f.t==="string"&&f.t.startsWith("sp:"))){
       const _condStr=String(f.cond).trim();
-      const _parseable=/(?:<=|>=|<|>|＝|=|以上|以下)/.test(_condStr)||/^(?:自分|相手)?(?:の)?(?:マナ|墓地|手札|盾|シールド|バトル|山札|革命|超次元|GR|デッキ)/.test(_condStr);
+      /* 🅳 v16.23 「Dスイッチ前／中」「マナドライブ」は枚数の比較にならないが、zoneCondOk が
+         真偽に置き換えられる書き方。これまで「ゾーン条件式ではない」と見なして素通ししていた。 */
+      const _parseable=/(?:<=|>=|<|>|＝|=|以上|以下)/.test(_condStr)||/Dスイッチ|マナドライブ/.test(_condStr)||/^(?:自分|相手)?(?:の)?(?:マナ|墓地|手札|盾|シールド|バトル|山札|革命|超次元|GR|デッキ)/.test(_condStr);
       if(!_parseable){
         toast(`💡 条件「${_condStr}」はゾーン条件式ではないため無視して実行します（この効果の条件欄は発動条件用です。対象の絞り込みは対応した効果で）`);
-      }else if(!zoneCondOk(f.cond,pi)){
+      }else if(!zoneCondOk(f.cond,pi,srcCard)){
         toast(`条件未達（${f.cond}）：効果をスキップ`);
         continue;
       }
@@ -25585,8 +25614,10 @@ async function startAttack(pi,id){
         }
         if(sickSrc)break;
       }
-      if(sickSrc&&(!sickFoeOnly||sickPi!==pi)&&c.bornTurn===S.turn&&!(rA&&lockFilterOk(sickFilt,rA,c))){
-        const go=await ask(`🥶 ${faceNameOf(sickSrc)} の常在効果：${sickFilt}以外のクリーチャーは、バトルゾーンに出たターン攻撃できません。\n《${faceNameOf(c)}》はこのターンに出ています。それでも攻撃しますか？（通常は「いいえ」）`);
+      // 🥶 v16.23 対象欄に「なし」と書くと除外なし＝全部が対象（コスモアンタッチャブル型「相手のクリーチャーは出たターン攻撃できない」）
+      const _sickNone=/^(なし|無し|-|―|ー)$/.test(sickFilt);
+      if(sickSrc&&(!sickFoeOnly||sickPi!==pi)&&c.bornTurn===S.turn&&(_sickNone||!(rA&&lockFilterOk(sickFilt,rA,c)))){
+        const go=await ask(`🥶 ${faceNameOf(sickSrc)} の常在効果：${_sickNone?`${sickFoeOnly?"相手の":""}クリーチャーは`:`${sickFilt}以外のクリーチャーは`}、バトルゾーンに出たターン攻撃できません。\n《${faceNameOf(c)}》はこのターンに出ています。それでも攻撃しますか？（通常は「いいえ」）`);
         if(!go){renderAll();return;}
       }
     }
@@ -37219,6 +37250,7 @@ async function loadPeerJS(){
     await new Promise((res,rej)=>{
       const sc=document.createElement("script");
       sc.src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js";
+      sc.crossOrigin="anonymous";   // 🕵 v16.23 これが無いと、PeerJS内で起きたエラーが "Script error." としか届かない
       sc.onload=res;sc.onerror=rej;
       document.head.appendChild(sc);
     });
@@ -49003,10 +49035,10 @@ function splashRun(off){
   db=await openDB();
   // ⚡ 表紙は設定を読んでから。読めない時は出す側に倒す
   /* ♻ v16.22 自分から読み直した時は表紙を出さない。
-     読み直しが日常になるので、そのたびに3.4秒の表紙を見るのは重い。
+     💥 v16.23 落ちて読み直された時も出さない（対戦の続きに戻るのに3.4秒待たされるため）。
      設定の「起動時の表紙」はそのまま（手で開いた時には出る）。 */
   let _selfReloadBoot=false;
-  try{_selfReloadBoot=!!sessionStorage.getItem("dmrvSelfReload");}catch(e){}
+  try{_selfReloadBoot=!!sessionStorage.getItem("dmrvSelfReload")||!!sessionStorage.getItem("dmrvInGame");}catch(e){}
   try{splashRun(_selfReloadBoot||(db?await idbGet("misc","splashOff"):false));}catch(e){try{splashRun(_selfReloadBoot);}catch(e2){}}
   {const ilm=db?await idbGet("misc","imageLoadMode"):null;if(ilm)S.imageLoadMode=ilm;}
   {const so=db?await idbGet("misc","splashOff"):null;if(so!=null)S.splashOff=!!so;}
