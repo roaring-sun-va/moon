@@ -5503,7 +5503,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.13";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.14";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10123,14 +10123,19 @@ function watchNamesTurnEnd(pi){
    ログは試合終了時にリプレイと一緒に保存されるので、**読み直されたあとでも後から確認できる**。 */
 let DIAG_ON=false,DIAG_TIMER=null,DIAG_LOGGED=0;
 const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
-                 nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
+                 nodes:0,bnodes:0,urls:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
 function diagNow(){
   const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
-             nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
+             nodes:0,bnodes:0,urls:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
   /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
      操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
   try{out.nodes=document.getElementsByTagName("*").length;}catch(e){}
+  /* 🩺 v16.14 そのうち**描き直しで作り直している分**（盤面）を分けて出す。
+     残りは設定パネル・効果登録・ビューアなど、最初から置いてあって触っていない分。 */
+  try{const _bd=document.getElementById("board");out.bnodes=_bd?_bd.getElementsByTagName("*").length:0;}catch(e){}
+  /* 🩺 v16.14 画像用に作った一時URLの数。作りっぱなしだと画像が解放されない。 */
+  try{out.urls=imgURL.liveCount();}catch(e){}
   try{
     out.hist=(typeof HIST!=="undefined"&&HIST)?HIST.length:0;
     let hb=0;
@@ -10173,7 +10178,7 @@ function diagNow(){
 }
 function diagTick(){
   const d=diagNow();
-  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","hist","histBytes","log","snaps","snapMB","renders","made"])
+  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","bnodes","urls","hist","histBytes","log","snaps","snapMB","renders","made"])
     if(d[k]>(DIAG_PEAK[k]|0))DIAG_PEAK[k]=d[k];
   // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
   if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
@@ -10194,13 +10199,14 @@ function diagText(){
     `画像メモリ：${d.memImg}枚／${mb(d.memBytes)}（上限 ${cap.count}枚・${mb(cap.bytes)}）`,
     `誘発待ち：${d.watch}件／出た時待ち：${d.fxQueue}件（最大 ${DIAG_PEAK.watch}件）`,
     `カード総数：${d.cards}枚（最大 ${DIAG_PEAK.cards}枚）`,
-    `画面の要素：${d.nodes}個（最大 ${DIAG_PEAK.nodes}個）`,
+    `画面の要素：${d.nodes}個（最大 ${DIAG_PEAK.nodes}個）／うち盤面 ${d.bnodes}個`,
     `巻き戻し履歴：${d.hist}手／${mb(d.histBytes)}（最大 ${mb(DIAG_PEAK.histBytes)}）`,
     `ログ：${d.log}行（最大 ${DIAG_PEAK.log}行）`,
     `操作の回数：${d.snaps}回／作った写しの累計 ${mb(d.snapMB)}`,
     `描き直し：${d.renders}回（1操作あたり ${d.snaps?(d.renders/d.snaps).toFixed(1):0}回）`,
     `作り直した要素の累計：${(d.made/10000).toFixed(1)}万個`,
     `画像の読み出し：${d.readN}枚／1枚あたり ${d.readN?(d.readMs/d.readN).toFixed(0):0}ms`,
+    `画像の一時URL：${d.urls}本`,
     `捨てた画像：上限超え ${d.dropCap||0}枚／まとめて解放 ${d.dropTrim||0}枚`,
   ].join("\n");
 }
@@ -36855,7 +36861,14 @@ function renderAll(){
        捨てた要素は「画面の要素」には出ないため、これまで見えていなかった量。
        この数字が大きければ「作り直しをやめる」改修（差し替え方式）に効き目があり、
        小さければ効かないと判断できる。 */
-    try{ELEM_MADE+=document.getElementsByTagName("*").length;}catch(e){}
+    /* 🩺 v16.14 数え方を直しました。
+       v16.5 はここで **画面全体の要素数**（約2900個）を足していましたが、
+       描き直しで作り直しているのは `#board` の中だけです。
+       実測すると盤面は266個ほどで、残りの2600個あまりは設定パネル・効果登録・
+       ビューアなど、最初から置いてあって作り直していない部分でした。
+       つまり「1回2900個を捨てて作り直している」は数え方の誤りで、
+       実際の作り直しは**10分の1ほど**です。ここを直さないと改修の効き目を見誤ります。 */
+    try{const _bd=document.getElementById("board");ELEM_MADE+=_bd?_bd.getElementsByTagName("*").length:0;}catch(e){}
     return;
   }
   if(!_raTm)_raTm=setTimeout(()=>{
