@@ -5431,10 +5431,16 @@ const imgURL=(()=>{
                  次のカーソルでは条件が成立せず、結局最後まで読んでしまっていた
                  （実測：768枚を残しつつ595枚を読んでは捨てていた）。
                  これから入れる1枚を足したら超えるか、で見れば1枚も無駄にならない。 */
-              const sz=(c.value&&c.value.size)|0;
-              if(bytes+sz>capBytes()||blobs.size+1>capCount()){resolve();return;}
+              const sz=isArtKey(c.key)?0:((c.value&&c.value.size)|0);
+              if(sz&&(bytes+sz>capBytes()||blobs.size+1>capCount())){resolve();return;}
             }
-            if(c){if(known.has(c.key))put(c.key,c.value);c.continue();}else resolve();};
+            /* 🎴 v16.17 スリーブ・プレマの控え（__art__）は、ここではまとめて読まない。
+               名前が並び順の先頭近くに来るうえ1枚が大きいため、実測で
+               **106枚で63.2MB（1枚あたり約600KB）**を占め、
+               カードの画像がほとんど載らないまま上限で打ち切られていた。
+               いま使っているスリーブ・プレマは protectedImageKeys() で別に読んで固定するので、
+               控えの分をここで抱える必要はない。必要になった時に1枚ずつ読む。 */
+            if(c){if(known.has(c.key)&&!isArtKey(c.key))put(c.key,c.value);c.continue();}else resolve();};
           req.onerror=()=>resolve();
         }catch(e){resolve();}
       });
@@ -5443,6 +5449,10 @@ const imgURL=(()=>{
     clear(){known.clear();loading.clear();queue.length=0;urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();blobs.clear();used.clear();bytes=0;},
     forEach(fn){[...blobs.keys()].forEach(k=>fn(api.get(k),k));},
     liveCount(){return urls.size;},        // 実際に一時URLを作った枚数
+    /* 🎴 v16.17 メモリに載っている画像のうち、スリーブ・プレマの控えが占めている分 */
+    breakdown(){let artN=0,artBytes=0;
+      try{for(const [k,b] of blobs){if(isArtKey(k)){artN++;artBytes+=(b&&b.size)|0;}}}catch(e){}
+      return {artN,artBytes};},
     memCount(){return blobs.size;},        // メモリに載っている枚数
     memBytes(){return bytes;},             // メモリに載っている合計サイズ
     memCap(){return {bytes:capBytes(),count:capCount()};},
@@ -5503,7 +5513,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.16";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.17";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10156,10 +10166,10 @@ let TMR_LIVE=0,TMR_MADE=0;
   }catch(e){}
 })();
 const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
-                 nodes:0,bnodes:0,urls:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
+                 nodes:0,bnodes:0,urls:0,artN:0,artBytes:0,decMB:0,decW:0,decH:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
 function diagNow(){
   const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
-             nodes:0,bnodes:0,urls:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
+             nodes:0,bnodes:0,urls:0,artN:0,artBytes:0,decMB:0,decW:0,decH:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
   /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
      操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
@@ -10169,6 +10179,22 @@ function diagNow(){
   try{const _bd=document.getElementById("board");out.bnodes=_bd?_bd.getElementsByTagName("*").length:0;}catch(e){}
   /* 🩺 v16.14 画像用に作った一時URLの数。作りっぱなしだと画像が解放されない。 */
   try{out.urls=imgURL.liveCount();}catch(e){}
+  /* 🩺 v16.17 画像メモリのうち、スリーブ・プレマの控えが占めている分 */
+  try{const b=imgURL.breakdown();out.artN=b.artN|0;out.artBytes=b.artBytes|0;}catch(e){}
+  /* 🩺 v16.17 画面に貼った画像の**展開後**の大きさ（推定）。
+     メモリに載っている数字は縮めたファイルの大きさで、
+     画面に貼ると 横×縦×4バイト に展開される。ここが桁違いだと、
+     ファイルが小さくてもブラウザの持ち分を食い尽くす。 */
+  try{
+    let px=0,mw=0,mh=0;
+    for(const im of document.getElementsByTagName("img")){
+      const w=im.naturalWidth|0,h=im.naturalHeight|0;
+      if(!w||!h)continue;
+      px+=w*h;
+      if(w*h>mw*mh){mw=w;mh=h;}
+    }
+    out.decMB=+(px*4/1048576).toFixed(1);out.decW=mw;out.decH=mh;
+  }catch(e){}
   /* 🩺 v16.15 作った札と、そのうちブラウザが回収した数／済んでいない待ちの数 */
   try{out.elMade=EL_MADE_N|0;out.elFreed=EL_FREED_N|0;}catch(e){}
   try{out.tmrLive=TMR_LIVE|0;out.tmrMade=TMR_MADE|0;}catch(e){}
@@ -10214,7 +10240,7 @@ function diagNow(){
 }
 function diagTick(){
   const d=diagNow();
-  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","bnodes","urls","tmrLive","hist","histBytes","log","snaps","snapMB","renders","made"])
+  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","bnodes","urls","artN","artBytes","decMB","tmrLive","hist","histBytes","log","snaps","snapMB","renders","made"])
     if(d[k]>(DIAG_PEAK[k]|0))DIAG_PEAK[k]=d[k];
   // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
   if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
@@ -10242,7 +10268,8 @@ function diagText(){
     `描き直し：${d.renders}回（1操作あたり ${d.snaps?(d.renders/d.snaps).toFixed(1):0}回）`,
     `作り直した要素の累計：${(d.made/10000).toFixed(1)}万個`,
     `画像の読み出し：${d.readN}枚／1枚あたり ${d.readN?(d.readMs/d.readN).toFixed(0):0}ms`,
-    `画像の一時URL：${d.urls}本`,
+    `画像の一時URL：${d.urls}本／うちスリーブ・プレマ ${d.artN}枚・${(d.artBytes/1048576).toFixed(1)}MB`,
+    `画面の画像の展開後：推定 ${d.decMB}MB（いちばん大きい絵 ${d.decW}×${d.decH}）`,
     `作った札：${d.elMade}枚（回収済み ${d.elFreed}枚／未回収 ${d.elMade-d.elFreed}枚）`,
     `済んでいない待ち：${d.tmrLive}件（のべ ${d.tmrMade}件）`,
     `捨てた画像：上限超え ${d.dropCap||0}枚／まとめて解放 ${d.dropTrim||0}枚`,
