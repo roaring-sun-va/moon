@@ -5321,6 +5321,7 @@ const imgURL=(()=>{
      900枚でも約155MB分に相当し、96MBのほうが先に当たる。 */
   const capCount=()=>(deviceIsSmall()||imageLoadingIsLazy())?900:2000;
   const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));urls.delete(k);}};
+  let DROP_CAP=0,DROP_TRIM=0;   // 🩺 v16.10 捨てた内訳（上限超え／まとめて解放）
   const forget=k=>{const b=blobs.get(k);if(b)bytes-=(b.size|0);drop(k);blobs.delete(k);used.delete(k);};
   const put=(k,b)=>{
     if(blobs.has(k))forget(k);
@@ -5341,7 +5342,7 @@ const imgURL=(()=>{
     for(const [k] of order){
       if(bytes<=cb&&blobs.size<=cn)break;
       if(pinned.has(k))continue;
-      forget(k);
+      DROP_CAP++;forget(k);
     }
   };
   /* 🖼 v15.99 画像が届いた時は、届いた絵を貼るだけにする。
@@ -5426,6 +5427,7 @@ const imgURL=(()=>{
     memCount(){return blobs.size;},        // メモリに載っている枚数
     memBytes(){return bytes;},             // メモリに載っている合計サイズ
     memCap(){return {bytes:capBytes(),count:capCount()};},
+    drops(){return {cap:DROP_CAP,trim:DROP_TRIM};},
     /* 🧹 v15.86 画面を離れた時などに、画像のメモリをまとめて解放する。
        IndexedDB には残っているので、戻ってきたら必要なぶんだけ読み直す。 */
     /* 🧹 v15.90 いま画面に出ている画像だけ残して、あとは手放す。
@@ -5451,7 +5453,7 @@ const imgURL=(()=>{
         const b=blobs.get(k);
         freed+=(b&&b.size)|0;
         const u=urls.get(k);if(u)URL.revokeObjectURL(u);
-        urls.delete(k);blobs.delete(k);used.delete(k);
+        urls.delete(k);blobs.delete(k);used.delete(k);DROP_TRIM++;
       }
       bytes=Math.max(0,bytes-freed);
       return freed;
@@ -5482,7 +5484,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.9";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.10";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10088,10 +10090,10 @@ function watchNamesTurnEnd(pi){
    ログは試合終了時にリプレイと一緒に保存されるので、**読み直されたあとでも後から確認できる**。 */
 let DIAG_ON=false,DIAG_TIMER=null,DIAG_LOGGED=0;
 const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
-                 nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0};
+                 nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
 function diagNow(){
   const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
-             nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0};
+             nodes:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
   /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
      操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
@@ -10113,6 +10115,9 @@ function diagNow(){
   try{out.renders=(typeof RENDER_CNT!=="undefined")?(RENDER_CNT|0):0;}catch(e){}
   try{out.made=(typeof ELEM_MADE!=="undefined")?(ELEM_MADE|0):0;}catch(e){}
   try{out.readN=IMG_READ_N|0;out.readMs=Math.round(IMG_READ_MS);}catch(e){}
+  /* 🩺 v16.10 読めたのにメモリに無い、の原因を切り分ける。
+     上限超え＝入れすぎて古いものを捨てた。まとめて解放＝画面を離れた時などに手放した。 */
+  try{const dr=imgURL.drops();out.dropCap=dr.cap|0;out.dropTrim=dr.trim|0;}catch(e){}
   try{
     out.frames=(typeof REPLAY!=="undefined"&&REPLAY.frames)?REPLAY.frames.length:0;
     let ch=0;
@@ -10163,6 +10168,7 @@ function diagText(){
     `描き直し：${d.renders}回（1操作あたり ${d.snaps?(d.renders/d.snaps).toFixed(1):0}回）`,
     `作り直した要素の累計：${(d.made/10000).toFixed(1)}万個`,
     `画像の読み出し：${d.readN}枚／1枚あたり ${d.readN?(d.readMs/d.readN).toFixed(0):0}ms`,
+    `捨てた画像：上限超え ${d.dropCap||0}枚／まとめて解放 ${d.dropTrim||0}枚`,
   ].join("\n");
 }
 function diagToggle(){
