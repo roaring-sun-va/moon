@@ -5449,6 +5449,8 @@ const imgURL=(()=>{
     clear(){known.clear();loading.clear();queue.length=0;urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();blobs.clear();used.clear();bytes=0;},
     forEach(fn){[...blobs.keys()].forEach(k=>fn(api.get(k),k));},
     liveCount(){return urls.size;},        // 実際に一時URLを作った枚数
+    /* 🩺 v16.18 一時URLから元の名前を引く（いちばん大きい絵がどれか出すため） */
+    keyOfUrl(u){try{for(const [k,v] of urls)if(v===u)return k;}catch(e){}return "";},
     /* 🎴 v16.17 メモリに載っている画像のうち、スリーブ・プレマの控えが占めている分 */
     breakdown(){let artN=0,artBytes=0;
       try{for(const [k,b] of blobs){if(isArtKey(k)){artN++;artBytes+=(b&&b.size)|0;}}}catch(e){}
@@ -5513,7 +5515,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.17";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.18";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10166,10 +10168,10 @@ let TMR_LIVE=0,TMR_MADE=0;
   }catch(e){}
 })();
 const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
-                 nodes:0,bnodes:0,urls:0,artN:0,artBytes:0,decMB:0,decW:0,decH:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
+                 nodes:0,bnodes:0,urls:0,artN:0,artBytes:0,decMB:0,decUniqMB:0,decUniqN:0,decW:0,decH:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
 function diagNow(){
   const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
-             nodes:0,bnodes:0,urls:0,artN:0,artBytes:0,decMB:0,decW:0,decH:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
+             nodes:0,bnodes:0,urls:0,artN:0,artBytes:0,decMB:0,decUniqMB:0,decUniqN:0,decW:0,decH:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
   /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
      操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
@@ -10186,14 +10188,24 @@ function diagNow(){
      画面に貼ると 横×縦×4バイト に展開される。ここが桁違いだと、
      ファイルが小さくてもブラウザの持ち分を食い尽くす。 */
   try{
-    let px=0,mw=0,mh=0;
+    /* 🩺 v16.18 同じ絵は何度貼っても展開は1回なので、**重複を除いた分**も出す。
+       v16.17 の数字は、相手の手札10枚や盾に同じスリーブを貼っている分を数え直していた。
+       ブラウザが実際に持つのは重複を除いたほうなので、こちらで判断する。 */
+    let px=0,mw=0,mh=0,mkey="";
+    const seen=new Map();
     for(const im of document.getElementsByTagName("img")){
       const w=im.naturalWidth|0,h=im.naturalHeight|0;
       if(!w||!h)continue;
       px+=w*h;
-      if(w*h>mw*mh){mw=w;mh=h;}
+      const src=im.currentSrc||im.src||"";
+      if(src&&!seen.has(src))seen.set(src,w*h);
+      if(w*h>mw*mh){mw=w;mh=h;try{mkey=imgURL.keyOfUrl(src)||"";}catch(e){mkey="";}}
     }
-    out.decMB=+(px*4/1048576).toFixed(1);out.decW=mw;out.decH=mh;
+    let upx=0;for(const v of seen.values())upx+=v;
+    out.decMB=+(px*4/1048576).toFixed(1);
+    out.decUniqMB=+(upx*4/1048576).toFixed(1);
+    out.decUniqN=seen.size;
+    out.decW=mw;out.decH=mh;out.decKey=mkey;
   }catch(e){}
   /* 🩺 v16.15 作った札と、そのうちブラウザが回収した数／済んでいない待ちの数 */
   try{out.elMade=EL_MADE_N|0;out.elFreed=EL_FREED_N|0;}catch(e){}
@@ -10240,7 +10252,7 @@ function diagNow(){
 }
 function diagTick(){
   const d=diagNow();
-  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","bnodes","urls","artN","artBytes","decMB","tmrLive","hist","histBytes","log","snaps","snapMB","renders","made"])
+  for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","bnodes","urls","artN","artBytes","decMB","decUniqMB","tmrLive","hist","histBytes","log","snaps","snapMB","renders","made"])
     if(d[k]>(DIAG_PEAK[k]|0))DIAG_PEAK[k]=d[k];
   // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
   if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
@@ -10269,7 +10281,8 @@ function diagText(){
     `作り直した要素の累計：${(d.made/10000).toFixed(1)}万個`,
     `画像の読み出し：${d.readN}枚／1枚あたり ${d.readN?(d.readMs/d.readN).toFixed(0):0}ms`,
     `画像の一時URL：${d.urls}本／うちスリーブ・プレマ ${d.artN}枚・${(d.artBytes/1048576).toFixed(1)}MB`,
-    `画面の画像の展開後：推定 ${d.decMB}MB（いちばん大きい絵 ${d.decW}×${d.decH}）`,
+    `画面の画像の展開後：重複を除いて ${d.decUniqMB}MB（${d.decUniqN}種類／貼った数で数えると ${d.decMB}MB）`,
+    `いちばん大きい絵：${d.decW}×${d.decH}${d.decKey?`《${dispName.get(d.decKey)||d.decKey}》`:""}`,
     `作った札：${d.elMade}枚（回収済み ${d.elFreed}枚／未回収 ${d.elMade-d.elFreed}枚）`,
     `済んでいない待ち：${d.tmrLive}件（のべ ${d.tmrMade}件）`,
     `捨てた画像：上限超え ${d.dropCap||0}枚／まとめて解放 ${d.dropTrim||0}枚`,
