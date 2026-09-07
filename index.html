@@ -1768,7 +1768,8 @@ body.shake{animation:bodyShake .4s ease-out}
       <label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="スマホで長い試合になった時、ターンの区切りで読み直しを勧めます。盤面はそのまま戻ります"><input type="checkbox" id="optReloadHint" checked> ♻ 長い試合で読み直しを勧める（スマホのみ）</label>
       <div class="hint" style="margin:0 0 0 24px;font-size:10.5px;line-height:1.45">
         スマホは長い試合になるとブラウザに読み直されることがあります。オンにしておくと、
-        操作が60回を超えたあたりでターンの区切りに「読み直しますか」と出ます。
+        操作が一定回数を超えたあたりで、ターンの区切りに「読み直しますか」と出ます
+        （ホーム画面の単独アプリは60回、Safariで開いている時は80回）。
         読み直す前に盤面を保存するので、そのまま続きから遊べます。PC・iPad では何も出ません。
       </div>
     </div>
@@ -5522,7 +5523,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.19";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.22";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8334,7 +8335,13 @@ async function autoSaveOfferRestore(){
   const ageMin=Math.round((Date.now()-(s.at||0))/60000);
   if(ageMin>720){await autoSaveClear();return false;} // 12時間以上前のものは破棄
   const when=ageMin<1?"1分以内":ageMin<60?`約${ageMin}分前`:`約${Math.round(ageMin/60)}時間前`;
-  const yes=await ask(`💾 前回の対戦の途中データが見つかりました（${when}・ターン${s.turn}${s.vs?`／${s.labels&&s.labels[s.who]||""}の番`:""}）。\n盤面を復元しますか？\n\n※画面が勝手に読み直された時の復帰用です。「いいえ」を選ぶと破棄されます`);
+  /* ♻ v16.22 自分から読み直した時（♻ の案内で「はい」を押した時）は確認しない。
+     何が起きたか分かっているので、聞かずにそのまま戻すほうが速い。
+     ブラウザに勝手に落とされた時は、これまでどおり確認を出す
+     （何が起きたか分からないまま盤面が変わるのは怖いため）。 */
+  let selfReload=false;
+  try{selfReload=!!sessionStorage.getItem("dmrvSelfReload");sessionStorage.removeItem("dmrvSelfReload");}catch(e){}
+  const yes=selfReload?true:await ask(`💾 前回の対戦の途中データが見つかりました（${when}・ターン${s.turn}${s.vs?`／${s.labels&&s.labels[s.who]||""}の番`:""}）。\n盤面を復元しますか？\n\n※画面が勝手に読み直された時の復帰用です。「いいえ」を選ぶと破棄されます`);
   if(!yes){await autoSaveClear();return false;}
   try{
     S.turn=s.turn|0;S.who=s.who|0;S.seat=s.seat|0;S.vs=!!s.vs;
@@ -8393,7 +8400,9 @@ async function autoSaveOfferRestore(){
       logOnly("⚔ 保留中の攻撃を復元しました");
     }
     logOnly(`💾 途中データから盤面を復元しました（${when}の記録・ターン${S.turn}）`);
-    toast(`💾 盤面を復元しました（ターン${S.turn}）\n※オンライン対戦だった場合は、もう一度接続してください`);
+    toast(selfReload
+      ?`♻ 続きから再開しました（ターン${S.turn}）`
+      :`💾 盤面を復元しました（ターン${S.turn}）\n※オンライン対戦だった場合は、もう一度接続してください`);
     return true;
   }catch(e){
     console.warn("restore failed",e);
@@ -8484,6 +8493,17 @@ function sleevePosY(pi){
 /* 📱 画面の上下の「帯」（時計・電波／ホームバー）の高さを実測して CSS 変数に入れる。
    ホーム画面アプリ＋black-translucent だと env(safe-area-inset-top) が 0 と返ることがあり、
    CSS だけでは避けられないため、standalone の時は端末の縦の長さから見当を付けて補う。 */
+/* 📱 v16.20 ホーム画面の「Webアプリとして開く」で動いているかを見る。
+   iOSでは単独アプリのほうがSafariのタブよりメモリの持ち分が小さく、
+   実測で 単独アプリ55〜70回／Safariのタブ98回 だった。
+   読み直しを勧める回数を、この違いに合わせて変えるために使う。 */
+function isStandaloneApp(){
+  try{
+    return (window.navigator&&window.navigator.standalone===true)
+      ||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)
+      ||(window.matchMedia&&window.matchMedia("(display-mode: fullscreen)").matches);
+  }catch(e){return false;}
+}
 function applySafeArea(){
   const probe=(prop)=>{
     const d=document.createElement("div");
@@ -8495,9 +8515,7 @@ function applySafeArea(){
   };
   let top=0,bot=0;
   try{top=probe("safe-area-inset-top");bot=probe("safe-area-inset-bottom");}catch(e){}
-  const standalone=(window.navigator&&window.navigator.standalone===true)
-    ||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)
-    ||(window.matchMedia&&window.matchMedia("(display-mode: fullscreen)").matches);
+  const standalone=isStandaloneApp();   // 📱 v16.20 判定を1か所にまとめた
   if(standalone){
     const w=window.innerWidth,h=window.innerHeight;
     const tall=Math.max(w,h)/Math.min(w,h)>=1.8;   // 縁の細い（帯のある）端末
@@ -9413,14 +9431,23 @@ async function maybeSuggestReload(){
     if(!deviceIsPhone())return;
     if(S.reloadHint===false)return;          // 設定で切っている
     if((S.turn|0)<=0)return;
-    const th=60;
+    /* ♻ v16.20 聞く回数を入れ物に合わせる。
+       ホーム画面の単独アプリは55〜70回で落ちるので60回のまま。
+       Safariのタブ（「Webアプリとして開く」をオフで追加したアイコンを含む）は
+       98回まで持つので80回にする。2割の余裕を残しつつ、
+       普通の対戦（1試合40〜50操作）なら試合の切れ目で1回聞かれるくらいになる。 */
+    const th=isStandaloneApp()?60:80;
     if(SNAP_CNT<th)return;
     if(SNAP_CNT-RELOAD_ASKED<30)return;      // 断られたら30操作は聞かない
     RELOAD_ASKED=SNAP_CNT;
-    const y=await ask(`♻ 操作が${SNAP_CNT}回になりました。\nこのあたりで一度読み直すと、対戦中に落ちるのを避けられます。\n（盤面はそのまま戻ります。数秒で済みます）\n読み直しますか？`);
+    const y=await ask(`♻ 操作が${SNAP_CNT}回になりました。\nこのまま続けると、ブラウザに読み直される（落ちる）ことがあります。\n\nいま読み直すと：\n・盤面はそのまま戻ります（自動保存から復元）\n・数秒で終わります\n・回数が0に戻るので、また長く遊べます\n\nいま読み直しますか？`);
     if(!y)return;
     toast("♻ 盤面を保存して読み直します…");
     try{await autoSaveNow();}catch(e){}
+    /* ♻ v16.22 自分から読み直した印を残す。
+       起動時にこれがあれば、表紙も「復元しますか？」も出さずに盤面へ直行する。
+       sessionStorage はタブを閉じるまでの控えなので、次に手で開き直した時には残らない。 */
+    try{sessionStorage.setItem("dmrvSelfReload",String(Date.now()));}catch(e){}
     setTimeout(()=>location.reload(),400);
   }catch(e){}
 }
@@ -12011,6 +12038,7 @@ const FX_TYPES=[
   ["breakOneAsk","💥 シールドをn枚ブレイクする（自分／相手どちらの盾かは実行時に選択・S・トリガー処理つき）"],
   ["breakMineOneOpt","💥 自分のシールドを1枚まで選んでブレイクする（任意・S・トリガー処理つき／エメラルーダ型）"],
   ["breakMineAny","💥 自分のシールドを好きな数ブレイクする（ライオネル・フィナーレ型・1枚ずつ選択→S・トリガー処理つき・やめるまで繰り返し）"],
+  ["breakMineAll","💥 自分のシールドを**すべて**ブレイクする（「黒幕」型・枚数は実行時のシールドの数・S・トリガー処理つき）"],
   ["breakMineRandPeek","🛡👁 自分のランダムなシールドをn枚、1枚ずつ見てから「ブレイクするか」を任意で選ぶ（ライオネル型・S・トリガー処理つき・割らなければ盾に戻す）"],
   ["handShield","🛡 自分の手札からn枚まで選んで裏向きにシールド化（キャンセルで打ち切り）"],
   ["manaRecruitLess","🌱 自分のマナ枚数よりコストが小さい非進化クリーチャーを1体、マナから出す（ダグラジャパニカン型）"],
@@ -12282,7 +12310,7 @@ const FX_TYPES=[
   ["grantTurnSelf","✨ そのターン、このクリーチャー自身に能力を与える（条件欄に「ブロックされない」「スピードアタッカー」等を「／」区切りで・サイバー・A・アイアンズ型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["foeToDeckTop","destroyAllCondDrawPer","battleWithPick","meteorBurnX","motherSeiiki","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["foeToDeckTop","destroyAllCondDrawPer","battleWithPick","meteorBurnX","motherSeiiki","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","breakMineAll","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -13832,7 +13860,7 @@ const MODE_FX_ALIAS={
   "S詠唱":"handStFree","手札S詠唱":"handStFree",
   "全ブロッカー付与":"tempBlockerAll","攻撃ブロック封じ":"lockFoeAtkBlock","攻撃封じ":"lockFoeAtkP",
   "相手シールド化":"foeToShield","シールド化":"foeToShield","シールド送り":"foeToShield","相手をシールド":"foeToShield",
-  "両者タップ":"tapAnyN","どちらでもタップ":"tapAnyN","自分をゾーンへ":"selfToZone","自分パワーアップ":"tempPowSelf1k","めくってマナ":"flipTopMana","公開して手札":"revealTakeAll","公開して手札残り墓地":"revealTakeGrave","おつかい":"revealTakeGrave","自分タップ":"tapMyN","処理中":"pauseManual","手動処理":"pauseManual","盾ブレイク":"breakOneAsk","自分盾ブレイク":"breakMineAny","手札シールド化":"handShield","墓地山札":"graveToDeckAll","コスト合計踏み倒し":"sumRecruit","盾を見てブレイク":"breakMineRand","デッキ進化":"deckEvo",
+  "両者タップ":"tapAnyN","どちらでもタップ":"tapAnyN","自分をゾーンへ":"selfToZone","自分パワーアップ":"tempPowSelf1k","めくってマナ":"flipTopMana","公開して手札":"revealTakeAll","公開して手札残り墓地":"revealTakeGrave","おつかい":"revealTakeGrave","自分タップ":"tapMyN","処理中":"pauseManual","手動処理":"pauseManual","盾ブレイク":"breakOneAsk","自分盾ブレイク":"breakMineAny","自分盾全ブレイク":"breakMineAll","自分の盾すべてブレイク":"breakMineAll","手札シールド化":"handShield","墓地山札":"graveToDeckAll","コスト合計踏み倒し":"sumRecruit","盾を見てブレイク":"breakMineRand","デッキ進化":"deckEvo",
   // 今回追加した効果ぶん
   "探索山上":"deckSearchTop","探索して山上":"deckSearchTop","山札の一番上":"deckSearchTop","トップ固定":"deckSearchTop",
   "手札マナ詠唱":"handManaCastSpell","マナ詠唱":"handManaCastSpell","手札マナから呪文":"handManaCastSpell",
@@ -19042,6 +19070,18 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!Z.shield.length){toast("シールドがありません");continue;}
       const idxs=await pickShieldIdxsAny(pi);
       if(idxs&&idxs.length){await breakShields(pi,idxs.length,null,idxs);renderAll();}
+    }else if(f.t==="breakMineAll"){
+      /* 💥 v16.21 自分のシールドを**すべて**ブレイクする（「黒幕」型）。
+         これまでは breakMineAny（好きな数を1枚ずつ選ぶ）で代用していたため、
+         全部割るまで手で選び続ける必要があり、手動（gap）扱いのカードが9枚あった。
+         枚数は実行時のシールドの数で決まる。S・トリガーの処理は通常どおり通る。
+         城は Z.shield に並ばないので、ここでは対象にならない（規則どおり）。 */
+      if(!Z.shield.length){toast("シールドがありません");continue;}
+      const nAll=Z.shield.length;
+      const idxAll=Z.shield.map((_,i)=>i);
+      toast(`💥 ${S.players[pi].label} のシールド${nAll}枚をすべてブレイクします`);
+      await breakShields(pi,nAll,null,idxAll);
+      renderAll();
     }else if(f.t==="handShield"){
       // 🛡 手札からn枚まで選んで裏向きにシールド化（キャンセルで打ち切り）
       if(f.shieldMax>0&&Z.shield.length>f.shieldMax){toast(`🛡 自分のシールドが${f.shieldMax}枚以下でないため発動しません（現在${Z.shield.length}枚）`);continue;}
@@ -29819,7 +29859,10 @@ function extractEffects(text,mode){
        fx.push({t:"handRecruit",n:99,cond:tg.replace(/^／|／$/g,"")});
      }}
     // 💥 自分のシールドを好きな数ブレイク（ライオネル・フィナーレ型）
-    if(/自分のシールドを好きな数ブレイク/.test(cl))fx.push({t:"breakMineAny",n:1});
+    /* 💥 v16.21 「自分のシールドをすべてブレイク」は専用の型に当てる。
+       「好きな数」より先に見ること（どちらも「自分のシールドを…ブレイク」を含むため）。 */
+    if(/自分のシールドを(?:すべて|全て)ブレイク/.test(cl))fx.push({t:"breakMineAll",n:1});
+    else if(/自分のシールドを好きな数ブレイク/.test(cl))fx.push({t:"breakMineAny",n:1});
     // 🛡 自分の手札をn枚までシールド化
     {const mHS=cl.match(/(?:自分の)?手札を(\d+)枚まで(?:選んで)?シールド化/);if(mHS)fx.push({t:"handShield",n:+mHS[1]});}
     // 🛡 相手のクリーチャーをシールド化（爆進オリジナル・チューニング／チェンクン型）
@@ -46176,11 +46219,18 @@ async function makeBackupZip(data,imageKeys,mode="original"){
 async function readBackupZip(file){
   const tailSize=Math.min(file.size,65557),tail=new Uint8Array(await file.slice(file.size-tailSize).arrayBuffer());
   let eocd=-1;for(let i=tail.length-22;i>=0;i--){if(new DataView(tail.buffer,tail.byteOffset+i,4).getUint32(0,true)===0x06054b50){eocd=i;break;}}
-  if(eocd<0)throw new Error("ZIPの終端情報が見つかりません");
+  if(eocd<0)throw new Error("ZIPの終わりの目印が見つかりません。ファイルが途中で切れている可能性があります。\nダウンロードし直してから、もう一度読み込んでください");
   const ev=new DataView(tail.buffer,tail.byteOffset+eocd),count=ev.getUint16(10,true),cdSize=ev.getUint32(12,true),cdOff=ev.getUint32(16,true);
+  /* 📦 v16.22 目次の位置がファイルの外を指していたら、壊れているのではなく
+     **最後まで受け取れていない**。末尾から目次の印を探す作りなので、
+     途中で切れたファイルだと画像データの並びを印と読み違えてここに来る。
+     ダウンロードのやり直しで直るので、そう言い切る。 */
+  if(cdOff+cdSize>file.size){
+    throw new Error(`ファイルが最後まで受け取れていません（${(file.size/1048576).toFixed(1)}MBしかありません）。\nダウンロードし直してから、もう一度読み込んでください。\n※iCloud Driveの雲マークが残っていると、中身が来ていないことがあります`);
+  }
   const cd=new Uint8Array(await file.slice(cdOff,cdOff+cdSize).arrayBuffer()),entries=new Map();let p=0;
   for(let i=0;i<count;i++){
-    const v=new DataView(cd.buffer,cd.byteOffset+p);if(v.getUint32(0,true)!==0x02014b50)throw new Error("ZIPの目次が壊れています");
+    const v=new DataView(cd.buffer,cd.byteOffset+p);if(v.getUint32(0,true)!==0x02014b50)throw new Error("ZIPの目次を読めません。ファイルが途中で切れているか、別の形式に変換されています。\nダウンロードし直してから、もう一度読み込んでください");
     const method=v.getUint16(10,true),size=v.getUint32(24,true),nl=v.getUint16(28,true),xl=v.getUint16(30,true),cl=v.getUint16(32,true),local=v.getUint32(42,true);
     const name=ZIP_TD.decode(cd.slice(p+46,p+46+nl));entries.set(name,{method,size,local});p+=46+nl+xl+cl;
   }
@@ -48952,7 +49002,12 @@ function splashRun(off){
 (async function init(){
   db=await openDB();
   // ⚡ 表紙は設定を読んでから。読めない時は出す側に倒す
-  try{splashRun(db?await idbGet("misc","splashOff"):false);}catch(e){try{splashRun(false);}catch(e2){}}
+  /* ♻ v16.22 自分から読み直した時は表紙を出さない。
+     読み直しが日常になるので、そのたびに3.4秒の表紙を見るのは重い。
+     設定の「起動時の表紙」はそのまま（手で開いた時には出る）。 */
+  let _selfReloadBoot=false;
+  try{_selfReloadBoot=!!sessionStorage.getItem("dmrvSelfReload");}catch(e){}
+  try{splashRun(_selfReloadBoot||(db?await idbGet("misc","splashOff"):false));}catch(e){try{splashRun(_selfReloadBoot);}catch(e2){}}
   {const ilm=db?await idbGet("misc","imageLoadMode"):null;if(ilm)S.imageLoadMode=ilm;}
   {const so=db?await idbGet("misc","splashOff"):null;if(so!=null)S.splashOff=!!so;}
   {const z=db?await idbGet("misc","ldStackSize"):null;
