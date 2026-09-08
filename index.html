@@ -5535,7 +5535,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.36";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.37";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10863,6 +10863,28 @@ function emitEvent(actor,type,card){
           ["コストを支払った（そのまま）","コストを支払わずに唱えた → マナを1枚墓地へ"]);
         if(j!==1)return;
         await cheatManaKillPay(_actor,live);
+      });
+    }
+  }
+  /* 🔥 v16.37 「相手がコストを支払わずに呪文を唱えた時」（"B-零朱"レイド型）。
+     コストを払ったかどうかは盤面からは分からないので、ギルザウルス（stCheatManaKill）と同じく
+     一度だけ聞いて、支払わずに唱えたと答えた時だけ誘発する。
+     持っているカードが場に無ければ何も聞かない。 */
+  if(type==="spell"&&S.expert&&S.vs){
+    const defF=actor===0?1:0;
+    const holders=zonesOf(defF).battle.filter(x=>{
+      const rx=getReg(x);
+      return rx&&Array.isArray(rx.watchFx)&&rx.watchFx.some(w=>w&&w.ev==="foeFreeSpell")&&!isSealed(x)&&!isIgnored(x,defF);
+    });
+    if(holders.length){
+      const _ids=holders.map(x=>x.id), _actor=actor;
+      enqueueWatchJob(async()=>{
+        const live=zonesOf(defF).battle.filter(x=>_ids.includes(x.id)&&!isSealed(x)&&!isIgnored(x,defF));
+        if(!live.length)return;
+        const j=await askChoice(`🔥 ${live.map(x=>faceNameOf(x)).join("、")}\n\n${S.players[_actor].label} が唱えた呪文は【コストを支払って】唱えましたか？\n（支払わずに唱えたなら、この効果が誘発します）`,
+          ["コストを支払った（何も起きない）","コストを支払わずに唱えた → 効果を誘発する"]);
+        if(j!==1)return;
+        runWatchFx(defF,"foeFreeSpell",card);
       });
     }
   }
@@ -28455,6 +28477,7 @@ const TRIG_EVS=[
   ["selfAtkEnd","このクリーチャーの攻撃の終わりに（条件式と組み合わせて「攻撃の後アンタップする」などに）"],
   ["atkC","相手がクリーチャーを攻撃した時"],
   ["atkP","相手がプレイヤーを攻撃した時"],
+  ["foeFreeSpell","相手がコストを支払わずに呪文を唱えた時（唱えるたびに1度だけ確認します・\"B-零朱\"レイド型）"],
   ["draw","相手がドローした時"],
   ["summon","相手がクリーチャーを出した時"],
   ["elem","相手がエレメントを出した時"],
