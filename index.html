@@ -1755,6 +1755,7 @@ body.shake{animation:bodyShake .4s ease-out}
     <details class="setSect"><summary>🖥 画面・ログの見た目</summary><div class="setSectBody">
 <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="起動した時に、雷の表紙を出します。タップで飛ばせます">
       <input type="checkbox" id="setSplash"> ⚡ 起動時に表紙を出す</label></div>
+    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="【計測用】起動した時に、効果登録の画面（1576個の要素）を丸ごと外します。落ちるまでの回数がこれで伸びるかどうかを測るための切り替えです。オンの間はカード登録の編集ができません（対戦はふつうにできます）。切り替えたら読み直してください"><input type="checkbox" id="setFxOlayOff"> 🧪 計測用：効果登録の画面を読み込まない（要読み直し・編集不可）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="盤面の右下に、ログを開く丸ボタンを浮かべます。スマホ・iPadで片手で出し入れしやすくなります"><input type="checkbox" id="optLogFab" checked> 📜 ログを開く丸ボタンを盤面に浮かべる（スマホ・iPad向け）</label></div>
     <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="丸ボタンが「ランダム捨て」などゾーンのボタンに重なる時、自動で上や横へよけます。丸ボタンは指でつまんで好きな場所へ動かすこともできます"><input type="checkbox" id="optLogFabAvoid" checked> 🚧 丸ボタンがゾーンのボタンに重なる時は自動でよける（つまんで移動も可）</label><button class="btn small ghost" id="btnLogFabReset" title="手で動かした丸ボタンの位置を、右下の既定の場所に戻します">↺ 丸ボタンの位置を戻す</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの見出しをつかんで、好きな場所へ動かせます。右下・左下の隅をつかむと大きさ（幅と高さ）を変えられます。位置と大きさは次回も覚えています"><input type="checkbox" id="optLogDrag" checked> ✋ ログの見出しをつかんで移動する（隅のつかみ手で大きさ変更）</label><button class="btn small ghost" id="btnLogBoxReset" title="自由に動かしたログの位置と大きさを、既定（右上・幅340px）に戻します">↺ ログの位置と大きさを戻す</button></div>
@@ -5534,7 +5535,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.34";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.36";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -21542,7 +21543,9 @@ async function runFxList(pi,list,srcCard,inPump){
           for(const x of zonesOf(pp).battle){
             const rx=getReg(x);
             const blocked=rx&&(rx.noChoose||momoUntouchable(x))&&!isIgnored(x,pp);
-            if(rx&&!blocked&&(!filtB||lockFilterOk(filtB,rx,x)))cands.push({pp,host:x,card:x,top:true});
+            /* 🔗 v16.35 リンク合体中のカード（gl）の「一番上」は合体名で作った見せかけの1枚なので選べない。
+               本物は under に入っているメンバーなので、そちらだけを候補にする。 */
+            if(rx&&!blocked&&!x.gl&&(!filtB||lockFilterOk(filtB,rx,x)))cands.push({pp,host:x,card:x,top:true});
             for(const u of (x.under||[])){
               const ru=getReg(u);
               if(ru&&(!filtB||lockFilterOk(filtB,ru,u)))cands.push({pp,host:x,card:u,top:false});
@@ -21567,6 +21570,7 @@ async function runFxList(pi,list,srcCard,inPump){
           if(typeof toHand==="function")toHand(ZB,card);else ZB.hand.push(card);
           toast(`🏯 ${faceNameOf(host)} の下の《${faceNameOf(card)}》を1枚だけ持ち主の手札に戻した`);
           logPush(`🏯 ${S.players[pp].label}：《${faceNameOf(host)}》の下の《${faceNameOf(card)}》を手札へ`);
+          if(host.gl)relinkAfterMemberLoss(pp,host);   // 🔗 v16.35 リンクを組み直す
         }else if(host.under&&host.under.length){
           // 🔽 退化：一番上のカードだけを戻し、下のカードを場に残す
           const bi=ZB.battle.findIndex(x=>x.id===host.id);
@@ -31757,6 +31761,11 @@ async function autoFillFromText(){
     [{face:0,list:_twinUpFx},{face:1,list:_twinDnFx}],notes);
 }
 function openFxEditor(key){
+  /* 🧪 v16.36 計測用に効果登録の画面を外している間は開かない（中身が無いので操作できない）。 */
+  if(S.fxOlayOff){
+    toast("🧪 いまは計測用に効果登録の画面を外しています。\n設定の「🧪 計測用：効果登録の画面を読み込まない」を外して読み直すと使えます");
+    return;
+  }
   const cur=FXDB.get(key);
   FXEDIT={
     key, name:dispName.get(key)||key,
@@ -36472,6 +36481,41 @@ function linkExpand(cards){
   return out;
 }
 /* 🔗 顔ぶれ全体から合体後の名前を探す。どのパーツの表から見てもよい。 */
+/* 🔗 v16.35 リンク合体しているクリーチャーから、メンバーが1枚だけ抜けた時に組み直す。
+   合体後のカード（gl）は「合体名で作った1枚」で、本物の3枚は under に入っている。
+   1枚抜けたらその名前のままでは正しくないので、残ったメンバーで合体名を引き直して作り直す。
+   （3体リンク中に《破壊神デス》が離れたら《ヘヴィ・メタル》に戻る、が自動になる）
+   残り1枚になったら、そのカードをそのまま場に戻す。 */
+function relinkAfterMemberLoss(pi,host){
+  try{
+    const Z=zonesOf(pi);
+    const bi=Z.battle.findIndex(x=>x.id===host.id);
+    if(bi<0)return null;
+    const members=(host.under||[]).slice();
+    if(!members.length){Z.battle.splice(bi,1);return null;}
+    if(members.length===1){
+      const only=members[0];
+      only.tapped=host.tapped;only.sideways=host.sideways;only.rot=0;only.faceup=true;
+      only.gear=host.gear||[];only.under=[];
+      Z.battle[bi]=only;
+      toast(`🔗 リンクが解けた：《${faceNameOf(only)}》だけが場に残った`);
+      logPush(`🔗 ${S.players[pi].label}：リンクが解けて《${faceNameOf(only)}》に戻った`);
+      renderAll();
+      return only;
+    }
+    const nm=resolveLinkName(members)||members.map(x=>faceNameOf(x)).join("／");
+    const nc=makeCard(nm);
+    nc.gl=true;
+    nc.under=members;
+    nc.gear=host.gear||[];
+    nc.tapped=host.tapped;nc.sideways=host.sideways;nc.rot=host.rot;
+    Z.battle[bi]=nc;
+    toast(`🔗 リンクを組み直しました：${nm}（${members.length}枚）`);
+    logPush(`🔗 ${S.players[pi].label}：メンバーが1枚減ったので ${nm} に組み直した`);
+    renderAll();
+    return nc;
+  }catch(e){console.warn("relinkAfterMemberLoss",e);return null;}
+}
 function resolveLinkName(members){
   for(const m of members){
     const r=getReg(m);
@@ -47911,6 +47955,13 @@ $("setBgmVol").addEventListener("input",async ()=>{
   if(BGM)BGM.volume=S.bgmVol/100;
   if(db)await idbPut("misc","bgmVol",S.bgmVol);
 });
+{const e=$("setFxOlayOff");if(e)e.addEventListener("change",async ()=>{
+  S.fxOlayOff=e.checked;
+  if(db)await idbPut("misc","fxOlayOff",S.fxOlayOff);
+  toast(S.fxOlayOff
+    ?"🧪 計測用：次の読み直しから、効果登録の画面を外して起動します（編集不可）\nバージョン表示をタップして読み直してください"
+    :"🧪 計測用：解除しました。次の読み直しから、効果登録の画面が元に戻ります");
+});}
 {const e=$("setSplash");if(e)e.addEventListener("change",async ()=>{
   S.splashOff=!e.checked;
   if(db)await idbPut("misc","splashOff",S.splashOff);
@@ -49638,6 +49689,27 @@ function splashRun(off){
   try{splashRun(_selfReloadBoot||(db?await idbGet("misc","splashOff"):false));}catch(e){try{splashRun(_selfReloadBoot);}catch(e2){}}
   {const ilm=db?await idbGet("misc","imageLoadMode"):null;if(ilm)S.imageLoadMode=ilm;}
   {const so=db?await idbGet("misc","splashOff"):null;if(so!=null)S.splashOff=!!so;}
+  /* 🧪 v16.36 計測用：効果登録の画面（fxOlay）を丸ごと外して起動する。
+     この画面は常駐している要素の66%（約1576個）を占めていて、
+     「落ちるまでの回数」がこれで伸びるかどうかがまだ分かっていない。
+     組み立て直す改修は大きいので、まず**外して測る**ための切り替えを用意した。
+     ・オンの間はカード登録の編集ができない（対戦・パックの読み込みはできる）
+     ・元に戻すのは、この切り替えを外して読み直すだけ
+     ・要素の数は 🩺 で見える（外すと「画面の要素」が1500ほど減る） */
+  {
+    const fo=db?await idbGet("misc","fxOlayOff"):null;
+    S.fxOlayOff=!!fo;
+    const e0=$("setFxOlayOff");if(e0)e0.checked=S.fxOlayOff;
+    if(S.fxOlayOff){
+      try{
+        const el=$("fxOlay");
+        const before=el?el.getElementsByTagName("*").length:0;
+        if(el)el.innerHTML="";
+        console.log(`[v16.36] 計測用：効果登録の画面を外しました（要素 ${before} 個）`);
+        setTimeout(()=>{try{toast(`🧪 計測用：効果登録の画面を外して起動しました（要素${before}個ぶん）\nカード登録の編集はできません。設定で戻せます`);}catch(e){}},1200);
+      }catch(e){console.warn("fxOlayOff",e);}
+    }
+  }
   {const z=db?await idbGet("misc","ldStackSize"):null;
    if(z!=null)LD_STACK_SIZE=Math.max(0,Math.min(2,(+z)||0));}
   {const dv=db?await idbGet("misc","deckView"):null;if(dv==="text"||dv==="img")DECK_VIEW=dv;}
