@@ -5534,7 +5534,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.23";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.28";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -12179,6 +12179,10 @@ const FX_TYPES=[
   ["deckTopRecruitMana","🃏 山札の上からn枚を表向きにし、その中の条件に合うクリーチャーを好きな数バトルゾーンへ・残りをマナゾーンへ（条件欄で対象を指定・ボルシャック究極進化型）"],
   ["deckTopPlay","🎴 山札の上からn枚を見て（めくって）、その中の条件に合うクリーチャーを出す→残りをランダムに山札の下（探索と違い外れることもある・条件欄で対象＋『最大3』等で出す上限指定・ヘブンズ・キリコ型）"],
   ["bottomGravePlay","🂡 自分の山札の一番下のカードをn枚 墓地に置く。それが条件に合うクリーチャーなら、バトルゾーンに出す（カツラデランス型／条件欄＝例：コスト7以下／ジョーカーズ）"],
+  ["eternalGate","⛓ 相手のシールドが自分より多い時だけ実行。相手は自分のシールドから「自分（唱えた側）のシールドと同じ枚数」を残して選び、残りは持ち主の手札へ（S・トリガー使用可・憎悪と怒りの獄門型）"],
+  ["luckyDarts","🎯 自分のシールドを1つ相手に選ばせ、見る。その中から呪文を好きな数、コストを支払わずに唱えてもよい（ラッキー・ダーツ型／唱えなかったカードは裏向きで元に戻る）。条件欄に「ランダム」でランダムに1つ、「すべて」で呪文を全部唱える＝デュエプレ版"],
+  ["numBounceCost","🔢 数字を1つ選び、その数字と同じコストを持つ相手のクリーチャーをすべて手札に戻す（機術士ディール型／条件欄でさらに絞れる）"],
+  ["luckyNumber","🔢 数字を1つ選び、次の自分のターンのはじめまで、相手がその数字と同じコストのクリーチャーを召喚することと呪文を唱えることを封じる（「本日のラッキーナンバー！」型・盤面の「🔢 数字を宣言」と同じ扱いで画面上部に出ます）"],
   ["destroySumPow","💥 相手のクリーチャーを、パワーの合計がn以下になるように好きな数選び、破壊する（スクラッパーレッド型／条件欄で対象をさらに絞れる）"],
   ["destroyAllCond","💥 条件に合うクリーチャーをすべて破壊する（両者・モーツァルト型／条件欄＝例：ドラゴン以外。先頭に「相手:」「自分:」を付けると片側だけ＝destroyFiltAllの片側指定できる版）"],
   ["manaKill","💎 相手のマナゾーンからn枚選び、持ち主の墓地に置く（マナ破壊・条件欄で対象を絞れる）"],
@@ -12337,7 +12341,7 @@ const FX_TYPES=[
   ["grantTurnSelf","✨ そのターン、このクリーチャー自身に能力を与える（条件欄に「ブロックされない」「スピードアタッカー」等を「／」区切りで・サイバー・A・アイアンズ型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["foeToDeckTop","destroyAllCondDrawPer","battleWithPick","meteorBurnX","motherSeiiki","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","breakMineAll","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["eternalGate","luckyDarts","numBounceCost","luckyNumber","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","meteorBurnX","motherSeiiki","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","breakMineAll","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -13824,6 +13828,7 @@ async function destroyCreature(pi,c,opts){
     const kids=c.under.splice(0);
     if(r0&&r0.underRecycleOnDestroy)c._destroyUnderIds=kids.map(x=>x.id);
     kids.forEach(u=>{u.tapped=false;u.faceup=true;(Z[d0]||Z.grave).push(u);});
+    noteUnderToGrave(pi,kids,(Z[d0]?d0:"grave"));   // 🧬 v16.25 下敷きの「墓地に置かれた時」
   }
   const r=getReg(c);
   if(r&&r.ctype==="exile"&&(c.face||0)>0)c.face=0;
@@ -13894,6 +13899,9 @@ const MODE_FX_ALIAS={
   "相手墓地山札":"foeGraveTopCostToDeck","相手墓地リセット":"foeGraveTopCostToDeck",
   "相手盾マナ送り":"foeShieldToMana","相手シールドマナ":"foeShieldToMana","盾マナ送り":"foeShieldToMana",
   "パワー合計破壊":"destroySumPow","合計破壊":"destroySumPow","スクラッパー":"destroySumPow",
+  "ラッキーナンバー":"luckyNumber","数字ロック":"luckyNumber","数字バウンス":"numBounceCost",
+  "ラッキーダーツ":"luckyDarts","ダーツ":"luckyDarts",
+  "エターナルゲート":"eternalGate","獄門":"eternalGate",
   "全体破壊":"destroyAllCond","すべて破壊":"destroyAllCond","マナ破壊":"manaKill","ガチンコ追加ターン":"gachinkoExtraTurn","鬼丸":"gachinkoExtraTurn",
   "超次元":"psyOut","サイキック展開":"psyOut","サイキック戻し":"psyReturn","跳次元召喚":"psyJump","跳次元":"psyJump",
   "自分マナ送りして相手マナ送り":"selfManaThenFoeMana","エリカッチュ":"selfManaThenFoeMana",
@@ -21326,6 +21334,171 @@ async function runFxList(pi,list,srcCard,inPump){
         }
         if(moved){sfx("move");toast(`↩ 相手の${filt?filt+"の":""}クリーチャー${moved}体を手札に戻した`);}
       }
+    }else if(f.t==="numBounceCost"){
+      /* 🔢 v16.25 数字を1つ選ぶ。その数字と同じコストを持つ相手のクリーチャーをすべて手札に戻す
+         （機術士ディール型）。コストが登録されていないカードは対象外（判定できないため）。
+         条件欄（f.cond）を書くと、さらに絞り込める。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const num=await declareNumber(pi,"🔢 数字を1つ選んでください（その数と同じコストの相手クリーチャーをすべて手札に戻します）",null);
+      if(num==null)continue;
+      const filt=String(f.cond||"").trim();
+      const OZn=zonesOf(op);
+      const targets=OZn.battle.filter(x=>{
+        const rx=getReg(x);
+        if(!rx||!isCreatureReg(rx))return false;
+        if(rx.cost==null||isNaN(+rx.cost)||(+rx.cost)!==(+num))return false;
+        return !filt||lockFilterOk(filt,rx,x);
+      });
+      if(!targets.length){toast(`🔢 コスト${num}の相手クリーチャーはいません`);}
+      else{
+        let moved=0;
+        for(const tgt of targets.slice()){
+          if(cantLeaveBattle(op,tgt))continue;                       // ⚓ 離れない
+          if(await offerTrueEscape(op,tgt)){renderAll();continue;}   // 🛡 真・エスケープ
+          const idx=OZn.battle.findIndex(x=>x.id===tgt.id);
+          if(idx<0)continue;
+          const removed=OZn.battle.splice(idx,1)[0];
+          const _um=(removed.under&&removed.under.length)?removed.under.splice(0):[];
+          if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>gearOut(OZn,gg));}
+          removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];
+          removed.faceup=true;removed.mark=false;removed.neoEvo=false;removed.isCross=false;
+          if(typeof toHand==="function")toHand(OZn,removed);else OZn.hand.push(removed);
+          _um.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];OZn.grave.push(u);});
+          if(_um.length)noteUnderToGrave(op,_um,"grave");   // 🧬 進化元の「墓地に置かれた時」
+          moved++;
+          renderAll();
+        }
+        if(moved){sfx("move");toast(`🔢 コスト${num}の相手クリーチャー${moved}体を手札に戻した`);}
+      }
+    }else if(f.t==="luckyNumber"){
+      /* 🔢 v16.26 数字を1つ選ぶ。次の自分のターンのはじめまで、相手はその数字と同じコストを持つ
+         クリーチャーを召喚できず、呪文も唱えられない（「本日のラッキーナンバー！」型）。
+         盤面の道具にある「🔢 数字を宣言」と同じ仕組み（S.numDecl・lucky型）に載せる。
+         こうすると画面上部に宣言が出続け、失効も宣言者の次のターン開始で自動、
+         ツインパクトは実行する面のコストだけで判定される。
+         踏み倒しは「踏倒:ON」で通せる（＝召喚だけを止める、というカードの意味どおりになる）。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const num=await declareNumber(pi,"🔢 数字を1つ選んでください（次の自分のターンのはじめまで、相手はそのコストのクリーチャーを召喚できず、呪文も唱えられません）","lucky");
+      if(num==null)continue;
+      toast(`🔢 本日のラッキーナンバーは ${num}！\n次の${S.players[pi].label}のターンのはじめまで、${S.players[op].label} はコスト${num}のクリーチャーを召喚できず、呪文も唱えられない`);
+    }else if(f.t==="eternalGate"){
+      /* ⛓ v16.28 憎悪と怒りの獄門（エターナル・ゲート）型。
+         「相手のシールドが自分のシールドより多ければ、この呪文を唱えることができる」
+         「自分のシールドと同じ枚数のシールドを、相手は自分自身のシールドゾーンから選ぶ。
+           相手は残りのシールドを持ち主の手札に加える（その「S・トリガー」を使ってもよい）」
+         唱える条件はここで見て、満たしていなければ何もしない（唱える前に気づけるよう文面で知らせる）。
+         手札に加える処理はブレイクと同じ道（processBroken）を通すので、S・トリガーが使える。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const mineN=Z.shield.length, foeN=OZ.shield.length;
+      if(foeN<=mineN){
+        toast(`⛔ この呪文は、相手のシールドが自分より多い時だけ唱えられます（相手${foeN}枚・自分${mineN}枚）`);
+        logOnly(`⛔ 憎悪と怒りの獄門：唱える条件を満たしていない（相手${foeN}／自分${mineN}）`);
+        continue;
+      }
+      snap();
+      const keepIds=new Set();
+      let canceled=false;
+      for(let i=0;i<mineN;i++){
+        const pool=OZ.shield.filter(x=>!keepIds.has(x.id));
+        if(!pool.length)break;
+        const j=await pickCard(`🛡 ${pName(op)} が自分のシールドから残すものを選択（${i+1}/${mineN}枚目）`,pool,
+          {hint:"相手に選んでもらってください（残りは手札に加わります）",mask:true,maskPi:op,maskLabel:"盾"});
+        if(j===null){canceled=true;break;}
+        keepIds.add(pool[j].id);
+      }
+      if(canceled){
+        // 取りやめても枚数は決まっているので、左から順に埋める（枚数がずれないように）
+        for(const x of OZ.shield){if(keepIds.size>=mineN)break;keepIds.add(x.id);}
+        toast(`🛡 残す盾の選択を取りやめたため、残り${mineN-0}枚ぶんは左から順に残しました`);
+      }
+      const rest=OZ.shield.filter(x=>!keepIds.has(x.id));
+      if(!rest.length){toast("🛡 手札に加わるシールドはありません");renderAll();continue;}
+      const stack=[];
+      for(const sh of rest){
+        const si=OZ.shield.findIndex(x=>x.id===sh.id);
+        if(si<0)continue;
+        OZ.shield.splice(si,1);
+        stack.push(sh,...(sh.under?sh.under.splice(0):[]));
+      }
+      sfx("break");
+      toast(`⛓ ${pName(op)} は${mineN}枚を残し、残り${rest.length}枚を手札に加えます（S・トリガー使用可）`);
+      logPush(`⛓ 憎悪と怒りの獄門：${S.players[op].label} は盾${mineN}枚を残し、${rest.length}枚を手札へ（S・トリガー使用可）`);
+      await processBroken(op,stack,`⛓ 憎悪と怒りの獄門：手札に加える（S・トリガー使用可・計${stack.length}枚）`);
+      await notifyShieldLeave(op);
+      renderAll();
+    }else if(f.t==="luckyDarts"){
+      /* 🎯 v16.27 自分のシールドを1つ相手に選ばせ、見る。
+         その中から呪文を好きな数、コストを支払わずに唱えてもよい（ラッキー・ダーツ型）。
+         唱えなかったカード・呪文でなかったカードは、元のシールドへ裏向きで戻す。
+         シールドは1枚とは限らない（シールド・プラス等で重なっている分＝under も「その中」に含む）。
+         条件欄（f.cond）で版を切り替える：
+           「ランダム」＝相手に選ばせず、ランダムに1つ（デュエプレ版）
+           「すべて」  ＝1枚ずつ聞かず、その中の呪文をすべて唱える（デュエプレ版・強制）
+         空欄なら相手に選ばせて、唱えるかどうかも1枚ずつ選ぶ（TCG版）。 */
+      const SH=Z.shield;
+      if(!SH.length){toast("🎯 自分のシールドがありません");continue;}
+      const dartCond=String(f.cond||"");
+      const dartRand=/ランダム/.test(dartCond);
+      const dartAll=/すべて|全て|全部|強制/.test(dartCond);
+      const opts=SH.map((x,i)=>`シールド${i+1}${(x.under&&x.under.length)?`（重なり${x.under.length+1}枚）`:""}`);
+      let j=null;
+      if(dartRand){
+        j=randInt(SH.length);
+        toast(`🎲 ランダムに シールド${j+1} が選ばれた`);
+      }else if(S.vs&&olRemoteReady()&&op!==olMySeat()){
+        j=await olRemoteChoice(`🎯 ラッキー・ダーツ：${S.players[pi].label} のシールドを1つ選んでください`,
+          [...opts,"🎲 ランダムで決める"],opts.length,120000);
+      }else{
+        j=await askChoice(`🎯 ラッキー・ダーツ：${S.vs?`${pName(op)} が `:""}${pName(pi)} のシールドを1つ選びます${S.vs?"（相手に選んでもらってください）":""}`,
+          [...opts,"🎲 ランダムで決める"]);
+      }
+      if(j===null)continue;
+      if(j>=SH.length)j=randInt(SH.length);
+      const sh=SH[j];
+      const group=[sh,...((sh.under&&sh.under.length)?sh.under.slice():[])];
+      snap();
+      group.forEach(x=>{x.faceup=true;});
+      renderAll();
+      toast(`🎯 選ばれたシールド：${group.map(x=>faceNameOf(x)).join("、")}`);
+      logPush(`🎯 ラッキー・ダーツ：${S.players[pi].label} のシールド${j+1}を公開（${group.map(x=>faceNameOf(x)).join("、")}）`);
+      const isSp=x=>{const r2=getReg(x);return r2&&(r2.ctype==="spell"||r2.twin||r2.ctype==="twinpact");};
+      const spells=group.filter(isSp);
+      const cast=[];
+      if(!spells.length)toast("🎯 その中に呪文はありませんでした（裏向きに戻します）");
+      else{
+        for(const sp of spells){
+          if(dartAll){cast.push(sp);continue;}   // 🎲 デュエプレ版：その中の呪文をすべて唱える（強制）
+          const yes=await ask(`✨ 《${faceNameOf(sp)}》をコストを支払わずに唱えますか？\n（唱えないカードは元のシールドに戻ります）`);
+          if(!yes)continue;
+          cast.push(sp);
+        }
+      }
+      // シールドの組み直し：唱えたぶんを抜き、残りは裏向きでシールドに戻す
+      {
+        const rest=group.filter(x=>!cast.some(y=>y.id===x.id));
+        const si=SH.findIndex(x=>x.id===sh.id);
+        if(si>=0)SH.splice(si,1);
+        if(rest.length){
+          const head=rest[0];
+          head.under=rest.slice(1);
+          rest.forEach(x=>{x.faceup=false;x.tapped=false;});
+          head.under.forEach(x=>{x.faceup=false;});
+          SH.splice(si<0?SH.length:si,0,head);
+        }
+      }
+      for(const sp of cast){
+        sp.faceup=true;sp.tapped=false;sp.sideways=false;sp.under=[];
+        if(S.spellAutoGrave!==false){
+          Z.resolve.push(sp);emitEvent(pi,"spell",sp);scheduleAutoResolve(pi,sp);
+        }else{
+          if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
+          Z.resolve.push(sp);emitEvent(pi,"spell",sp);
+        }
+        enqueueFx(pi,sp);
+        toast(`✨ ${faceNameOf(sp)} をコストを支払わずに唱えた（シールドから）`);
+        logPush(`✨ ラッキー・ダーツ：${S.players[pi].label} が《${faceNameOf(sp)}》をシールドからコストを支払わず唱えた`);
+      }
+      sfx("ok");renderAll();
     }else if(f.t==="shieldPickNew"||f.t==="shieldPickTuck"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
       const isTuck=f.t==="shieldPickTuck";
@@ -22805,6 +22978,46 @@ function gearOut(Z,g){
    ・オーラは墓地／ドラグハートは超次元／封印は墓地
    ・重なっていた下敷き（進化元）は移動先へ
    toZone省略時は下敷きを墓地へ。moveCardX以外の直接移動（バウンス等）から呼ぶ。 */
+/* 🧬 v16.25 重ねていた進化元（下敷き）が墓地に置かれた時の誘発。
+   これまでは、進化クリーチャーが離れる時に下敷きを `Z.grave.push(u)` と直接置いていたため、
+   下敷き自身の「どこからでも墓地に置かれた時」（toGrave）が一度も発火していなかった。
+   （《海滅竜騎ゾルザーク》を進化元にしていると、墓地に落ちてもモード選択が出ない）
+   置いた時点では破壊の処理がまだ続いているので、ここでは控えだけ取り、
+   一連の処理が終わってから（描き直しのたびに見る）順番に流す。 */
+let UNDER_GRAVE_PEND=[];
+let UNDER_GRAVE_BUSY=false;
+function noteUnderToGrave(pi,cards,toZone){
+  try{
+    if(!S.expert||!cards||!cards.length)return;
+    if(toZone&&toZone!=="grave")return;
+    for(const u of cards){
+      const r=getReg(u);
+      if(!r||!Array.isArray(r.watchFx))continue;
+      if(!r.watchFx.some(w=>w&&(w.ev==="toGrave"||w.ev==="toGraveBattle")))continue;
+      UNDER_GRAVE_PEND.push({pi,id:u.id});
+    }
+  }catch(e){}
+}
+async function flushUnderToGrave(){
+  if(!S.expert||UNDER_GRAVE_BUSY||REPLAY.on)return;
+  if(!UNDER_GRAVE_PEND.length)return;
+  if(fxRunning||fxQueue.length)return;          // 一連の効果処理が終わるまで待つ
+  if(typeof WATCH_BUSY!=="undefined"&&WATCH_BUSY)return;
+  if($("askOlay")&&$("askOlay").classList.contains("open"))return;
+  UNDER_GRAVE_BUSY=true;
+  try{
+    while(UNDER_GRAVE_PEND.length){
+      const it=UNDER_GRAVE_PEND.shift();
+      const Z=zonesOf(it.pi);
+      const u=Z.grave.find(x=>x.id===it.id);
+      if(!u)continue;                           // すでに墓地から動いていたら何もしない
+      toast(`⚡ 進化元が墓地に置かれた時の効果：${faceNameOf(u)}`);
+      await fireToGrave(it.pi,u,"battle");
+    }
+  }catch(e){console.warn("flushUnderToGrave",e);}
+  finally{UNDER_GRAVE_BUSY=false;}
+  renderAll();
+}
 function leaveBattleCleanup(Z,c,toZone){
   // 名前宣言は「このカードが場にある間」だけ有効。再登場時は改めて宣言する。
   delete c.ignoreName;delete c._ignoreNameAsking;
@@ -22827,6 +23040,7 @@ function leaveBattleCleanup(Z,c,toZone){
       placeCard(Z,kz,u);
     }
     toast(`重なっていた${kids.length}枚もバラして同じ場所へ移動`);
+    {const _pi=S.players.findIndex(P=>P.zones===Z);if(_pi>=0)noteUnderToGrave(_pi,kids,kz);}  // 🧬 v16.25
   }
 }
 async function offerPhoenixStore(pi,newCard){
@@ -24197,6 +24411,29 @@ function resolveOut(Z,o){
     if(pi>=0){MUGETSU_PENDING.add(pi+":spl");MUGETSU_AT[pi]=Date.now();}
   }
   return false;
+}
+/* 🌑 v16.24 唱えた呪文が「解決中」から墓地に置かれ、無月の門の確認まで済むのを待つ。
+   呪文の解決終了は scheduleAutoResolve が別走りで面倒を見ており（0.3秒ごとに様子を見る）、
+   墓地に置かれてはじめて虚無月の門の権利が立つ。さらに門の確認は次の描き直しで出る。
+   攻撃の流れがこれを待たずに進むと、唱えたのにブレイクが先に通ってしまう。
+   ・「解決中に保持」（ザフィヴォ型）は手で墓地に置く決まりなので待たない
+   ・門が開かない時も、権利が消えるまで1.2秒ほどかかるので、その分だけ待つ
+   ・何かに引っかかっても最大6秒で切り上げる（攻撃が止まったままにならないように） */
+async function waitResolveMugetsu(msMax){
+  const t0=Date.now(), lim=msMax||6000;
+  while(Date.now()-t0<lim){
+    if(REPLAY.on)return;
+    let busy=false;
+    for(const pp of (S.vs?[0,1]:[0])){
+      const Z=zonesOf(pp);
+      if(Z&&Z.resolve&&Z.resolve.some(x=>{const r=getReg(x);return !(r&&r.holdResolve);}))busy=true;
+    }
+    try{if(MUGETSU_BUSY||MUGETSU_PENDING.size)busy=true;}catch(e){}
+    if(!busy)return;
+    try{renderAllNow();}catch(e){}   // 門の確認は描き直しの中で出るので、こちらから促す
+    await new Promise(r2=>setTimeout(r2,120));
+    await waitFxIdle();
+  }
 }
 function isCrystalChargerReg(r){
   if(!r)return false;
@@ -25680,6 +25917,7 @@ async function startAttack(pi,id){
   if(pick===null){renderAll();return;}
   let tg=targets[pick]; // 🔥 革命0トリガーでシールドが増えた場合にブレイクへ差し替えるため let
   c._atkFxDone=false; // 新規アタック宣言のたびにアタック時効果を再有効化（保留→再開は別経路なので影響なし）
+  c._atkPDone=false;c._atkPEarly=false; // ⚡ v16.24 プレイヤーへの攻撃時の誘発も、宣言のたびに1回だけ流す
   c._acAsked=false;   // ✨ アタック・チャンスの確認も、新規宣言のたびに1回だけ出す
   c._allyAtkDone=false;c._anyAtkDone=false;c._gearAtkDone=false; // 攻撃するたびに誘発し直せるよう毎回リセット
   noteAttackThisTurn(pi,c);   // 🕐 「そのターン◯体目の攻撃」を数える
@@ -27073,6 +27311,25 @@ async function execAttack(pi,id,tg){
      アタック・チャンスの分岐では既に待っているが、通常の攻撃では待っていなかった。 */
   await WATCH_CHAIN;
   await waitFxIdle();
+  /* ⚡ v16.24 相手プレイヤーへの攻撃時の誘発（atkP＝Dスイッチ等）は、**ブロック宣言より前**に解決する。
+     これまではブレイクの直前に流していたため、
+     ・唱えた呪文が墓地に置かれる前にブレイクが通ってしまう（無月の門が間に合わない）
+     ・そこで出したクリーチャーでブロックできない
+     という2つの取りこぼしがあった。カードの文面は「攻撃する時」なので、ブロックより先が正しい。
+     呪文の解決終了と門の確認まで待ってから、下のブロック候補を数える。 */
+  if(S.expert&&tg.kind!=="creature"&&!c._atkPDone){
+    c._atkPDone=true;c._atkPEarly=true;
+    emitEvent(pi,"atkP");
+    await settleTriggers();
+    await waitResolveMugetsu();
+    await settleTriggers();
+    if(holdIfNeeded())return;   // ⏸ 誘発の中で「手動で処理する」を選んだ場合はここで保留
+    if(!stillAtk()){
+      toast("攻撃クリーチャーが場を離れたため、攻撃は中止されました");
+      clearPendingAtk();renderAll();return;
+    }
+    renderAll();
+  }
   const aregNB=getReg(c);
   // 🛡✋ v10.44：「ブロックされない」の判定を1か所にまとめた。
   //    従来はカード自身の登録（noBlock）しか見ておらず、条件付き常在（cstFx=unblock）・
@@ -27396,7 +27653,9 @@ async function execAttack(pi,id,tg){
         renderAll();
       }
     }
-    emitEvent(pi,"atkP");
+    // ⚡ v16.24 通常はブロック宣言の前に済ませてある（下の _atkPDone）。
+    //    保留からの再開など、まだ流していない場合だけここで流す。
+    if(!c._atkPDone){c._atkPDone=true;emitEvent(pi,"atkP");}
     // ⏸ 攻撃時の誘発（サイバーダイス・ベガス型／黄金卍罠＝デンジャデオン型等）の解決が
     //    完全に終わるまでブレイクを待つ。誘発の解決中にさらに誘発が積まれたり、
     //    唱えた呪文の効果が後から解決されることがあるため、増えなくなるまで繰り返す。
@@ -27470,13 +27729,13 @@ async function execAttack(pi,id,tg){
     const cStill=Z.battle.find(x=>x.id===id);
     if(!cStill){toast("攻撃クリーチャーが場を離れたため、攻撃は中止されました");renderAll();return;}
     sfx("atk");
-    emitEvent(pi,"atkP");
+    if(!c._atkPDone){c._atkPDone=true;emitEvent(pi,"atkP");}   // ⚡ v16.24 済んでいれば二度流さない
     toast(`💥 ダイレクトアタック！`);
     try{fxShare("direct","ダイレクトアタック成功！",`${S.players[pi].label}`,true,c.name,pi);}catch(e){}
     if(S.expert){
       const DZ2=zonesOf(op);
       const dw=DZ2.battle.filter(x=>{const r2=getReg(x);return r2&&r2.watchFx&&r2.watchFx.some(w=>w.ev==="atkP")&&!isSealed(x)&&!isIgnored(x,op);});
-      if(dw.length){
+      if(dw.length&&!c._atkPEarly){   // ⚡ v16.24 ブロック宣言の前に流し終えていれば、ここでは聞かない
         const q2=await askChoice(`⚡誘発確認（プレイヤーが攻撃された時）\n${dw.map(x=>faceNameOf(x)).join("、")}\n\n勝敗を記録する前に効果を処理しますか？`,
           ["はい：処理する（勝敗記録を保留）","いいえ：そのまま勝敗を記録"]);
         if(q2===0){
@@ -34031,6 +34290,26 @@ function numDeclBlocked(card,pTo,kind){
   return null;
 }
 const NUMDECL_LABEL={lucky:"ラッキーナンバー",shuff:"シャッフ",ooparts:"オーパーツ",tenshi:"立ち上がれ"};
+/* 🔢 v16.26 「数字を1つ選ぶ」の共通処理。盤面の道具の「🔢 数字を宣言」と同じ形にそろえる。
+   mode を渡すと宣言として登録し（画面上部に出て、宣言者の次のターン開始で自動的に失効）、
+   null なら選ぶだけ（その場で使い切る型・機術士ディールの上面など）。
+   戻り値は選んだ数字。取りやめたら null。 */
+async function declareNumber(pi,msg,mode,def){
+  const n=await askNumber(msg,def==null?5:def);
+  if(n==null)return null;
+  if(mode){
+    S.numDecl=S.numDecl||{};
+    S.numDecl[pi]=S.numDecl[pi]||{ns:[],modeByN:{}};
+    S.numDecl[pi].modeByN=S.numDecl[pi].modeByN||{};
+    if(!S.numDecl[pi].ns.includes(+n))S.numDecl[pi].ns.push(+n);
+    S.numDecl[pi].modeByN[+n]=mode;
+  }
+  sfx("ok");
+  try{fxShare("declare",`🔢 ${n}`,`${S.players[pi].label}${mode?`（${NUMDECL_LABEL[mode]||""}型）`:""}`,true,"",pi);}catch(e){}
+  logOnly(`🔢 ${S.players[pi].label} が数字 ${n} を宣言${mode?`（${NUMDECL_LABEL[mode]||""}型・次の${S.players[pi].label}のターン開始まで）`:""}`);
+  renderAll();
+  return +n;
+}
 /* ================================================================
    🔒 バトルゾーンに「出る」時の置換ロック共通処理（v10.23）
    ヤドック型（最大マナ超→マナ）／シフォン型（召喚以外→シールド化・任意）／
@@ -34788,6 +35067,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         placeCard(Z,kz,u);
       }
       toast(`重なっていた${kids.length}枚もバラして同じ場所へ移動`);
+      noteUnderToGrave(pFrom,kids,kz);   // 🧬 v16.25
     }
   }
   if(toZone==="battle"){
@@ -37060,6 +37340,7 @@ function renderAllNow(){
   checkMugetsu(false);
   flushMugetsuOut();    // 🌙 無月の門の確認がぜんぶ済んでから、ムーゲッツの宣言を出す
   checkGraveAwaken();   // 🔄 自分の墓地にカードが置かれた時の覚醒／進化
+  flushUnderToGrave();  // 🧬 v16.25 進化元が墓地に置かれた時の誘発（ゾルザーク型）
   fixPsyStray();        // 🌌 サイキック／ドラグハートが超次元ゾーン以外に紛れていたら戻す
   fixStrayBuff();       // 🧹 バトルゾーンの外に残った一時的な付与を消す
   // 🌟 モモキングダム✕型：含まれるカードの枚数を見張り、「ちょうど6枚になった」瞬間に −99999 を発動する。
@@ -38742,7 +39023,7 @@ function ghostPowOf(c,r){
 }
 /* 👻 効果の型集合（v10.52・プレイ価値判定用） */
 const GHOST_FX={
-  needFoeCreature:new Set(["tapAllOp","tapOpN","sealFoe","foeFreezeAll","zenithSpark","lockFoeAtkP","lockFoeAtkBlock",
+  needFoeCreature:new Set(["numBounceCost","tapAllOp","tapOpN","sealFoe","foeFreezeAll","zenithSpark","lockFoeAtkP","lockFoeAtkBlock",
     "foePowDownPick","foePowDownPer","bounce","destroyRnd","destroyPick","destroyElemPick","manaPick","manaElemPick",
     "bouncePick","bounceElemPick","foeSelfDestroy","foeSelfMana","foeSelfBounce","shieldPickNew","shieldPickTuck",
     "battleAsk","destroyFilt","foeBounceAll","tapAnyN","drawPerOppTapped",
