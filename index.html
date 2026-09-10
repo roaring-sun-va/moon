@@ -3389,6 +3389,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <label><input type="checkbox" id="fxAuraTapIn"> 常在：相手クリーチャーはタップして出る</label>
         <label style="font-size:11px" title="このクリーチャーがNEO進化として出ている時だけ有効（大河聖霊プリマ・ドラード型）"><input type="checkbox" id="fxAuraTapInNeo"> NEO進化時のみ</label>
+        <label style="font-size:11px" title="自分のマナゾーンにあるカードの枚数よりコストが小さい相手のクリーチャーだけがタップして出る（百族の長 プチョヘンザ型）。上の「相手クリーチャーはタップして出る」と一緒に入れてください"><input type="checkbox" id="fxAuraTapInCostLtMana"> 自分のマナの枚数よりコストが小さいものだけ</label>
         <label title="このカードより実効パワーが小さいクリーチャーは、両者とも、タップしてバトルゾーンに出る（闇誦のイザナイ チリ型）。上の「相手クリーチャーはタップして出る」とは独立して働きます"><input type="checkbox" id="fxAuraTapInPow"> 常在：このカードよりパワーが小さいクリーチャーはタップして出る（両者・チリ型）</label>
       </div>
       <div class="row" style="gap:8px;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:6px 8px">
@@ -5538,7 +5539,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.46";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.49";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5796,7 +5797,7 @@ function queueCheatMeta(pTo,c,forced){
     if(!mag&&!gil)return;
     c._cheatQ=true;
     const magId=mag?mag.id:null, gilId=gil?gil.id:null;
-    enqueueWatchJob(async()=>{
+    scheduleCheatMeta(mag?magSide:foeN,async()=>{
       c._cheatQ=false;
       let cheated=!!forced;
       if(!cheated){
@@ -5921,6 +5922,22 @@ function turnEnteredCount(side,filt){
 /* 🚫 踏み倒しメタのまとめ（オニカマス型／フォーエバー・プリンセス型／マグナム型／センノー型）。
    moveCardX を通らない登場（効果が直接 battle.push するもの・ミラクルとミステリーの扉など）でも
    働くように、markArrive からも呼ぶ。二重に聞かないよう 1.5 秒の窓で1回だけ通す。 */
+/* 🌀 v16.49 踏み倒しメタ（誘発するタイプ）の解決順はアクティブプレイヤー優先（APNAP）。
+   ・持ち主がターンプレイヤー → 出した相手の「出た時」より先に処理する
+     （FX_GATE で出た時を止めてから聞く。オリオティスの drainOriotis(true) と同じ位置づけ）
+   ・持ち主が非ターンプレイヤー → 「出た時」をすべて解決したあとに処理する（誘発ジョブ）
+   オニカマスだけは「相手のターン中」限定なので、常に後者になります（カード側の条件）。 */
+function scheduleCheatMeta(ownerSide,job){
+  if(S.vs&&S.who===ownerSide){
+    FX_GATE++;
+    (async()=>{
+      try{await job();}catch(e){console.warn("cheatMeta",e);}
+      finally{FX_GATE=Math.max(0,FX_GATE-1);pumpFx();}
+    })();
+  }else{
+    enqueueWatchJob(job);
+  }
+}
 function queueCheatWatchers(pTo,c){
   if(!S.expert||!c)return;
   try{
@@ -5983,7 +6000,7 @@ function queueCheatWatchers(pTo,c){
         if(prin&&rNew2&&isCreatureReg(rNew2)&&!c._prinChk){
           c._prinChk=true;
           const _pid=prin.id;
-          enqueueWatchJob(async()=>{
+          scheduleCheatMeta(foeN,async()=>{
             c._prinChk=false;
             const live=zonesOf(foeN).battle.find(x=>x.id===_pid&&!isSealed(x)&&!isIgnored(x,foeN));
             if(!live)return;
@@ -6017,7 +6034,7 @@ function queueCheatWatchers(pTo,c){
         if(katsu&&rNew3&&isCreatureReg(rNew3)&&!c._katsuChk){
           c._katsuChk=true;
           const _kid2=katsu.id;
-          enqueueWatchJob(async()=>{
+          scheduleCheatMeta(foeN,async()=>{
             c._katsuChk=false;
             const live=zonesOf(foeN).battle.find(x=>x.id===_kid2&&!isSealed(x)&&!isIgnored(x,foeN));
             if(!live)return;
@@ -6037,31 +6054,51 @@ function queueCheatWatchers(pTo,c){
       }
       // 💥 踏み倒しメタ（マグナム／ギルザウルス）：確認を出したうえで判定する
       queueCheatMeta(pTo,c,false);
-      const noCheat=zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoCheat&&!isSealed(x);});
+      /* 🚫 洗脳センノー型（stNoCheat）：「相手は、自身のターン中、召喚以外の方法で
+         クリーチャーをバトルゾーンに出せない」。
+         これは誘発ではなく**禁止**なので、出たあとに戻すのではなく、そもそも出せません。
+         出ていないので「出た時」も誘発しません（v16.49で直しました。それまでは
+         いったん出して出た時を解決してから戻す形になっていました）。
+         盤面は手で動かす作りなので、召喚だったかどうかは本人に聞くしかありません。
+         聞いている間は FX_GATE で「出た時」を止めておき、召喚以外だったら
+         待機列からも取り下げてから戻します。
+         ※「自身のターン中」＝出した側がターンプレイヤーの時だけ働きます。 */
+      const noCheat=(S.vs&&S.who===pTo)
+        ? zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoCheat&&!isSealed(x)&&!isIgnored(x,foeN);})
+        : null;
       if(noCheat&&!c._noCheatChk){
         c._noCheatChk=true;
+        FX_GATE++;   // ⏸ 答えが出るまで「出た時」を走らせない
         (async()=>{
-          const j=await askChoice(`🚫 ${faceNameOf(noCheat)}：相手は召喚以外でクリーチャーを出せない\n《${c.name}》は【召喚】で出しましたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝OK。侵略・革命チェンジ・蘇生・トリガー出しは不可）`,
-            ["召喚で出した（そのまま）","召喚以外（出せない→戻す）"]);
-          c._noCheatChk=false;
-          if(j!==1)return;
-          const ZB5=zonesOf(pTo).battle;
-          const bi5=ZB5.findIndex(x=>x.id===c.id);
-          if(bi5<0)return;
-          snap();
-          const k=await askChoice(`《${c.name}》の戻し先を選択（出す前の場所へ）`,
-            ["手札へ","墓地へ","超次元へ","GRゾーンの下へ","山札の上へ"]);
-          if(k===null)return;
-          ZB5.splice(bi5,1);
-          c.tapped=false;
-          const Z5=zonesOf(pTo);
-          if(k===0){c.faceup=true;Z5.hand.push(c);}
-          else if(k===1){c.faceup=true;Z5.grave.push(c);}
-          else if(k===2){c.faceup=true;Z5.hyper.push(c);}
-          else if(k===3){c.faceup=false;Z5.gr.push(c);}
-          else{c.faceup=false;Z5.deck.unshift(c);}
-          sfx("grave");renderAll();
-          toast(`🚫 ${c.name} は出せなかった（召喚以外）`);
+          try{
+            const j=await askChoice(`🚫 ${faceNameOf(noCheat)}：相手は自身のターン中、召喚以外でクリーチャーを出せない\n《${c.name}》は【召喚】で出しましたか？\n（GR召喚・墓地召喚・マナ召喚・ムゲンクライムも召喚＝OK。侵略・革命チェンジ・蘇生・トリガー出しは不可）`,
+              ["召喚で出した（そのまま）","召喚以外（そもそも出せない）"]);
+            c._noCheatChk=false;
+            if(j!==1)return;
+            const ZB5=zonesOf(pTo).battle;
+            const bi5=ZB5.findIndex(x=>x.id===c.id);
+            if(bi5<0)return;
+            snap();
+            const k=await askChoice(`《${c.name}》は出せません。出す前の場所を選んでください`,
+              ["手札へ","墓地へ","超次元へ","GRゾーンの下へ","山札の上へ"]);
+            if(k===null)return;
+            // 🚫 出ていないことにするので、待機している「出た時」も取り下げる
+            for(let q=fxQueue.length-1;q>=0;q--)if(fxQueue[q].c&&fxQueue[q].c.id===c.id)fxQueue.splice(q,1);
+            for(let q=TRIG_PENDING.length-1;q>=0;q--)if(TRIG_PENDING[q].c&&TRIG_PENDING[q].c.id===c.id)TRIG_PENDING.splice(q,1);
+            for(let q=ORI_QUEUE.length-1;q>=0;q--)if(ORI_QUEUE[q].hc&&ORI_QUEUE[q].hc.id===c.id)ORI_QUEUE.splice(q,1);
+            ZB5.splice(bi5,1);
+            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.mark=false;
+            const Z5=zonesOf(pTo);
+            if(k===0){c.faceup=true;Z5.hand.push(c);}
+            else if(k===1){c.faceup=true;Z5.grave.push(c);}
+            else if(k===2){c.faceup=true;Z5.hyper.push(c);}
+            else if(k===3){c.faceup=false;Z5.gr.push(c);}
+            else{c.faceup=false;Z5.deck.unshift(c);}
+            sfx("grave");renderAll();
+            toast(`🚫 ${c.name} は出せなかった（召喚以外・出た時も誘発しません）`);
+            logOnly(`🚫 ${S.players[foeN].label} の《${faceNameOf(noCheat)}》により、《${faceNameOf(c)}》はバトルゾーンに出せなかった（出た時は誘発しない）`);
+          }catch(e){console.warn("stNoCheat",e);}
+          finally{c._noCheatChk=false;FX_GATE=Math.max(0,FX_GATE-1);pumpFx();}
         })();
       }
   }catch(e){}
@@ -6192,7 +6229,20 @@ function markArrive(c,opt){
       if(S.expert&&S.vs&&pOwn!=null&&!c.tapped&&!_flipOnly){
         const foeA=pOwn===0?1:0;
         const rIsCre=r?isCreatureReg(r):true;
-        if(rIsCre&&zonesOf(foeA).battle.some(x=>{const r2=getReg(x);return r2&&r2.auraTapIn&&!isSealed(x)&&!isIgnored(x,foeA)&&(!r2.auraTapInNeo||isNeoEvoInstance(x));})){
+        if(rIsCre&&zonesOf(foeA).battle.some(x=>{
+          const r2=getReg(x);
+          if(!(r2&&r2.auraTapIn&&!isSealed(x)&&!isIgnored(x,foeA)))return false;
+          if(r2.auraTapInNeo&&!isNeoEvoInstance(x))return false;
+          /* ⤵ v16.47 「自分のマナゾーンにあるカードの枚数よりコストが小さい相手のクリーチャーは、
+             バトルゾーンにタップして置く」（百族の長 プチョヘンザ型）。
+             数えるのは付与元（相手側）のマナゾーンの枚数。コストが分からないカードは対象外。 */
+          if(r2.auraTapInCostLtMana){
+            const cCost=(r&&r.cost!=null&&r.cost!=="")?+r.cost:null;
+            if(cCost==null||isNaN(cCost))return false;
+            if(!(cCost<zonesOf(foeA).mana.length))return false;
+          }
+          return true;
+        })){
           c.tapped=true;
           toast(`⤵ 常在効果：${faceNameOf(c)} はタップ状態で出た`);
         }
@@ -10732,16 +10782,41 @@ function runWatchFx(pi,type,trigCard){
 }
 function runWatchFxCond(pi,cond){
   if(!S.expert)return;
+  const hits=[];
   for(const c of zonesOf(pi).battle){
     const r=getReg(c);
     if(r&&r.watchFx&&r.watchFx.length){
       const fx=r.watchFx.filter(w=>cond(w.ev));
-      if(fx.length){
-        const cc=c;
-        enqueueWatchJob(async()=>{toast(`⚡誘発処理：${faceNameOf(cc)}`);await runFxList(pi,fx,cc);});
-      }
+      if(fx.length)hits.push({c,fx});
     }
   }
+  if(!hits.length)return;
+  if(hits.length===1){
+    const {c:cc,fx}=hits[0];
+    enqueueWatchJob(async()=>{toast(`⚡誘発処理：${faceNameOf(cc)}`);await runFxList(pi,fx,cc);});
+    return;
+  }
+  /* ⚡ v16.47 ターンのはじめ／終わりに複数体が同時に誘発した時も、
+     TCGは持ち主が好きな順に解決できる。これまでは盤面の左から順に固定だった。
+     1つの仕事にまとめて、その中で1件ずつ順番を聞く（列の作りは変えない）。 */
+  enqueueWatchJob(async()=>{
+    const rest=hits.slice();
+    let guard=0;
+    while(rest.length&&guard++<40){
+      let ix=0;
+      if(S.gameMode==="tcg"&&S.fxOrderPick!==false&&rest.length>1){
+        const j=await askChoice(
+          `⚡ ${S.players[pi].label}：同時に誘発した能力が${rest.length}つあります。\nどれから解決しますか？`,
+          rest.map(o=>`《${faceNameOf(o.c)}》${(o.fx[0]&&o.fx[0].ev)?`／${trigEvLabel(o.fx[0].ev)}`:""}`));
+        if(j!=null&&j>=0&&j<rest.length)ix=j;
+        if(ix>0)logOnly(`⚡ ${S.players[pi].label}：解決順を選択 → 《${faceNameOf(rest[ix].c)}》から`);
+      }
+      const {c:cc,fx}=rest.splice(ix,1)[0];
+      toast(`⚡誘発処理：${faceNameOf(cc)}`);
+      await runFxList(pi,fx,cc);
+      if(rest.length)await waitFxIdle().catch(()=>{});   // 1件ずつ片づけてから次を聞く
+    }
+  });
 }
 const CIV_JP_SEAL={light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"};
 function cardCivsOf(x){const r=getReg(x);return (r&&r.civs)||[];}
@@ -26721,31 +26796,42 @@ async function drainOriotis(activeOnly){
     while(guard++<40){
       const ix=ORI_QUEUE.findIndex(o=>activeOnly?(S.who===o.defO):true);
       if(ix<0)break;
-      const {actor,defO,hc,manaN,destroy}=ORI_QUEUE.splice(ix,1)[0];
+      await runOneOriotis(ORI_QUEUE.splice(ix,1)[0]);
+    }
+  }finally{ORI_DRAINING=false;}
+}
+/* 🌀 v16.48 オリオティス判定を1件だけ解決する。
+   drainOriotis と、TCGの解決順選択（tcgPickNextFx）の両方から呼ぶため切り出した。
+   解決の前後関係（APNAP）は呼び出し側が決める：
+   ・所有者がターンプレイヤー → 出た時(CIP)より先
+   ・出した側がターンプレイヤー → 全CIP解決後 */
+async function runOneOriotis(ent){
+  {
+      const {actor,defO,hc,manaN,destroy}=ent;
       const AZ0=zonesOf(actor);
       try{await MOVE_TAP_CHAIN;}catch(e){}
-      if(!AZ0.battle.some(x=>x.id===hc.id))continue; // 既にバトルゾーンを離れていたら中止
+      if(!AZ0.battle.some(x=>x.id===hc.id))return; // 既にバトルゾーンを離れていたら中止
       // 🌀 破壊版（マグナム・ルピア型）
       if(destroy){
         const yesD=await ask(`🌀 マグナム・ルピア型！\n《${faceNameOf(hc)}》（コスト${getReg(hc).cost}）は${S.players[actor].label}のマナ（${manaN}枚）より大きい。\nこのクリーチャーを破壊しますか？`);
-        if(!yesD)continue;
+        if(!yesD)return;
         snap();
         await destroyCreature(actor,hc);
         renderAll();
         toast(`🌀 マグナム・ルピア：${faceNameOf(hc)} を破壊`);
         try{fxShare("judge","不正は許さない！",`${S.players[actor].label}　${faceNameOf(hc)} を破壊`,true,hc.name,actor);}catch(e){}
-        continue;
+        return;
       }
       const yes=await ask(`🌀 オリオティス！\n《${faceNameOf(hc)}》（コスト${getReg(hc).cost}）は${S.players[actor].label}のマナ（${manaN}枚）より大きい。\n山札の一番下に置きますか？`);
-      if(!yes)continue;
+      if(!yes)return;
       snap();
       // ♾ エターナルΩ：離れるかわりに手札へ
       if(hasEtOmega(actor,hc,getReg(hc))){
         etOmegaToHand(actor,hc,AZ0.battle);
-        continue;
+        return;
       }
       const bi=AZ0.battle.findIndex(x=>x.id===hc.id);
-      if(bi<0)continue;
+      if(bi<0)return;
       AZ0.battle.splice(bi,1);
       if(hc.gear&&hc.gear.length){const gs=hc.gear.splice(0);gs.forEach(g=>gearOut(AZ0,g));}
       const sendBottom=x=>{
@@ -26769,8 +26855,7 @@ async function drainOriotis(activeOnly){
       sfx("grave");renderAll();
       toast(`🌀 オリオティス：${faceNameOf(hc)}${us.length?`と進化元${us.length}枚`:""} は山札の一番下へ`);
       try{fxShare("judge","不正は許さない！",`${S.players[actor].label}　${faceNameOf(hc)} を山札の一番下へ`,true,hc.name,actor);}catch(e){}
-    }
-  }finally{ORI_DRAINING=false;}
+  }
 }
 /* ⚡ toGrave遅延キュー：1枚のカードの効果解決の途中で墓地に落ちたカード（mill等）の「墓地に置かれた時」は、
    割り込まずに、そのカードの解決が完全に終わってから順に発火する（マガマガルピアの破壊まで終えてからゾルザーク）。*/
@@ -30410,6 +30495,7 @@ function renderFxEditor(){
   {const v=$("fxEvoZone");if(v)v.value=FXEDIT.evoZone||"";}
   $("fxAuraTapIn").checked=!!FXEDIT.auraTapIn;
   {const e=$("fxAuraTapInNeo");if(e)e.checked=!!FXEDIT.auraTapInNeo;}
+  {const e=$("fxAuraTapInCostLtMana");if(e)e.checked=!!FXEDIT.auraTapInCostLtMana;}
   {const e=$("fxAuraTapInPow");if(e)e.checked=!!FXEDIT.auraTapInPow;}
   {const e=$("fxStWinBattle");if(e)e.checked=!!FXEDIT.stWinBattle;}
   {const e=$("fxStWinBattleF");if(e)e.value=FXEDIT.stWinBattleF||"";}
@@ -31564,6 +31650,16 @@ function parseCardText(txt,mode){
   if(/Dスイッチ/.test(t)&&!out.set.ctype)out.set.ctype="d2";
   // ニンジャ・ストライク（数字つき）
   m=tSelf.match(/ニンジャ・?ストライク\s*(\d+)/); if(m)out.set.ninja=+m[1];
+  /* ⤵ v16.47 「相手のクリーチャーは、バトルゾーンにタップして置く（出る）」（常在）。
+     プチョヘンザ型の「自分のマナゾーンにあるカードの枚数よりコストが小さい」も読む。 */
+  if(/相手の?クリーチャーは[、,]?\s*(?:バトルゾーンに)?タップして(?:バトルゾーンに)?(?:出る|置く)/.test(tSelf)){
+    out.set.auraTapIn=true;
+    if(/マナゾーンにあるカードの枚数より\s*コストが小さい/.test(tSelf.replace(/\s+/g,""))
+      ||/マナゾーンにあるカードの枚数よりコストが小さい/.test(tSelf)){
+      out.set.auraTapInCostLtMana=true;
+    }
+    out.notes.push({msg:`⤵ 常在「相手のクリーチャーはタップして出る」を設定しました${out.set.auraTapInCostLtMana?"（自分のマナの枚数よりコストが小さいものだけ）":""}`,q:"タップして"});
+  }
   /* 🌀 マスターJトルネード：相手のターンの終わりに、手札にあるこのカードを、
      自分のジョーカーズをコスト合計n以上になるよう手札に戻して出す。 */
   if(/マスター\s*J\s*トルネード/i.test(tSelf)){
@@ -32691,6 +32787,7 @@ function openFxEditor(key){
     qqqx:cur?!!cur.qqqx:false,
     auraTapIn:cur?!!cur.auraTapIn:false,
     auraTapInNeo:cur?!!cur.auraTapInNeo:false,
+    auraTapInCostLtMana:cur?!!cur.auraTapInCostLtMana:false,
     stWinBattle:cur?!!cur.stWinBattle:false,
     stWinBattleF:cur&&cur.stWinBattleF||"",
     stWinBattleCond:cur&&cur.stWinBattleCond||"",
@@ -33270,6 +33367,7 @@ $("fxSave").addEventListener("click",async ()=>{
     evoZone:(()=>{const v=$("fxEvoZone");return v&&v.value?v.value:undefined;})(),
     auraTapIn:$("fxAuraTapIn").checked,
     auraTapInNeo:$("fxAuraTapInNeo")?$("fxAuraTapInNeo").checked:false,
+    auraTapInCostLtMana:$("fxAuraTapInCostLtMana")?$("fxAuraTapInCostLtMana").checked:false,
     auraTapInPow:$("fxAuraTapInPow")?$("fxAuraTapInPow").checked:false,
     stWinBattle:$("fxStWinBattle")?$("fxStWinBattle").checked:false,
     stWinBattleF:($("fxStWinBattleF")?$("fxStWinBattleF").value:"").trim(),
@@ -33748,7 +33846,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.dragonB)attrs.push("ドラゴンB");
     if(v.shieldBurn)attrs.push(`シールド焼却${v.shieldBurnCond?`（${v.shieldBurnCond}）`:""}`);
     if(v.qqqx)attrs.push("Q.Q.QX型");
-    if(v.auraTapIn||v.auraNote)attrs.push("常在");
+    if(v.auraTapIn||v.auraNote)attrs.push(v.auraTapInCostLtMana?"常在[マナ数未満タップイン]":"常在");
     if(hasMachF(v))attrs.push("マッハファイター");
     if(v.noBlock)attrs.push("ブロックされない");
     if(v.noAtked)attrs.push("攻撃されない");
