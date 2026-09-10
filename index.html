@@ -1756,6 +1756,7 @@ body.shake{animation:bodyShake .4s ease-out}
 <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="起動した時に、雷の表紙を出します。タップで飛ばせます">
       <input type="checkbox" id="setSplash"> ⚡ 起動時に表紙を出す</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="【計測用】起動した時に、効果登録の画面（1576個の要素）を丸ごと外します。落ちるまでの回数がこれで伸びるかどうかを測るための切り替えです。オンの間はカード登録の編集ができません（対戦はふつうにできます）。切り替えたら読み直してください"><input type="checkbox" id="setFxOlayOff"> 🧪 計測用：効果登録の画面を読み込まない（要読み直し・編集不可）</label></div>
+    <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="TCGでは、同時に誘発した能力を持ち主が好きな順に解決できます。オンにすると、出た時の能力が同時に2つ以上ある時に「どれから解決しますか？」と聞きます。デュエプレモードでは聞きません（自動）"><input type="checkbox" id="setFxOrderPick" checked> ⚡ 同時に誘発した効果の順番を選ぶ（TCGモードのみ）</label></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="盤面の右下に、ログを開く丸ボタンを浮かべます。スマホ・iPadで片手で出し入れしやすくなります"><input type="checkbox" id="optLogFab" checked> 📜 ログを開く丸ボタンを盤面に浮かべる（スマホ・iPad向け）</label></div>
     <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="丸ボタンが「ランダム捨て」などゾーンのボタンに重なる時、自動で上や横へよけます。丸ボタンは指でつまんで好きな場所へ動かすこともできます"><input type="checkbox" id="optLogFabAvoid" checked> 🚧 丸ボタンがゾーンのボタンに重なる時は自動でよける（つまんで移動も可）</label><button class="btn small ghost" id="btnLogFabReset" title="手で動かした丸ボタンの位置を、右下の既定の場所に戻します">↺ 丸ボタンの位置を戻す</button></div>
     <div class="row"><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px" title="ログの見出しをつかんで、好きな場所へ動かせます。右下・左下の隅をつかむと大きさ（幅と高さ）を変えられます。位置と大きさは次回も覚えています"><input type="checkbox" id="optLogDrag" checked> ✋ ログの見出しをつかんで移動する（隅のつかみ手で大きさ変更）</label><button class="btn small ghost" id="btnLogBoxReset" title="自由に動かしたログの位置と大きさを、既定（右上・幅340px）に戻します">↺ ログの位置と大きさを戻す</button></div>
@@ -2939,6 +2940,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このクリーチャーが攻撃する時、このカードの呪文側を、バトルゾーンに置いたままコストを支払わずに唱えてもよい（ツインパクト専用・邪幽 ジャヴェール型）"><input type="checkbox" id="fxSmashBurst"> 💥 スマッシュ・バースト（攻撃する時に呪文側・場に残る）</label>
         <label><input type="checkbox" id="fxOniTime"> 鬼タイム（両者の盾合計6枚以下で有効）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="◀鬼エンド▶ クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいて、自分のマナゾーンに指定の文明がすべてあれば、このカードを手札からコストを支払わずに出せる（一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）"><input type="checkbox" id="fxOniEnd"> 👹 鬼エンド（攻撃時・盾0のプレイヤーがいれば手札からコストなしで出す）／必要文明<input type="text" id="fxOniEndCiv" placeholder="例：火闇自然（空欄＝文明条件なし）" style="width:180px"></label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="マスターJトルネード：相手のターンの終わりに、このカードが自分の手札にあれば、自分のジョーカーズ・クリーチャーをコストの合計がこの数以上になるように好きな数だけ手札に戻して、このカードをコストを支払わずに出せる（ジョリー・ザ・ジョルネード型）。このターン中に自分の他のマスターJトルネードを使っていない時だけ使えます。0＝無効"><input type="checkbox" id="fxMasterJT"> 🌀 マスターJトルネード（相手のターンの終わりに、味方を手札に戻して手札から出す）／コスト合計<input type="number" id="fxMasterJTSum" min="0" max="99" value="10" style="width:56px">以上／対象<input type="text" id="fxMasterJTF" list="raceList" placeholder="例：ジョーカーズ（空欄＝ジョーカーズ）" style="width:170px"></label>
         <label><input type="checkbox" id="fxAbyss"> アビスラッシュ（墓地から召喚・SA・ターン終わりに山下へ）</label>
         <label><input type="checkbox" id="fxYobinion"> ヨビニオン（召喚時、山上からコストの小さいクリーチャーが出るまでめくって出す）</label>
         <label title="このクリーチャーがタップしていれば、相手が自分のターン中にクリーチャーを召喚するか呪文を唱えた時、そのターンの残りが飛ぶ（禁断機関 ViVy-R型）。「〜した時」の誘発なので、実行した瞬間にタップしていれば誘発が確定し、そのあとデーモン・ハンド等でこのクリーチャーが除去されてもターンは飛びます"><input type="checkbox" id="fxEndTurnOppPlay"> ⏭ タップ中なら、相手がクリーチャー召喚／呪文を唱えた時に相手のターンを終わらせる（ViVy-R型）</label>
@@ -3073,6 +3075,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <label><input type="checkbox" id="fxAGMach"> マッハF</label>
           <label><input type="checkbox" id="fxAGBlocker"> ブロッカー</label>
           <label><input type="checkbox" id="fxAGSlayer"> スレイヤー</label>
+          <label title="自分のクリーチャーが出た時、ジャストダイバーを適用する（ヴォルグ・イソレイト6th型）。出たクリーチャーは待機列に入り、解決されると次の自分のターンまで相手に選ばれず攻撃されない"><input type="checkbox" id="fxAGJD"> ジャストダイバー</label>
           <label><input type="checkbox" id="fxAGEsc"> エスケープ</label>
           <label><input type="checkbox" id="fxAGTEsc"> 真・エスケープ</label>
           <label title="自分のクリーチャーが離れる時、かわりに自分のシールドを2つ手札に加えてもよい（エバーラストのマナ武装5型）。盾が2枚未満なら使えません"><input type="checkbox" id="fxAGTEsc2"> 盾2つで身代わり（2枚必須）</label>
@@ -5191,7 +5194,7 @@ const S={
   /* ⚔ 対戦モードは既定でON（v14.52・雷鳴神さん指示）。
      OFFのまま起動→自動で開いた対戦開始から始めると「相手がいないモード」になってしまうため */
   extra:[0,0],
-  gameMode:"dmps", autoTap:false, noUntapMana:false, tapMultiMana:true, civWarn:true,
+  gameMode:"dmps", fxOrderPick:true, autoTap:false, noUntapMana:false, tapMultiMana:true, civWarn:true,
   imageLoadMode:"auto", splashOff:false,
 };
 /* 🖼 登録画像の管理（Safariのメモリ対策）
@@ -5535,7 +5538,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.41";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.46";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9559,6 +9562,9 @@ async function runTurnEndTriggers(cur2){
     await WATCH_CHAIN;
     await waitFxIdle();
     TURN_END_PHASE="";
+    // 🌀 v16.44 マスターJトルネード：相手のターンの終わりに、手札から出す（ジョリー・ザ・ジョルネード型）
+    try{await offerMasterJT(cur2);}catch(e){console.warn("offerMasterJT",e);}
+    await waitFxIdle();
     // ⚙ ライオネル・グロリア：タップ中の《神託アイドル！コットン》にクロスしている時、
     // 自分のターン終了時に手札の光/闇ゼニスを任意でコストを支払わず「召喚」する。
     {
@@ -12214,10 +12220,11 @@ const FX_TYPES=[
   ["revealTopSumPlay","🎴 自分の山札の上から数枚を表向きにし、その中から条件に合うクリーチャーをコストの合計がn以下になるように好きな数出す。残りを好きな順序で山札の下に置く（蒼き守護神 ドギラゴン閃のファイナル革命型／n＝コスト合計の上限・条件欄に「見る4」で見る枚数）"],
   ["handGraveCastBottom","🔮 自分の手札または墓地から条件に合う呪文を1枚、コストを支払わずに唱えてもよい。唱えた後、墓地に置くかわりに山札の一番下に置く（龍風混成 ザーディクリカ型／条件欄で文明・コスト指定）"],
   ["bounceCardAny","🏯 バトルゾーンにある「カード」をn枚選び、持ち主の手札に戻す（龍脈術 落城の計型／条件欄で絞れる）。クリーチャー単位ではなくカード単位なので、進化クリーチャーの一番上だけを戻せます（＝退化。下のカードは場に残ります）"],
+  ["applyJDiver","🌀 ジャストダイバーを適用する（次の自分のターンのはじめまで、相手に選ばれず攻撃されない／出た時に待機列へ自動で入ります）"],
   ["foeMustAtkCre","🧲 次の自分のターンのはじめまで、相手のクリーチャーが攻撃する時、可能ならクリーチャーを攻撃する（オラオラ・スラッシュ型／プレイヤーを攻撃しようとすると注意が出ます）"],
   ["jtDeclareCost","🌀🔢 直前のJトルネードで戻したクリーチャーのコストを宣言する（ジェイ-SHOCKER型／次の自分のターンのはじめまで、相手はそのコストのカードを出せない・条件欄「召喚だけ」でラッキーナンバー型に）"],
   ["jtUseEnterFx","🌀✨ 直前のJトルネードで戻したクリーチャーの「バトルゾーンに出た時」の能力を1つ使う（せんすいカンちゃん型）"],
-  ["jTornado","🌀 Jトルネード：自分の他のジョーカーズを最大n体、手札に戻す（途中でやめてよい・条件欄で対象／戻したカードのコスト合計をトーストとログに出します）"],
+  ["jTornado","🌀 Jトルネード：自分の他のジョーカーズを最大n体、手札に戻す（n=0で無制限・途中でやめてよい・条件欄で対象／条件欄に「合計10以上」と書くとコスト合計がその数になるまで戻す＝マスターJトルネード／戻したカードのコスト合計をトーストとログに出します）"],
   ["keepShieldsGrave","🛡🔥 各プレイヤーは自身のシールドゾーンのカードをn枚ずつ選び、残りを墓地に置く（CRYMAX ジャオウガ型・ブレイクではないのでS・トリガーは使えない／条件欄「自分だけ」「相手だけ」で片側）"],
   ["eternalGate","⛓ 相手のシールドが自分より多い時だけ実行。相手は自分のシールドから「自分（唱えた側）のシールドと同じ枚数」を残して選び、残りは持ち主の手札へ（S・トリガー使用可・憎悪と怒りの獄門型）"],
   ["luckyDarts","🎯 自分のシールドを1つ相手に選ばせ、見る。その中から呪文を好きな数、コストを支払わずに唱えてもよい（ラッキー・ダーツ型／唱えなかったカードは裏向きで元に戻る）。条件欄に「ランダム」でランダムに1つ、「すべて」で呪文を全部唱える＝デュエプレ版"],
@@ -12381,7 +12388,7 @@ const FX_TYPES=[
   ["grantTurnSelf","✨ そのターン、このクリーチャー自身に能力を与える（条件欄に「ブロックされない」「スピードアタッカー」等を「／」区切りで・サイバー・A・アイアンズ型）"],
 ];
 const FX_LABEL=new Proxy(Object.fromEntries(FX_TYPES),{get:(t,k)=>(k in t)?t[k]:(typeof k==="string"&&k.startsWith("sp:")?"特殊："+k.slice(3):k)});
-const FX_NO_N=new Set(["foeMustAtkCre","jtDeclareCost","jtUseEnterFx","handGraveCastBottom","eternalGate","luckyDarts","numBounceCost","luckyNumber","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","meteorBurnX","motherSeiiki","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","breakMineAll","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
+const FX_NO_N=new Set(["applyJDiver","foeMustAtkCre","jtDeclareCost","jtUseEnterFx","handGraveCastBottom","eternalGate","luckyDarts","numBounceCost","luckyNumber","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","meteorBurnX","motherSeiiki","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","grantTurnSelf","stackTopToGrave","gachinkoFlipWin","handesCastIfSpell","foePickReviveThenSeal","turnEndUntapAll","untapAllMineNow","peek","battleAsk","hold","oriotis1","drawTapped","graveView","graveViewMy","flip","handShieldUp","tapAllOp","turnLock","freeSummon","freeCast","atkNoLeaveSelf","diaBliz","foeAtkLockP","tempBlockerAll","selfToZone","flipTopMana","breakMineAny","breakMineAll","graveToDeckAll","foeAllShield","deckEvo","untapFilt","handStFree","selfBounceAll","grantStayBlk","foeBounceAll","handCastSpell","handManaCastSpell","foeNoSpell","runMode","foeFreezeAll","drawPerOppTapped","drawUpToOppTapped","trigCantAtkNextMine","pickCostSpellHand","graveToManaAllTap","drawAsk","manaUntapAll","manaKillAllBoth","destroySameName","manaSameNameGrave","matenSwap","hakiJudge","deckCastSpellAll","deckGearFree","handGearCrossSelf","hoganBlaster","foeMaxCostDiscardRevive","deathGate","gachinkoWinToHand","selfToShield","grantTurnAll","noAtkAllTurn","noSTAllTurn","revealUntilNamed","tauntTapSelfTurn","manaCreToHandBounceLE","grsummonPerSumKill","selfHandAllDiscard","castSelfToBattleEndMana","destroyAllOthers","anyDestroyThenRebirth","peepDiscardKillSameCost","civAtkGuardTurn","deckTopHandOrMana","evoStackFromHandMana","knightMagic","allZonesToDeck","myOthersToDeckBottom","pickAnyToDeckBottomThenReveal","graveCastBottom","chargeTapManaCount","manaAllCreatureBattleNoEnterFx"]);
 /* 条件欄を対象フィルタとして使う効果（追加分） */
 const fxNoN=t=>FX_NO_N.has(t)||(typeof t==="string"&&t.startsWith("sp:"));
 /* ☄ 誘発イベントの日本語名（登録一覧の要約用・v14.72） */
@@ -13839,15 +13846,22 @@ async function destroyCreature(pi,c,opts){
   if(S.expert){
     const rp=getReg(c);
     if(rp&&rp.watchFx&&rp.watchFx.length){
+      /* ⚡ v16.46 破壊された時（pig）・墓地に置かれた時（toGrave）は、これまで
+         その場で投げっぱなしに実行していたため、全体破壊などで複数体が同時に壊れても
+         列に並ばず、解決順を選べませんでした（TCGは持ち主が好きな順に解決できます）。
+         効果の解決中（fxRunning／FX_GATE）は、他の誘発と同じ待機列に入れて
+         drainTrig にさばかせます。解決中でなければ今までどおりその場で流します。 */
+      const _defer=!!(S.vs&&(fxRunning||FX_GATE>0));
+      const _bi0=Z.battle.findIndex(x=>x.id===c.id);
       const fx=onceFilter(c,rp.watchFx.filter(w=>w.ev==="pig"));
       if(fx.length){
-        toast(`⚡破壊された時の効果：${faceNameOf(c)}`);
-        runFxList(pi,fx,c);
+        if(_defer)TRIG_PENDING.push({pi,fx,c,onceKeys:[],ev:"pig",pos:_bi0,trigCard:null});
+        else{toast(`⚡破壊された時の効果：${faceNameOf(c)}`);runFxList(pi,fx,c);}
       }
       const fxG=onceFilter(c,rp.watchFx.filter(w=>w.ev==="toGrave"||w.ev==="toGraveBattle")); // 破壊＝バトルゾーンから墓地へ
       if(fxG.length){
-        toast(`⚡墓地に置かれた時の効果：${faceNameOf(c)}`);
-        runFxList(pi,fxG,c);
+        if(_defer)TRIG_PENDING.push({pi,fx:fxG,c,onceKeys:[],ev:"toGraveBattle",pos:_bi0,trigCard:null});
+        else{toast(`⚡墓地に置かれた時の効果：${faceNameOf(c)}`);runFxList(pi,fxG,c);}
       }
     }
   }
@@ -21614,14 +21628,11 @@ async function runFxList(pi,list,srcCard,inPump){
         snap();
         if(!top){
           // 下に重ねたカードを1枚だけ抜き取る（クリーチャーはそのまま残る）
-          const ui=(host.under||[]).findIndex(u=>u.id===card.id);
-          if(ui<0)continue;
-          host.under.splice(ui,1);
-          card.faceup=true;card.tapped=false;card.sideways=false;card.rot=0;card.buff=null;card.seals=[];
-          if(typeof toHand==="function")toHand(ZB,card);else ZB.hand.push(card);
-          toast(`🏯 ${faceNameOf(host)} の下の《${faceNameOf(card)}》を1枚だけ持ち主の手札に戻した`);
-          logPush(`🏯 ${S.players[pp].label}：《${faceNameOf(host)}》の下の《${faceNameOf(card)}》を手札へ`);
-          if(host.gl)relinkAfterMemberLoss(pp,host);   // 🔗 v16.35 リンクを組み直す
+          // 🔗 v16.44 抜いたあとの組み直しも removeUnderMember がまとめて行う
+          const hostNm2=faceNameOf(host);
+          if(!removeUnderMember(pp,host,card.id,"hand"))continue;
+          toast(`🏯 ${hostNm2} の下の《${faceNameOf(card)}》を1枚だけ持ち主の手札に戻した`);
+          logPush(`🏯 ${S.players[pp].label}：《${hostNm2}》の下の《${faceNameOf(card)}》を手札へ`);
         }else if(host.under&&host.under.length){
           // 🔽 退化：一番上のカードだけを戻し、下のカードを場に残す
           const bi=ZB.battle.findIndex(x=>x.id===host.id);
@@ -21660,18 +21671,47 @@ async function runFxList(pi,list,srcCard,inPump){
       /* 🌀 v16.38 Jトルネード：自分の**他の**ジョーカーズをn体、手札に戻す（最大n体・途中でやめてよい）。
          戻したカードは S._jTornadoLast に控える（コストの合計を後ろの行で使うため）。
          条件欄で対象を絞れる（既定は「ジョーカーズ」）。 */
-      const filtJ=String(f.cond||"ジョーカーズ").trim();
+      /* 🌀 v16.44 マスターJトルネード用に「下限」を足した。
+           ・上限＝n欄（0＝無制限。合計の条件を満たすまで何体でも戻せる）
+           ・下限＝条件欄の「合計10以上」（コストの合計がその数になるまで戻す）
+         下限があるうちは途中でやめられない（1枚も選んでいなければやめられる）。 */
+      let filtJ=String(f.cond||"ジョーカーズ").trim();
+      let needSum=0;
+      {const mS=filtJ.match(/合計\s*(\d+)\s*以上/);
+       if(mS){needSum=+mS[1];filtJ=filtJ.replace(mS[0],"").replace(/^[／\/、,\s]+|[／\/、,\s]+$/g,"").trim();}}
+      if(!filtJ)filtJ="ジョーカーズ";
+      const poolJ=()=>Z.battle.filter(x=>{
+        if(srcCard&&x.id===srcCard.id)return false;   // 「自分の他の」
+        const rx=getReg(x);
+        return rx&&isCreatureReg(rx)&&(!filtJ||lockFilterOk(filtJ,rx,x));
+      });
       S._jTornadoLast=[];
-      for(let i=0;i<n;i++){
-        const pool=Z.battle.filter(x=>{
-          if(srcCard&&x.id===srcCard.id)return false;   // 「自分の他の」
-          const rx=getReg(x);
-          return rx&&isCreatureReg(rx)&&(!filtJ||lockFilterOk(filtJ,rx,x));
-        });
+      // 🌀 下限があるなら、そもそも届くかを先に見る（届かないなら何もしない）
+      if(needSum>0){
+        const canSum=poolJ().reduce((a,x)=>a+(+(getReg(x)||{}).cost||0),0);
+        if(canSum<needSum){
+          toast(`🌀 Jトルネード：手札に戻せる${filtJ}のコスト合計が ${canSum} なので、${needSum}以上にできません`);
+          continue;
+        }
+      }
+      /* 上限は n 欄。runFxList の n は 0 を 1 に丸めるので、無制限にしたい時は f.n を直に見る。
+         下限を書いていない今までの登録は、これまでどおり n 体が上限のまま。 */
+      const limJ=(needSum>0&&(f.n|0)<=0)?99:Math.max(1,f.n|0);
+      for(let i=0;i<limJ;i++){
+        const sumNow=S._jTornadoLast.reduce((a,b)=>a+(b.cost||0),0);
+        if(needSum>0&&sumNow>=needSum)break;   // 下限に届いたら終わり
+        const pool=poolJ();
         if(!pool.length){if(i===0)toast(`🌀 手札に戻せる${filtJ}がいません`);break;}
-        const jj=await pickCard(`🌀 Jトルネード：手札に戻す${filtJ}を選択（${i+1}/${n}・キャンセルでやめる）`,pool,
+        const jj=await pickCard(
+          needSum>0
+            ? `🌀 Jトルネード：手札に戻す${filtJ}を選択（いまのコスト合計 ${sumNow}／${needSum}以上にします${S._jTornadoLast.length?"":"・キャンセルでやめる"}）`
+            : `🌀 Jトルネード：手札に戻す${filtJ}を選択（${i+1}/${limJ}・キャンセルでやめる）`,
+          pool,
           {hint:"自分の他のジョーカーズを手札に戻します",sub:x=>{const rx=getReg(x);return `コスト${rx&&rx.cost!=null?rx.cost:"?"}`;}});
-        if(jj===null)break;
+        if(jj===null){
+          if(needSum>0&&S._jTornadoLast.length){toast(`🌀 コストの合計が ${needSum} 以上になるまで選んでください（いま ${sumNow}）`);i--;continue;}
+          break;
+        }
         const tgt=pool[jj];
         if(cantLeaveBattle(pi,tgt)){toast(`⚓ ${faceNameOf(tgt)} は離れない`);break;}
         const bi=Z.battle.findIndex(x=>x.id===tgt.id);
@@ -21693,6 +21733,19 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🌀 Jトルネード：${S._jTornadoLast.map(x=>x.name).join("、")} を手札に戻した（コストの合計 ${sum}）`);
         logPush(`🌀 ${S.players[pi].label}：Jトルネードで ${S._jTornadoLast.map(x=>x.name).join("、")} を手札へ（合計${sum}）`);
       }
+    }else if(f.t==="applyJDiver"){
+      /* 🌀 v16.43 ジャストダイバーを適用する（待機列から解決された時）。
+         次の自分のターンのはじめまで、このクリーチャーは相手に選ばれず、攻撃されない。
+         解除はターンのはじめに自動。手で外したい時は付与メニューから。 */
+      const tgt=srcCard;
+      if(!tgt){toast("🌀 対象のクリーチャーが分かりません");continue;}
+      if(!zonesOf(pi).battle.some(x=>x.id===tgt.id)){
+        toast(`🌀 ${faceNameOf(tgt)} は場にいないので、ジャストダイバーは適用しません`);continue;
+      }
+      tgt.jd=true;
+      sfx("ok");renderAll();
+      toast(`🌀 ジャストダイバー適用：${faceNameOf(tgt)} は次の${S.players[pi].label}のターンのはじめまで、相手に選ばれず攻撃されません`);
+      logPush(`🌀 ${S.players[pi].label}：《${faceNameOf(tgt)}》にジャストダイバーを適用`);
     }else if(f.t==="foeMustAtkCre"){
       /* 🧲 v16.40 次の自分のターンのはじめまで、相手のクリーチャーが攻撃する時、
          可能ならクリーチャーを攻撃する（オラオラ・スラッシュ型）。
@@ -23057,6 +23110,16 @@ async function askIgnoreNameOnBattleEntry(pi,c){
     delete c._ignoreNameAsking;renderAll();
   }catch(e){delete c._ignoreNameAsking;}
 }
+/* ⚡ v16.44 このカードが「出た時」(CIP)として待機列に入るかどうか。
+   enqueueFx の入口の判定をそのまま切り出したもの。
+   ジャストダイバー側が「pumpFx が1本の列として拾ってくれるか」を知るためにも使う。
+   ※ 名前指定の能力無視は faces/CIP を持たなくても登場時に宣言が要るので、ここに含む。 */
+function hasCipFx(reg,c){
+  const hasFx=reg&&(cipFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0||reg.ignore==="name");
+  if(hasFx)return true;
+  if(reg&&(reg.soulRaid||reg.momoKingX))return true;
+  return !!soulXCipFx(c).length;
+}
 function enqueueFx(pi,c){
   if(!S.expert)return;
   if(c._repPending)return;
@@ -23076,9 +23139,7 @@ function enqueueFx(pi,c){
   }
   if([0,1].some(p=>zonesOf(p).battle.some(b=>b.gear&&b.gear.includes(c))))return;
   const reg=getReg(c);
-  // 名前指定の能力無視は通常の faces/CIP を持たなくても、登場時に宣言が必要。
-  const hasFx=reg&&(cipFx(reg,0).length||(reg.twin&&faceFx(reg,1).length)||(reg.modeN|0)>0||reg.ignore==="name");
-  if(!hasFx&&!(reg&&(reg.soulRaid||reg.momoKingX))&&!soulXCipFx(c).length)return;
+  if(!hasCipFx(reg,c))return;
   // ⏳ 解決中のクリーチャー能力によって生まれたCIPは、親能力を最後まで終えてから解決する。
   if(fxRunning){fxQueue.push({pi,c,reg});}
   else{
@@ -23104,6 +23165,17 @@ async function pumpFx(){
     // 💰 効果を処理している最中に手札からカードを出した／唱えた場合、そのコスト支払い（代替コストの選択を含む）を先に済ませる。
     //    1枚ごとに待たないと、コストの確認より先に効果が解決してしまい、確認が後の操作までずれ込む。
     try{await MOVE_TAP_CHAIN;}catch(e){}
+    /* 🎛 v16.42〜44 TCGは「同時に誘発した能力は、その持ち主が好きな順で解決する」。
+       待機している中に同じ持ち主のものが2つ以上あれば、どれから解決するか選んでもらう。
+       v16.44 で「出た時」と「その他の誘発」を1本の列にまとめ、種類をまたいで並べ替えられるようにした。
+       デュエプレモードは今までどおり自動（到着順・APNAP・trigRank）。
+       設定「⚡ 同時に誘発した効果の順番を選ぶ」で切れる。 */
+    let _tcgPick="";
+    if(S.gameMode==="tcg"&&S.fxOrderPick!==false){
+      _tcgPick=await tcgPickNextFx(!S.allyEnterFirst);
+      if(_tcgPick==="trig")continue; // 誘発を先に解決した。待機列を取り直す
+      if(!fxQueue.length)continue;   // 誘発の解決で列が空になった場合の保険
+    }
     const {pi,c,reg}=fxQueue.shift();
     fxInsertAt=null; // 子CIPは待機列の末尾へ積み、現在のカードの解決へ割り込ませない
     // ▶ 効果処理の演出待ち：連続処理（キューが多い）時は短縮して詰まり感を軽減
@@ -23114,9 +23186,10 @@ async function pumpFx(){
     // 🃏 デュエプレモード：同一プレイヤー内は「出た時」(CIP)が最優先（wiki準拠：新たな出た時は未解決の
     //    破壊された時等より繰り上がる）。次のCIPの持ち主がターンプレイヤー自身なら、そのプレイヤーの
     //    他の誘発はこのCIPの後に回す。非ターン側のCIPなら従来どおりターンプレイヤーの誘発が先（APNAP）。
+    // ⚡ v16.44 TCGでこのCIPを「先に解決する」と選んだ時は、誘発の先出しをしない（選び直しになるため）
     {const _skipAlly=!S.allyEnterFirst;
      const _cipIsTurnP=(S.gameMode!=="tcg")&&(S.who===pi);
-     if(!_cipIsTurnP&&TRIG_PENDING.length&&TRIG_PENDING.some(t=>S.who===t.pi&&!(_skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"))))await drainTrig(true,_skipAlly);}
+     if(_tcgPick!=="cip"&&!_cipIsTurnP&&TRIG_PENDING.length&&TRIG_PENDING.some(t=>S.who===t.pi&&!(_skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"))))await drainTrig(true,_skipAlly);}
     HILITE_ID=c.id;renderAll(); // 🔶 処理中のカードを黄色ハイライト
     // ⚡ どのカードの効果を処理中か常時表示（同時に複数体出た時に取り違えないように・残り待機数も出す）
     {const _bi=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
@@ -24284,12 +24357,11 @@ async function faceupDestroyRep(pi,c,n,kindLabel){
     const t=ps[j];
     if(t.host){
       // 🧬 下のカードは「破壊」ではなく、そのまま墓地へ置く（進化元は場のクリーチャーではないため）
-      const hi=t.host.under.findIndex(u=>u.id===t.card.id);
-      if(hi<0)continue;
-      const rm=t.host.under.splice(hi,1)[0];
-      rm.faceup=true;rm.tapped=false;rm.sideways=false;rm.rot=0;rm.buff=null;rm.mark=false;rm.isCross=false;
-      Z.grave.push(rm);
-      names.push(`${faceNameOf(rm)}（${faceNameOf(t.host)}の下）`);
+      // 🔗 v16.44 リンク合体のメンバーだった場合は、抜けたあとの合体名を組み直す（removeUnderMember が面倒を見る）
+      const hostNm=faceNameOf(t.host);
+      const rm=removeUnderMember(pi,t.host,t.card.id,"grave");
+      if(!rm)continue;
+      names.push(`${faceNameOf(rm)}（${hostNm}の下）`);
       if(typeof queueToGrave==="function"){try{queueToGrave(pi,rm,"battle");}catch(e){}} // ⚡ 墓地に置かれた時（ゾルザーク型）は解決後に発火
       renderAll();
     }else{
@@ -26192,6 +26264,56 @@ function setFxNowChip(msg){
   applyFloatSize(e,"fxNowChip");
   applyFloatPos(e,"fxNowChip");
 }
+/* 🌀 v16.44 マスターJトルネード（ジョリー・ザ・ジョルネード型）。
+   相手のターンの終わりに、このカードが自分の手札にあり、このターン中に自分の他の
+   「マスターJトルネード」をまだ使っていなければ、自分のジョーカーズ・クリーチャーを
+   コストの合計がn以上になるように好きな数だけ手札に戻して、このカードを手札から出せる。
+   戻す処理は既存の jTornado（条件欄「合計n以上」）にそのまま任せる。
+   cur＝いまターンを終えるプレイヤー。その相手側だけが対象。 */
+async function offerMasterJT(cur){
+  if(!S.expert||!S.vs)return;
+  const p=cur===0?1:0;                       // 「相手のターンの終わり」＝ターンプレイヤーでない側
+  if(S._masterJTUsed===`${S.turn}:${p}`)return;   // このターン、この人はもう使った
+  const Z=zonesOf(p);
+  const cands=Z.hand.filter(x=>{const r=getReg(x);return r&&r.masterJT&&isCreatureReg(r);});
+  if(!cands.length)return;
+  for(const cc of cands){
+    if(S._masterJTUsed===`${S.turn}:${p}`)break;
+    if(!Z.hand.some(h=>h.id===cc.id))continue;
+    const r=getReg(cc);
+    const need=Math.max(1,+r.masterJTSum||10);
+    const filt=String(r.masterJTF||"ジョーカーズ").trim()||"ジョーカーズ";
+    const can=Z.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&lockFilterOk(filt,rx,x);})
+      .reduce((a,x)=>a+(+(getReg(x)||{}).cost||0),0);
+    if(can<need)continue;                    // 合計が足りないなら聞かない
+    const y=await ask(`🌀 マスターJトルネード（${S.players[p].label}）\n手札の《${faceNameOf(cc)}》を、自分の${filt}をコストの合計が${need}以上になるように手札に戻して出しますか？\n（いま戻せる${filt}のコスト合計 ${can}）`);
+    if(!y)continue;
+    snap();
+    // 🌀 まず手札に戻す（合計が届かなければ何も起きない＝出さない）
+    await runFxList(p,[{t:"jTornado",n:0,cond:`${filt}／合計${need}以上`}],cc,fxRunning);
+    const got=(S._jTornadoLast||[]).reduce((a,b)=>a+(b.cost||0),0);
+    if(got<need){
+      toast(`🌀 コストの合計が ${need} に届かなかったので、${faceNameOf(cc)} は出しません`);
+      continue;
+    }
+    const hi=Z.hand.findIndex(h=>h.id===cc.id);
+    if(hi<0)continue;
+    Z.hand.splice(hi,1);
+    cc.faceup=true;cc.tapped=false;
+    if(cheatEnterBattle(p,cc)){
+      S._masterJTUsed=`${S.turn}:${p}`;      // このターンはもう使えない
+      emitEvent(p,"summon");enqueueFx(p,cc);
+      toast(`🌀 マスターJトルネード！ ${faceNameOf(cc)} をコストを支払わず出した（戻したコストの合計 ${got}）`);
+      fxKeyword(p,"マスターJトルネード！",cc.name,"");
+      logPush(`🌀 ${S.players[p].label}：マスターJトルネードで《${faceNameOf(cc)}》を出した（戻した合計${got}／${need}以上）`);
+      sfx("ok");renderAll();
+      await waitFxIdle();
+    }else{
+      Z.hand.splice(hi,0,cc);                // 出せなかったら手札に戻す
+      toast(`⚠ バトルゾーンがいっぱいで ${faceNameOf(cc)} を出せませんでした`);
+    }
+  }
+}
 /* 👹 鬼エンド：クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいて、
    自分のマナゾーンに必要な文明がすべてあれば、手札の鬼エンド持ちをコストを支払わずに出せる
    （一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）。両プレイヤーが対象。 */
@@ -26468,6 +26590,65 @@ function trigQueuePreview(){
   const names=ord.slice(0,4).map(t=>faceNameOf(t.c));
   return `⏳ 待機誘発（解決順）：${names.join(" → ")}${ord.length>4?` …他${ord.length-4}件`:""}`;
 }
+/* ⚡ v16.43 誘発の種類を日本語で短く出す（解決順の選択肢に添える）。 */
+function trigEvLabel(ev){
+  const M={jdiver:"ジャストダイバーの適用",selfAtk:"攻撃する時",selfAtkC:"クリーチャーを攻撃する時",selfAtkP:"プレイヤーを攻撃する時",
+    atkP:"プレイヤーが攻撃された時",anyAtk:"誰かが攻撃した時",allyAtk:"味方が攻撃する時",
+    toGrave:"墓地に置かれた時",toGraveBattle:"場から墓地に置かれた時",selfLeave:"場を離れた時",
+    selfDestroy:"破壊された時",allyEnter:"味方が出た時",allyEvo:"味方が進化した時",
+    turnEndMine:"自分のターンの終わりに",turnStartMine:"自分のターンのはじめに",
+    spell:"呪文を唱えた時",summon:"召喚した時",revFinal:"ファイナル革命",
+    foeFreeSpell:"相手がタダで唱えた時",selfWinBattle:"バトルに勝った時"};
+  return M[ev]||ev||"保留";
+}
+/* ⚡ v16.44 待機列から取り出した誘発を1件だけ解決する。
+   drainTrig（誘発どうし）と pumpFx（出た時と混ぜて並べ替える時）の両方から呼ぶため、
+   TRIG_PENDING.splice で取り出したあとの処理をここに切り出してある。 */
+async function runOneTrig(t){
+  // ⚡ 誘発元が場を離れていても、誘発した時点で確定しているので実行する（記録だけ残す）
+  if(!zonesOf(t.pi).battle.some(x=>x.id===t.c.id)){
+    logOnly(`⚡ ${faceNameOf(t.c)} の誘発（${t.ev||"保留"}）を解決（誘発時に場にいたため・現在：${whereIs(t.c)}）`);
+  }
+  toast(`⚡誘発処理：${faceNameOf(t.c)}`);
+  setFxNowChip(`⚡ 誘発処理：${faceNameOf(t.c)}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`); // ⏳ 残りの待機誘発を解決順で表示
+  setFxNow(t.pi,t.c);
+  const _prevTrig=FX_TRIG;FX_TRIG=t.trigCard||null;
+  try{await runFxList(t.pi,t.fx,t.c,fxRunning);}
+  finally{FX_TRIG=_prevTrig;}
+  S._watchOnce=S._watchOnce||{};
+  for(const k of (t.onceKeys||[]))S._watchOnce[k]=`${S.turn}:${S.who}`;
+}
+/* ⚡ v16.44 効果スタックの1本化：
+   「出た時」(fxQueue) と「その他の誘発」(TRIG_PENDING) を、同じ持ち主のぶんだけ1つの列として並べ、
+   種類をまたいで解決順を選べるようにする。カード自身の出た時とジャストダイバーのような組み合わせも並べ替えられる。
+   返り値： "trig"＝誘発を1件解決した（呼び出し側は列を取り直す）
+            "cip" ＝出た時を選んだ（fxQueue の先頭に寄せてある。誘発の先出しはしない）
+            ""    ＝選ぶまでもなかった（今までどおりの流れ）
+   デュエプレモード・設定オフの時は呼ばない（並びは trigRank などの自動判定のまま）。 */
+async function tcgPickNextFx(skipAlly){
+  if(!fxQueue.length)return "";
+  const late=t=>!!(skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"));
+  const trigs=TRIG_PENDING.map((t,i)=>({kind:"trig",t,i})).filter(o=>!late(o.t));
+  // 🃏 APNAP：ターンプレイヤーの誘発が待っていればその持ち主から。無ければ待機列の先頭の持ち主。
+  const headPi=trigs.some(o=>o.t.pi===S.who)?S.who:fxQueue[0].pi;
+  const cands=trigs.filter(o=>o.t.pi===headPi)
+    .concat(fxQueue.map((q,i)=>({kind:"cip",q,i})).filter(o=>o.q.pi===headPi));
+  if(cands.length<2)return "";
+  const j=await askChoice(
+    `⚡ ${S.players[headPi].label}：同時に誘発した能力が${cands.length}つあります。\nどれから解決しますか？`,
+    cands.map(o=>o.kind==="cip"?`《${faceNameOf(o.q.c)}》／出た時`:`《${faceNameOf(o.t.c)}》／${trigEvLabel(o.t.ev)}`));
+  const sel=cands[(j!=null&&j>=0&&j<cands.length)?j:0];
+  if(sel.kind==="cip"){
+    if(sel.i>0)fxQueue.unshift(fxQueue.splice(sel.i,1)[0]);
+    logOnly(`⚡ ${S.players[headPi].label}：解決順を選択 → 《${faceNameOf(sel.q.c)}》（出た時）から`);
+    return "cip";
+  }
+  const t=TRIG_PENDING.splice(sel.i,1)[0];
+  logOnly(`⚡ ${S.players[headPi].label}：解決順を選択 → 《${faceNameOf(t.c)}》（${trigEvLabel(t.ev)}）から`);
+  const _prevDr=TRIG_DRAINING;TRIG_DRAINING=true; // 解決中に drainTrig が二重に走らないようにする
+  try{await runOneTrig(t);}finally{TRIG_DRAINING=_prevDr;}
+  return "trig";
+}
 async function drainTrig(activeOnly,skipAlly){
   if(TRIG_DRAINING||!TRIG_PENDING.length)return;
   TRIG_DRAINING=true;
@@ -26501,21 +26682,27 @@ async function drainTrig(activeOnly,skipAlly){
         if(ix>0)logOnly(`⚡ 解決順（デュエプレ）：待機中の誘発から ${faceNameOf(TRIG_PENDING[ix].c)}（${TRIG_PENDING[ix].ev||"保留"}）を優先して解決`);
       }else{
         ix=TRIG_PENDING.findIndex(t=>(activeOnly?(S.who===t.pi):true)&&!late(t));
+        /* 🎛 v16.43 TCGは同時に誘発した能力を持ち主が好きな順に解決できる。
+           出た時（fxQueue）と同じように、待機している誘発が同じ持ち主で2つ以上あれば選んでもらう。
+           種類（攻撃する時・破壊された時・ターン終わり…）はまたいで並べる。 */
+        if(ix>=0&&S.fxOrderPick!==false){
+          const headPi=TRIG_PENDING[ix].pi;
+          const same=TRIG_PENDING.map((t,i)=>({t,i}))
+            .filter(o=>o.t.pi===headPi&&(activeOnly?(S.who===o.t.pi):true)&&!late(o.t));
+          if(same.length>1){
+            const j=await askChoice(
+              `⚡ ${S.players[headPi].label}：同時に誘発した能力が${same.length}つあります。\nどれから解決しますか？`,
+              same.map(o=>`《${faceNameOf(o.t.c)}》${o.t.ev?`／${trigEvLabel(o.t.ev)}`:""}`));
+            if(j!=null&&j>=0){
+              ix=same[j].i;
+              logOnly(`⚡ ${S.players[headPi].label}：解決順を選択 → 《${faceNameOf(TRIG_PENDING[ix].c)}》から`);
+            }
+          }
+        }
       }
       if(ix<0)break;
       const t=TRIG_PENDING.splice(ix,1)[0];
-      // ⚡ 誘発元が場を離れていても、誘発した時点で確定しているので実行する（記録だけ残す）
-      if(!zonesOf(t.pi).battle.some(x=>x.id===t.c.id)){
-        logOnly(`⚡ ${faceNameOf(t.c)} の誘発（${t.ev||"保留"}）を解決（誘発時に場にいたため・現在：${whereIs(t.c)}）`);
-      }
-      toast(`⚡誘発処理：${faceNameOf(t.c)}`);
-      setFxNowChip(`⚡ 誘発処理：${faceNameOf(t.c)}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`); // ⏳ 残りの待機誘発を解決順で表示
-      setFxNow(t.pi,t.c);
-      const _prevTrig=FX_TRIG;FX_TRIG=t.trigCard||null;
-      try{await runFxList(t.pi,t.fx,t.c,fxRunning);}
-      finally{FX_TRIG=_prevTrig;}
-      S._watchOnce=S._watchOnce||{};
-      for(const k of (t.onceKeys||[]))S._watchOnce[k]=`${S.turn}:${S.who}`;
+      await runOneTrig(t);
     }
   }finally{
     TRIG_DRAINING=false;
@@ -26680,7 +26867,25 @@ async function drainToGrave(inPump){
   try{
     let guard=0;
     while(TOGRAVE_PENDING.length&&guard++<60){
-      const {pi,c,from}=TOGRAVE_PENDING.shift();
+      let ix=0;
+      /* ⚡ v16.46 「墓地に置かれた時」も、TCGでは持ち主が好きな順に解決できる。
+         全体破壊などで同じ持ち主のものが2件以上たまった時に選ばせる。
+         この列は fxQueue／TRIG_PENDING とは別で、解決の順番（出た時 → 味方が出た時 → 墓地に置かれた時）は
+         ALLY_WAIT で守られているため、列をまたぐ並べ替えはしない。 */
+      if(S.gameMode==="tcg"&&S.fxOrderPick!==false&&TOGRAVE_PENDING.length>1){
+        const headPi=TOGRAVE_PENDING[0].pi;
+        const same=TOGRAVE_PENDING.map((t,i)=>({t,i})).filter(o=>o.t.pi===headPi);
+        if(same.length>1){
+          const j=await askChoice(
+            `⚡ ${S.players[headPi].label}：同時に誘発した能力が${same.length}つあります。\nどれから解決しますか？`,
+            same.map(o=>`《${faceNameOf(o.t.c)}》／${trigEvLabel("toGrave")}`));
+          if(j!=null&&j>=0&&j<same.length){
+            ix=same[j].i;
+            logOnly(`⚡ ${S.players[headPi].label}：解決順を選択 → 《${faceNameOf(TOGRAVE_PENDING[ix].c)}》（墓地に置かれた時）から`);
+          }
+        }
+      }
+      const {pi,c,from}=TOGRAVE_PENDING.splice(ix,1)[0];
       await fireToGrave(pi,c,from,inPump);
     }
   }finally{TOGRAVE_DRAINING=false;}
@@ -29969,6 +30174,9 @@ function renderFxEditor(){
   $("fxSmashBurst").checked=!!FXEDIT.smashBurst;
   $("fxOniTime").checked=!!FXEDIT.oniTime;
   {const e=$("fxOniEnd");if(e)e.checked=!!FXEDIT.oniEnd;}
+  {const e=$("fxMasterJT");if(e)e.checked=!!FXEDIT.masterJT;}
+  {const e=$("fxMasterJTSum");if(e)e.value=String(FXEDIT.masterJTSum||10);}
+  {const e=$("fxMasterJTF");if(e)e.value=FXEDIT.masterJTF||"";}
   {const e=$("fxOniEndCiv");if(e)e.value=FXEDIT.oniEndCiv||"";}
   $("fxAbyss").checked=!!FXEDIT.abyss;
   $("fxFushigi").value=String(FXEDIT.fushigi||0);
@@ -30055,6 +30263,7 @@ function renderFxEditor(){
   $("fxAGMach").checked=!!FXEDIT.agMach;
   $("fxAGBlocker").checked=!!FXEDIT.agBlocker;
   $("fxAGSlayer").checked=!!FXEDIT.agSlayer;
+  {const e=$("fxAGJD");if(e)e.checked=!!FXEDIT.agJD;}
   $("fxAGEsc").checked=!!FXEDIT.agEsc;
   $("fxAGTEsc").checked=!!FXEDIT.agTEsc;
   $("fxAGTEsc2").checked=!!FXEDIT.agTEsc2;
@@ -31355,6 +31564,16 @@ function parseCardText(txt,mode){
   if(/Dスイッチ/.test(t)&&!out.set.ctype)out.set.ctype="d2";
   // ニンジャ・ストライク（数字つき）
   m=tSelf.match(/ニンジャ・?ストライク\s*(\d+)/); if(m)out.set.ninja=+m[1];
+  /* 🌀 マスターJトルネード：相手のターンの終わりに、手札にあるこのカードを、
+     自分のジョーカーズをコスト合計n以上になるよう手札に戻して出す。 */
+  if(/マスター\s*J\s*トルネード/i.test(tSelf)){
+    out.set.masterJT=true;
+    const mj=tSelf.match(/コストの?合計が?\s*(\d+)\s*以上/);
+    out.set.masterJTSum=mj?+mj[1]:10;
+    const mf=tSelf.match(/自分の([^をのが]{2,12})・?クリーチャーをコストの?合計/);
+    if(mf)out.set.masterJTF=mf[1].trim();
+    out.notes.push({msg:`🌀 マスターJトルネードを設定しました（相手のターンの終わりに、コスト合計${out.set.masterJTSum}以上ぶん手札に戻して出す）`,q:"マスターJトルネード"});
+  }
   // ムゲンクライム（コストn）
   m=tSelf.match(/ムゲンクライム[（(]?コスト?(\d+)/)||tSelf.match(/ムゲンクライム\s*(\d+)/); if(m)out.set.mugen=+m[1];
   if(out.set.mugen){
@@ -32217,6 +32436,9 @@ function openFxEditor(key){
     smashBurst:cur?!!cur.smashBurst:false,
     oniTime:cur?!!cur.oniTime:false,
     oniEnd:cur?!!cur.oniEnd:false,
+    masterJT:cur?!!cur.masterJT:false,
+    masterJTSum:cur&&+cur.masterJTSum||10,
+    masterJTF:cur&&cur.masterJTF||"",
     oniEndCiv:cur&&cur.oniEndCiv||"",
     abyss:cur?!!cur.abyss:false,
     fushigi:cur&&(+cur.fushigi||0)||0,
@@ -32342,6 +32564,7 @@ function openFxEditor(key){
     agMach:cur?!!cur.agMach:false,
     agBlocker:cur?!!cur.agBlocker:false,
     agSlayer:cur?!!cur.agSlayer:false,
+    agJD:cur?!!cur.agJD:false,
     agEsc:cur?!!cur.agEsc:false,
     agTEsc:cur?!!cur.agTEsc:false,
     agTEsc2:cur?!!cur.agTEsc2:false,
@@ -32843,6 +33066,9 @@ $("fxSave").addEventListener("click",async ()=>{
     smashBurst:$("fxSmashBurst").checked,
     oniTime:$("fxOniTime").checked,
     oniEnd:$("fxOniEnd")?$("fxOniEnd").checked:false,
+    masterJT:$("fxMasterJT")?$("fxMasterJT").checked:false,
+    masterJTSum:$("fxMasterJTSum")?(parseInt($("fxMasterJTSum").value,10)||10):10,
+    masterJTF:$("fxMasterJTF")?$("fxMasterJTF").value.trim():"",
     oniEndCiv:$("fxOniEndCiv")?$("fxOniEndCiv").value.trim():"",
     abyss:$("fxAbyss").checked,
     fushigi:+$("fxFushigi").value||0,
@@ -32930,6 +33156,7 @@ $("fxSave").addEventListener("click",async ()=>{
     agMach:$("fxAGMach").checked,
     agBlocker:$("fxAGBlocker").checked,
     agSlayer:$("fxAGSlayer").checked,
+    agJD:$("fxAGJD")?$("fxAGJD").checked:false,
     agEsc:$("fxAGEsc").checked,
     agTEsc:$("fxAGTEsc").checked,
     agTEsc2:$("fxAGTEsc2").checked,
@@ -33625,6 +33852,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.smashBurst)attrs.push("スマッシュ・バースト");
     if(v.oniTime)attrs.push("鬼タイム");
     if(v.oniEnd)attrs.push(`鬼エンド${v.oniEndCiv?`[${v.oniEndCiv}]`:""}`);
+    if(v.masterJT)attrs.push(`マスターJトルネード[合計${v.masterJTSum||10}以上${v.masterJTF?"／"+v.masterJTF:""}]`);
     if(v.abyss)attrs.push("アビスラッシュ");
     if(v.fushigi)attrs.push(`フシギバース${v.fushigi}${v.fushigiCiv&&v.fushigiCiv.length?"："+v.fushigiCiv.map(k=>({light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"}[k]||k)).join("/"):""}`);
     if(v.ryuArm)attrs.push(`龍マナ武装${v.ryuArm}`);
@@ -33717,6 +33945,7 @@ $("btnRegList").addEventListener("click",()=>{
       if(v.agMach)gs.push("マッハF");
       if(v.agBlocker)gs.push("ブロッカー");
       if(v.agSlayer)gs.push("スレイヤー");
+      if(v.agJD)gs.push("ジャストダイバー");
       if(v.agEsc)gs.push("エスケープ");
       if(v.agTEsc)gs.push("真エスケープ");
       if(v.agTEsc2)gs.push("盾2つで身代わり");
@@ -35636,8 +35865,21 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     if(S.expert&&reg&&reg.gimmick==="complex"&&!reg.complexArc){c.tapped=true;c.under=c.under||[];toast(`⬛ ${c.name} はタップして出る（下に8枚でアンタップ）`);}
     if(S.expert&&reg&&reg.gimmick==="complex"&&reg.complexArc){c.under=c.under||[];}
     if(S.expert&&reg&&reg.tapIn&&(!reg.gimmick||reg.gimmick!=="complex")){c.tapped=true;toast(`⤵ ${c.name} はタップして出る`);}
-    if(S.expert&&hasJDiver(reg)){
-      toast(`🌀 ジャストダイバー持ち：${faceNameOf(c)}（付与はメニューのバフから手動で・処理順は任意）`);
+    /* 🌀 v16.45 ジャストダイバーは、自分で持っている場合のほかに、
+       味方から与えられている場合（agJD・ヴォルグ・イソレイト6th型）もある。 */
+    if(S.expert&&(hasJDiver(reg)||allyGrant(pTo,"agJD",null,c.id))){
+      /* 🌀 v16.43 ジャストダイバーも、他の誘発と同じ待機列に並べる。
+         TCGは同時に誘発した能力を好きな順に解決できるので、
+         「先に適用する／出た時の効果を片づけてから適用する」を毎回選べる形にする。
+         解決が来たら c.jd を立てる（相手からの選択・攻撃の対象から外れる）。
+         ターンのはじめの自動解除は今までどおり。 */
+      TRIG_PENDING.push({pi:pTo,c,ev:"jdiver",fx:[{t:"applyJDiver"}],onceKeys:[],pos:0,trigCard:null});
+      /* ⚡ v16.44 出た時と1本の列にまとめたので、ここでは流さない。
+         このカードが出た時を持つなら pumpFx が同じ列として拾い、種類をまたいで解決順を選べる。
+         出た時を持たないカードは誰も拾わないので、今までどおりその場で流す。
+         （どちらの場合も、取りこぼしは waitFxIdle の drainTrig が受け止める） */
+      if(!hasCipFx(reg,c))try{drainTrig(false,false);}catch(e){}
+      toast(`🌀 ジャストダイバー：${faceNameOf(c)}（待機列に入れました。解決順を選べます）`);
     }
     if(S.expert&&reg&&reg.psyLink){
       (async()=>{
@@ -36734,6 +36976,24 @@ function linkExpand(cards){
   return out;
 }
 /* 🔗 顔ぶれ全体から合体後の名前を探す。どのパーツの表から見てもよい。 */
+/* 🔗 v16.44 リンク合体（gl）や進化クリーチャーの下から、メンバー（下のカード）を1枚だけ抜く共通処理。
+   抜いたあとに gl なら合体名を引き直す（＝破壊・マナ送り・山札送りでも自動で組み直る）。
+   dest は "grave" / "hand" / "mana" / "deck"（山札の下）/ "shield" / null（どこにも置かない）。
+   戻り値は抜いたカード（見つからなければ null）。 */
+function removeUnderMember(pi,host,id,dest){
+  if(!host||!host.under||!host.under.length)return null;
+  const idx=host.under.findIndex(u=>u&&u.id===id);
+  if(idx<0)return null;
+  const Z=zonesOf(pi);
+  const rm=host.under.splice(idx,1)[0];
+  rm.tapped=false;rm.sideways=false;rm.rot=0;rm.buff=null;rm.mark=false;rm.isCross=false;rm.seals=[];
+  rm.faceup=(dest!=="shield"&&dest!=="deck");
+  if(dest==="hand"){if(typeof toHand==="function")toHand(Z,rm);else Z.hand.push(rm);}
+  else if(dest==="deck")Z.deck.push(rm);
+  else if(dest)(Z[dest]||Z.grave).push(rm);
+  if(host.gl)relinkAfterMemberLoss(pi,host);   // 🔗 メンバーが減ったら合体名を組み直す
+  return rm;
+}
 /* 🔗 v16.35 リンク合体しているクリーチャーから、メンバーが1枚だけ抜けた時に組み直す。
    合体後のカード（gl）は「合体名で作った1枚」で、本物の3枚は under に入っている。
    1枚抜けたらその名前のままでは正しくないので、残ったメンバーで合体名を引き直して作り直す。
@@ -43430,6 +43690,8 @@ function stackDragAttach(el,u){
         placeCard(Z,t.zone,cc);
         moved.push(faceNameOf(cc));
       }
+      // 🔗 v16.44 リンク合体のメンバーを抜いたら、残りで合体名を組み直す（手で組み直す手間をなくす）
+      if(host.gl)relinkAfterMemberLoss(t.p,host);
       stSel=new Set();
       sfx("move");
       toast(`${moved.length}枚を移動：${moved.join("、")}`);
@@ -43569,6 +43831,8 @@ function renderStackPanel(){
           else Z[tz].push(u);
           moved.push(faceNameOf(u));
         }
+        // 🔗 v16.44 リンク合体のメンバーを抜いたら、残りで合体名を組み直す
+        if(c.gl)relinkAfterMemberLoss(stCtx.p,c);
         if(tz==="grave")sfx("grave");else sfx("move");
         stSel=new Set();
         toast(`${moved.length}枚を移動：${moved.join("、")}`);
@@ -48208,6 +48472,11 @@ $("setBgmVol").addEventListener("input",async ()=>{
   if(BGM)BGM.volume=S.bgmVol/100;
   if(db)await idbPut("misc","bgmVol",S.bgmVol);
 });
+{const e=$("setFxOrderPick");if(e)e.addEventListener("change",async ()=>{
+  S.fxOrderPick=e.checked;
+  if(db)await idbPut("misc","fxOrderPick",S.fxOrderPick);
+  toast(S.fxOrderPick?"⚡ 同時に誘発した効果の順番を選びます（TCGモードのみ）":"⚡ 順番は自動（到着順）にします");
+});}
 {const e=$("setFxOlayOff");if(e)e.addEventListener("change",async ()=>{
   S.fxOlayOff=e.checked;
   if(db)await idbPut("misc","fxOlayOff",S.fxOlayOff);
@@ -49950,6 +50219,9 @@ function splashRun(off){
      ・元に戻すのは、この切り替えを外して読み直すだけ
      ・要素の数は 🩺 で見える（外すと「画面の要素」が1500ほど減る） */
   {
+    {const fp=db?await idbGet("misc","fxOrderPick"):null;
+     S.fxOrderPick=(fp==null)?true:!!fp;
+     const e1=$("setFxOrderPick");if(e1)e1.checked=S.fxOrderPick;}
     const fo=db?await idbGet("misc","fxOlayOff"):null;
     S.fxOlayOff=!!fo;
     const e0=$("setFxOlayOff");if(e0)e0.checked=S.fxOlayOff;
