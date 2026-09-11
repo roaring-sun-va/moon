@@ -2940,6 +2940,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このクリーチャーが攻撃する時、このカードの呪文側を、バトルゾーンに置いたままコストを支払わずに唱えてもよい（ツインパクト専用・邪幽 ジャヴェール型）"><input type="checkbox" id="fxSmashBurst"> 💥 スマッシュ・バースト（攻撃する時に呪文側・場に残る）</label>
         <label><input type="checkbox" id="fxOniTime"> 鬼タイム（両者の盾合計6枚以下で有効）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="◀鬼エンド▶ クリーチャーが攻撃する時、シールドが1つもないプレイヤーがいて、自分のマナゾーンに指定の文明がすべてあれば、このカードを手札からコストを支払わずに出せる（一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）"><input type="checkbox" id="fxOniEnd"> 👹 鬼エンド（攻撃時・盾0のプレイヤーがいれば手札からコストなしで出す）／必要文明<input type="text" id="fxOniEndCiv" placeholder="例：火闇自然（空欄＝文明条件なし）" style="width:180px"></label>
+        <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="龍装者 バルチュリス型：自分のクリーチャーが攻撃する時、このカードが自分の手札にあり、その攻撃がこのターンn度目のクリーチャーによる攻撃であれば、攻撃の後、このターン自分の同名がバトルゾーンに出ていなければ出せる。宣言は攻撃する時、出るのはブレイクとS・トリガーの処理が終わってから"><input type="checkbox" id="fxAtkJoin"> 🐉 n度目の攻撃で手札から公開して出す（攻撃の後）／このターン<input type="number" id="fxAtkJoinN" min="1" max="9" value="2" style="width:48px">度目</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="マスターJトルネード：相手のターンの終わりに、このカードが自分の手札にあれば、自分のジョーカーズ・クリーチャーをコストの合計がこの数以上になるように好きな数だけ手札に戻して、このカードをコストを支払わずに出せる（ジョリー・ザ・ジョルネード型）。このターン中に自分の他のマスターJトルネードを使っていない時だけ使えます。0＝無効"><input type="checkbox" id="fxMasterJT"> 🌀 マスターJトルネード（相手のターンの終わりに、味方を手札に戻して手札から出す）／コスト合計<input type="number" id="fxMasterJTSum" min="0" max="99" value="10" style="width:56px">以上／対象<input type="text" id="fxMasterJTF" list="raceList" placeholder="例：ジョーカーズ（空欄＝ジョーカーズ）" style="width:170px"></label>
         <label><input type="checkbox" id="fxAbyss"> アビスラッシュ（墓地から召喚・SA・ターン終わりに山下へ）</label>
         <label><input type="checkbox" id="fxYobinion"> ヨビニオン（召喚時、山上からコストの小さいクリーチャーが出るまでめくって出す）</label>
@@ -5344,7 +5345,7 @@ const imgURL=(()=>{
      カードの表示に遅れが出る。**守るのはサイズの上限のほう**なので、枚数は目安まで上げる。
      900枚でも約155MB分に相当し、96MBのほうが先に当たる。 */
   const capCount=()=>(deviceIsSmall()||imageLoadingIsLazy())?900:2000;
-  const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));urls.delete(k);}};
+  const drop=k=>{if(urls.has(k)){URL.revokeObjectURL(urls.get(k));URL_FREED++;urls.delete(k);}};
   let DROP_CAP=0,DROP_TRIM=0;   // 🩺 v16.10 捨てた内訳（上限超え／まとめて解放）
   const forget=k=>{const b=blobs.get(k);if(b)bytes-=(b.size|0);drop(k);blobs.delete(k);used.delete(k);};
   const put=(k,b)=>{
@@ -5388,7 +5389,7 @@ const imgURL=(()=>{
       const _t0=(typeof performance!=="undefined"&&performance.now)?performance.now():Date.now();
       idbGet("images",k).then(b=>{if(b&&known.has(k))put(k,b);}).finally(()=>{
         try{const _t1=(typeof performance!=="undefined"&&performance.now)?performance.now():Date.now();
-            IMG_READ_N++;IMG_READ_MS+=(_t1-_t0);}catch(e){}
+            IMG_READ_N++;IMG_READ_MS+=(_t1-_t0);try{IMG_READ_BYTES+=(b&&b.size)|0;}catch(e2){}}catch(e){}
         active--;loading.delete(k);redraw();pump();});
     }
   };
@@ -5408,7 +5409,7 @@ const imgURL=(()=>{
       if(!blobs.has(k)){request(k);return undefined;}
       used.set(k,++useSeq);   // 画面に出ているものほど新しくなり、捨てられにくくなる
       let u=urls.get(k);
-      if(!u){u=URL.createObjectURL(blobs.get(k));urls.set(k,u);}
+      if(!u){u=URL.createObjectURL(blobs.get(k));URL_MADE++;urls.set(k,u);}
       return u;
     },
     addKey(k){known.add(k);return api;},
@@ -5470,7 +5471,7 @@ const imgURL=(()=>{
       });
     },
     delete(k){known.delete(k);loading.delete(k);forget(k);return true;},
-    clear(){known.clear();loading.clear();queue.length=0;urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();blobs.clear();used.clear();bytes=0;},
+    clear(){known.clear();loading.clear();queue.length=0;urls.forEach(u=>{URL.revokeObjectURL(u);URL_FREED++;});urls.clear();blobs.clear();used.clear();bytes=0;},
     forEach(fn){[...blobs.keys()].forEach(k=>fn(api.get(k),k));},
     liveCount(){return urls.size;},        // 実際に一時URLを作った枚数
     /* 🩺 v16.18 一時URLから元の名前を引く（いちばん大きい絵がどれか出すため） */
@@ -5507,7 +5508,7 @@ const imgURL=(()=>{
         if(keep.has(k))continue;
         const b=blobs.get(k);
         freed+=(b&&b.size)|0;
-        const u=urls.get(k);if(u)URL.revokeObjectURL(u);
+        const u=urls.get(k);if(u){URL.revokeObjectURL(u);URL_FREED++;}
         urls.delete(k);blobs.delete(k);used.delete(k);DROP_TRIM++;
       }
       bytes=Math.max(0,bytes-freed);
@@ -5515,7 +5516,7 @@ const imgURL=(()=>{
     },
     releaseAll(){
       const before=bytes;
-      urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();
+      urls.forEach(u=>{URL.revokeObjectURL(u);URL_FREED++;});urls.clear();
       blobs.clear();used.clear();bytes=0;
       return before;
     },
@@ -5539,7 +5540,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.49";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.51";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5821,7 +5822,7 @@ function queueCheatMeta(pTo,c,forced){
         const live=zonesOf(foeN).battle.find(x=>x.id===gilId&&!isSealed(x)&&!isIgnored(x,foeN));
         if(live)await cheatManaKillPay(pTo,live);
       }
-    });
+    },mag||gil);
   }catch(e){}
 }
 /* 🕐 そのターンにバトルゾーンを離れたカードの記録（覚醒条件「そのターン相手のクリーチャーが3体以上離れていたら」用） */
@@ -5922,19 +5923,93 @@ function turnEnteredCount(side,filt){
 /* 🚫 踏み倒しメタのまとめ（オニカマス型／フォーエバー・プリンセス型／マグナム型／センノー型）。
    moveCardX を通らない登場（効果が直接 battle.push するもの・ミラクルとミステリーの扉など）でも
    働くように、markArrive からも呼ぶ。二重に聞かないよう 1.5 秒の窓で1回だけ通す。 */
+/* 🐉 v16.50 龍装者 バルチュリス型（atkJoin）。
+   「自分のクリーチャーが攻撃する時、このクリーチャーが自分の手札にあり、
+     その攻撃がこのターンn度目のクリーチャーによる攻撃であれば、攻撃の後、
+     このターン自分の同名がバトルゾーンに出ていなければ、このクリーチャーを出してもよい。」
+   ・**宣言は攻撃する時。出るのは「その攻撃の後」**＝ブレイクもS・トリガーも
+     全部終わってから（atkEnd）。ここを取り違えると、S・トリガーで場が変わる前に
+     出てしまいます。
+   ・「出ていなければ」は**攻撃の後に**見ます（2022年のテキスト訂正どおり）。
+     そのため2枚宣言しても、出るのは1体だけです。
+   ・出すかどうかの確認は宣言の時に1回だけ聞きます（盤面が手動なので、
+     攻撃の後にもう一度聞くと手間が増えるだけのため）。 */
+function atkJoinAlreadyOut(pi,nm){
+  try{
+    const tk=`${S.turn}:${S.who}`;
+    if(S._atkJoinOut&&S._atkJoinOut.key===tk&&S._atkJoinOut.names.indexOf(nm)>=0)return true;
+    return zonesOf(pi).battle.some(x=>faceNameOf(x)===nm);
+  }catch(e){return false;}
+}
+async function offerAtkJoin(pi){
+  if(!S.expert)return;
+  const Z=zonesOf(pi);
+  const cands=Z.hand.filter(x=>{const r=getReg(x);return r&&r.atkJoin&&isCreatureReg(r);});
+  if(!cands.length)return;
+  const cnt=turnAtkCount(pi);   // この攻撃を数えたあとの回数
+  for(const cc of cands){
+    if(cc._atkJoinDecl)continue;
+    const r=getReg(cc);
+    const need=Math.max(1,+r.atkJoinN||2);
+    if(cnt!==need)continue;
+    const nm=faceNameOf(cc);
+    if(atkJoinAlreadyOut(pi,nm))continue;
+    const y=await ask(`🐉 ${nm}：この攻撃はこのターン${need}度目のクリーチャーによる攻撃です。\n手札から公開して、この攻撃の後にバトルゾーンに出しますか？\n（実際に出るのは、ブレイクやS・トリガーの処理がすべて終わってからです）`);
+    if(!y)continue;
+    cc._atkJoinDecl=true;
+    S._atkJoinQ=(S._atkJoinQ||[]).concat([{pi,id:cc.id,name:nm}]);
+    toast(`🐉 ${nm} を手札から公開した（攻撃の後に出します）`);
+    logPush(`🐉 ${S.players[pi].label}：《${nm}》を手札から公開（このターン${need}度目の攻撃・出るのは攻撃の後）`);
+    try{fxKeyword(pi,"手札から公開！",cc.name,`このターン${need}度目の攻撃`);}catch(e){}
+  }
+}
+async function resolveAtkJoin(){
+  const q=S._atkJoinQ||[];
+  if(!q.length)return;
+  S._atkJoinQ=[];
+  for(const ent of q){
+    const Z=zonesOf(ent.pi);
+    const hi=Z.hand.findIndex(x=>x.id===ent.id);
+    if(hi<0)continue;
+    const cc=Z.hand[hi];
+    cc._atkJoinDecl=false;
+    // 🐉 「出ていなければ」は攻撃の後に見る（2枚宣言しても1体だけ）
+    if(atkJoinAlreadyOut(ent.pi,ent.name)){
+      toast(`🐉 ${ent.name} はこのターンすでに出ているので出せません`);
+      logOnly(`🐉 ${S.players[ent.pi].label}：《${ent.name}》はこのターンすでに出ているため出せなかった`);
+      continue;
+    }
+    snap();
+    Z.hand.splice(hi,1);
+    cc.faceup=true;cc.tapped=false;
+    if(cheatEnterBattle(ent.pi,cc)){
+      const tk=`${S.turn}:${S.who}`;
+      if(!S._atkJoinOut||S._atkJoinOut.key!==tk)S._atkJoinOut={key:tk,names:[]};
+      S._atkJoinOut.names.push(ent.name);
+      emitEvent(ent.pi,"summon");enqueueFx(ent.pi,cc);
+      toast(`🐉 ${ent.name} をバトルゾーンに出した（攻撃の後）`);
+      logPush(`🐉 ${S.players[ent.pi].label}：《${ent.name}》を手札からバトルゾーンへ（攻撃の後）`);
+      sfx("ok");renderAll();
+      await waitFxIdle();
+    }else{
+      Z.hand.splice(hi,0,cc);
+      toast(`⚠ バトルゾーンがいっぱいで ${ent.name} を出せませんでした`);
+    }
+  }
+}
 /* 🌀 v16.49 踏み倒しメタ（誘発するタイプ）の解決順はアクティブプレイヤー優先（APNAP）。
    ・持ち主がターンプレイヤー → 出した相手の「出た時」より先に処理する
      （FX_GATE で出た時を止めてから聞く。オリオティスの drainOriotis(true) と同じ位置づけ）
    ・持ち主が非ターンプレイヤー → 「出た時」をすべて解決したあとに処理する（誘発ジョブ）
    オニカマスだけは「相手のターン中」限定なので、常に後者になります（カード側の条件）。 */
-function scheduleCheatMeta(ownerSide,job){
+function scheduleCheatMeta(ownerSide,job,src){
   if(S.vs&&S.who===ownerSide){
-    FX_GATE++;
-    (async()=>{
-      try{await job();}catch(e){console.warn("cheatMeta",e);}
-      finally{FX_GATE=Math.max(0,FX_GATE-1);pumpFx();}
-    })();
+    /* 🌀 v16.50 持ち主がターンプレイヤーの時は、自分の他の誘発と同じ待機列に入れる。
+       こうすると「どの解決のタイミングで処理するか」を自分で選べる（TCGモード）。
+       デュエプレモードでは今までどおり、出た時より先に自動で処理される。 */
+    TRIG_PENDING.push({pi:ownerSide,fx:[],c:src||null,job,onceKeys:[],ev:"cheatMeta",pos:0,trigCard:null});
   }else{
+    // ⏱ 持ち主が非ターンプレイヤー → 出た時をすべて解決したあと（APNAP）
     enqueueWatchJob(job);
   }
 }
@@ -6020,7 +6095,7 @@ function queueCheatWatchers(pTo,c){
             sfx("move");renderAll();
             toast(`🌱 ${faceNameOf(live)}：${faceNameOf(c)} を持ち主のマナゾーンへ`);
             logOnly(`🌱 ${S.players[foeN].label} の《${faceNameOf(live)}》により、${S.players[pTo].label} の《${faceNameOf(c)}》をマナゾーンへ（コストを支払わずに出たため）`);
-          });
+          },prin);
         }
       }
       // ⚔ カツムゲン型：相手のクリーチャーがコストを支払わずに出た時、
@@ -6049,7 +6124,7 @@ function queueCheatWatchers(pTo,c){
             logOnly(`⚔ ${S.players[foeN].label} の《${faceNameOf(live)}》により、コストを支払わずに出た《${faceNameOf(c)}》とバトル`);
             await doBattle(foeN,live,pTo,c);
             renderAll();
-          });
+          },katsu);
         }
       }
       // 💥 踏み倒しメタ（マグナム／ギルザウルス）：確認を出したうえで判定する
@@ -8407,6 +8482,9 @@ async function autoSaveClear(){try{sessionStorage.removeItem("dmrvInGame");}catc
 /* 画面を離れる・隠れる時は必ず書き込む（Safariが破棄する直前の最後の砦） */
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")autoSaveNow();});
 window.addEventListener("pagehide",()=>{autoSaveNow();});
+/* 🩺 v16.51 きちんと閉じた／離れた時は、落ちる直前の記録を消す。
+   iPhoneがタブごと落とした時はここを通らないので、記録が残る＝異常終了の印になる。 */
+window.addEventListener("beforeunload",()=>{try{diagRingClear();}catch(e){}});
 /* 復帰：起動時に保存があれば聞く（新しい対戦を始めたい時は「いいえ」でそのまま） */
 async function autoSaveOfferRestore(){
   if(!db)return false;
@@ -10260,6 +10338,65 @@ function watchNamesTurnEnd(pi){
    最大値（ピーク）を覚えておき、大きく伸びた時だけログに残す。
    ログは試合終了時にリプレイと一緒に保存されるので、**読み直されたあとでも後から確認できる**。 */
 let DIAG_ON=false,DIAG_TIMER=null,DIAG_LOGGED=0;
+/* 🩺 v16.51 「落ちる直前の数字が残らない」への対処。
+   突然落ちる（iPhoneがタブごと落とす）ので、手で撮ると最後の数秒を必ず取り逃がす。
+   計測中は5秒ごとに直近12回ぶん（＝1分）をIndexedDBへ書いておき、
+   次に開いた時に「前回の終わり」として出す。
+   ・きちんと閉じた時は pagehide で印を消すので、印が残っていたら異常終了
+   ・1分ぶん並べて出すので、最後の1分で何かが跳ねたかどうかが分かる
+   書くのは数字だけ（1回あたり数百バイト）なので、これ自体は負担になりません。 */
+const DIAG_RING=[];const DIAG_RING_N=12;
+let DIAG_SAVE_BUSY=false;
+function diagRingPush(d){
+  try{
+    DIAG_RING.push({at:d.at|0,turn:d.turn|0,snaps:d.snaps|0,
+      memImg:d.memImg|0,memBytes:d.memBytes|0,decMB:d.decMB|0,decUniqMB:d.decUniqMB|0,
+      nodes:d.nodes|0,bnodes:d.bnodes|0,img:d.img|0,urls:d.urls|0,
+      urlMade:d.urlMade|0,urlFreed:d.urlFreed|0,readBytes:d.readBytes|0,
+      elMade:d.elMade|0,elFreed:d.elFreed|0,tmrLive:d.tmrLive|0,
+      hist:d.hist|0,histBytes:d.histBytes|0,bytes:d.bytes|0,frames:d.frames|0,
+      log:d.log|0,cards:d.cards|0,made:d.made|0,renders:d.renders|0});
+    while(DIAG_RING.length>DIAG_RING_N)DIAG_RING.shift();
+  }catch(e){}
+}
+async function diagRingSave(){
+  if(DIAG_SAVE_BUSY||!DIAG_RING.length)return;
+  DIAG_SAVE_BUSY=true;
+  try{
+    if(db)await idbPut("misc","diagRing",JSON.stringify({ver:(typeof APP_VER!=="undefined"?APP_VER:""),ring:DIAG_RING}));
+    try{sessionStorage.setItem("dmrvDiagLive","1");}catch(e){}
+  }catch(e){}
+  finally{DIAG_SAVE_BUSY=false;}
+}
+/* 📖 前回のぶんを読む。きちんと閉じていれば印が消えているので「異常終了」とは出さない。 */
+let DIAG_PREV=null;
+async function diagPrevLoad(){
+  try{
+    if(!db)return;
+    const raw=await idbGet("misc","diagRing");
+    if(!raw)return;
+    const o=JSON.parse(raw);
+    if(!o||!o.ring||!o.ring.length)return;
+    DIAG_PREV={ver:o.ver||"",ring:o.ring,dirty:true};
+  }catch(e){}
+}
+function diagPrevText(){
+  try{
+    if(!DIAG_PREV||!DIAG_PREV.ring||!DIAG_PREV.ring.length)return "";
+    const R=DIAG_PREV.ring;
+    const last=R[R.length-1],first=R[0];
+    const mb=v=>`${Math.round(v/1048576*10)/10}MB`;
+    const dt=Math.max(0,Math.round(((last.at||0)-(first.at||0))/1000));
+    const line=r=>`  操作${r.snaps}／ターン${r.turn}：画像${r.memImg}枚 ${mb(r.memBytes)}／展開後${r.decMB}MB／要素${r.nodes}／札の未回収${(r.elMade|0)-(r.elFreed|0)}／URLの差${(r.urlMade|0)-(r.urlFreed|0)}`;
+    return ["",
+      `── 前回の終わり（${DIAG_PREV.ver||"版不明"}・最後の${dt}秒）──`,
+      ...R.map(line),
+      `（きちんと閉じた時はここに出ません。出ているなら前回は落ちています）`,
+    ].join("\n");
+  }catch(e){return "";}
+}
+/* 🧹 きちんと閉じた時は消す。落ちた時はここを通らないので記録が残る。 */
+async function diagRingClear(){try{if(db)await idbPut("misc","diagRing","");}catch(e){}}
 /* 🩺 v16.15 「操作の回数だけで落ちる」（何もしないターン送りでも60回）の切り分けのため、
    これまで測れていなかった2つを測る。どちらも数えるだけで、動きは変えない。
 
@@ -10297,7 +10434,8 @@ const DIAG_PEAK={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,cards:0,
                  nodes:0,bnodes:0,urls:0,artN:0,artBytes:0,decMB:0,decUniqMB:0,decUniqN:0,decW:0,decH:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
 function diagNow(){
   const out={img:0,frames:0,bytes:0,memImg:0,memBytes:0,watch:0,fxQueue:0,cards:0,
-             nodes:0,bnodes:0,urls:0,artN:0,artBytes:0,decMB:0,decUniqMB:0,decUniqN:0,decW:0,decH:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0};
+             nodes:0,bnodes:0,urls:0,artN:0,artBytes:0,decMB:0,decUniqMB:0,decUniqN:0,decW:0,decH:0,elMade:0,elFreed:0,tmrLive:0,tmrMade:0,hist:0,histBytes:0,log:0,snaps:0,snapMB:0,renders:0,made:0,readN:0,readMs:0,dropCap:0,dropTrim:0,
+             urlMade:0,urlFreed:0,readBytes:0,at:0,turn:0};
   try{out.img=document.querySelectorAll("img").length;}catch(e){}
   /* 🩺 v15.91 画像がほとんど無くても落ちる、という報告を受けて追加。
      操作を重ねるほど増えるものを見る：画面の要素の数・巻き戻し履歴・ログ行数。 */
@@ -10352,7 +10490,11 @@ function diagNow(){
   /* 🩺 v16.1 盤面を丸ごと描き直した回数。1操作で何回描き直しているかが分かる。 */
   try{out.renders=(typeof RENDER_CNT!=="undefined")?(RENDER_CNT|0):0;}catch(e){}
   try{out.made=(typeof ELEM_MADE!=="undefined")?(ELEM_MADE|0):0;}catch(e){}
-  try{out.readN=IMG_READ_N|0;out.readMs=Math.round(IMG_READ_MS);}catch(e){}
+  try{out.readN=IMG_READ_N|0;out.readMs=Math.round(IMG_READ_MS);out.readBytes=IMG_READ_BYTES|0;}catch(e){}
+  /* 🩺 v16.51 一時URLの作成と解放の累計。差が開き続けるならURLの取りこぼし。
+     メモリ上の枚数（memImg）には出てこないので、これまで見えていなかった。 */
+  try{out.urlMade=URL_MADE|0;out.urlFreed=URL_FREED|0;}catch(e){}
+  try{out.at=Date.now();out.turn=(typeof S!=="undefined"&&S)?(S.turn|0):0;}catch(e){}
   /* 🩺 v16.10 読めたのにメモリに無い、の原因を切り分ける。
      上限超え＝入れすぎて古いものを捨てた。まとめて解放＝画面を離れた時などに手放した。 */
   try{const dr=imgURL.drops();out.dropCap=dr.cap|0;out.dropTrim=dr.trim|0;}catch(e){}
@@ -10380,6 +10522,8 @@ function diagTick(){
   const d=diagNow();
   for(const k of ["img","frames","bytes","memImg","memBytes","watch","cards","nodes","bnodes","urls","artN","artBytes","decMB","decUniqMB","tmrLive","hist","histBytes","log","snaps","snapMB","renders","made"])
     if(d[k]>(DIAG_PEAK[k]|0))DIAG_PEAK[k]=d[k];
+  // 🩺 v16.51 落ちる直前の数字を残す（1分ぶんの輪）
+  if(DIAG_ON){diagRingPush(d);diagRingSave();}
   // 大きく伸びた時だけログに残す（ログはリプレイと一緒に保存される）
   if(DIAG_PEAK.img>=Math.max(120,DIAG_LOGGED*1.25)){
     DIAG_LOGGED=DIAG_PEAK.img;
@@ -10412,15 +10556,20 @@ function diagText(){
     `作った札：${d.elMade}枚（回収済み ${d.elFreed}枚／未回収 ${d.elMade-d.elFreed}枚）`,
     `済んでいない待ち：${d.tmrLive}件（のべ ${d.tmrMade}件）`,
     `捨てた画像：上限超え ${d.dropCap||0}枚／まとめて解放 ${d.dropTrim||0}枚`,
-  ].join("\n");
+    `一時URL：作った ${d.urlMade||0}本／解放した ${d.urlFreed||0}本（差 ${(d.urlMade||0)-(d.urlFreed||0)}本）`,
+    `読み出しの累計：${mb(d.readBytes||0)}`,
+    diagPrevText(),
+  ].filter(Boolean).join("\n");
 }
 function diagToggle(){
   DIAG_ON=!DIAG_ON;
   if(DIAG_TIMER){clearInterval(DIAG_TIMER);DIAG_TIMER=null;}
   if(DIAG_ON){
     DIAG_TIMER=setInterval(()=>{try{diagTick();}catch(e){}},5000);
-    try{logOnly("🩺 診断を開始しました（5秒ごとに計測・大きく伸びた時だけ記録します）");}catch(e){}
+    try{logOnly("🩺 診断を開始しました（5秒ごとに計測・落ちた時のために直近1分ぶんを控えます）");}catch(e){}
   }else{
+    DIAG_RING.length=0;
+    try{diagRingClear();}catch(e){}
     try{logOnly("🩺 診断を止めました");}catch(e){}
   }
   try{const b=$("btnDiag");if(b)b.classList.toggle("primary",DIAG_ON);}catch(e){}
@@ -26584,6 +26733,8 @@ async function startAttack(pi,id){
   c._acAsked=false;   // ✨ アタック・チャンスの確認も、新規宣言のたびに1回だけ出す
   c._allyAtkDone=false;c._anyAtkDone=false;c._gearAtkDone=false; // 攻撃するたびに誘発し直せるよう毎回リセット
   noteAttackThisTurn(pi,c);   // 🕐 「そのターン◯体目の攻撃」を数える
+  // 🐉 龍装者 バルチュリス型：このターンn度目の攻撃なら、手札から公開して攻撃の後に出す（宣言だけここで行う）
+  try{await offerAtkJoin(pi);}catch(e){console.warn("offerAtkJoin",e);}
   c._attacking=true;   // 🛡 v15.80 攻撃中だけ効く効果（ギガハート型の破壊耐性）のための印
   S._noGSAtk=(()=>{try{const _rG=getReg(c);return (_rG&&_rG.noGSAtk&&!isIgnored(c,pi))?`${S.turn}:${S.who}`:null;}catch(e){return null;}})();   // 🚫 攻撃中はG・ストライクを使えない
   try{await checkAwaken(pi,"atkDeclare",c);}catch(e){}   // 🔄 攻撃する時の覚醒（時空の忠剣ハチ公／勝首領将軍 カツキング型）
@@ -26688,7 +26839,12 @@ async function runOneTrig(t){
   setFxNowChip(`⚡ 誘発処理：${faceNameOf(t.c)}${TRIG_PENDING.length?"\n"+trigQueuePreview():""}`); // ⏳ 残りの待機誘発を解決順で表示
   setFxNow(t.pi,t.c);
   const _prevTrig=FX_TRIG;FX_TRIG=t.trigCard||null;
-  try{await runFxList(t.pi,t.fx,t.c,fxRunning);}
+  /* 🌀 v16.50 効果の型では書けない誘発（踏み倒しメタの確認と処理など）は、
+     job としてそのまま持たせる。待機列に並ぶので、解決順も他の誘発と一緒に選べる。 */
+  try{
+    if(typeof t.job==="function")await t.job();
+    else await runFxList(t.pi,t.fx,t.c,fxRunning);
+  }
   finally{FX_TRIG=_prevTrig;}
   S._watchOnce=S._watchOnce||{};
   for(const k of (t.onceKeys||[]))S._watchOnce[k]=`${S.turn}:${S.who}`;
@@ -27216,6 +27372,8 @@ async function execAttack(pi,id,tg){
       renderAll();
     }
     if(S.expert)await runSelfAtkEnd(pi,c);
+    // 🐉 v16.50 バルチュリス型は「その攻撃の後」。ブレイクとS・トリガーの処理が終わったここで出す
+    if(S.expert)await resolveAtkJoin();
     // 🔄 覚醒（攻撃に関する条件）は攻撃が終わってから。
     //    攻撃中にバトルゾーンを離れていたら覚醒しない。ブロックされた場合も「攻撃が通った」扱いにしない。
     if(S.expert&&zonesOf(pi).battle.some(x=>x.id===c.id)){
@@ -30260,6 +30418,8 @@ function renderFxEditor(){
   $("fxOniTime").checked=!!FXEDIT.oniTime;
   {const e=$("fxOniEnd");if(e)e.checked=!!FXEDIT.oniEnd;}
   {const e=$("fxMasterJT");if(e)e.checked=!!FXEDIT.masterJT;}
+  {const e=$("fxAtkJoin");if(e)e.checked=!!FXEDIT.atkJoin;}
+  {const e=$("fxAtkJoinN");if(e)e.value=String(FXEDIT.atkJoinN||2);}
   {const e=$("fxMasterJTSum");if(e)e.value=String(FXEDIT.masterJTSum||10);}
   {const e=$("fxMasterJTF");if(e)e.value=FXEDIT.masterJTF||"";}
   {const e=$("fxOniEndCiv");if(e)e.value=FXEDIT.oniEndCiv||"";}
@@ -31660,6 +31820,15 @@ function parseCardText(txt,mode){
     }
     out.notes.push({msg:`⤵ 常在「相手のクリーチャーはタップして出る」を設定しました${out.set.auraTapInCostLtMana?"（自分のマナの枚数よりコストが小さいものだけ）":""}`,q:"タップして"});
   }
+  /* 🐉 龍装者 バルチュリス型：n度目のクリーチャーによる攻撃で、手札から公開して攻撃の後に出す */
+  {const mB=tSelf.match(/その攻撃がこのターン\s*([０-９0-9一二三四五六七八九]+)\s*度目の(?:クリーチャーによる)?攻撃/);
+   if(mB&&/攻撃の後[、,]?.*出してもよい|攻撃の後[、,]?.*バトルゾーンに出してもよい/.test(tSelf)){
+     const zen="０１２３４５６７８９",kan="〇一二三四五六七八九";
+     let d=String(mB[1]).replace(/[０-９]/g,ch=>String(zen.indexOf(ch)));
+     if(/^[一二三四五六七八九]$/.test(d))d=String(kan.indexOf(d));
+     out.set.atkJoin=true;out.set.atkJoinN=Math.max(1,parseInt(d,10)||2);
+     out.notes.push({msg:`🐉 「このターン${out.set.atkJoinN}度目の攻撃で、手札から公開して攻撃の後に出す」を設定しました`,q:"度目の攻撃"});
+   }}
   /* 🌀 マスターJトルネード：相手のターンの終わりに、手札にあるこのカードを、
      自分のジョーカーズをコスト合計n以上になるよう手札に戻して出す。 */
   if(/マスター\s*J\s*トルネード/i.test(tSelf)){
@@ -32533,6 +32702,8 @@ function openFxEditor(key){
     oniTime:cur?!!cur.oniTime:false,
     oniEnd:cur?!!cur.oniEnd:false,
     masterJT:cur?!!cur.masterJT:false,
+    atkJoin:cur?!!cur.atkJoin:false,
+    atkJoinN:cur&&+cur.atkJoinN||2,
     masterJTSum:cur&&+cur.masterJTSum||10,
     masterJTF:cur&&cur.masterJTF||"",
     oniEndCiv:cur&&cur.oniEndCiv||"",
@@ -33164,6 +33335,8 @@ $("fxSave").addEventListener("click",async ()=>{
     oniTime:$("fxOniTime").checked,
     oniEnd:$("fxOniEnd")?$("fxOniEnd").checked:false,
     masterJT:$("fxMasterJT")?$("fxMasterJT").checked:false,
+    atkJoin:$("fxAtkJoin")?$("fxAtkJoin").checked:false,
+    atkJoinN:$("fxAtkJoinN")?(parseInt($("fxAtkJoinN").value,10)||2):2,
     masterJTSum:$("fxMasterJTSum")?(parseInt($("fxMasterJTSum").value,10)||10):10,
     masterJTF:$("fxMasterJTF")?$("fxMasterJTF").value.trim():"",
     oniEndCiv:$("fxOniEndCiv")?$("fxOniEndCiv").value.trim():"",
@@ -33951,6 +34124,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.oniTime)attrs.push("鬼タイム");
     if(v.oniEnd)attrs.push(`鬼エンド${v.oniEndCiv?`[${v.oniEndCiv}]`:""}`);
     if(v.masterJT)attrs.push(`マスターJトルネード[合計${v.masterJTSum||10}以上${v.masterJTF?"／"+v.masterJTF:""}]`);
+    if(v.atkJoin)attrs.push(`${v.atkJoinN||2}度目の攻撃で手札から出る`);
     if(v.abyss)attrs.push("アビスラッシュ");
     if(v.fushigi)attrs.push(`フシギバース${v.fushigi}${v.fushigiCiv&&v.fushigiCiv.length?"："+v.fushigiCiv.map(k=>({light:"光",water:"水",dark:"闇",fire:"火",nature:"自然",zero:"ゼロ"}[k]||k)).join("/"):""}`);
     if(v.ryuArm)attrs.push(`龍マナ武装${v.ryuArm}`);
@@ -38237,6 +38411,10 @@ function checkLibWin(){
    アイドル時（前回描画から50ms以上）は従来どおり即時描画＝通常操作の体感は不変。末尾は必ず描画される。 */
 let _raLast=0,_raTm=null;
 let IMG_READ_N=0,IMG_READ_MS=0;   // 🩺 v16.8 画像の読み出し回数と合計時間
+/* 🩺 v16.51 一時URL（createObjectURL）の作成と解放の累計。
+   差が操作のたびに開いていくなら、画像そのものではなく**URLの取りこぼし**が原因。
+   これはメモリ上の枚数（memImg）には出てこないので、いままで見えていなかった。 */
+let URL_MADE=0,URL_FREED=0,IMG_READ_BYTES=0;
 let ELEM_MADE=0;   // 🩺 v16.5 作り直した要素の累計
 let FX_DEPTH=0;   // 🖼 v16.4 効果の処理が何重に走っているか（0なら処理していない）
 let RENDER_CNT=0;   // 🩺 v16.1 盤面を丸ごと描き直した回数（1回で約2800要素＋画像40枚を作り直す）
@@ -50300,6 +50478,10 @@ function splashRun(off){
 }
 (async function init(){
   db=await openDB();
+  /* 🩺 v16.51 前回が落ちて終わっていれば、その直前1分ぶんの数字を読んでおく。
+     診断を開くとそのまま下に出る（きちんと閉じた時は消えているので出ません）。 */
+  try{await diagPrevLoad();}catch(e){}
+  try{if(DIAG_PREV)logOnly("🩺 前回は途中で終わっています。設定の「🩺 診断」を開くと、落ちる直前1分ぶんの数字が出ます");}catch(e){}
   // ⚡ 表紙は設定を読んでから。読めない時は出す側に倒す
   /* ♻ v16.22 自分から読み直した時は表紙を出さない。
      💥 v16.23 落ちて読み直された時も出さない（対戦の続きに戻るのに3.4秒待たされるため）。
