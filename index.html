@@ -5540,7 +5540,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.51";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.53";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -15058,11 +15058,14 @@ async function runFxList(pi,list,srcCard,inPump){
     }else if(f.t==="zoneMove"){
       // ↔ 自分の〔元〕から条件に合うカードをn枚〔先〕へ移動。cond="元→先:対象"
       const spec=String(f.cond||"").trim();
-      let m=spec.match(/^(マナ|墓地|手札|シールド|山札|バトル)\s*(?:→|->|―>|~>|>|→)\s*(マナ|墓地|手札|シールド|山札)[：:]?(.*)$/);
+      /* 🛡 v16.53 ゾーン名は「シールド」でも「盾」でも受ける（条件式と同じ扱い） */
+      const _zn=x=>String(x||"").replace(/^盾$/,"シールド");
+      let m=spec.match(/^(マナ|墓地|手札|シールド|盾|山札|バトル)\s*(?:→|->|―>|~>|>|→)\s*(マナ|墓地|手札|シールド|盾|山札)[：:]?(.*)$/);
+      if(m)m=[m[0],_zn(m[1]),_zn(m[2]),m[3]];
       if(!m){
         // 「マナ:多色→手札」の順（元:対象→先）でも読めるように
-        const m2=spec.match(/^(マナ|墓地|手札|シールド|山札|バトル)[：:]([^→]*?)\s*(?:→|->)\s*(マナ|墓地|手札|シールド|山札)$/);
-        if(m2)m=[m2[0],m2[1],m2[3],m2[2]];
+        const m2=spec.match(/^(マナ|墓地|手札|シールド|盾|山札|バトル)[：:]([^→]*?)\s*(?:→|->)\s*(マナ|墓地|手札|シールド|盾|山札)$/);
+        if(m2)m=[m2[0],_zn(m2[1]),_zn(m2[3]),m2[2]];
       }
       if(!m){toast("移動の指定が必要です（条件欄に「墓地→マナ:スノーフェアリー」のように書いてください）");}
       else{
@@ -17871,8 +17874,9 @@ async function runFxList(pi,list,srcCard,inPump){
       // 条件欄に「マナ:クリーチャー」のようにゾーンを書くと、ゾーン選択を飛ばしてそのゾーンから直接回収する
       let filt=String(f.cond||"").trim();
       let fixedSide=null,fixedZone=null;
-      {const mZ=filt.match(/^(?:(相手|自分)の?)?(マナ|墓地|シールド|山札)[：:](.*)$/);
-       if(mZ){fixedSide=mZ[1]==="相手"?"opp":"self";fixedZone={"マナ":"mana","墓地":"grave","シールド":"shield","山札":"deck"}[mZ[2]];filt=(mZ[3]||"").trim();}}
+      // 🛡 v16.53 「盾」でも「シールド」でも受ける
+      {const mZ=filt.match(/^(?:(相手|自分)の?)?(マナ|墓地|シールド|盾|山札)[：:](.*)$/);
+       if(mZ){fixedSide=mZ[1]==="相手"?"opp":"self";fixedZone={"マナ":"mana","墓地":"grave","シールド":"shield","盾":"shield","山札":"deck"}[mZ[2]];filt=(mZ[3]||"").trim();}}
       const zoneOpts=[
         ["self","mana","自分のマナゾーン"],
         ["self","grave","自分の墓地"],
@@ -23732,7 +23736,11 @@ async function offerSBack(pi,added){
     if(!S.expert||!added||!added.length)return;
     const Z=zonesOf(pi);
     const ids=new Set(added.map(x=>x.id));
-    const sbCards=Z.hand.filter(x=>{const r2=getReg(x);return r2&&r2.sback;});
+    /* ↩ v16.52 S・バックは「**元から手札にある**カード」でしか使えません。
+       いま盾から手札に加わったカード自身をS・バックで使うことはできない
+       （サバキZは逆に、盾から加わった本体でも使えます。あちらは別の処理です）。
+       v16.51 まではここで加わったばかりのカードも候補に入れていました。 */
+    const sbCards=Z.hand.filter(x=>{const r2=getReg(x);return r2&&r2.sback&&!ids.has(x.id);});
     for(const sc of sbCards){
       if(!Z.hand.some(h=>h.id===sc.id))continue;
       const rsc=getReg(sc);
@@ -25624,7 +25632,10 @@ async function processBroken(op,stack,label){
           const stSealed=noSTAllTurnOn()||((S.expert&&S.vs)?zonesOf(op===0?1:0).battle.some(x=>{const rx=getReg(x);return rx&&rx.stNoST&&!isSealed(x);}):false);
           const usable=c=>{
             const r=getReg(c);if(!r)return false;
-            if(r.sabaki||r.sback)return true;   // サバキZ／S・バックは手札に加えたあとに使うので確認する
+            /* ⚔ サバキZはブレイクで加わった本体でも使えるので、ここで確認する。
+               ↩ S・バックは元から手札にあるカードでしか使えないので、
+                 ブレイクで加わったこのカード自身は候補にしない（v16.52）。 */
+            if(r.sabaki)return true;
             if(!stSealed&&((r.st)||shieldStGrantOk(op,c)))return true;
             if((r.gs)||shieldGSGrantOk(op,c))return true;
             if(r.stWhen||r.stCond){
@@ -25686,10 +25697,13 @@ async function processBroken(op,stack,label){
           el.querySelector(".thumb").style.position="relative";
           el.querySelector(".thumb").appendChild(badge);
         }else if(r2&&r2.sback){
-          el.style.outline="2px solid #a78bfa";
+          /* ↩ v16.52 S・バックは元から手札にあるカードでしか使えないので、
+             ブレイクされたこのカード自身をここから使うことはできない。
+             印は残すが「手札のみ」と書いて、押せるものと間違えないようにする。 */
+          el.style.outline="2px dashed #6d5ba8";
           const badge=document.createElement("div");
-          badge.style.cssText="position:absolute;bottom:0;left:0;right:0;background:#a78bfa;color:#000;font-size:10px;font-weight:900;text-align:center;padding:1px 0;z-index:5;border-radius:0 0 4px 4px";
-          badge.textContent="S・バック";
+          badge.style.cssText="position:absolute;bottom:0;left:0;right:0;background:#6d5ba8;color:#e9e4f7;font-size:9px;font-weight:900;text-align:center;padding:1px 0;z-index:5;border-radius:0 0 4px 4px";
+          badge.textContent="S・バック(手札のみ)";
           el.querySelector(".thumb").style.position="relative";
           el.querySelector(".thumb").appendChild(badge);
         }else if(r2&&r2.sabaki){
@@ -26259,7 +26273,9 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   // ↩ S・バック：手札にあるS・バック持ちを、ブレイクで手札に加わった「指定のカード」を捨てて、コストを支払わずに使う
   if(S.expert){
     const brokenInHand=()=>OZ.hand.filter(x=>stackIds.has(x.id));
-    const sbCards=OZ.hand.filter(x=>{const r2=getReg(x);return r2&&r2.sback;});
+    /* ↩ v16.52 S・バックは元から手札にあるカードでしか使えない（ブレイクで加わった本体は不可）。
+       サバキZは可（すぐ下の処理）。 */
+    const sbCards=OZ.hand.filter(x=>{const r2=getReg(x);return r2&&r2.sback&&!stackIds.has(x.id);});
     for(const sc of sbCards){
       if(!OZ.hand.some(h=>h.id===sc.id))continue; // まだ手札にあるか
       const rsc=getReg(sc);
@@ -49360,7 +49376,14 @@ function zoneCondOk(expr,pi,selfCard){
       const map={"盾":"shield","墓地":"grave","手札":"hand","バトル":"battle","マナ":"mana","山札":"deck"};
       return map[key]!=null?zoneCards(ZZ,map[key]).length:null; // ⚙ バトルはクロス中のギアも含む
     };
-    return terms.every(t=>{
+    return terms.every(t0=>{
+      /* 🛡 v16.52 条件式のゾーン名は「盾」で書くことになっているが、「シールド」と書いても通す。
+         ゾーン名として使われている時だけ置き換える（相手／自分のすぐ後ろか先頭にあり、
+         そのあとが 表向き／裏向き／合計／最少／数字／比較記号／区切り／終わり のいずれか）。
+         《シールド・トゥ・ウィン》のようにカード名の一部で出てきた時は触らない。 */
+      let t=String(t0).replace(
+        /(^|(?<=相手)|(?<=相手の)|(?<=自分)|(?<=自分の))シールド(?=表向き|裏向き|合計|最少|他|全文明|すべて|全て|全部|ゾーン|にある|にいる|の|[:：]|[<>=]|\d|$)/g,
+        "盾");
       // 💥 「ブレイク数」＝そのプレイヤーがこれまでにブレイクした枚数（MATCH_EV の集計を見る）
       {const mBk=t.match(/^(相手の?)?(?:このターンの?)?ブレイク数(>=|<=|=)(\d+)$/);
        if(mBk){
@@ -49386,8 +49409,8 @@ function zoneCondOk(expr,pi,selfCard){
          if(op==="<")return cntST<num;
          return cntST===num;
        }}
-      {const mAC=t.match(/^((?:相手)?(?:マナ|墓地|手札|盾|バトル|山札))?[:：]?全文明$/);
-       if(mAC)return allCivOk(mAC[1]||"マナ");}
+      {const mAC=t.match(/^((?:相手)?(?:マナ|墓地|手札|盾|シールド|バトル|山札))?[:：]?全文明$/);
+       if(mAC)return allCivOk(String(mAC[1]||"マナ").replace("シールド","盾"));}
       // 💯 「マナすべてアビス」：そのゾーンのカードが全部条件に合う（空のゾーンは不成立）。
       //    書き方：マナすべてアビス／マナ:すべてアビス／相手バトルすべてブロッカー など
       {const mAll=t.match(/^((?:相手|自分の?)?(?:マナ|墓地|手札|盾|シールド|バトル|山札))[:：]?(?:すべて|全て|全部)[:：]?(.+)$/);
@@ -49451,7 +49474,7 @@ function zoneCondOk(expr,pi,selfCard){
         }
       }
       {
-        const m2=t.match(/^((?:相手|自分の?)?(?:盾|墓地|手札|バトル|マナ|山札))(>=|<=|>|<|=)((?:相手|自分の?)?(?:盾|墓地|手札|バトル|マナ|山札))$/);
+        const m2=t.match(/^((?:相手|自分の?)?(?:盾|シールド|墓地|手札|バトル|マナ|山札))(>=|<=|>|<|=)((?:相手|自分の?)?(?:盾|シールド|墓地|手札|バトル|マナ|山札))$/);
         if(m2){
           const a=zoneCnt(m2[1]),b=zoneCnt(m2[3]);
           if(a==null||b==null)return false;
