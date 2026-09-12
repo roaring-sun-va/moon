@@ -3091,7 +3091,9 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このクリーチャーは封印されない（禁断・零龍などの封印を受け付けない・パーフェクト・エイティー型）"><input type="checkbox" id="fxNoSeal"> 🔏 封印されない（自身・パーフェクト・エイティー型）</label>
         <label><input type="checkbox" id="fxStNoHandes"> 常在：自分の手札は相手のカードの効果によって捨てられない</label>
         <label><input type="checkbox" id="fxLibWin"> 常在：自分の山札が0枚になったら、負けるかわりに勝利する（シャコガイル型）</label>
-        <label><input type="checkbox" id="fxPetensy"> 相手のターンの終わりに、そのターン クリーチャーが3体以上出ていれば、手札からコストを支払わずに使える（ペテンシー型）</label>
+        <label><input type="checkbox" id="fxPetensy"> 相手のターンの終わりに、手札からコストを支払わずに使える（ペテンシー型）</label>
+        <label title="そのターンに出たクリーチャーの数（両者合算）がこの数以上なら使えます。0にすると着地数を見ません（ブルー・インパルス型）">└ 着地<input type="number" id="fxPetensyN" min="0" max="20" value="3" style="width:52px">体以上（0＝見ない）</label>
+        <input type="text" id="fxPetensyCond" placeholder="└ 追加条件（例：相手バトル-バトル>=4かつバトル:ブルー・インパルス=0・空欄＝なし）" style="flex:1;min-width:220px">
         <label><input type="checkbox" id="fxCostFloor1"> コストは0にならない（軽減してもコスト1以上・ゼロ文明でも）</label>
         <label title="相手のターン中、相手が召喚以外の方法でクリーチャーをバトルゾーンに出した時、そのクリーチャーを行き先に送ってもよい（置換ではないので、出た時の効果は先に誘発します）"><input type="checkbox" id="fxStBounceCheat"> ↩ 相手のターン中、相手が召喚以外で出したクリーチャーを送る（オニカマス／ポクチンちん型）</label>
         <select id="fxStBounceCheatTo" style="width:auto;flex:0 0 150px" title="送り先。置換ではないので、出た時の効果は先に誘発します">
@@ -3384,6 +3386,10 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxWide"> 横向きカード（ドルマゲドン等・置いた時に横向き）</label>
         <label><input type="checkbox" id="fxDragonB"> ドラゴン・ブレイカー（ブレイク数ぶん山上を盾へ）</label>
         <label><input type="checkbox" id="fxShieldBurn"> シールド焼却（このクリーチャーがブレイクした盾は手札に加えず墓地へ・S・トリガー不可／ボルメテウス型）</label>
+        <label title="このクリーチャーがシールドをブレイクする時、相手はそのシールドを手札に加えるかわりに山札の一番下に置く。その後、各プレイヤーはこうして置かれた数だけカードを引く（切札竜 ボルメテウス・リバース・ドラゴン型）"><input type="checkbox" id="fxBrkDeckDraw"> 🔀 ブレイクした盾は山札の下へ→その数だけ各プレイヤーが引く</label>
+        <label title="上の効果をハイパーモード中だけ働かせる"><input type="checkbox" id="fxBrkDeckDrawHm"> └ HM中だけ</label>
+        <label title="「相手のクリーチャーは出たターンに攻撃できない」をハイパーモード中だけ働かせる"><input type="checkbox" id="fxFoeEntrySickHm"> └ 出たターン攻撃不可はHM中だけ</label>
+        <label title="相手のクリーチャーは、相手の手札以外からはバトルゾーンに出ない（改竄の炎 ボルメテウス・ハック型）。手札からなら召喚でも踏み倒しでも出せます"><input type="checkbox" id="fxStNoCheatHand"> 🚫 常在：相手のクリーチャーは相手の手札以外から出ない</label>
         <input id="fxShieldBurnCond" placeholder="焼却条件（空欄＝無条件／例：バトルマナ:ジョーカーズ10以上）" style="min-width:360px">
         <label><input type="checkbox" id="fxQqqx"> Q.Q.QX型（ブレイクした盾を相手の山札の上から4枚目に横向きで差し込む／相手がその横向きを引くと特殊敗北／相手は自分の山札をシャッフル・確認・表向きにできない／このカードが離れたら自分の山札をシャッフル）</label>
       </div>
@@ -5540,7 +5546,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.53";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.58";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6141,6 +6147,49 @@ function queueCheatWatchers(pTo,c){
       const noCheat=(S.vs&&S.who===pTo)
         ? zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoCheat&&!isSealed(x)&&!isIgnored(x,foeN);})
         : null;
+      /* 🚫 v16.58 改竄の炎 ボルメテウス・ハック型（stNoCheatHand）：
+         「相手のクリーチャーは、相手の手札以外から出ない」。
+         センノー型（stNoCheat）と違い、ターンを問わず働き、止めるのは「手札以外から出すこと」です。
+         手札からなら召喚でも踏み倒し（革命チェンジ等）でも出せます。
+         こちらも禁止なので、出したあとに戻すのではなく、そもそも出せません（出た時も誘発しません）。 */
+      const noHand=(S.vs&&!noCheat)
+        ? zonesOf(foeN).battle.find(x=>{const rx=getReg(x);return rx&&rx.stNoCheatHand&&!isSealed(x)&&!isIgnored(x,foeN);})
+        : null;
+      if(noHand&&!c._noHandChk){
+        c._noHandChk=true;
+        FX_GATE++;
+        (async()=>{
+          try{
+            const j=await askChoice(`🚫 ${faceNameOf(noHand)}：相手のクリーチャーは、相手の手札以外から出ない\n《${c.name}》は【手札】から出しましたか？\n（手札からなら召喚でも踏み倒しでもOK。山札・墓地・マナ・超次元・GRからは出せません）`,
+              ["手札から出した（そのまま）","手札以外（そもそも出せない）"]);
+            c._noHandChk=false;
+            if(j!==1)return;
+            const ZB6=zonesOf(pTo).battle;
+            const bi6=ZB6.findIndex(x=>x.id===c.id);
+            if(bi6<0)return;
+            snap();
+            const k=await askChoice(`《${c.name}》は出せません。出す前の場所を選んでください`,
+              ["墓地へ","マナへ","山札の上へ","超次元へ","GRゾーンの下へ","手札へ"]);
+            if(k===null)return;
+            for(let q=fxQueue.length-1;q>=0;q--)if(fxQueue[q].c&&fxQueue[q].c.id===c.id)fxQueue.splice(q,1);
+            for(let q=TRIG_PENDING.length-1;q>=0;q--)if(TRIG_PENDING[q].c&&TRIG_PENDING[q].c.id===c.id)TRIG_PENDING.splice(q,1);
+            for(let q=ORI_QUEUE.length-1;q>=0;q--)if(ORI_QUEUE[q].hc&&ORI_QUEUE[q].hc.id===c.id)ORI_QUEUE.splice(q,1);
+            ZB6.splice(bi6,1);
+            c.tapped=false;c.sideways=false;c.rot=0;c.buff=null;c.seals=[];c.mark=false;
+            const Z6=zonesOf(pTo);
+            if(k===0){c.faceup=true;Z6.grave.push(c);}
+            else if(k===1){c.faceup=true;Z6.mana.push(c);}
+            else if(k===2){c.faceup=false;Z6.deck.unshift(c);}
+            else if(k===3){c.faceup=true;Z6.hyper.push(c);}
+            else if(k===4){c.faceup=false;Z6.gr.push(c);}
+            else{c.faceup=true;Z6.hand.push(c);}
+            sfx("grave");renderAll();
+            toast(`🚫 ${c.name} は出せなかった（手札以外・出た時も誘発しません）`);
+            logOnly(`🚫 ${S.players[foeN].label} の《${faceNameOf(noHand)}》により、《${faceNameOf(c)}》は手札以外から出せなかった（出た時は誘発しない）`);
+          }catch(e){console.warn("stNoCheatHand",e);}
+          finally{c._noHandChk=false;FX_GATE=Math.max(0,FX_GATE-1);pumpFx();}
+        })();
+      }
       if(noCheat&&!c._noCheatChk){
         c._noCheatChk=true;
         FX_GATE++;   // ⏸ 答えが出るまで「出た時」を走らせない
@@ -12453,7 +12502,7 @@ const FX_TYPES=[
   ["eternalGate","⛓ 相手のシールドが自分より多い時だけ実行。相手は自分のシールドから「自分（唱えた側）のシールドと同じ枚数」を残して選び、残りは持ち主の手札へ（S・トリガー使用可・憎悪と怒りの獄門型）"],
   ["luckyDarts","🎯 自分のシールドを1つ相手に選ばせ、見る。その中から呪文を好きな数、コストを支払わずに唱えてもよい（ラッキー・ダーツ型／唱えなかったカードは裏向きで元に戻る）。条件欄に「ランダム」でランダムに1つ、「すべて」で呪文を全部唱える＝デュエプレ版"],
   ["numBounceCost","🔢 数字を1つ選び、その数字と同じコストを持つ相手のクリーチャーをすべて手札に戻す（機術士ディール型／条件欄でさらに絞れる）"],
-  ["luckyNumber","🔢 数字を1つ選び、次の自分のターンのはじめまで、相手がその数字と同じコストのクリーチャーを召喚することと呪文を唱えることを封じる（「本日のラッキーナンバー！」型・盤面の「🔢 数字を宣言」と同じ扱いで画面上部に出ます）"],
+  ["luckyNumber","🔢 数字を1つ選び、次の自分のターンのはじめまで、相手がその数字と同じコストのクリーチャーを召喚することと呪文を唱えることを封じる（「本日のラッキーナンバー！」型・盤面の「🔢 数字を宣言」と同じ扱いで画面上部に出ます／条件欄に「呪文だけ」と書くと呪文だけを止める＝奇天烈 シャッフ型）"],
   ["destroySumPow","💥 相手のクリーチャーを、パワーの合計がn以下になるように好きな数選び、破壊する（スクラッパーレッド型／条件欄で対象をさらに絞れる）"],
   ["destroyAllCond","💥 条件に合うクリーチャーをすべて破壊する（両者・モーツァルト型／条件欄＝例：ドラゴン以外。先頭に「相手:」「自分:」を付けると片側だけ＝destroyFiltAllの片側指定できる版）"],
   ["manaKill","💎 相手のマナゾーンからn枚選び、持ち主の墓地に置く（マナ破壊・条件欄で対象を絞れる）"],
@@ -12596,6 +12645,12 @@ const FX_TYPES=[
   ["deckLookPlayRestBottom","🎴 自分の山札の上からn枚を見る。その中から条件に合う1枚をバトルゾーンに出してもよい。残りをランダムな順番で山札の一番下に置く（\"末法\"チュリス型・条件欄に「ターン終了時に破壊」と足すと、出したカードをターンの終わりに破壊する）"],
   ["meteorBurnX","☄ メテオバーンX：このカードの下にあるドラゴンをすべて墓地に置いてもよい。置いた枚数で、9枚以上＝相手のシールドをすべて墓地／6枚以上＝相手のブロッカーをすべて破壊／3枚以上＝相手のシールドをすべてブレイク（枚数を満たすものは全部起きる・超無限神星 アポロヌス・アガペリオス型）"],
   ["killMaxPowFoe","💥 相手の、パワーが一番大きいクリーチャーをすべて破壊する（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く侵略 レッドゾーン型）"],
+  ["battlePick2","⚔ クリーチャーを2体選び、その2体をバトルさせる（自分・相手どちらでも／呪文からでも使える・宝魂剣と獄門盾の決断型／条件欄で対象を絞れる）"],
+  ["handGraveRecruit","🃏 条件に合うクリーチャーをn体、自分の**手札または墓地**から出す（1体ごとにどちらから出すか選ぶ・宝魂剣と獄門盾の決断型／条件欄＝例：コスト3以下）"],
+  ["graveRecruitSAEnd","⚡ 条件に合うクリーチャーをn体、自分の墓地から出す。出したクリーチャーに「スピードアタッカー」を与え、このターンの終わりに破壊する（炎氷渦と鎮魂禍の決断／邪幽 ジャガイスト型）"],
+  ["selfDiscardKillLeCost","🗑💥 自分の手札を1枚捨てる。こうして捨てたカード**以下のコスト**の相手クリーチャーを1体選び、破壊する（皇天闘と炎天華の決断型／条件欄で捨てる対象を絞れる）"],
+  ["manaMinPowFoe","🌱 相手の、パワーが一番小さいクリーチャーをすべて持ち主のマナゾーンに置く（同じパワーが複数なら全部・条件欄で対象を絞れる・百威と族絆の決断型）"],
+  ["lockFoeAtkBlockAll","🚫 相手のクリーチャーを**すべて**、次の自分のターン開始時まで攻撃もブロックもできなくする（条件欄で対象を絞れる・切札竜 ボルメテウス・リバース・ドラゴン型）"],
   ["killMinPowFoe","💥 相手の、パワーが一番小さいクリーチャーをすべて破壊する（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く邪道 レッドゾーン型）"],
   ["killMinCostFoe","💥 相手の、コストが一番小さいクリーチャーをすべて破壊する（同じコストが複数なら全部・条件欄で対象を絞れる・新空のプラズマ ジョンジョ・ジョン型）"],
   ["sealMinPowFoe","🔏 相手は、自身のパワーが一番小さいクリーチャーすべてに封印を1つずつ付ける（禁断の轟速 ブラックゾーン型／条件欄で対象を絞れる）"],
@@ -14567,7 +14622,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -16091,6 +16146,11 @@ async function runFxList(pi,list,srcCard,inPump){
           if(/スレイヤー/.test(t2)){x.buff.slayer=true;keysP.push("slayer");}
           else if(/スピードアタッカー|SA/i.test(t2)){x.buff.sa=true;x.sick=false;keysP.push("sa");}
           else if(/ブロッカー/.test(t2)){x.buff.blocker=true;keysP.push("blocker");}
+          /* 💥 v16.54 パワード・ブレイカー付与（武将利と威嚇命の決断型）。ブレイク枚数の計算で拾う */
+          else if(/パワード・?ブレイカー|パワードB/.test(t2)){x.buff.pb=true;keysP.push("pb");}
+          /* 💪 v16.54 「このターン、そのクリーチャーのパワーを2倍にする」。
+             いまのパワー（バフ込み）と同じ値を足して表す。数の指定より先に見ること */
+          else if(/^パワー\s*(?:を)?\s*2倍/.test(t2)){const _cp=powSyncOf(x);if(_cp>0){x.buff.pow=(x.buff.pow||0)+_cp;keysP.push("pow");}}
           else if(/^パワーアタッカー\+?(\d+)/.test(t2)){const v=+t2.match(/(\d+)/)[1];x.buff.pa=(x.buff.pa||0)+v;keysP.push("pa");}
           else if(/^パワー\+?(\d+)/.test(t2)){const v=+t2.match(/(\d+)/)[1];x.buff.pow=(x.buff.pow||0)+v;keysP.push("pow");}
           else if(/最初の攻撃の終わり.*アンタップ|攻撃の終わり.*アンタップ|2回攻撃/.test(t2)){
@@ -18074,6 +18134,22 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       if(cnt>0){sfx("ok");toast(`🚫 相手クリーチャー${cnt}体は次の自分のターン開始時まで攻撃もブロックもできない`);}
       renderAll();
+    }else if(f.t==="lockFoeAtkBlockAll"){
+      /* 🚫 v16.58 相手のクリーチャーをすべて、次の自分のターン開始時まで攻撃もブロックもできなくする
+         （切札竜 ボルメテウス・リバース・ドラゴン型）。選ぶ効果ではないので「選ばれない」は関係ない。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _laF=String(f.cond||"").trim();
+      const _laT=OZ.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!_laF||lockFilterOk(_laF,rx,x));});
+      if(!_laT.length){toast(`🚫 対象の相手クリーチャーがいません${_laF?`（${_laF}）`:""}`);continue;}
+      snap();
+      for(const x of _laT){
+        x.buff=x.buff||{};x.buff.noAtkBlock=true;
+        markBuffNext(x,["noAtkBlock"],pi);
+      }
+      sfx("ok");
+      toast(`🚫 相手のクリーチャー${_laT.length}体すべては、次の自分のターン開始時まで攻撃もブロックもできない`);
+      logOnly(`🚫 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[op].label} の${_laT.length}体を攻撃・ブロック不可（次の自分のターン開始まで）`);
+      renderAll();
     }else if(f.t==="selfBounceAll"){
       // ↩ 自分の対象クリーチャーをすべて手札に戻す（f.cond＝対象・「進化以外」等／このカード自身は戻さない）
       const filt=String(f.cond||"").trim();
@@ -20019,6 +20095,42 @@ async function runFxList(pi,list,srcCard,inPump){
       snap();
       await doBattle(pi,srcCard,op,_pb[_jb]);
       renderAll();
+    }else if(f.t==="battlePick2"){
+      /* ⚔ v16.56 クリーチャーを2体選び、その2体をバトルさせる（宝魂剣と獄門盾の決断型）。
+         battleWithPick と違い「このクリーチャー」を使わないので、呪文からでも使える。
+         自分どうし・相手どうしでも選べる（カードの文面が陣営を限っていないため）。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _b2F=String(f.cond||"").trim();
+      const _b2All=()=>{
+        const out=[];
+        for(const sp of [pi,op]){
+          for(const x of zonesOf(sp).battle){
+            const rx=getReg(x);
+            if(!rx||!isCreatureReg(rx))continue;
+            if(_b2F&&!lockFilterOk(_b2F,rx,x))continue;
+            if((rx.noChoose||momoUntouchable(x))&&sp!==pi&&!isIgnored(x,sp))continue;
+            out.push({x,sp});
+          }
+        }
+        return out;
+      };
+      const _pool1=_b2All();
+      if(_pool1.length<2){toast(`⚔ バトルさせられるクリーチャーが2体そろっていません${_b2F?`（${_b2F}）`:""}`);continue;}
+      const _j1=await pickCard(`⚔ バトルさせるクリーチャーを選択（1体目${_b2F?`・${_b2F}`:""}）`,_pool1.map(e=>e.x),
+        {sub:e2=>"",hint:"タップで選択／キャンセルでしない"});
+      if(_j1===null)continue;
+      const _e1=_pool1[_j1];
+      const _pool2=_b2All().filter(e=>e.x.id!==_e1.x.id);
+      if(!_pool2.length){toast("⚔ もう1体がいません");continue;}
+      const _j2=await pickCard(`⚔ バトルさせるクリーチャーを選択（2体目・相手は ${faceNameOf(_e1.x)}）`,_pool2.map(e=>e.x),
+        {hint:"タップで選択／キャンセルでしない"});
+      if(_j2===null)continue;
+      const _e2=_pool2[_j2];
+      snap();
+      toast(`⚔ ${faceNameOf(_e1.x)} と ${faceNameOf(_e2.x)} をバトルさせる`);
+      logOnly(`⚔ ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${faceNameOf(_e1.x)} と ${faceNameOf(_e2.x)} をバトル`);
+      await doBattle(_e1.sp,_e1.x,_e2.sp,_e2.x);
+      renderAll();
     }else if(f.t==="deckLookPlayRestBottom"){
       /* 🎴 v15.80 山札の上からn枚を見て、条件に合う1枚を出してもよい。残りはランダムな順番で山札の下へ
          （"末法"チュリス型）。条件欄に「ターン終了時に破壊」と足すと、出したカードに
@@ -21622,6 +21734,101 @@ async function runFxList(pi,list,srcCard,inPump){
       const added=Z.battle.filter(x=>!before.has(x.id));
       added.forEach(c2=>{c2.buff=c2.buff||{};c2.buff.blocker=true;markBuffNext(c2,["blocker"],pi);});
       if(added.length){renderAll();toast(`🛡 ${added.map(faceNameOf).join("、")} に次の自分のターンまで「ブロッカー」を付与`);}
+    }else if(f.t==="handGraveRecruit"){
+      /* 🃏 v16.54 条件に合うクリーチャーをn体、自分の手札または墓地から出す（宝魂剣と獄門盾の決断型）。
+         1体ごとに、どちらから出すかを選ぶ。片方にしか居なければ聞かずにそちらから出す。 */
+      const _hgF=String(f.cond||"").trim();
+      const _hgPool=z=>zonesOf(pi)[z].filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!_hgF||lockFilterOk(_hgF,rx,x));});
+      for(let i=0;i<n;i++){
+        const _hN=_hgPool("hand").length,_gN=_hgPool("grave").length;
+        if(!_hN&&!_gN){toast(`🃏 手札にも墓地にも条件に合うクリーチャーがいません${_hgF?`（${_hgF}）`:""}`);break;}
+        let _zn;
+        if(_hN&&_gN){
+          const _jz=await askChoice(`🃏 どこから出しますか？（${i+1}/${n}体目${_hgF?`・${_hgF}`:""}）`,[`手札から（${_hN}枚）`,`墓地から（${_gN}枚）`,"出さない"]);
+          if(_jz===null||_jz===2)break;
+          _zn=(_jz===0)?"hand":"grave";
+        }else _zn=_hN?"hand":"grave";
+        await deckRecruitCore(pi,_hgF,1,0,_zn==="hand"?"踏み倒し":"蘇生",_zn,inPump);
+      }
+      renderAll();
+    }else if(f.t==="graveRecruitSAEnd"){
+      /* ⚡ v16.54 墓地から出して「スピードアタッカー」を与え、このターンの終わりに破壊する
+         （炎氷渦と鎮魂禍の決断／邪幽 ジャガイスト型）。ターン終わりの破壊は B・A・D と同じ badMark。 */
+      const _bfE=new Set(Z.battle.map(x=>x.id));
+      await deckRecruitCore(pi,String(f.cond||"").trim(),n,0,"蘇生","grave",inPump);
+      const _addE=Z.battle.filter(x=>!_bfE.has(x.id));
+      for(const c2 of _addE){
+        c2.buff=c2.buff||{};c2.buff.sa=true;c2.sick=false;
+        try{markBuffTurn(c2,["sa"]);}catch(e){}
+        c2.badMark=true;
+      }
+      if(_addE.length){
+        toast(`⚡ ${_addE.map(faceNameOf).join("、")} に「スピードアタッカー」を与えた（このターンの終わりに破壊）`);
+        logOnly(`⚡ ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[pi].label}：墓地から${_addE.length}体を出してSA付与（ターン終了時に破壊）`);
+      }
+      renderAll();
+    }else if(f.t==="selfDiscardKillLeCost"){
+      /* 🗑💥 v16.54 自分の手札を1枚捨て、こうして捨てたカード以下のコストの相手クリーチャーを
+         1体選んで破壊する（皇天闘と炎天華の決断型）。条件欄で捨てる対象を絞れる。 */
+      const _dcF=String(f.cond||"").trim();
+      for(let i=0;i<n;i++){
+        const _dp=Z.hand.filter(x=>{const rx=getReg(x);return !_dcF||(rx&&lockFilterOk(_dcF,rx,x));});
+        if(!_dp.length){toast(`🗑 捨てられる手札がありません${_dcF?`（${_dcF}）`:""}`);break;}
+        const _jd=await pickCard(`🗑 捨てる手札を選択（捨てたカード以下のコストの相手クリーチャーを破壊）`,_dp,{hint:"キャンセルで捨てない"});
+        if(_jd===null)break;
+        const _cc=_dp[_jd];
+        const _ki=Z.hand.findIndex(x=>x.id===_cc.id);
+        if(_ki<0)break;
+        if(i===0)snap();
+        Z.hand.splice(_ki,1);
+        const _rc=getReg(_cc);
+        const _cst=(_rc&&_rc.cost!=null&&_rc.cost!=="")?(+_rc.cost||0):0;
+        _cc.faceup=true;_cc.tapped=false;Z.grave.push(_cc);
+        toast(`🗑 ${faceNameOf(_cc)} を捨てた（コスト${_cst}）`);
+        logOnly(`${S.players[pi].label}：《${faceNameOf(_cc)}》を捨てた（コスト${_cst}）`);
+        afterHandDiscard(pi,_cc,pi); // 😈 自分の効果で捨てた＝マッドネスは発動しない
+        if(!S.vs){toast("（ソロのため破壊はスキップ）");renderAll();continue;}
+        const _tg=OZ.battle.filter(x=>{
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))return false;
+          if(rx.cost==null||rx.cost==="")return false;
+          if((+rx.cost||0)>_cst)return false;
+          return !((rx.noChoose||momoUntouchable(x))&&!isIgnored(x,op));
+        });
+        if(!_tg.length){toast(`💥 コスト${_cst}以下の相手クリーチャーがいません`);renderAll();continue;}
+        const _j2=_tg.length===1?0:await pickCard(`💥 破壊する相手クリーチャーを選択（コスト${_cst}以下）`,_tg);
+        if(_j2===null){renderAll();continue;}
+        await destroyWithReplace(op,_tg[_j2]);
+        sfx("grave");renderAll();
+      }
+    }else if(f.t==="manaMinPowFoe"){
+      /* 🌱 v16.54 相手の、パワーが一番小さいクリーチャーをすべて持ち主のマナゾーンに置く
+         （百威と族絆の決断型）。同じパワーが複数いればその全部。選ぶ効果ではないので
+         「選ばれない」は関係ない。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _mf=String(f.cond||"").trim();
+      const _mp=OZ.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!_mf||lockFilterOk(_mf,rx,x));});
+      if(!_mp.length){toast(`🌱 対象の相手クリーチャーがいません${_mf?`（${_mf}）`:""}`);continue;}
+      const _mn=Math.min(..._mp.map(x=>powSyncOf(x)));
+      const _mt=_mp.filter(x=>powSyncOf(x)===_mn);
+      snap();
+      let _mc=0;
+      for(const t of [..._mt]){
+        if(!OZ.battle.some(x=>x.id===t.id))continue;
+        if(await offerTrueEscape(op,t)){renderAll();continue;}
+        const _ix=OZ.battle.findIndex(x=>x.id===t.id);
+        if(_ix<0)continue;
+        const _rm=OZ.battle.splice(_ix,1)[0];
+        const _um=(_rm.under&&_rm.under.length)?_rm.under.splice(0):[];
+        if(_rm.gear&&_rm.gear.length){_rm.gear.splice(0).forEach(gg=>gearOut(OZ,gg));}
+        _rm.tapped=false;_rm.sideways=false;_rm.rot=0;_rm.buff=null;_rm.seals=[];_rm.faceup=true;_rm.mark=false;
+        OZ.mana.push(_rm);_mc++;
+        _um.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];OZ.mana.push(u);});
+        renderAll();
+      }
+      toast(`🌱 パワーが一番小さい（${_mn}）相手クリーチャー${_mc}体を持ち主のマナゾーンへ`);
+      logOnly(`🌱 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[op].label} のパワー最小（${_mn}）${_mc}体をマナゾーンへ`);
+      sfx("move");renderAll();
     }else if(f.t==="destroyFiltAll"){
       // 💥 条件(f.cond)に合うクリーチャーを両者すべて破壊（自分も相手も）。このカード自身は除外（自壊しない）。
       const filt=String(f.cond||"").trim();
@@ -21715,9 +21922,17 @@ async function runFxList(pi,list,srcCard,inPump){
          ツインパクトは実行する面のコストだけで判定される。
          踏み倒しは「踏倒:ON」で通せる（＝召喚だけを止める、というカードの意味どおりになる）。 */
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
-      const num=await declareNumber(pi,"🔢 数字を1つ選んでください（次の自分のターンのはじめまで、相手はそのコストのクリーチャーを召喚できず、呪文も唱えられません）","lucky");
+      /* 🔢 v16.55 条件欄に「呪文だけ」と書くと、止めるのを呪文だけにする（奇天烈 シャッフ型）。
+         numDeclBlocked の "shuff" と同じ扱いで、クリーチャーの召喚は止めない。 */
+      const _spOnly=/呪文だけ|呪文のみ|シャッフ/.test(String(f.cond||""));
+      const num=await declareNumber(pi,_spOnly
+        ?"🔢 数字を1つ選んでください（次の自分のターンのはじめまで、相手はそのコストの呪文を唱えられません）"
+        :"🔢 数字を1つ選んでください（次の自分のターンのはじめまで、相手はそのコストのクリーチャーを召喚できず、呪文も唱えられません）",
+        _spOnly?"shuff":"lucky");
       if(num==null)continue;
-      toast(`🔢 本日のラッキーナンバーは ${num}！\n次の${S.players[pi].label}のターンのはじめまで、${S.players[op].label} はコスト${num}のクリーチャーを召喚できず、呪文も唱えられない`);
+      toast(_spOnly
+        ?`🔢 ${num} を宣言！\n次の${S.players[pi].label}のターンのはじめまで、${S.players[op].label} はコスト${num}の呪文を唱えられない`
+        :`🔢 本日のラッキーナンバーは ${num}！\n次の${S.players[pi].label}のターンのはじめまで、${S.players[op].label} はコスト${num}のクリーチャーを召喚できず、呪文も唱えられない`);
     }else if(f.t==="revealTopSumPlay"){
       /* 🎴 v16.32 自分の山札の上からm枚を表向きにする。その中から条件に合うカードを、
          コストの合計がn以下になるように好きな数バトルゾーンに出す。残りを好きな順序で山札の下に置く。
@@ -26149,7 +26364,33 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   const aRep=attacker?getReg(attacker):null;
   const burnPi=op===0?1:0;
   const burnCondOk=!!(aRep&&aRep.shieldBurn&&(!aRep.shieldBurnCond||zoneCondOk(aRep.shieldBurnCond,burnPi,attacker)));
-  if(S.expert&&burnCondOk){
+  /* 🔀 v16.58 切札竜 ボルメテウス・リバース・ドラゴン型（brkDeckDraw）：
+     このクリーチャーがブレイクする時、相手はそのシールドを手札に加えるかわりに山札の下に置く。
+     その後、各プレイヤーはこうして置かれたシールドの数だけカードを引く。
+     brkDeckDrawHm を付けると、ハイパーモード中だけ働く。焼却より先に見る。 */
+  const brkDeckOk=!!(S.expert&&aRep&&aRep.brkDeckDraw&&(!aRep.brkDeckDrawHm||(attacker&&attacker.hyper)));
+  if(brkDeckOk){
+    stack.forEach(c=>{
+      c.tapped=false;c.faceup=false;c.mark=false;c.sideways=false;
+      delete c._addedBy;delete c._addedTurn;
+      OZ.deck.push(c);
+    });
+    const _nD=stack.length;
+    sfx("move");renderAll();
+    toast(`🔀 ${faceNameOf(attacker)}：ブレイクした${_nD}枚は手札に加えず${S.players[op].label}の山札の一番下へ（S・トリガー不可）`);
+    logOnly(`🔀 ${faceNameOf(attacker)}：${S.players[op].label} の盾${_nD}枚を山札の一番下へ`);
+    for(const pd of [pi,op]){
+      const Zd=zonesOf(pd);
+      let dc=0;
+      for(let i=0;i<_nD&&Zd.deck.length;i++){
+        const c2=Zd.deck.shift();c2.faceup=true;c2.sideways=false;
+        if(toHand(Zd,c2)){markArrive(c2);dc++;}
+      }
+      if(dc>0){bumpEv("draws",pd,dc);emitEvent(pd,"draw");}
+    }
+    sfx("draw");renderAll();
+    toast(`🃏 置いた数（${_nD}枚）ぶん、各プレイヤーがカードを引いた`);
+  }else if(S.expert&&burnCondOk){
     // ボルメテウス型：ブレイクした盾は手札に加えるかわりに墓地へ（S・トリガー不可）
     stack.forEach(c=>{
       c.tapped=false;c.faceup=true;c.mark=false;c.sideways=false;
@@ -26643,7 +26884,9 @@ async function startAttack(pi,id){
     if(rA&&+rA.atkWinIncludedN>0&&stackCountOf(c)>=+rA.atkWinIncludedN){
       declareWin(pi,`${faceNameOf(c)}：含まれるカードが${stackCountOf(c)}枚で攻撃`,false);return;
     }
-    if(c.bornTurn===S.turn&&S.vs&&zonesOf(pi?0:1).battle.some(b=>{const rb=getReg(b);return rb&&rb.foeEntrySick&&!isSealed(b)&&!isIgnored(b,pi?0:1);})){
+    /* ⛔ v16.58 foeEntrySickHm を付けた登録は、そのクリーチャーがハイパーモード中の時だけ効く
+       （改竄の炎 ボルメテウス・ハック型）。付けていなければ今までどおり常時。 */
+    if(c.bornTurn===S.turn&&S.vs&&zonesOf(pi?0:1).battle.some(b=>{const rb=getReg(b);return rb&&rb.foeEntrySick&&(!rb.foeEntrySickHm||b.hyper)&&!isSealed(b)&&!isIgnored(b,pi?0:1);})){
       toast(`⛔ ${faceNameOf(c)} は相手の常在効果により、出たターンは攻撃できない`);return;
     }
     // ⛔ 条件付き攻撃不可：条件式を満たしていない間は攻撃できない（例：墓地:ドラゴン>=5）
@@ -28477,6 +28720,12 @@ async function execAttack(pi,id,tg){
     else if(bk==="masterw")n=2;
     else n=parseInt(bk,10)||1;
     if(typeof n==="number"){
+      /* ✨ v16.54 このターンだけ付与されたパワード・ブレイカー（grantTurnPick／grantTurnAll の「パワード・ブレイカー」） */
+      if(c.buff&&c.buff.pb){
+        const P=await effPower(c,true);
+        const pn=Math.max(1,1+Math.floor(P/6000));
+        if(pn>n){n=pn;toast(`✨ 付与：パワード・ブレイカー！ パワー${P} → ${n}枚ブレイク`);}
+      }
       // ✨ 常在付与：パワード・ブレイカー（味方から付与されていれば、パワー由来のブレイク数と比べて多い方）
       {
         let auraPB=false;
@@ -30557,6 +30806,8 @@ function renderFxEditor(){
   $("fxStNoHandes").checked=!!FXEDIT.stNoHandes;
   $("fxLibWin").checked=!!FXEDIT.libWin;
   $("fxPetensy").checked=!!FXEDIT.petensy;
+  $("fxPetensyN").value=(FXEDIT.petensyN==null?3:FXEDIT.petensyN);
+  $("fxPetensyCond").value=FXEDIT.petensyCond||"";
   $("fxRepIn").value=FXEDIT.repIn||"";
   $("fxRepInF").value=FXEDIT.repInF||"";
   $("fxRepInNC").checked=!!FXEDIT.repInNC;
@@ -30665,6 +30916,10 @@ function renderFxEditor(){
   $("fxWide").checked=!!FXEDIT.wide;
   $("fxDragonB").checked=!!FXEDIT.dragonB;
   $("fxShieldBurn").checked=!!FXEDIT.shieldBurn;
+  {const e=$("fxBrkDeckDraw");if(e)e.checked=!!FXEDIT.brkDeckDraw;}
+  {const e=$("fxBrkDeckDrawHm");if(e)e.checked=!!FXEDIT.brkDeckDrawHm;}
+  {const e=$("fxFoeEntrySickHm");if(e)e.checked=!!FXEDIT.foeEntrySickHm;}
+  {const e=$("fxStNoCheatHand");if(e)e.checked=!!FXEDIT.stNoCheatHand;}
   {const e=$("fxShieldBurnCond");if(e)e.value=FXEDIT.shieldBurnCond||"";}
   $("fxQqqx").checked=!!FXEDIT.qqqx;
   {const v=$("fxEvoBaseN");if(v)v.value=(FXEDIT.evoBaseN>1)?String(FXEDIT.evoBaseN):"";}
@@ -32890,6 +33145,8 @@ function openFxEditor(key){
     stNoHandes:cur?!!cur.stNoHandes:false,
     libWin:cur?!!cur.libWin:false,
     petensy:cur?!!cur.petensy:false,
+    petensyN:(cur&&cur.petensyN!=null)?+cur.petensyN:3,
+    petensyCond:cur&&cur.petensyCond||"",
     repIn:cur&&cur.repIn||"",
     repInF:cur&&cur.repInF||"",
     repInNC:cur?!!cur.repInNC:false,
@@ -32970,6 +33227,10 @@ function openFxEditor(key){
     wide:cur?!!cur.wide:false,
     dragonB:cur?!!cur.dragonB:false,
     shieldBurn:cur?!!cur.shieldBurn:false,
+    brkDeckDraw:cur?!!cur.brkDeckDraw:false,
+    brkDeckDrawHm:cur?!!cur.brkDeckDrawHm:false,
+    foeEntrySickHm:cur?!!cur.foeEntrySickHm:false,
+    stNoCheatHand:cur?!!cur.stNoCheatHand:false,
     shieldBurnCond:cur&&cur.shieldBurnCond||"",
     qqqx:cur?!!cur.qqqx:false,
     auraTapIn:cur?!!cur.auraTapIn:false,
@@ -33475,6 +33736,8 @@ $("fxSave").addEventListener("click",async ()=>{
     stNoHandes:$("fxStNoHandes").checked,
     libWin:$("fxLibWin").checked,
     petensy:$("fxPetensy").checked,
+    petensyN:Math.max(0,+$("fxPetensyN").value||0),
+    petensyCond:$("fxPetensyCond").value.trim(),
     repIn:$("fxRepIn").value||"",
     repInF:$("fxRepInF").value.trim(),
     repInNC:$("fxRepInNC").checked,
@@ -33550,6 +33813,10 @@ $("fxSave").addEventListener("click",async ()=>{
     wide:$("fxWide").checked,
     dragonB:$("fxDragonB").checked,
     shieldBurn:$("fxShieldBurn").checked,
+    brkDeckDraw:$("fxBrkDeckDraw")?$("fxBrkDeckDraw").checked:false,
+    brkDeckDrawHm:$("fxBrkDeckDrawHm")?$("fxBrkDeckDrawHm").checked:false,
+    foeEntrySickHm:$("fxFoeEntrySickHm")?$("fxFoeEntrySickHm").checked:false,
+    stNoCheatHand:$("fxStNoCheatHand")?$("fxStNoCheatHand").checked:false,
     shieldBurnCond:$("fxShieldBurnCond")?$("fxShieldBurnCond").value.trim():"",
     qqqx:$("fxQqqx").checked,
     evoBaseN:(()=>{const v=$("fxEvoBaseN");const n=v?parseInt(v.value,10):0;return (n>1)?Math.min(5,n):undefined;})(),
@@ -34243,6 +34510,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.stOriotis)attrs.push("常在：オリオティス");
     if(v.manaUntapN>0)attrs.push(`常在：相手ターン開始時マナ回復を${v.manaUntapN}枚に制限`);
     if(v.stNoCheat)attrs.push("常在：召喚以外で出せない");
+    if(v.stNoCheatHand)attrs.push("常在：相手は手札以外から出せない");
+    if(v.brkDeckDraw)attrs.push(`ブレイクした盾は山札の下→各自ドロー${v.brkDeckDrawHm?"（HM中だけ）":""}`);
     if(v.noChooseOppTurn)attrs.push("相手ターン中は相手に選ばれない");
     if(v.stBounceCheat)attrs.push(`相手ターン中：相手が召喚以外で出したクリーチャーを${({hand:"手札",deckBottom:"山札の下",grave:"墓地",mana:"マナ"})[v.stBounceCheatTo||"hand"]}へ`);
     if(v.stManaCheat)attrs.push("相手が踏み倒しで出したクリーチャーをマナへ");
@@ -34252,7 +34521,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.noUntap)attrs.push("アンタップしない");
     if(v.stNoHandes)attrs.push("常在：ハンデスされない");
     if(v.libWin)attrs.push("常在：山札0で勝利（シャコガイル型）");
-    if(v.petensy)attrs.push("ペテンシー型（相手ターン終了時・3体以上で無料使用）");
+    if(v.petensy){const _pn=(v.petensyN==null?3:+v.petensyN);
+      attrs.push(`ペテンシー型（相手ターン終了時${_pn>0?`・着地${_pn}体以上`:""}${v.petensyCond?`・${v.petensyCond}`:""}で無料使用）`);}
     if(v.repIn)attrs.push(`常在：置換ロック（${v.repIn==="manaOverMax"?"相手・最大マナ超のコスト→マナ（ヤドック型）":v.repInAfterN>0?`相手がそのターン他のクリーチャーを${v.repInAfterN}体以上出していれば、次から→マナ（リツイーギョ型）`:`${v.repInF||"相手全て"}${v.repInNC?"・召喚以外":""}${v.repInOppTurn?"・相手ターンのみ":""}→${v.repIn==="grave"?"墓地":v.repIn==="shield"?"シールド":v.repIn==="mana"?"マナ":"山下"}`}）`);
     if(v.madness)attrs.push((v.madness==="baiken"?"マッドネス（バイケン型）":"マッドネス（永遠型）")+(v.madForced?"・強制":""));
     if(v.ignore)attrs.push(v.ignore==="cost"?`能力無視：コスト${v.ignoreN}以下`:"能力無視：名前指定");
@@ -46282,8 +46552,17 @@ $("btnNextTurn").addEventListener("click",async function(){
       const cands=Zp.hand.filter(h=>{const r=getReg(h);return r&&r.petensy;});
       for(const h of [...cands]){
         const rH=getReg(h);
-        if(landed<3)continue; // 発動条件：そのターン クリーチャーが3体以上出ていれば。0〜2体では反応しない
-        const go=await ask(`🌀 ペテンシー型（${faceNameOf(h)}）\nこのターンの着地数：${landed}体（発動条件：3体以上・成立）\nコストを支払わずに${rH.ctype==="spell"?"唱え":"使い"}ますか？`);
+        /* 🌀 v16.57 発動条件を登録から読む。
+           petensyN＝そのターンの着地数のしきい値（既定3・0にすると着地数を見ない）
+           petensyCond＝追加の条件式（zoneCondOk・空欄ならなし）
+           真気楼と誠偽感の決断は petensyN 未設定＝3 なので今までどおり動く。 */
+        const _pN=(rH.petensyN==null?3:+rH.petensyN||0);
+        if(_pN>0&&landed<_pN)continue;
+        const _pC=String(rH.petensyCond||"").trim();
+        if(_pC&&!zoneCondOk(_pC,pl,h))continue;
+        const _pMsg=[_pN>0?`このターンの着地数：${landed}体（発動条件：${_pN}体以上・成立）`:"",
+                     _pC?`条件：${_pC}（成立）`:""].filter(Boolean).join("\n");
+        const go=await ask(`🌀 ペテンシー型（${faceNameOf(h)}）\n${_pMsg}${_pMsg?"\n":""}コストを支払わずに${rH.ctype==="spell"?"唱え":"使い"}ますか？`);
         if(!go)continue;
         snap();
         const hi=Zp.hand.findIndex(x=>x.id===h.id);
@@ -49332,6 +49611,19 @@ function zoneCondOk(expr,pi,selfCard){
       expr=String(expr).replace(/非進化の上|進化元非進化/g,_okU?"バトル>=0":"バトル<0");
       if(!String(expr).trim())return true;
     }
+    /* 🔢 v16.57 ゾーンの枚数の「差」を比べる：「相手バトル-バトル>=4」のように書く。
+       （ブルー・インパルス型「相手のクリーチャーが自分より4体以上多い」用）
+       既存の式には出てこない形なので、ここで先に片付ける。 */
+    {const _md=String(expr||"").replace(/[０-９]/g,d0=>String.fromCharCode(d0.charCodeAt(0)-0xFEE0))
+        .replace(/＞/g,">").replace(/＜/g,"<").replace(/＝/g,"=").replace(/≧|≥/g,">=").replace(/≦|≤/g,"<=")
+        .replace(/[\uFF0D\u2212]/g,"-")   // 全角マイナス・数学記号のマイナス（長音「ー」は変えない）
+        .replace(/[\s　]/g,"")
+        .match(/^([^-+<>=]+)-([^-+<>=]+)(>=|<=|>|<|=)(\d+)$/);
+     if(_md){
+       const _a=zoneCountSimple(_md[1],"",pi), _b=zoneCountSimple(_md[2],"",pi);
+       const _d=_a-_b, _n=+_md[4];
+       return _md[3]===">="?_d>=_n:_md[3]==="<="?_d<=_n:_md[3]===">"?_d>_n:_md[3]==="<"?_d<_n:_d===_n;
+     }}
     // 全角・半角の揺れを正規化（＞＜＝、全角数字、全角スペース）
     let ex=String(expr)
       .replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
