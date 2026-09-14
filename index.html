@@ -5548,7 +5548,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.59";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.60";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9672,7 +9672,9 @@ async function maybeSuggestReload(){
 async function offerGrandZero99(pi){
   if(!S.expert)return;
   const Z=zonesOf(pi);
-  const fields=Z.battle.filter(x=>{const r=getReg(x);return r&&r.grandZero&&!x._grandZeroUsed&&(x.under||[]).length>=4&&!isSealed(x)&&!isIgnored(x,pi);});
+  S._grandZero99Used=S._grandZero99Used||[false,false];
+  if(S._grandZero99Used[pi])return;
+  const fields=Z.battle.filter(x=>{const r=getReg(x);return r&&r.grandZero&&(x.under||[]).length>=4&&!isSealed(x)&&!isIgnored(x,pi);});
   for(const fld of fields){
     if(!window.confirm(`🌌 無月の門99：${faceNameOf(fld)} の下に${(fld.under||[]).length}枚あります。\nコスト99以下の水の呪文1枚を手札または墓地からコストを支払わずに唱えますか？`))continue;
     const pool=[...Z.hand,...Z.grave].filter(c=>{const r=getReg(c);return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact")&&(r.civs||[]).includes("water")&&+r.cost<=99;});
@@ -9681,7 +9683,7 @@ async function offerGrandZero99(pi){
     if(j===null)continue;
     const sp=pool[j];
     let ix=Z.hand.findIndex(x=>x.id===sp.id);if(ix>=0)Z.hand.splice(ix,1);else{ix=Z.grave.findIndex(x=>x.id===sp.id);if(ix>=0)Z.grave.splice(ix,1);}
-    fld._grandZeroUsed=true;sp.faceup=true;sp.tapped=false;Z.resolve.push(sp);
+    S._grandZero99Used[pi]=true;sp.faceup=true;sp.tapped=false;Z.resolve.push(sp);
     S.spellTurn=S.spellTurn||[0,0];S.spellTurn[pi]=(S.spellTurn[pi]||0)+1;
     emitEvent(pi,"spell",sp);scheduleAutoResolve(pi,sp);enqueueFx(pi,sp);
     toast(`🌌 無月の門99：${faceNameOf(sp)} をコストを支払わずに唱えた`);renderAll();
@@ -35675,6 +35677,7 @@ function numDeclBlocked(card,pTo,kind){
   if(!S.expert||!S.numDecl||S.freePlay)return null;
   const rW=getReg(card);
   if(!rW)return null;
+  if(kind==="spell"&&grandZeroSpellBypass(pTo,rW))return null;
   // ツインパクトは「実行する面」のコストだけを判定（クリーチャー面=cost／呪文面=cost2）。
   // 使わない面のコストが宣言されていても、使う面が宣言外なら実行できる。
   let costs;
@@ -36299,8 +36302,15 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if(fromZone==="battle"&&toZone!=="battle"){
     const OWZ=zonesOf(pFrom);
     if(c.under&&c.under.length){
-      _stackMove=c.under.splice(0);
-      _stackMove.forEach(u=>{u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.frozen=false;u.jd=false;u.gl=false;u.face=0;u.under=u.under||[];u.gear=u.gear||[];});
+      const _leaveReg=getReg(c);
+      if(_leaveReg&&_leaveReg.grandZero){
+        const _gzUnder=c.under.splice(0);
+        _gzUnder.forEach(u=>{u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.frozen=false;u.jd=false;u.gl=false;u.faceup=true;OWZ.grave.push(u);});
+        toast(`🌌 ${faceNameOf(c)} が離れるため、下のカード${_gzUnder.length}枚を墓地へ置いた`);
+      }else{
+        _stackMove=c.under.splice(0);
+        _stackMove.forEach(u=>{u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.frozen=false;u.jd=false;u.gl=false;u.face=0;u.under=u.under||[];u.gear=u.gear||[];});
+      }
     }
     // クロスギア・封印は「重ね」ではないため従来どおり持ち主の墓地へ
     if(c.gear&&c.gear.length){c.gear.splice(0).forEach(g=>gearOut(OWZ,g));}
@@ -36373,6 +36383,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   else{
     markDeckKnownFromPublic(c,fromZone,toZone);   // 🔍 見えていた場所→山札 は確認済みで残す（v14.76）
     placeCard(Z,toZone,c);
+    {const _pr=getReg(c);if(toZone==="battle"&&_pr&&_pr.grandZero){c.sideways=true;c.tapped=false;c.rot=0;}}
   }
   if(!_reorder){c._mvxRep=true;try{markArrive(c);}finally{delete c._mvxRep;}} // 🔧 配置後に呼ぶ（並べ替えでは出直し扱いにしない・置換ロックは本体側で判定するためフラグで除外）
   // 🛡 表向きでシールドに置く操作は誤操作しやすいので確認（城/Gキャッスルは除く）
