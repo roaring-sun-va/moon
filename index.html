@@ -2596,7 +2596,9 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row">
         <span style="font-size:12px;font-weight:700">💪 条件付きパワー ＋</span>
         <input type="number" id="fxCstPow" style="width:100px" placeholder="0" min="0">
-        <input type="text" id="fxCstPowCond" style="flex:1;min-width:160px" placeholder="条件（例：マナ:ボルシャック／ルピア>=3・空欄＝常時）">
+        <input type="text" id="fxCstPowCond" style="flex:1;min-width:160px" placeholder="条件（例：マナ:ボルシャック／ルピア>
+        <span style="font-size:12px;font-weight:700">／同じ条件でブレイク数</span>
+        <input type="number" id="fxCstBk" style="width:70px" placeholder="0" min="0" max="5" title="上の条件を満たしている間、ブレイク数をこの数にする（2＝W・ブレイカー／3＝T・ブレイカー）">=3・空欄＝常時）">
         <label style="font-size:11px" title="条件欄の代わりに『このクリーチャーがNEO進化なら』を条件にする（大河聖霊プリマ・ドラード型）"><input type="checkbox" id="fxCstPowNeo"> NEO進化なら</label>
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;flex:1 1 100%">
@@ -3069,6 +3071,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <input type="text" id="fxStAuraFiltFoe" list="raceList" placeholder="相手全体パワーの対象条件（例：サイキック／サイキック以外・空欄＝全員）" style="flex:1;min-width:170px">
           <label style="font-size:12px"><input type="checkbox" id="fxStAuraSA"> SAを与える</label>
           <label style="font-size:12px" title="この付与はハイパーモード中だけ働く（コットピ・ルピア型）。Zラッシュで解放するまで付与しません"><input type="checkbox" id="fxStAuraHmOnly"> 付与はHM中だけ</label>
+        <label title="付与するのは自分の手札が1枚以下の時だけ（G・G・G／龍星装者 "B-我"ライザ型）"><input type="checkbox" id="fxStAuraGggOnly"> 付与はG・G・G中だけ（手札1枚以下）</label>
           <label style="font-size:12px"><input type="checkbox" id="fxStAuraPB"> パワード・ブレイカーを与える（パワー6000ごとに＋1枚）</label>
           <label style="font-size:12px"><input type="checkbox" id="fxStAuraOthers"> このカード自身は含まない（「自分の他の〜」型）</label>
           <input type="text" id="fxAtkOnlyF" list="raceList" placeholder="自分はこの条件のクリーチャーでしか攻撃できない（例：コマンド｜イニシャルズ｜名前:禁断）" style="flex:1;min-width:200px"><input type="text" id="fxStAuraFilt" list="raceList" placeholder="対象条件（例：ドラゴン／ルピア・空欄＝クリーチャー全部）" style="flex:1;min-width:180px">
@@ -3388,6 +3391,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxWide"> 横向きカード（ドルマゲドン等・置いた時に横向き）</label>
         <label><input type="checkbox" id="fxDragonB"> ドラゴン・ブレイカー（ブレイク数ぶん山上を盾へ）</label>
         <label><input type="checkbox" id="fxShieldBurn"> シールド焼却（このクリーチャーがブレイクした盾は手札に加えず墓地へ・S・トリガー不可／ボルメテウス型）</label>
+        <label title="召喚する時、自分のシールドを1つ墓地に置いてもよい。そうしたら召喚コストをこの数だけ少なくする（フロウ&quot;GIG&quot;ロール型）"><span style="font-size:12px;font-weight:700">🛡 盾1つを墓地に置いて召喚コスト−</span><input type="number" id="fxShieldCostDown" style="width:70px" placeholder="0" min="0" max="20"></label>
         <label title="このクリーチャーがシールドをブレイクする時、相手はそのシールドを手札に加えるかわりに山札の一番下に置く。その後、各プレイヤーはこうして置かれた数だけカードを引く（切札竜 ボルメテウス・リバース・ドラゴン型）"><input type="checkbox" id="fxBrkDeckDraw"> 🔀 ブレイクした盾は山札の下へ→その数だけ各プレイヤーが引く</label>
         <label title="上の効果をハイパーモード中だけ働かせる"><input type="checkbox" id="fxBrkDeckDrawHm"> └ HM中だけ</label>
         <label title="「相手のクリーチャーは出たターンに攻撃できない」をハイパーモード中だけ働かせる"><input type="checkbox" id="fxFoeEntrySickHm"> └ 出たターン攻撃不可はHM中だけ</label>
@@ -5548,7 +5552,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.60";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.62";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9672,23 +9676,27 @@ async function maybeSuggestReload(){
 async function offerGrandZero99(pi){
   if(!S.expert)return;
   const Z=zonesOf(pi);
-  S._grandZero99Used=S._grandZero99Used||[false,false];
-  if(S._grandZero99Used[pi])return;
+  /* 🔟 v16.61 「ゲーム中で一度」は、既存の _once1G に乗せる。
+     独自の変数だと startGame（開始/再試合）で消えず、盤面の保存・復元にも乗らなかった。 */
+  S._once1G=S._once1G||{};
+  const g1key=`${pi}:grandZero99`;
+  if(S._once1G[g1key])return;
   const fields=Z.battle.filter(x=>{const r=getReg(x);return r&&r.grandZero&&(x.under||[]).length>=4&&!isSealed(x)&&!isIgnored(x,pi);});
-  for(const fld of fields){
-    if(!window.confirm(`🌌 無月の門99：${faceNameOf(fld)} の下に${(fld.under||[]).length}枚あります。\nコスト99以下の水の呪文1枚を手札または墓地からコストを支払わずに唱えますか？`))continue;
-    const pool=[...Z.hand,...Z.grave].filter(c=>{const r=getReg(c);return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact")&&(r.civs||[]).includes("water")&&+r.cost<=99;});
-    if(!pool.length){toast("🌌 唱えられる水の呪文が手札・墓地にありません");continue;}
-    const j=await pickCard("🌌 無月の門99：唱える水の呪文を選択",pool,{hint:"手札または墓地／キャンセル可"});
-    if(j===null)continue;
-    const sp=pool[j];
-    let ix=Z.hand.findIndex(x=>x.id===sp.id);if(ix>=0)Z.hand.splice(ix,1);else{ix=Z.grave.findIndex(x=>x.id===sp.id);if(ix>=0)Z.grave.splice(ix,1);}
-    S._grandZero99Used[pi]=true;sp.faceup=true;sp.tapped=false;Z.resolve.push(sp);
-    S.spellTurn=S.spellTurn||[0,0];S.spellTurn[pi]=(S.spellTurn[pi]||0)+1;
-    emitEvent(pi,"spell",sp);scheduleAutoResolve(pi,sp);enqueueFx(pi,sp);
-    toast(`🌌 無月の門99：${faceNameOf(sp)} をコストを支払わずに唱えた`);renderAll();
-    await waitFxIdle();await waitResolveMugetsu(6000);
-  }
+  if(!fields.length)return;
+  const fld=fields[0];
+  if(!await ask(`🌌 無月の門99：${faceNameOf(fld)} の下に${(fld.under||[]).length}枚あります。\nコスト99以下の水の呪文1枚を、手札または墓地からコストを支払わずに唱えますか？\n（ゲーム中に1回だけ）`))return;
+  const pool=[...Z.hand,...Z.grave].filter(c=>{const r=getReg(c);return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact")&&(r.civs||[]).includes("water")&&+r.cost<=99;});
+  if(!pool.length){toast("🌌 唱えられる水の呪文が手札・墓地にありません");return;}
+  const j=await pickCard("🌌 無月の門99：唱える水の呪文を選択",pool,{hint:"手札または墓地／キャンセル可"});
+  if(j===null)return;
+  const sp=pool[j];
+  let ix=Z.hand.findIndex(x=>x.id===sp.id);if(ix>=0)Z.hand.splice(ix,1);else{ix=Z.grave.findIndex(x=>x.id===sp.id);if(ix>=0)Z.grave.splice(ix,1);}
+  S._once1G[g1key]=true;
+  sp.faceup=true;sp.tapped=false;Z.resolve.push(sp);
+  S.spellTurn=S.spellTurn||[0,0];S.spellTurn[pi]=(S.spellTurn[pi]||0)+1;
+  emitEvent(pi,"spell",sp);scheduleAutoResolve(pi,sp);enqueueFx(pi,sp);
+  toast(`🌌 無月の門99：${faceNameOf(sp)} をコストを支払わずに唱えた`);renderAll();
+  await waitFxIdle();await waitResolveMugetsu(6000);
 }
 async function runTurnEndTriggers(cur2){
     try{await maybeSuggestReload();}catch(e){}
@@ -12674,6 +12682,9 @@ const FX_TYPES=[
   ["deckLookPlayRestBottom","🎴 自分の山札の上からn枚を見る。その中から条件に合う1枚をバトルゾーンに出してもよい。残りをランダムな順番で山札の一番下に置く（\"末法\"チュリス型・条件欄に「ターン終了時に破壊」と足すと、出したカードをターンの終わりに破壊する）"],
   ["meteorBurnX","☄ メテオバーンX：このカードの下にあるドラゴンをすべて墓地に置いてもよい。置いた枚数で、9枚以上＝相手のシールドをすべて墓地／6枚以上＝相手のブロッカーをすべて破壊／3枚以上＝相手のシールドをすべてブレイク（枚数を満たすものは全部起きる・超無限神星 アポロヌス・アガペリオス型）"],
   ["killMaxPowFoe","💥 相手の、パワーが一番大きいクリーチャーをすべて破壊する（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く侵略 レッドゾーン型）"],
+  ["destroySumCostDiscard","🗑💥 自分の手札を1枚捨て、**捨てたカードのコスト以下**になるように、相手のクリーチャーをコストの合計で好きな数選び、破壊する（ゴゴゴ・Cho絶・ラッシュ型／条件欄で捨てる対象を絞れる）"],
+  ["shieldFaceUpDraw","🛡👁 自分のシールドゾーンにある裏向きのカードをn枚表向きにする。条件に合えばその1枚につきカードを1枚引く。表向きにしたカードはシールドゾーンにある間そのまま（紫天ノ裁キ型／条件欄＝例：メタリカ｜裁きの紋章）"],
+  ["selfDiscardRandom","🗑 自分の手札をランダムにn枚捨てる（ホメホメ老句型・自分で選べない）"],
   ["battlePick2","⚔ クリーチャーを2体選び、その2体をバトルさせる（自分・相手どちらでも／呪文からでも使える・宝魂剣と獄門盾の決断型／条件欄で対象を絞れる）"],
   ["handGraveRecruit","🃏 条件に合うクリーチャーをn体、自分の**手札または墓地**から出す（1体ごとにどちらから出すか選ぶ・宝魂剣と獄門盾の決断型／条件欄＝例：コスト3以下）"],
   ["graveRecruitSAEnd","⚡ 条件に合うクリーチャーをn体、自分の墓地から出す。出したクリーチャーに「スピードアタッカー」を与え、このターンの終わりに破壊する（炎氷渦と鎮魂禍の決断／邪幽 ジャガイスト型）"],
@@ -13637,6 +13648,25 @@ async function autoTapCost(pi,c){
     }
     return mx;
   })();
+  /* 🛡 v16.62 召喚する時、自分のシールドを1つ墓地に置いてもよい。そうしたらコストをn少なくする
+     （フロウ"GIG"ロール型）。墓地に置くシールドは自分で選ぶ。S・トリガーは使えない。 */
+  if((+r.shieldCostDown||0)>0&&cost>0&&!c._viaCheat&&paySide==="creature"&&Z.shield.length){
+    const _sn=+r.shieldCostDown||0;
+    if(await ask(`🛡 ${faceNameOf(c)}\n自分のシールドを1つ墓地に置いて、召喚コストを${_sn}少なくしますか？\n（置いたシールドのS・トリガーは使えません）`)){
+      const _js=Z.shield.length===1?0:await pickCard("🛡 墓地に置くシールドを選択",Z.shield,{hint:"キャンセルで軽減しない"});
+      if(_js!==null){
+        const _sc=Z.shield.splice(_js,1)[0];
+        const _un=(_sc.under&&_sc.under.length)?_sc.under.splice(0):[];
+        _sc.faceup=true;_sc.tapped=false;_sc.sideways=false;_sc.rot=0;_sc.mark=false;
+        Z.grave.push(_sc);
+        _un.forEach(u=>{u.faceup=true;u.tapped=false;Z.grave.push(u);});
+        cost=Math.max(0,cost-_sn);
+        sfx("grave");renderAll();
+        toast(`🛡 シールド1つを墓地に置き、コスト${cost} で召喚`);
+        logOnly(`🛡 ${S.players[pi].label}：シールドを1つ墓地に置いて《${faceNameOf(c)}》のコストを${_sn}下げた`);
+      }
+    }
+  }
   const _joeN=Math.max(+r.joe||0,_joeGrant);
   if(_joeN>0&&cost>0&&!c._viaCheat&&paySide==="creature"){
     const nJ=_joeN;   // 🃏 自前の J・O・E と、他のカードから与えられた分の大きいほう
@@ -14662,7 +14692,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -19973,12 +20003,35 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!Z.deck.length){toast("（山札がありません）");continue;}
       let _cd=String(f.cond||"").trim();
       const _toBottom=/→\s*山下|→\s*山札の下/.test(_cd);
-      _cd=_cd.replace(/→\s*(山下|山札の下)/,"").replace(/[／\/]\s*$/,"").trim();
+      /* 🎴 v16.62 条件欄の追加の言葉
+         「攻撃コスト以下」＝いま攻撃しているクリーチャーのコスト以下だけ出せる（B-我ライザ型）
+         「任意」＝条件に合っても出すかどうかを聞く（〜出してもよい） */
+      const _atkLe=/攻撃コスト以下/.test(_cd);
+      const _optPlay=/任意/.test(_cd);
+      _cd=_cd.replace(/→\s*(山下|山札の下)/,"").replace(/攻撃コスト以下/,"").replace(/任意/,"")
+             .replace(/[／\/]\s*$/,"").replace(/^[／\/]\s*/,"").trim();
       snap();
       const _top=Z.deck.shift();
       _top.faceup=true;
       const _rt=getReg(_top);
-      const _hit=!!(_rt&&isCreatureReg(_rt)&&(!_cd||lockFilterOk(_cd,_rt,_top)));
+      let _hit=!!(_rt&&isCreatureReg(_rt)&&(!_cd||lockFilterOk(_cd,_rt,_top)));
+      if(_hit&&_atkLe){
+        /* いま攻撃しているクリーチャーのコストと比べる。攻撃中でなければ比べない。 */
+        let _ac=null;
+        try{
+          const _at=zonesOf(pi).battle.find(x=>x.id===CUR_ATTACKER);
+          const _ra=_at?getReg(_at):null;
+          if(_ra&&_ra.cost!=null&&_ra.cost!=="")_ac=+_ra.cost||0;
+        }catch(e){}
+        const _tc=(_rt.cost==null||_rt.cost==="")?0:(+_rt.cost||0);
+        if(_ac!=null&&_tc>_ac){
+          _hit=false;
+          toast(`🎴 コスト${_tc} は攻撃中のクリーチャー（コスト${_ac}）より大きいので出せません`);
+        }
+      }
+      if(_hit&&_optPlay){
+        if(!await ask(`🎴 ${faceNameOf(_top)} をバトルゾーンに出しますか？\n（出さないなら${_toBottom?"山札の一番下":"墓地"}へ）`))_hit=false;
+      }
       toast(`🎴 表向き：${faceNameOf(_top)}`);
       if(_hit){
         _top.tapped=false;_top.sick=true;
@@ -20168,6 +20221,84 @@ async function runFxList(pi,list,srcCard,inPump){
       snap();
       await doBattle(pi,srcCard,op,_pb[_jb]);
       renderAll();
+    }else if(f.t==="selfDiscardRandom"){
+      /* 🗑 v16.62 自分の手札をランダムにn枚捨てる（ホメホメ老句型）。選べないので、引いた直後の捨て札に使う。 */
+      if(!Z.hand.length){toast("🗑 捨てる手札がありません");continue;}
+      snap();
+      const _dn=Math.min(n,Z.hand.length);
+      const _names=[];
+      for(let i=0;i<_dn;i++){
+        const k=Math.floor(Math.random()*Z.hand.length);
+        const cc=Z.hand.splice(k,1)[0];
+        cc.faceup=true;cc.tapped=false;Z.grave.push(cc);
+        _names.push(faceNameOf(cc));
+        afterHandDiscard(pi,cc,pi);   // 😈 自分の効果なのでマッドネスは発動しない
+      }
+      sfx("grave");renderAll();
+      toast(`🗑 ランダムに${_dn}枚捨てた：${_names.join("、")}`);
+      logOnly(`🗑 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[pi].label} が手札からランダムに${_dn}枚捨てた`);
+    }else if(f.t==="destroySumCostDiscard"){
+      /* 🗑💥 v16.62 自分の手札を1枚捨て、そのコスト以下になるように、相手のクリーチャーを
+         コストの合計で好きな数選んで破壊する（ゴゴゴ・Cho絶・ラッシュ型）。
+         v16.54 の selfDiscardKillLeCost は「1体だけ」。こちらは合計で複数選べる。 */
+      const _dcF=String(f.cond||"").trim();
+      const _dp=Z.hand.filter(x=>{const rx=getReg(x);return !_dcF||(rx&&lockFilterOk(_dcF,rx,x));});
+      if(!_dp.length){toast(`🗑 捨てられる手札がありません${_dcF?`（${_dcF}）`:""}`);continue;}
+      const _jd=await pickCard("🗑 捨てる手札を選択（そのコスト以下の合計になるよう相手を破壊）",_dp,{hint:"キャンセルで捨てない"});
+      if(_jd===null)continue;
+      const _cc=_dp[_jd];
+      const _ki=Z.hand.findIndex(x=>x.id===_cc.id);
+      if(_ki<0)continue;
+      snap();
+      Z.hand.splice(_ki,1);
+      const _rc=getReg(_cc);
+      let _bud=(_rc&&_rc.cost!=null&&_rc.cost!=="")?(+_rc.cost||0):0;
+      _cc.faceup=true;_cc.tapped=false;Z.grave.push(_cc);
+      toast(`🗑 ${faceNameOf(_cc)} を捨てた（コスト${_bud}）`);
+      logOnly(`${S.players[pi].label}：《${faceNameOf(_cc)}》を捨てた（コスト${_bud}）`);
+      afterHandDiscard(pi,_cc,pi);
+      if(!S.vs){toast("（ソロのため破壊はスキップ）");renderAll();continue;}
+      let _killed=0;
+      while(_bud>=0){
+        const _tg=OZ.battle.filter(x=>{
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))return false;
+          const cst=(rx.cost==null||rx.cost==="")?0:(+rx.cost||0);
+          if(cst>_bud)return false;
+          return !((rx.noChoose||momoUntouchable(x))&&!isIgnored(x,op));
+        });
+        if(!_tg.length)break;
+        const _j2=await pickCard(`💥 破壊する相手クリーチャーを選択（残りコスト合計 ${_bud}）`,_tg,{hint:"キャンセルで終了"});
+        if(_j2===null)break;
+        const _t=_tg[_j2];
+        const _rt=getReg(_t);
+        _bud-=((_rt.cost==null||_rt.cost==="")?0:(+_rt.cost||0));
+        await destroyWithReplace(op,_t);
+        _killed++;
+        sfx("grave");renderAll();
+      }
+      toast(_killed?`💥 ${_killed}体を破壊した（残り${Math.max(0,_bud)}）`:"💥 破壊できる相手クリーチャーがいません");
+    }else if(f.t==="shieldFaceUpDraw"){
+      /* 🛡👁 v16.62 自分のシールドゾーンの裏向きカードをn枚表向きにする。
+         条件に合えばその1枚につき1枚引く。表向きにしたカードはシールドゾーンにある間そのまま（紫天ノ裁キ型）。 */
+      const _sf=String(f.cond||"").trim();
+      let _drew=0;
+      for(let i=0;i<n;i++){
+        const _pool=Z.shield.filter(x=>!x.faceup);
+        if(!_pool.length){toast("🛡 裏向きのシールドがありません");break;}
+        if(i===0)snap();
+        const _js=_pool.length===1?0:await pickCard("🛡 表向きにするシールドを選択",_pool,{hint:"中身は表向きにするまで見えません"});
+        if(_js===null)break;
+        const _sc=_pool[_js];
+        _sc.faceup=true;_sc.seen=true;
+        const _rs=getReg(_sc);
+        const _hit=!!(_rs&&(!_sf||lockFilterOk(_sf,_rs,_sc)));
+        toast(`🛡 ${faceNameOf(_sc)} を表向きにした${_hit?"（条件に合う）":""}`);
+        logOnly(`🛡 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[pi].label} がシールドの《${faceNameOf(_sc)}》を表向きにした`);
+        if(_hit){draw(pi,1);_drew++;}
+        renderAll();
+      }
+      if(_drew)toast(`🃏 条件に合ったので${_drew}枚引いた`);
     }else if(f.t==="battlePick2"){
       /* ⚔ v16.56 クリーチャーを2体選び、その2体をバトルさせる（宝魂剣と獄門盾の決断型）。
          battleWithPick と違い「このクリーチャー」を使わないので、呪文からでも使える。
@@ -23158,6 +23289,41 @@ function lockFilterOk(filt,r,c,lockPi,face){
   const nameOk=!names.length||names.some(tk=>one(tk));
   return consOk&&nameOk;
 }
+/* 🌌 v16.61 無月フィールド《卍 新世壊 卍》まわりの共通部品。
+   grandZeroSpellOk＝下に置ける呪文か（魔導具呪文）／grandZeroFieldsOf＝使える新世壊の一覧
+   grandZeroPut＝下に置いて1枚引く。 */
+function grandZeroSpellOk(r){
+  return !!(r&&raceMatch(r,"魔導具")&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"));
+}
+function grandZeroFieldsOf(pi){
+  try{
+    return zonesOf(pi).battle.filter(x=>{const rx=getReg(x);return rx&&rx.grandZero&&!isSealed(x)&&!isIgnored(x,pi);});
+  }catch(e){return [];}
+}
+function grandZeroPut(pi,fld,o){
+  fld.under=fld.under||[];
+  o.faceup=true;o.tapped=false;o.sideways=false;o.rot=0;
+  fld.under.push(o);
+  draw(pi,1);
+  o._resolvedToGrandZero=true;
+  toast(`🌌 ${faceNameOf(o)} を ${faceNameOf(fld)} の下に置き、1枚引いた`);
+  return true;
+}
+/* 🌌 v16.61 解決の終わりに、置くかどうかを先に聞いておく（ここは非同期なのでアプリの確認パネルを使える）。
+   複数の《卍 新世壊 卍》があれば、どれの下に置くかを選ぶ（カードの文面は「1つの下に置き」）。 */
+async function offerGrandZeroPlace(pi,o){
+  try{
+    const rg=getReg(o);
+    if(!S.expert||!grandZeroSpellOk(rg))return;
+    const fields=grandZeroFieldsOf(pi);
+    if(!fields.length)return;
+    if(!await ask(`🌌 ${faceNameOf(fields[0])}\n解決した《${faceNameOf(o)}》を、墓地のかわりに《卍 新世壊 卍》の下に置き、カードを1枚引きますか？`)){o._gzNo=true;return;}
+    if(fields.length===1){o._gzPick=fields[0].id;return;}
+    const j=await pickCard("🌌 どの《卍 新世壊 卍》の下に置きますか？",fields,{hint:"キャンセルで置かない"});
+    if(j===null){o._gzNo=true;return;}
+    o._gzPick=fields[j].id;
+  }catch(e){console.warn("offerGrandZeroPlace",e);}
+}
 function grandZeroSpellBypass(pi,r){
   try{
     if(!r||!(r.ctype==="spell"||r.twin||r.ctype==="twinpact"))return false;
@@ -24529,7 +24695,7 @@ function saGrantSource(pi,c,r){
     if(!rb||isSealed(b))continue;
     if(rb.stAllSA)return `常在：${faceNameOf(b)}`;
     if(rb.stAuraSA&&!isIgnored(b,pi)){
-      if(rb.stAuraHmOnly&&!b.hyper)continue;   // ⚡ ハイパーモード中だけ付与（Zラッシュ解放前は付与しない）
+      if((rb.stAuraHmOnly&&!b.hyper)||(rb.stAuraGggOnly&&!gggOn(pi)))continue;   // ⚡ ハイパーモード中だけ付与（Zラッシュ解放前は付与しない）
       if(rb.stAuraOthers&&b.id===c.id)continue;
       if(rb.stAuraFilt&&!(r&&lockFilterOk(rb.stAuraFilt,r,c)))continue;
       return `付与：${faceNameOf(b)}`;
@@ -25455,20 +25621,28 @@ function resolveOut(Z,o){
     delete o._resolveToBottom;o.faceup=false;o.seen=false;o.sideways=false;o.rot=0;Z.deck.push(o);
     return true;
   }
-  /* 🌌 無月フィールド《卍 新世壊 卍》：魔導具呪文の解決後、墓地の代わりにカードの下へ置き1枚引く。 */
-  if(rg&&raceMatch(rg,"魔導具")&&(rg.ctype==="spell"||rg.twin||rg.ctype==="twinpact")){
+  /* 🌌 無月フィールド《卍 新世壊 卍》：魔導具呪文の解決後、墓地の代わりにカードの下へ置き1枚引く。
+     v16.61：置くかどうかと、どの《卍 新世壊 卍》の下に置くかは、解決の終わり（scheduleAutoResolve）で
+     先に聞いて `_gzPick`／`_gzNo` に控えておく。ここは控えを適用するだけ（この関数は同期のため）。
+     まだ聞けていない場合（別の呪文を唱えて古い解決が押し出された時など）は、その場で確認する。 */
+  if(rg&&grandZeroSpellOk(rg)){
     const pi0=S.players.findIndex(P=>P.zones===Z);
-    if(pi0>=0){
-      const fields=Z.battle.filter(x=>{const rx=getReg(x);return rx&&rx.grandZero&&!isSealed(x)&&!isIgnored(x,pi0);});
+    if(pi0>=0&&!o._gzNo){
+      const fields=grandZeroFieldsOf(pi0);
+      const picked=o._gzPick?fields.find(x=>x.id===o._gzPick):null;
+      delete o._gzPick;delete o._gzNo;
+      if(picked){
+        grandZeroPut(pi0,picked,o);
+        return true;
+      }
       for(const fld of fields){
         if(window.confirm(`🌌 ${faceNameOf(fld)}\n解決した《${faceNameOf(o)}》を墓地の代わりにこのカードの下に置き、1枚引きますか？`)){
-          fld.under=fld.under||[];o.faceup=true;o.tapped=false;o.sideways=false;o.rot=0;fld.under.push(o);
-          draw(pi0,1);o._resolvedToGrandZero=true;
-          toast(`🌌 ${faceNameOf(o)} を ${faceNameOf(fld)} の下に置き、1枚引いた`);
+          grandZeroPut(pi0,fld,o);
           return true;
         }
       }
     }
+    delete o._gzPick;delete o._gzNo;
   }
   // 🏵 裁きの紋章：唱えた後、墓地に置くかわりに自分のシールド1つの上に表向きにして置く。
   //    置いたカードがその盾の一番上になり、元の盾はその下に重なる（盾が離れる時は一緒に動く）。
@@ -25557,7 +25731,10 @@ async function scheduleAutoResolve(pi,c){
       &&!($("revealOlay")&&$("revealOlay").classList.contains("open"))
       &&!($("breakOlay")&&$("breakOlay").classList.contains("open"))
       &&!($("sheet")&&$("sheet").classList.contains("open"))){
-      Z.resolve.splice(ix,1);
+      await offerGrandZeroPlace(pi,c);   // 🌌 v16.61 下に置くかを先に確認（同期の resolveOut では聞けないため）
+      const ix2=Z.resolve.findIndex(x=>x.id===c.id);
+      if(ix2<0)return;                    // 確認の間に手で動かされた
+      Z.resolve.splice(ix2,1);
       const toBottom=!!c._resolveToBottom;
       const toMana=resolveOut(Z,c);       // 墓地へ（チャージャーはマナ）＋虚無月誘発はresolveOut内
       const toGrandZero=!!c._resolvedToGrandZero;delete c._resolvedToGrandZero;
@@ -27808,7 +27985,7 @@ async function execAttack(pi,id,tg){
       const rSelf=getReg(c);
       const condSA=(rSelf&&rSelf.cstCond&&rSelf.cstFx==="sa"&&zoneCondOk(rSelf.cstCond,pi,c))||(c.hyper&&rSelf&&rSelf.hmSA);
       if(condSA)toast(`✨ 条件常在（${rSelf.cstCond}）：スピードアタッカー！`);
-      const _auraSAsrc=Z.battle.find(b=>{const rb=getReg(b);if(!rb||!rb.stAuraSA)return false;if(rb.stAuraHmOnly&&!b.hyper)return false;if(isSealed(b)||isIgnored(b,pi))return false;if(rb.stAuraOthers&&b.id===c.id)return false;return !rb.stAuraFilt||(rA&&lockFilterOk(rb.stAuraFilt,rA,c));});
+      const _auraSAsrc=Z.battle.find(b=>{const rb=getReg(b);if(!rb||!rb.stAuraSA)return false;if((rb.stAuraHmOnly&&!b.hyper)||(rb.stAuraGggOnly&&!gggOn(pi)))return false;if(isSealed(b)||isIgnored(b,pi))return false;if(rb.stAuraOthers&&b.id===c.id)return false;return !rb.stAuraFilt||(rA&&lockFilterOk(rb.stAuraFilt,rA,c));});
       const hasAllSA=condSA||(c.buff&&c.buff.sa)||Z.battle.some(b=>{const rb=getReg(b);return rb&&rb.stAllSA&&!isSealed(b);})||!!_auraSAsrc;
       if(_auraSAsrc&&c.sick&&!(rA&&rA.sa))toast(`✨ ${faceNameOf(_auraSAsrc)} の付与：${faceNameOf(c)} はスピードアタッカー！`);
       if(hasAllSA){
@@ -28833,6 +29010,16 @@ async function execAttack(pi,id,tg){
     else if(bk==="masterw")n=2;
     else n=parseInt(bk,10)||1;
     if(typeof n==="number"){
+      /* 💥 v16.62 条件付きブレイク数（cstBk）。条件は「条件付きパワー＋」と同じ cstPowCond を使う。
+         フロウ"GIG"ロール型：シールドが2つ以下のプレイヤーがいれば「W・ブレイカー」を与える。 */
+      {const _rb2=getReg(c);
+       if(_rb2&&+_rb2.cstBk>0&&_rb2.cstPowCond){
+         const _own2=S.players.findIndex(P=>P.zones.battle.some(x=>x.id===c.id));
+         if(_own2>=0&&zoneCondOk(_rb2.cstPowCond,_own2,c)){
+           const _bn=+_rb2.cstBk||0;
+           if(_bn>n){n=_bn;toast(`💥 条件を満たしているので ${n}枚ブレイク（${_rb2.cstPowCond}）`);}
+         }
+       }}
       /* ✨ v16.54 このターンだけ付与されたパワード・ブレイカー（grantTurnPick／grantTurnAll の「パワード・ブレイカー」） */
       if(c.buff&&c.buff.pb){
         const P=await effPower(c,true);
@@ -30871,6 +31058,9 @@ function renderFxEditor(){
   {const e=$("fxCondGrantPA");if(e)e.value=FXEDIT.condGrantPA||"";}
   {const e=$("fxCondGrantBreaks");if(e)e.value=FXEDIT.condGrantBreaks||"";}
   {const e=$("fxGggSA");if(e)e.checked=!!FXEDIT.gggSA;}
+  {const e=$("fxStAuraGggOnly");if(e)e.checked=!!FXEDIT.stAuraGggOnly;}
+  {const e=$("fxCstBk");if(e)e.value=FXEDIT.cstBk||"";}
+  {const e=$("fxShieldCostDown");if(e)e.value=FXEDIT.shieldCostDown||"";}
   {const e=$("fxGggPA");if(e)e.value=FXEDIT.gggPA||0;}
   {const e=$("fxGggCantAtk");if(e)e.checked=!!FXEDIT.gggCantAtk;}
   {const e=$("fxNeedOtherAtk");if(e)e.checked=!!FXEDIT.needOtherAtk;}
@@ -33202,6 +33392,9 @@ function openFxEditor(key){
     condGrantPA:cur&&(+cur.condGrantPA||0)||0,
     condGrantBreaks:cur&&(+cur.condGrantBreaks||0)||0,
     gggSA:cur?!!cur.gggSA:false,
+    stAuraGggOnly:cur?!!cur.stAuraGggOnly:false,
+    cstBk:cur?(+cur.cstBk||0):0,
+    shieldCostDown:cur?(+cur.shieldCostDown||0):0,
     gggPA:cur&&(+cur.gggPA||0)||0,
     gggCantAtk:cur?!!cur.gggCantAtk:false,
     needOtherAtk:cur?!!cur.needOtherAtk:false,
@@ -33805,6 +33998,9 @@ $("fxSave").addEventListener("click",async ()=>{
     condGrantPA:$("fxCondGrantPA")?(Math.abs(+$("fxCondGrantPA").value)||0):0,
     condGrantBreaks:$("fxCondGrantBreaks")?(Math.abs(+$("fxCondGrantBreaks").value)||0):0,
     gggSA:$("fxGggSA")?$("fxGggSA").checked:false,
+    stAuraGggOnly:$("fxStAuraGggOnly")?$("fxStAuraGggOnly").checked:false,
+    cstBk:Math.max(0,+($("fxCstBk")?$("fxCstBk").value:0)||0),
+    shieldCostDown:Math.max(0,+($("fxShieldCostDown")?$("fxShieldCostDown").value:0)||0),
     gggPA:$("fxGggPA")?(Math.abs(+$("fxGggPA").value)||0):0,
     gggCantAtk:$("fxGggCantAtk")?$("fxGggCantAtk").checked:false,
     needOtherAtk:$("fxNeedOtherAtk")?$("fxNeedOtherAtk").checked:false,
@@ -49713,6 +49909,12 @@ function zoneCondOk(expr,pi,selfCard){
        「バトル:水>=1かつバトル:闇>=1」のように、両方を満たす時だけ真。
        ブレイン・スラッシュの「自分のクリーチャーまたはタマシードの中に水と闇があれば」用。 */
     {const _e=String(expr||"");
+     /* 🔗 v16.62 「または」（||）も書けるようにした。「かつ」より先に切るので、
+        「AかつBまたはC」は（AかつB）または C になる。
+        フロウ"GIG"ロールの「シールドが2つ以下のプレイヤーがいれば」＝「盾<=2または相手盾<=2」用。 */
+     if(/または|\|\|/.test(_e)){
+       return _e.split(/または|\|\|/).map(x=>x.trim()).filter(Boolean).some(x=>zoneCondOk(x,pi,selfCard));
+     }
      if(/かつ|&&/.test(_e)){
        return _e.split(/かつ|&&/).map(x=>x.trim()).filter(Boolean).every(x=>zoneCondOk(x,pi,selfCard));
      }}
