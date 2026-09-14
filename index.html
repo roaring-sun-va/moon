@@ -2682,6 +2682,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxCharger"> チャージャー（呪文使用後マナへ／ツインパクト下面も可）</label>
         <label title="水晶チャージャー：この呪文を唱えた後、墓地に置くかわりに裏向きにしてマナゾーンに置く。チャージャーも自動でオンになります"><input type="checkbox" id="fxCrystalCharger"> 💎 水晶チャージャー（裏向きでマナへ）</label>
         <label><input type="checkbox" id="fxHoldResolve"> 🕐 解決中に保持（ザフィヴォ型：処理の途中で他のカードを使う呪文。自動で墓地に置かず、手動で墓地に置いた時に虚無月の門等が誘発）</label>
+        <label title="魔導具呪文を解決後にこのカードの下へ置いて1枚引く／対象呪文の詠唱禁止を無視／下4枚で無月の門99"><input type="checkbox" id="fxGrandZero"> 🌌 無月フィールド《卍 新世壊 卍》</label>
+        <label title="自分のシールドが1つもない間だけ、このクリーチャーはブロッカーを得ます"><input type="checkbox" id="fxShieldZeroBlocker"> 🛡 自分の盾が0ならブロッカー</label>
         <label><input type="checkbox" id="fxCastle"> 城/要塞（盾に重ねて要塞化・表向き）</label>
         <label title="相手のクリーチャーがシールドを1つ以上ブレイクする時、かわりにこのシールドをブレイクさせてもよい（セイント・キャッスル）"><input type="checkbox" id="fxCastleBreakRep"> 🏰 要塞化した盾のブレイクを、シールド1枚を手札に加えて肩代わりする（ハッスル・キャッスル型）</label>
         <label title="このカードを自分の超次元ゾーンからコストを支払って召喚できます（頂上龍素 サイクリタ型）。超次元ゾーンからバトルゾーンへ動かした時に、支払うかどうかを確認します"><input type="checkbox" id="fxHyperSummon"> 🌌 超次元ゾーンからコストを払って召喚できる</label>
@@ -5546,7 +5548,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.58";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.59";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9667,6 +9669,25 @@ async function maybeSuggestReload(){
     setTimeout(()=>location.reload(),400);
   }catch(e){}
 }
+async function offerGrandZero99(pi){
+  if(!S.expert)return;
+  const Z=zonesOf(pi);
+  const fields=Z.battle.filter(x=>{const r=getReg(x);return r&&r.grandZero&&!x._grandZeroUsed&&(x.under||[]).length>=4&&!isSealed(x)&&!isIgnored(x,pi);});
+  for(const fld of fields){
+    if(!window.confirm(`🌌 無月の門99：${faceNameOf(fld)} の下に${(fld.under||[]).length}枚あります。\nコスト99以下の水の呪文1枚を手札または墓地からコストを支払わずに唱えますか？`))continue;
+    const pool=[...Z.hand,...Z.grave].filter(c=>{const r=getReg(c);return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact")&&(r.civs||[]).includes("water")&&+r.cost<=99;});
+    if(!pool.length){toast("🌌 唱えられる水の呪文が手札・墓地にありません");continue;}
+    const j=await pickCard("🌌 無月の門99：唱える水の呪文を選択",pool,{hint:"手札または墓地／キャンセル可"});
+    if(j===null)continue;
+    const sp=pool[j];
+    let ix=Z.hand.findIndex(x=>x.id===sp.id);if(ix>=0)Z.hand.splice(ix,1);else{ix=Z.grave.findIndex(x=>x.id===sp.id);if(ix>=0)Z.grave.splice(ix,1);}
+    fld._grandZeroUsed=true;sp.faceup=true;sp.tapped=false;Z.resolve.push(sp);
+    S.spellTurn=S.spellTurn||[0,0];S.spellTurn[pi]=(S.spellTurn[pi]||0)+1;
+    emitEvent(pi,"spell",sp);scheduleAutoResolve(pi,sp);enqueueFx(pi,sp);
+    toast(`🌌 無月の門99：${faceNameOf(sp)} をコストを支払わずに唱えた`);renderAll();
+    await waitFxIdle();await waitResolveMugetsu(6000);
+  }
+}
 async function runTurnEndTriggers(cur2){
     try{await maybeSuggestReload();}catch(e){}
     // 📥 v15.96 次のターンで使う画像を先に読んでおく（すでに読んだものは何もしない）
@@ -9717,6 +9738,8 @@ async function runTurnEndTriggers(cur2){
         }
       }
     }
+    // 🌌 デュエプレ版《卍 新世壊 卍》の無月の門99（各カード1回）
+    try{await offerGrandZero99(cur2);}catch(e){console.warn("offerGrandZero99",e);}
     const ten=[];
     for(const pi2 of (S.vs?[0,1]:[0])){
       zonesOf(pi2).battle.forEach(c=>{
@@ -10006,6 +10029,7 @@ async function finishNextTurn(cur){
     if(S.who===0)S.turn++;
   }else S.turn++;
   const pi=S.vs?S.who:0;
+  S._isExtraTurn=extra;
   if(S._loseAtOwnStart&&S._loseAtOwnStart[pi]){
     const why=S._loseAtOwnStart[pi];delete S._loseAtOwnStart[pi];
     await declareWin(pi?0:1,`${why}：次の自分のターンのはじめにゲームに負ける`,false);return;
@@ -12352,6 +12376,7 @@ const FX_TYPES=[
   ["dSwitchOff","🅳 このカードのDスイッチを戻す（元の向きへ）"],
   ["destroyThis","💀 このクリーチャー自身を破壊する（黒神龍クランキーヴィーン型・すでに離れていたら何もしない）"],
   ["extraTurnSelf","⏭ このターンの後に、自分のターンを追加する（勝利龍装 クラッシュ\"覇道\" 型）"],
+  ["extraTurnUnlessExtra","⏭ このターンが追加ターンでなければ、このターンの後に自分のターンを追加する（デュエプレ版 月下卍壊 ガ・リュミーズ 卍 型）"],
   ["extraTurnLose","⏭☠ このターンの後に自分のターンを追加し、その追加ターンの終わりにゲームに負ける（ボルバルザーク型）"],
   ["drawUpTo","🃏 カードをn枚まで引く（0枚も選択可）"],
   ["destroyAllOtherExactPower","💥 このクリーチャー以外の、パワーnのクリーチャーをすべて破壊する（ボルバルザーク型）"],
@@ -12377,6 +12402,7 @@ const FX_TYPES=[
   ["breakMineOneOpt","💥 自分のシールドを1枚まで選んでブレイクする（任意・S・トリガー処理つき／エメラルーダ型）"],
   ["breakMineAny","💥 自分のシールドを好きな数ブレイクする（ライオネル・フィナーレ型・1枚ずつ選択→S・トリガー処理つき・やめるまで繰り返し）"],
   ["breakMineAll","💥 自分のシールドを**すべて**ブレイクする（「黒幕」型・枚数は実行時のシールドの数・S・トリガー処理つき）"],
+  ["breakMineN","💥 自分のシールドをn枚ブレイクする（必須・足りない場合は残りをすべて・S・トリガー処理つき）"],
   ["breakMineRandPeek","🛡👁 自分のランダムなシールドをn枚、1枚ずつ見てから「ブレイクするか」を任意で選ぶ（ライオネル型・S・トリガー処理つき・割らなければ盾に戻す）"],
   ["handShield","🛡 自分の手札からn枚まで選んで裏向きにシールド化（キャンセルで打ち切り）"],
   ["manaRecruitLess","🌱 自分のマナ枚数よりコストが小さい非進化クリーチャーを1体、マナから出す（ダグラジャパニカン型）"],
@@ -12551,6 +12577,7 @@ const FX_TYPES=[
   ["deckTopSplitHMG","🌊 山札の上からn枚を見て、1枚を手札・1枚をマナ・残りの1枚を墓地に置く（天災 デドダム型・n=3）"],
   ["peepDiscardKillSameCost","🗑💥 相手の手札を見て1枚選び、捨てさせる。その後、捨てたカードと**同じコスト**の相手のクリーチャーを1体選び、破壊する（ハンプティ・ルピア型／条件欄で捨てる対象を絞れる）"],
   ["topLookAnyBottom","👀 山札の上からn枚を見て、その中の**どれでも1枚**を手札に加え、残りを好きな順序で山札の下に置く（蒼狼の大王 イザナギテラス型／条件欄で対象を絞れる・クリーチャー限定ではない）"],
+  ["topLookAnyBottomRandom","👀 山札の上からn枚を見て、その中のどれでも1枚を手札に加え、残りをランダムな順番で山札の下に置く（デュエプレ版 堕呪 ゴンパドゥ型）"],
   ["foeDrawAsk","🃏 相手はカードをn枚まで引いてもよい（引くかどうかは相手に聞く・海底鬼面城型）"],
   ["drawThenDeckBottom","🃏⬇ カードをn枚引き、その後、自分の手札からn枚を山札の一番下に置く（引くかどうかから任意・海底鬼面城型）"],
   ["anyDestroy","💥 バトルゾーンにあるクリーチャーをn体まで選んで破壊する（自分・相手どちらでも選べる／条件欄で対象を絞れる）"],
@@ -12651,6 +12678,7 @@ const FX_TYPES=[
   ["selfDiscardKillLeCost","🗑💥 自分の手札を1枚捨てる。こうして捨てたカード**以下のコスト**の相手クリーチャーを1体選び、破壊する（皇天闘と炎天華の決断型／条件欄で捨てる対象を絞れる）"],
   ["manaMinPowFoe","🌱 相手の、パワーが一番小さいクリーチャーをすべて持ち主のマナゾーンに置く（同じパワーが複数なら全部・条件欄で対象を絞れる・百威と族絆の決断型）"],
   ["lockFoeAtkBlockAll","🚫 相手のクリーチャーを**すべて**、次の自分のターン開始時まで攻撃もブロックもできなくする（条件欄で対象を絞れる・切札竜 ボルメテウス・リバース・ドラゴン型）"],
+  ["lockFoeAtkBlockAllOppStart","🚫 相手のクリーチャーをすべて、次の相手のターン開始時まで攻撃もブロックもできなくする（デュエプレ版 堕呪 ギャプドゥ型）"],
   ["killMinPowFoe","💥 相手の、パワーが一番小さいクリーチャーをすべて破壊する（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く邪道 レッドゾーン型）"],
   ["killMinCostFoe","💥 相手の、コストが一番小さいクリーチャーをすべて破壊する（同じコストが複数なら全部・条件欄で対象を絞れる・新空のプラズマ ジョンジョ・ジョン型）"],
   ["sealMinPowFoe","🔏 相手は、自身のパワーが一番小さいクリーチャーすべてに封印を1つずつ付ける（禁断の轟速 ブラックゾーン型／条件欄で対象を絞れる）"],
@@ -12818,12 +12846,22 @@ function blockerAtkPFree(pi,c){
   try{
     if(!S.expert||!c)return false;
     const rc=getReg(c);
-    const isBlk=!!((rc&&rc.blocker)||(c.buff&&c.buff.blocker)||(typeof gearBlockerOn==="function"&&gearBlockerOn(c))||auraBlockerOn(c));
+    const isBlk=!!((rc&&rc.blocker)||(c.buff&&c.buff.blocker)||shieldZeroBlockerOn(c)||(typeof gearBlockerOn==="function"&&gearBlockerOn(c))||auraBlockerOn(c));
     if(!isBlk)return false;
     return zonesOf(pi).battle.some(b=>{
       const rb=getReg(b);
       return rb&&rb.agBlockerCanAtkP&&!isSealed(b)&&!isIgnored(b,pi);
     });
+  }catch(e){return false;}
+}
+/* 🛡 自分のシールドが0ならブロッカー（デュエプレ版 凶鬼卍号 メラヴォルガル型）。 */
+function shieldZeroBlockerOn(c){
+  try{
+    if(!c)return false;
+    const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
+    if(own==null)return false;
+    const r=getReg(c);
+    return !!(r&&r.shieldZeroBlocker&&zonesOf(own).shield.length===0&&!isSealed(c)&&!isIgnored(c,own));
   }catch(e){return false;}
 }
 function noAtkedGrant(owner,t,rt){
@@ -18150,6 +18188,15 @@ async function runFxList(pi,list,srcCard,inPump){
       toast(`🚫 相手のクリーチャー${_laT.length}体すべては、次の自分のターン開始時まで攻撃もブロックもできない`);
       logOnly(`🚫 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[op].label} の${_laT.length}体を攻撃・ブロック不可（次の自分のターン開始まで）`);
       renderAll();
+    }else if(f.t==="lockFoeAtkBlockAllOppStart"){
+      /* 相手の次ターン開始まで：解除ターンの所有者を「相手」にする。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _loT=OZ.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
+      if(!_loT.length){toast("🚫 相手クリーチャーがいません");continue;}
+      snap();
+      for(const x of _loT){x.buff=x.buff||{};x.buff.noAtkBlock=true;markBuffNext(x,["noAtkBlock"],op);}
+      sfx("ok");toast(`🚫 相手のクリーチャー${_loT.length}体は、次の相手のターン開始時まで攻撃もブロックもできない`);
+      renderAll();
     }else if(f.t==="selfBounceAll"){
       // ↩ 自分の対象クリーチャーをすべて手札に戻す（f.cond＝対象・「進化以外」等／このカード自身は戻さない）
       const filt=String(f.cond||"").trim();
@@ -18739,7 +18786,7 @@ async function runFxList(pi,list,srcCard,inPump){
       let cnt=0;
       for(const x of Z.battle){
         const rx=getReg(x);
-        const isBlk=!!((rx&&rx.blocker)||(x.buff&&x.buff.blocker)||gearBlockerOn(x)||auraBlockerOn(x));
+        const isBlk=!!((rx&&rx.blocker)||(x.buff&&x.buff.blocker)||shieldZeroBlockerOn(x)||gearBlockerOn(x)||auraBlockerOn(x));
         if(!isBlk)continue;
         x.buff=x.buff||{};x.buff.stayIfPow=true;markBuffNext(x,["stayIfPow"],pi);cnt++;
       }
@@ -19281,6 +19328,17 @@ async function runFxList(pi,list,srcCard,inPump){
       logOnly(`⏭ 追加ターン：${S.players[pi].label}（残り${S.extra[pi]}）`);
       try{fxShare("extra","エクストラターン！",`${S.players[pi].label}`,true,srcCard?srcCard.name:"",pi);}catch(e){}
       renderAll();
+    }else if(f.t==="extraTurnUnlessExtra"){
+      // デュエプレ版ガ・リュミーズ：追加ターン中には連続して追加ターンを得られない。
+      if(S._isExtraTurn){
+        toast("⏭ 現在は追加ターンのため、追加ターン獲得は発動しません");
+        logOnly("⏭ 追加ターン中のため追加ターン獲得なし");
+      }else{
+        S.extra[pi]=(S.extra[pi]|0)+Math.max(1,n|0);
+        toast("⏭ 追加ターンを得た");
+        logOnly("⏭ 追加ターンを得た");
+      }
+      renderAll();
     }else if(f.t==="foeElemDeckBottomOverMana"){
       if(!S.vs){toast("（ソロのため相手エレメントの選択はスキップ）");continue;}
       const manaN=zonesOf(op).mana.length; // 裏向きの水晶マナも「カード1枚」と数える
@@ -19531,6 +19589,19 @@ async function runFxList(pi,list,srcCard,inPump){
       const idxAll=Z.shield.map((_,i)=>i);
       toast(`💥 ${S.players[pi].label} のシールド${nAll}枚をすべてブレイクします`);
       await breakShields(pi,nAll,null,idxAll);
+      renderAll();
+    }else if(f.t==="breakMineN"){
+      // デュエプレ版メラヴォルガル：自分の盾を指定枚数、必ずブレイクする。
+      const take=Math.min(Math.max(1,n|0),Z.shield.length);
+      if(!take){toast("シールドがありません");continue;}
+      const idxs=[];
+      for(let i=0;i<take;i++){
+        const pool=Z.shield.filter((_,j)=>!idxs.includes(j));
+        const j=pool.length===1?0:await pickCard("💥 ブレイクする自分のシールドを選択",pool,{mask:true,maskPi:pi,maskLabel:"盾"});
+        const chosen=(j===null)?pool[0]:pool[j];
+        idxs.push(Z.shield.findIndex(x=>x.id===chosen.id));
+      }
+      await breakShields(pi,idxs.length,null,idxs);
       renderAll();
     }else if(f.t==="handShield"){
       // 🛡 手札からn枚まで選んで裏向きにシールド化（キャンセルで打ち切り）
@@ -21327,6 +21398,19 @@ async function runFxList(pi,list,srcCard,inPump){
       }
       sfx("ok");renderAll();
       toast("⬇ 残りを山札の一番下に置いた");
+    }else if(f.t==="topLookAnyBottomRandom"){
+      // デュエプレ版ゴンパドゥ：選ばなかったカードは順番を選ばずランダムに山札の下へ。
+      const seen=Z.deck.splice(0,Math.min(n,Z.deck.length));
+      if(!seen.length){toast("👀 山札がありません");continue;}
+      snap();seen.forEach(x=>{x.faceup=true;x.seen=true;});renderAll();
+      const j=seen.length===1?0:await pickCard("✋ 手札に加える1枚を選択（残りはランダムに山札の下）",seen,{hint:"タップで選択"});
+      const take=seen.splice(j===null?0:j,1)[0];
+      take.faceup=true;take.seen=false;take.tapped=false;
+      if(typeof toHand==="function")toHand(Z,take);else Z.hand.push(take);
+      for(let i=seen.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[seen[i],seen[k]]=[seen[k],seen[i]];}
+      seen.forEach(x=>{x.faceup=false;x.seen=true;x.tapped=false;x.sideways=false;x.face=0;Z.deck.push(x);});
+      logDeckBottomOrder(pi,seen,"残り","（ランダム順）");
+      sfx("ok");renderAll();toast("✋ 1枚を手札に加え、残りをランダムな順番で山札の下へ");
     }else if(f.t==="foeDrawAsk"){
       /* 🃏 相手はカードをn枚まで引いてもよい（海底鬼面城型）。引くかどうかは相手に聞く。
          ソロでは相手がいないのでスキップする。 */
@@ -23012,7 +23096,7 @@ function lockFilterOk(filt,r,c,lockPi,face){
     if(tk==="多色")return !!(r&&r.civs&&r.civs.length>=2);
     if(tk==="単色")return !!(r&&r.civs&&r.civs.length===1&&r.civs[0]!=="zero");
     if(tk==="無色")return !!(r&&r.civs&&r.civs.includes("zero"));
-    if(tk==="ブロッカー")return !!((r&&r.blocker)||(c&&c.buff&&c.buff.blocker)||gearBlockerOn(c)||auraBlockerOn(c));
+    if(tk==="ブロッカー")return !!((r&&r.blocker)||(c&&c.buff&&c.buff.blocker)||shieldZeroBlockerOn(c)||gearBlockerOn(c)||auraBlockerOn(c));
     if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(c)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」・通常召喚状態や手札では「進化以外」（ヘブンズ・ゲート／爆進ダブル両対応）
     // 🧬 NEOクリーチャー：山札や手札の状態でも種別として判定する（「進化」トークンは場でNEO進化している時だけ真になるため別に用意）
     if(tk==="NEOクリーチャー"||tk==="NEO")return ["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype);
@@ -23072,10 +23156,18 @@ function lockFilterOk(filt,r,c,lockPi,face){
   const nameOk=!names.length||names.some(tk=>one(tk));
   return consOk&&nameOk;
 }
+function grandZeroSpellBypass(pi,r){
+  try{
+    if(!r||!(r.ctype==="spell"||r.twin||r.ctype==="twinpact"))return false;
+    if(!(raceMatch(r,"魔導具")||raceMatch(r,"ドルスザク")))return false;
+    return zonesOf(pi).battle.some(x=>{const rx=getReg(x);return rx&&rx.grandZero&&!isSealed(x)&&!isIgnored(x,pi);});
+  }catch(e){return false;}
+}
 function stLockerOf(pi,key,filtKey,r,c,route){
   // pi=カードを使おうとしている側。相手のバトルゾーンにロック持ちがいればそのカードを返す
   // route="enter"＝踏み倒し・侵略等の非召喚経路（「召喚のみ禁止」のロックは対象外）
   if(!S.expert||!S.vs)return null;
+  if(key==="stLockSpell"&&grandZeroSpellBypass(pi,r))return null;
   const op2=pi===0?1:0;
   const sumOnly=rb=>!!(key==="stLockCre"&&rb.stLockCreSum&&route==="enter");
   // ハイパーモード連動版のキー（例：stLockSpell→hmLockSpell）。そのカードがHM解放中(b.hyper)のときのみ有効
@@ -23121,6 +23213,7 @@ function turnLockHit(pi,kind,r){
   // S.turnLock=[{pi,kind:"spell"|"creature"|"creatureEnter"|"creatureCount",prop,op,val,limit,cnt,until}]
   // kind="creature"（召喚チェック）：召喚ロック＋出せないロックの両方に反応
   // kind="creatureEnter"（踏み倒し等の「出す」チェック）：出せないロックのみに反応（ミラダンテⅫ型の召喚ロックは素通り）
+  if(kind==="spell"&&grandZeroSpellBypass(pi,r))return null;
   if(!S.turnLock||!S.turnLock.length)return null;
   for(const L of S.turnLock){
     // 体数制限：召喚・出す どちらのチェックでも判定（「n体以上出せない」は出す全般）
@@ -23154,7 +23247,8 @@ function turnLockCountUp(pi){
 }
 /* 常在「各ターンn回まで」制限（一音の妖精型）。piの相手の場のカードが課す最小の上限を返す（0/なし=無制限）。
    kind:"spell"（呪文）/"creature"（クリーチャー）。返り値 {limit, used, by} または null */
-function perTurnCapHit(pi,kind){
+function perTurnCapHit(pi,kind,r){
+  if(kind==="spell"&&grandZeroSpellBypass(pi,r))return null;
   if(!S.expert||!S.vs)return null;
   const foe=pi?0:1;
   const usedSpell=(S.spellTurn&&S.spellTurn[pi])||0;
@@ -25359,6 +25453,21 @@ function resolveOut(Z,o){
     delete o._resolveToBottom;o.faceup=false;o.seen=false;o.sideways=false;o.rot=0;Z.deck.push(o);
     return true;
   }
+  /* 🌌 無月フィールド《卍 新世壊 卍》：魔導具呪文の解決後、墓地の代わりにカードの下へ置き1枚引く。 */
+  if(rg&&raceMatch(rg,"魔導具")&&(rg.ctype==="spell"||rg.twin||rg.ctype==="twinpact")){
+    const pi0=S.players.findIndex(P=>P.zones===Z);
+    if(pi0>=0){
+      const fields=Z.battle.filter(x=>{const rx=getReg(x);return rx&&rx.grandZero&&!isSealed(x)&&!isIgnored(x,pi0);});
+      for(const fld of fields){
+        if(window.confirm(`🌌 ${faceNameOf(fld)}\n解決した《${faceNameOf(o)}》を墓地の代わりにこのカードの下に置き、1枚引きますか？`)){
+          fld.under=fld.under||[];o.faceup=true;o.tapped=false;o.sideways=false;o.rot=0;fld.under.push(o);
+          draw(pi0,1);o._resolvedToGrandZero=true;
+          toast(`🌌 ${faceNameOf(o)} を ${faceNameOf(fld)} の下に置き、1枚引いた`);
+          return true;
+        }
+      }
+    }
+  }
   // 🏵 裁きの紋章：唱えた後、墓地に置くかわりに自分のシールド1つの上に表向きにして置く。
   //    置いたカードがその盾の一番上になり、元の盾はその下に重なる（盾が離れる時は一緒に動く）。
   if(rg&&rg.monsho){
@@ -25449,8 +25558,9 @@ async function scheduleAutoResolve(pi,c){
       Z.resolve.splice(ix,1);
       const toBottom=!!c._resolveToBottom;
       const toMana=resolveOut(Z,c);       // 墓地へ（チャージャーはマナ）＋虚無月誘発はresolveOut内
+      const toGrandZero=!!c._resolvedToGrandZero;delete c._resolvedToGrandZero;
       sfx("grave");
-      toast(toBottom?`${faceNameOf(c)} の解決が終了（山札の下へ）`:toMana?`⚡チャージャー：${faceNameOf(c)} はマナゾーンへ`:`${faceNameOf(c)} の解決が終了（墓地へ）`);
+      toast(toBottom?`${faceNameOf(c)} の解決が終了（山札の下へ）`:toGrandZero?`🌌 ${faceNameOf(c)} は《卍 新世壊 卍》の下へ`:toMana?`⚡チャージャー：${faceNameOf(c)} はマナゾーンへ`:`${faceNameOf(c)} の解決が終了（墓地へ）`);
       renderAll();
       return;
     }
@@ -28557,6 +28667,7 @@ async function execAttack(pi,id,tg){
     const rb=getReg(b);
     if(_flying&&!(rb&&rb.flying))return false;
     if(rb&&rb.blocker)return true;
+    if(shieldZeroBlockerOn(b))return true;
     if(rb&&rb.sforceBlocker&&b.sfActive&&!isSealed(b)&&!isIgnored(b,op))return true;
     if(b.buff&&b.buff.blocker)return true;
     if(gearBlockerOn(b))return true; // ⚙ クロスギアの「ブロッカー」付与
@@ -30489,6 +30600,8 @@ function renderFxEditor(){
   $("fxCharger").checked=!!FXEDIT.charger;
   {const e=$("fxCrystalCharger");if(e)e.checked=!!FXEDIT.crystalCharger;}
   $("fxHoldResolve").checked=!!FXEDIT.holdResolve;
+  {const e=$("fxGrandZero");if(e)e.checked=!!FXEDIT.grandZero;}
+  {const e=$("fxShieldZeroBlocker");if(e)e.checked=!!FXEDIT.shieldZeroBlocker;}
   $("fxCastle").checked=!!FXEDIT.castle;
   $("fxGcRedirect").checked=!!FXEDIT.gcRedirect;
   {const e=$("fxCastleBreakRep");if(e)e.checked=!!FXEDIT.castleBreakRep;}
@@ -32823,6 +32936,8 @@ function openFxEditor(key){
     charger:cur?!!cur.charger:false,
     crystalCharger:cur?!!cur.crystalCharger:false,
     holdResolve:cur?!!cur.holdResolve:false,
+    grandZero:cur?!!cur.grandZero:false,
+    shieldZeroBlocker:cur?!!cur.shieldZeroBlocker:false,
     castle:cur?!!cur.castle:false,
     gcRedirect:cur?!!cur.gcRedirect:false,
     castleBreakRep:cur?!!cur.castleBreakRep:false,
@@ -33417,6 +33532,8 @@ $("fxSave").addEventListener("click",async ()=>{
     charger:$("fxCharger").checked,
     crystalCharger:$("fxCrystalCharger")?$("fxCrystalCharger").checked:false,
     holdResolve:$("fxHoldResolve").checked,
+    grandZero:$("fxGrandZero")?$("fxGrandZero").checked:false,
+    shieldZeroBlocker:$("fxShieldZeroBlocker")?$("fxShieldZeroBlocker").checked:false,
     castle:$("fxCastle").checked,
     gcRedirect:$("fxGcRedirect").checked,
     castleBreakRep:$("fxCastleBreakRep")?$("fxCastleBreakRep").checked:false,
@@ -34322,6 +34439,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.crystalCharger)attrs.push("💎水晶チャージャー（裏向きでマナへ）");
     else if(v.charger)attrs.push("チャージャー");
     if(v.holdResolve)attrs.push("🕐解決中に保持");
+    if(v.grandZero)attrs.push("🌌無月フィールド《卍 新世壊 卍》");
+    if(v.shieldZeroBlocker)attrs.push("🛡自分の盾が0ならブロッカー");
     if(v.castle)attrs.push("城/要塞");
     if(v.gcRedirect)attrs.push("🏰ブレイク肩代わり");
     if(v.invade)attrs.push("侵略");
@@ -35903,7 +36022,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   // 常在ロック／ターン限定ロック：呪文（唱える＝resolve送り）
   if(S.expert&&!S.freePlay&&toZone==="resolve"&&S.turn>0){
     const rQ=getReg(f.card);
-    const cap=perTurnCapHit(pTo,"spell");
+    const cap=perTurnCapHit(pTo,"spell",rQ);
     if(cap){sfx("flip");toast(`⛔ ${faceNameOf(cap.by)}：${S.players[pTo].label}はこのターン、${cap.kind==="play"?`クリーチャーと呪文を合計${cap.limit}回まで`:`呪文を${cap.limit}回まで`}しか実行できない（既に${cap.used}回）`);MOVE_BLOCKED=true;return;}
     const lk=stLockerOf(pTo,"stLockSpell","stLockSpellF",rQ,f.card);
     const tl=lk?null:turnLockHit(pTo,"spell",rQ);
@@ -37935,7 +38054,7 @@ function cardEl(pi,zone,c){
     const r0=getReg(c);
     if(r0){
       const ics=[];
-      if(r0.blocker||(c.buff&&c.buff.blocker)||gearBlockerOn(c)||auraBlockerOn(c)||((r0.hmBlocker||r0.hmBK)&&c.hyper))ics.push("🛡");
+      if(r0.blocker||(c.buff&&c.buff.blocker)||shieldZeroBlockerOn(c)||gearBlockerOn(c)||auraBlockerOn(c)||((r0.hmBlocker||r0.hmBK)&&c.hyper))ics.push("🛡");
       if(r0.slayer||(c.buff&&c.buff.slayer)||gearSlayerOn(c)||auraSlayerOn(c)||(r0.hmSlayer&&c.hyper))ics.push("☠");
       const bk0=c.hyper&&r0.hmBk?r0.hmBk:r0.breaks;
       if(bk0&&bk0!=="1")ics.push(bk0==="2"?"W":bk0==="3"?"T":bk0==="all"?"∀":bk0+"B");
@@ -40604,7 +40723,7 @@ async function ghostTurn(opts){
         // ロック確認
         if(S.expert&&!S.freePlay&&S.turn>0){
           const kind=o.side==="spell"?"spell":"creature";
-          const cap=perTurnCapHit(pi,kind);
+          const cap=perTurnCapHit(pi,kind,r);
           if(cap){skipped.push("⛔回数制限");continue;}
           const lk=o.side==="spell"
             ? stLockerOf(pi,"stLockSpell","stLockSpellF",r,cc)
@@ -40671,7 +40790,7 @@ async function ghostTurn(opts){
     const blockersUp=()=>OZ.battle.filter(b=>{
       if(b.tapped||noAtkBlkOf(b)||isSealed(b))return false;
       const rb=getReg(b);
-      return !!((rb&&rb.blocker)||(b.buff&&b.buff.blocker));
+      return !!((rb&&rb.blocker)||(b.buff&&b.buff.blocker)||shieldZeroBlockerOn(b));
     });
     let heldBack=0,nickDone=false;
     guard=0;
@@ -41592,7 +41711,7 @@ function showCardPreview(ctx){
       const r0=getReg(c);
       if(r0){
         const tags=[];
-        if(r0.blocker||(c.buff&&c.buff.blocker)||((r0.hmBlocker||r0.hmBK)&&c.hyper))tags.push("🛡ブロッカー");
+        if(r0.blocker||(c.buff&&c.buff.blocker)||shieldZeroBlockerOn(c)||((r0.hmBlocker||r0.hmBK)&&c.hyper))tags.push("🛡ブロッカー");
         if(r0.slayer||(c.buff&&c.buff.slayer)||(r0.hmSlayer&&c.hyper))tags.push("☠スレイヤー");
         const bk0=c.hyper&&r0.hmBk?r0.hmBk:r0.breaks;
         if(bk0&&bk0!=="1")tags.push(bk0==="2"?"W・ブレイカー":bk0==="3"?"T・ブレイカー":bk0==="all"?"ワールド・ブレイカー":bk0+"枚ブレイク");
@@ -49553,7 +49672,7 @@ function zoneFiltCount(arrs,filt){
       if(tk==="呪文")return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"); // ツインパクトは呪文としても数える（呪文貯蔵型・デュエプレ準拠）
       if(tk==="クリーチャー")return r&&r.ctype!=="spell";
       if(tk==="ツインパクト")return r&&(r.twin||r.ctype==="twinpact");
-      if(tk==="ブロッカー")return !!((r&&r.blocker)||(x.buff&&x.buff.blocker)||gearBlockerOn(x)||auraBlockerOn(x));
+      if(tk==="ブロッカー")return !!((r&&r.blocker)||(x.buff&&x.buff.blocker)||shieldZeroBlockerOn(x)||gearBlockerOn(x)||auraBlockerOn(x));
       if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(x)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」
       if(tk==="クロスギア")return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));
       if(tk==="無色"||tk==="ゼロ文明")return !!(r&&(!r.civs||!r.civs.length||(r.civs.length===1&&r.civs[0]==="zero")));
