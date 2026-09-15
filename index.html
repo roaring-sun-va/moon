@@ -2685,6 +2685,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="水晶チャージャー：この呪文を唱えた後、墓地に置くかわりに裏向きにしてマナゾーンに置く。チャージャーも自動でオンになります"><input type="checkbox" id="fxCrystalCharger"> 💎 水晶チャージャー（裏向きでマナへ）</label>
         <label><input type="checkbox" id="fxHoldResolve"> 🕐 解決中に保持（ザフィヴォ型：処理の途中で他のカードを使う呪文。自動で墓地に置かず、手動で墓地に置いた時に虚無月の門等が誘発）</label>
         <label title="魔導具呪文を解決後にこのカードの下へ置いて1枚引く／対象呪文の詠唱禁止を無視／下4枚で無月の門99"><input type="checkbox" id="fxGrandZero"> 🌌 無月フィールド《卍 新世壊 卍》</label>
+        <input type="text" id="fxGrandZeroFilt" placeholder="└ 下に置ける呪文の絞り込み（空欄＝魔導具・「呪文」＝全部・不夜城艦 クランヴィア型）" style="flex:1;min-width:220px">
+        <label title="無月の門99（下に4枚以上でゲーム中1回・水のコスト99以下の呪文をタダ唱え）を持たせる。絞り込みが空欄の登録（新世壊型）は書かなくても付きます"><input type="checkbox" id="fxGate99"> └ 無月の門99を持つ</label>
         <label title="自分のシールドが1つもない間だけ、このクリーチャーはブロッカーを得ます"><input type="checkbox" id="fxShieldZeroBlocker"> 🛡 自分の盾が0ならブロッカー</label>
         <label><input type="checkbox" id="fxCastle"> 城/要塞（盾に重ねて要塞化・表向き）</label>
         <label title="相手のクリーチャーがシールドを1つ以上ブレイクする時、かわりにこのシールドをブレイクさせてもよい（セイント・キャッスル）"><input type="checkbox" id="fxCastleBreakRep"> 🏰 要塞化した盾のブレイクを、シールド1枚を手札に加えて肩代わりする（ハッスル・キャッスル型）</label>
@@ -3113,6 +3115,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="ツインパクトで、どちらの面にS・トリガーが付いているか。片面だけにしておくと、受け札のパネルで面を選ばずに済みます"><span style="font-size:12px;font-weight:700">🃏 S・トリガーの面</span><select id="fxStFace" style="width:auto;font-size:12px"><option value="0">未設定（毎回選ぶ）</option><option value="1">上面（クリーチャー）のみ</option><option value="2">下面（呪文）のみ</option><option value="3">両面</option></select></label>
         <label title="このクリーチャーにクロスギアがn個以上クロスされていれば、バトルゾーンを離れない（バザガベルグ型）。0＝無効"><span style="font-size:12px;font-weight:700">⚙⚓ クロスギアが</span><input type="number" id="fxNoLeaveGearN" min="0" max="9" value="0" style="width:52px"><span style="font-size:12px;font-weight:700">個以上クロスされていれば離れない</span></label>
         <label title="バトル中だけパワーを∞として扱う（カツムゲン型）。バトル以外のパワー参照には影響しません"><input type="checkbox" id="fxPowInfBattle"> ♾ バトル中、このクリーチャーのパワーを∞にする（カツムゲン型）</label>
+        <label title="バトル中だけ、このクリーチャーのパワーをこの数だけ足す（印鑑D型。攻撃時だけのパワーアタッカーとは別で、ブロックした時や攻撃された時のバトルにも乗ります）"><span style="font-size:12px;font-weight:700">💪 バトル中パワー ＋</span><input type="number" id="fxPowBattle" style="width:90px" placeholder="0" min="0"></label>
         <label title="どちらのプレイヤーでも、コストを支払わずにクリーチャーを出した時、そのクリーチャーを破壊します（早撃人形マグナム型）。自分が踏み倒した場合も対象です"><input type="checkbox" id="fxStKillCheat"> 💥 いずれかのプレイヤーがコストを支払わずに出したクリーチャーを破壊する（早撃人形マグナム型）</label>
         <label title="相手がコストを支払わずにクリーチャーを出した時だけ、そのクリーチャーを破壊します（自分の踏み倒しは対象外・ウソと盗みのエンターテイナー型）"><input type="checkbox" id="fxStKillCheatFoe"> 💥 相手がコストを支払わずに出したクリーチャーだけを破壊する</label>
         <input type="text" id="fxExlifeCond" placeholder="💠 EXライフの条件式（例：マナ:闇>=1・空欄＝無条件）" title="EXライフ（盾を1枚墓地に置いて場に残る）を使える条件。満たしていない時は身代わりの選択肢に出ません" style="flex:1;min-width:200px">
@@ -5552,7 +5555,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.62";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.65";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9681,7 +9684,14 @@ async function offerGrandZero99(pi){
   S._once1G=S._once1G||{};
   const g1key=`${pi}:grandZero99`;
   if(S._once1G[g1key])return;
-  const fields=Z.battle.filter(x=>{const r=getReg(x);return r&&r.grandZero&&(x.under||[]).length>=4&&!isSealed(x)&&!isIgnored(x,pi);});
+  /* 🌌 v16.64 無月の門99は新世壊だけの能力。grandZeroFilt を付けた登録（クランヴィア型）には付けない。
+     gate99 を立てれば明示的に持たせられる。 */
+  const fields=Z.battle.filter(x=>{
+    const r=getReg(x);
+    if(!r||!r.grandZero)return false;
+    if(!(r.gate99||!String(r.grandZeroFilt||"").trim()))return false;
+    return (x.under||[]).length>=4&&!isSealed(x)&&!isIgnored(x,pi);
+  });
   if(!fields.length)return;
   const fld=fields[0];
   if(!await ask(`🌌 無月の門99：${faceNameOf(fld)} の下に${(fld.under||[]).length}枚あります。\nコスト99以下の水の呪文1枚を、手札または墓地からコストを支払わずに唱えますか？\n（ゲーム中に1回だけ）`))return;
@@ -12682,6 +12692,12 @@ const FX_TYPES=[
   ["deckLookPlayRestBottom","🎴 自分の山札の上からn枚を見る。その中から条件に合う1枚をバトルゾーンに出してもよい。残りをランダムな順番で山札の一番下に置く（\"末法\"チュリス型・条件欄に「ターン終了時に破壊」と足すと、出したカードをターンの終わりに破壊する）"],
   ["meteorBurnX","☄ メテオバーンX：このカードの下にあるドラゴンをすべて墓地に置いてもよい。置いた枚数で、9枚以上＝相手のシールドをすべて墓地／6枚以上＝相手のブロッカーをすべて破壊／3枚以上＝相手のシールドをすべてブレイク（枚数を満たすものは全部起きる・超無限神星 アポロヌス・アガペリオス型）"],
   ["killMaxPowFoe","💥 相手の、パワーが一番大きいクリーチャーをすべて破壊する（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く侵略 レッドゾーン型）"],
+  ["castSelfToBattle","🃏 この呪文を唱えた後、墓地に置くかわりに、このカード自身をバトルゾーンに出す（ツインパクトの上のクリーチャーとして出ます・「千客万来砲にゃ！」型）"],
+  ["handAllDeckBottomDraw","🔄 自分の手札をすべてランダムな順番で山札の下に置き、カードをn枚引く（金運メカ マネーキング型／手札が無くても引けます）"],
+  ["manaPickThenManaRecruit","🌱 相手のクリーチャーを1体選び、持ち主のマナゾーンに置く。その後、そのクリーチャーの**コスト以下**の、条件に合うクリーチャーを1体、自分のマナゾーンからバトルゾーンに出してもよい（極楽轟破5.S.トラップ型／条件欄＝例：自然）"],
+  ["revealTopUnderSpell","🎴 自分の山札をシャッフルし、上からn枚を表向きにする。その中の呪文をすべてこのクリーチャーの下に置き、残りを墓地に置く（不夜城艦 クランヴィア型）"],
+  ["castFromUnder","🔮 このクリーチャーの下から、条件に合う呪文1枚を墓地に置いてもよい。そうしたら、その呪文をコストを支払わずに唱える（不夜城艦 クランヴィア型／条件欄に「マナと同じ文明」と書くと、自分のマナゾーンにある文明の呪文だけになります）"],
+  ["foeDeckSideways","🃏 相手の山札の上からn枚目を横向きにする（5.S.D.型・目印だけで、ゲームの進行は変わりません）"],
   ["destroySumCostDiscard","🗑💥 自分の手札を1枚捨て、**捨てたカードのコスト以下**になるように、相手のクリーチャーをコストの合計で好きな数選び、破壊する（ゴゴゴ・Cho絶・ラッシュ型／条件欄で捨てる対象を絞れる）"],
   ["shieldFaceUpDraw","🛡👁 自分のシールドゾーンにある裏向きのカードをn枚表向きにする。条件に合えばその1枚につきカードを1枚引く。表向きにしたカードはシールドゾーンにある間そのまま（紫天ノ裁キ型／条件欄＝例：メタリカ｜裁きの紋章）"],
   ["selfDiscardRandom","🗑 自分の手札をランダムにn枚捨てる（ホメホメ老句型・自分で選べない）"],
@@ -14692,7 +14708,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -16685,12 +16701,15 @@ async function runFxList(pi,list,srcCard,inPump){
       }
     }else if(f.t==="pickCostSpellHand"){
       // 🔢 数字を1つ選び、そのコストの呪文を超探索して1枚公開し手札へ→シャッフル（ロジック・スパーク型）
-      const num=await askNumber("🔢 数字を1つ選んでください（そのコストの呪文を超探索）",3,99);
+      /* 🔢 v16.64 条件欄に「カード」と書くと、呪文だけでなく山札のカード全部が対象になる
+         （デュエプレ版クリスタル・メモリー型）。空欄なら今までどおり呪文だけ。 */
+      const _anyCard=/カード/.test(String(f.cond||""));
+      const num=await askNumber(`🔢 数字を1つ選んでください（そのコストの${_anyCard?"カード":"呪文"}を超探索）`,3,99);
       if(num===null)break;
       const cands=Z.deck.filter(x=>{
         const rx=getReg(x);if(!rx)return false;
         const isSp=rx.ctype==="spell"||rx.twin||rx.ctype==="twinpact";
-        if(!isSp)return false;
+        if(!isSp&&!_anyCard)return false;
         const cst=rx.ctype==="spell"?rx.cost:(rx.cost2!=null?rx.cost2:rx.cost);
         return cst===num;
       });
@@ -20221,6 +20240,148 @@ async function runFxList(pi,list,srcCard,inPump){
       snap();
       await doBattle(pi,srcCard,op,_pb[_jb]);
       renderAll();
+    }else if(f.t==="castSelfToBattle"){
+      /* 🃏 v16.64 唱えた呪文自身をバトルゾーンへ出す（「千客万来砲にゃ！」型）。
+         解決中ゾーンから抜いて出すので、そのあと墓地には行かない。 */
+      if(!srcCard){toast("🃏 この呪文自身が分からないため出せません");continue;}
+      const _ri=Z.resolve.findIndex(x=>x.id===srcCard.id);
+      if(_ri<0){toast("🃏 解決中ではないため出せません");continue;}
+      snap();
+      Z.resolve.splice(_ri,1);
+      srcCard.faceup=true;srcCard.tapped=false;srcCard.sideways=false;srcCard.rot=0;
+      if(!cheatEnterBattle(pi,srcCard)){Z.grave.push(srcCard);renderAll();continue;}
+      enqueueFx(pi,srcCard);
+      sfx("ok");renderAll();
+      toast(`🃏 ${faceNameOf(srcCard)} をバトルゾーンに出した`);
+      logOnly(`🃏 ${S.players[pi].label}：《${faceNameOf(srcCard)}》を唱えたあとバトルゾーンへ`);
+    }else if(f.t==="revealTopUnderSpell"){
+      /* 🎴 v16.64 山札をシャッフルし、上からn枚を表向きにする。その中の呪文をすべてこのクリーチャーの下に置き、
+         残りを墓地に置く（不夜城艦 クランヴィア型）。下に置く先はこのカード自身。 */
+      if(!srcCard){toast("🎴 このクリーチャー自身が分からないため置けません");continue;}
+      snap();
+      shuffle(Z.deck);
+      const _rv=[],_sp=[],_rest=[];
+      for(let i=0;i<n&&Z.deck.length;i++)_rv.push(Z.deck.shift());
+      _rv.forEach(c2=>{
+        c2.faceup=true;c2.seen=true;
+        const r2=getReg(c2);
+        const isSp=!!(r2&&(r2.ctype==="spell"||r2.twin||r2.ctype==="twinpact"));
+        (isSp?_sp:_rest).push(c2);
+      });
+      srcCard.under=srcCard.under||[];
+      _sp.forEach(c2=>{c2.tapped=false;c2.sideways=false;c2.rot=0;srcCard.under.push(c2);});
+      _rest.forEach(c2=>{c2.tapped=false;Z.grave.push(c2);});
+      sfx("move");renderAll();
+      toast(`🎴 ${_rv.length}枚を表向き：呪文${_sp.length}枚を ${faceNameOf(srcCard)} の下へ／残り${_rest.length}枚は墓地へ`);
+      logOnly(`🎴 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}上から${_rv.length}枚→呪文${_sp.length}枚を下へ、${_rest.length}枚を墓地へ`);
+    }else if(f.t==="castFromUnder"){
+      /* 🔮 v16.64 このクリーチャーの下から、条件に合う呪文1枚を墓地に置いて、コストを支払わずに唱える
+         （不夜城艦 クランヴィア型）。条件欄に「マナと同じ文明」と書くと、自分のマナゾーンにある文明の呪文だけになる。 */
+      if(!srcCard||!(srcCard.under||[]).length){toast("🔮 このクリーチャーの下にカードがありません");continue;}
+      const _cf=String(f.cond||"").trim();
+      const _manaCiv=/マナと同じ文明/.test(_cf);
+      const _rest=_cf.replace(/マナと同じ文明/,"").replace(/^[／\/]+|[／\/]+$/g,"").trim();
+      const _civs=new Set();
+      if(_manaCiv)for(const m of Z.mana){const rm=getReg(m);(rm&&rm.civs||[]).forEach(cv=>_civs.add(cv));}
+      const _pool=(srcCard.under||[]).filter(x=>{
+        const rx=getReg(x);
+        if(!rx)return false;
+        const isSp=(rx.ctype==="spell"||rx.twin||rx.ctype==="twinpact");
+        if(!isSp)return false;
+        if(_manaCiv&&!(rx.civs||[]).some(cv=>_civs.has(cv)))return false;
+        return !_rest||lockFilterOk(_rest,rx,x);
+      });
+      if(!_pool.length){toast(`🔮 下に唱えられる呪文がありません${_manaCiv?"（自分のマナにある文明のものだけ）":""}`);continue;}
+      const _j=await pickCard(`🔮 下から唱える呪文を選択（墓地に置いてから唱えます）`,_pool,{hint:"キャンセルで唱えない"});
+      if(_j===null)continue;
+      const _sp=_pool[_j];
+      snap();
+      const _ix=srcCard.under.findIndex(x=>x.id===_sp.id);
+      if(_ix<0)continue;
+      srcCard.under.splice(_ix,1);
+      _sp.faceup=true;_sp.tapped=false;
+      Z.grave.push(_sp);
+      renderAll();
+      /* 墓地に置いてから唱える＝解決中ゾーンへ移す。唱え終わったら墓地へ戻る。 */
+      const _gi=Z.grave.findIndex(x=>x.id===_sp.id);
+      if(_gi>=0)Z.grave.splice(_gi,1);
+      Z.resolve.push(_sp);
+      S.spellTurn=S.spellTurn||[0,0];S.spellTurn[pi]=(S.spellTurn[pi]||0)+1;
+      emitEvent(pi,"spell",_sp);scheduleAutoResolve(pi,_sp);enqueueFx(pi,_sp);
+      sfx("ok");renderAll();
+      toast(`🔮 ${faceNameOf(_sp)} をコストを支払わずに唱えた`);
+      logOnly(`🔮 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}下から《${faceNameOf(_sp)}》を唱えた`);
+    }else if(f.t==="handAllDeckBottomDraw"){
+      /* 🔄 v16.64 手札をすべてランダムな順番で山札の下に置き、n枚引く（金運メカ マネーキング型）。
+         「置いてもよい」は登録の任意（opt）で聞く。 */
+      snap();
+      const _hn=Z.hand.length;
+      const _mix=Z.hand.splice(0);
+      for(let i=_mix.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[_mix[i],_mix[j]]=[_mix[j],_mix[i]];}
+      _mix.forEach(c2=>{c2.faceup=false;c2.seen=false;c2.tapped=false;c2.sideways=false;Z.deck.push(c2);});
+      let _dc=0;
+      for(let i=0;i<n&&Z.deck.length;i++){
+        const c2=Z.deck.shift();c2.faceup=true;c2.sideways=false;
+        if(toHand(Z,c2)){markArrive(c2);_dc++;}
+      }
+      if(_dc>0){bumpEv("draws",pi,_dc);emitEvent(pi,"draw");}
+      sfx("draw");renderAll();
+      toast(`🔄 手札${_hn}枚をランダムな順で山札の下へ置き、${_dc}枚引いた`);
+      logOnly(`🔄 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[pi].label} が手札${_hn}枚を山札の下へ置き${_dc}枚引いた`);
+    }else if(f.t==="foeDeckSideways"){
+      /* 🃏 v16.64 相手の山札の上からn枚目を横向きにする（5.S.D.）。見た目の目印だけ。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _t=OZ.deck[Math.max(0,n-1)];
+      if(!_t){toast("🃏 相手の山札がそこまでありません");continue;}
+      snap();
+      _t.sideways=true;
+      renderAll();
+      toast(`🃏 5.S.D.：${S.players[op].label} の山札の上から${n}枚目を横向きにした`);
+      logOnly(`🃏 ${S.players[op].label} の山札${n}枚目を横向きに（5.S.D.）`);
+    }else if(f.t==="manaPickThenManaRecruit"){
+      /* 🌱 v16.64 相手を1体マナ送りし、そのコスト以下の条件に合うクリーチャーを自分のマナから出す
+         （極楽轟破5.S.トラップ型）。コストは送ったクリーチャーの登録コストで見る。 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _mf=String(f.cond||"").trim();
+      const _pool=OZ.battle.filter(x=>{const rx=getReg(x);
+        return rx&&isCreatureReg(rx)&&!((rx.noChoose||momoUntouchable(x))&&!isIgnored(x,op));});
+      if(!_pool.length){toast("🌱 対象の相手クリーチャーがいません");continue;}
+      const _j=_pool.length===1?0:await pickCard("🌱 マナゾーンに置く相手クリーチャーを選択",_pool);
+      if(_j===null)continue;
+      const _t=_pool[_j];
+      const _rt=getReg(_t);
+      const _cst=(_rt&&_rt.cost!=null&&_rt.cost!=="")?(+_rt.cost||0):0;
+      snap();
+      if(!await offerTrueEscape(op,_t)){
+        const _ix=OZ.battle.findIndex(x=>x.id===_t.id);
+        if(_ix>=0){
+          const _rm=OZ.battle.splice(_ix,1)[0];
+          const _um=(_rm.under&&_rm.under.length)?_rm.under.splice(0):[];
+          if(_rm.gear&&_rm.gear.length){_rm.gear.splice(0).forEach(gg=>gearOut(OZ,gg));}
+          _rm.tapped=false;_rm.sideways=false;_rm.rot=0;_rm.buff=null;_rm.seals=[];_rm.faceup=true;_rm.mark=false;
+          OZ.mana.push(_rm);
+          _um.forEach(u=>{u.faceup=true;u.tapped=false;u.buff=null;u.seals=[];u.under=u.under||[];u.gear=u.gear||[];OZ.mana.push(u);});
+          toast(`🌱 ${faceNameOf(_rm)}（コスト${_cst}）を持ち主のマナゾーンへ`);
+        }
+      }
+      sfx("move");renderAll();
+      const _mine=Z.mana.filter(x=>{const rx=getReg(x);
+        if(!rx||!isCreatureReg(rx))return false;
+        const c2=(rx.cost==null||rx.cost==="")?0:(+rx.cost||0);
+        if(c2>_cst)return false;
+        return !_mf||lockFilterOk(_mf,rx,x);
+      });
+      if(!_mine.length){toast(`🌱 マナゾーンにコスト${_cst}以下${_mf?`の${_mf}`:""}のクリーチャーがいません`);continue;}
+      const _j2=await pickCard(`🌱 マナゾーンから出すクリーチャーを選択（コスト${_cst}以下${_mf?`・${_mf}`:""}）`,_mine,{hint:"キャンセルで出さない"});
+      if(_j2===null)continue;
+      const _c2=_mine[_j2];
+      const _ix2=Z.mana.findIndex(x=>x.id===_c2.id);
+      if(_ix2<0)continue;
+      Z.mana.splice(_ix2,1);
+      if(!cheatEnterBattle(pi,_c2)){Z.mana.push(_c2);renderAll();continue;}
+      enqueueFx(pi,_c2);
+      sfx("ok");renderAll();
+      toast(`🌱 ${faceNameOf(_c2)} をマナゾーンから出した`);
     }else if(f.t==="selfDiscardRandom"){
       /* 🗑 v16.62 自分の手札をランダムにn枚捨てる（ホメホメ老句型）。選べないので、引いた直後の捨て札に使う。 */
       if(!Z.hand.length){toast("🗑 捨てる手札がありません");continue;}
@@ -23057,8 +23218,20 @@ function onceFilter(c,list){
   const key=`${S.turn}:${S.who}`;
   S._watchOnce=S._watchOnce||{};
   const out=[],used=[];
-  let skipped=0;
+  let skipped=0,gated=0;
+  /* 🧮 v16.65 cnd＝発動の前提になる盤面の条件（条件式・zoneCondOk）。
+     cond が「何に反応するか」の絞り込みなのに対し、cnd は「その時の自分の状況」を見る。
+     印鑑Dの「G・G・G：攻撃する時、自分の手札が1枚以下なら」＝cnd「手札<=1」。
+     ここで一括して判定するので、同じ誘発に複数の行を並べても、
+     1行目の結果（引いて手札が増える等）で2行目が落ちることはない。 */
+  const _own=[0,1].find(pp=>{try{return zonesOf(pp).battle.some(x=>x.id===c.id);}catch(e){return false;}});
   for(const w of (list||[])){
+    if(w&&w.cnd&&String(w.cnd).trim()){
+      const pi0=(_own!=null)?_own:(S.seat|0);
+      let okc=false;
+      try{okc=!!zoneCondOk(String(w.cnd).trim(),pi0,c);}catch(e){okc=false;}
+      if(!okc){gated++;continue;}
+    }
     const wi=all.indexOf(w);
     if(w&&w.once&&wi>=0){
       const k=`${c.id}:${w.ev}:${wi}`;
@@ -23069,6 +23242,7 @@ function onceFilter(c,list){
   }
   for(const k of used)S._watchOnce[k]=key;
   if(skipped)toast(`1️⃣ ${faceNameOf(c)}：各ターン1回の効果${skipped}件はこのターン使用済みのためスキップ`);
+  if(gated)logOnly(`🧮 ${faceNameOf(c)}：条件を満たしていない誘発${gated}件をとばしました`);
   return out;
 }
 const fxQueue=[];let fxRunning=false;
@@ -23150,6 +23324,13 @@ function _isColorless(r){return !!(r&&(!r.civs||!r.civs.length||(r.civs.length==
 function lockFilterOk(filt,r,c,lockPi,face){
   // ロック対象条件：「／」区切り＝すべて満たすものだけを禁止（AND）。「X以外」で否定（例：光以外）
   if(!filt)return true;
+  /* 🛡 v16.64 「ブロッカー」で絞れるようにした（叡智の聖騎士 スクアーロ型）。
+     登録の常在ブロッカーと、このターンだけ付与されたブロッカーの両方を見る。 */
+  {const fs0=String(filt).trim();
+   if(fs0==="ブロッカー"||fs0==="ブロッカー以外"){
+     const has=!!(r&&r.blocker)||!!(c&&c.buff&&c.buff.blocker);
+     return fs0==="ブロッカー"?has:!has;
+   }}
   // 🔀 ORグループ：「｜」または「または」区切り＝いずれかのグループを満たせば対象（例：ゴッド｜コスト4以下）
   {const fs=String(filt);
    if(fs.includes("｜")||fs.includes("または")){
@@ -23292,8 +23473,17 @@ function lockFilterOk(filt,r,c,lockPi,face){
 /* 🌌 v16.61 無月フィールド《卍 新世壊 卍》まわりの共通部品。
    grandZeroSpellOk＝下に置ける呪文か（魔導具呪文）／grandZeroFieldsOf＝使える新世壊の一覧
    grandZeroPut＝下に置いて1枚引く。 */
-function grandZeroSpellOk(r){
-  return !!(r&&raceMatch(r,"魔導具")&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact"));
+function grandZeroSpellOk(r,fr){
+  /* 🌌 v16.64 下に置ける呪文の条件を、置く側の登録（grandZeroFilt）で決められるようにした。
+     空欄なら今までどおり「魔導具」。不夜城艦 クランヴィアは「呪文」＝呪文なら何でも。
+     新世壊の登録は grandZeroFilt を持たないので、動きは変わらない。 */
+  if(!r)return false;
+  const isSp=(r.ctype==="spell"||r.twin||r.ctype==="twinpact");
+  if(!isSp)return false;
+  const f=String((fr&&fr.grandZeroFilt)||"").trim();
+  if(!f)return raceMatch(r,"魔導具");
+  if(/^呪文$/.test(f))return true;
+  return lockFilterOk(f,r,null);
 }
 function grandZeroFieldsOf(pi){
   try{
@@ -23314,8 +23504,8 @@ function grandZeroPut(pi,fld,o){
 async function offerGrandZeroPlace(pi,o){
   try{
     const rg=getReg(o);
-    if(!S.expert||!grandZeroSpellOk(rg))return;
-    const fields=grandZeroFieldsOf(pi);
+    if(!S.expert||!rg)return;
+    const fields=grandZeroFieldsOf(pi).filter(x=>grandZeroSpellOk(rg,getReg(x)));
     if(!fields.length)return;
     if(!await ask(`🌌 ${faceNameOf(fields[0])}\n解決した《${faceNameOf(o)}》を、墓地のかわりに《卍 新世壊 卍》の下に置き、カードを1枚引きますか？`)){o._gzNo=true;return;}
     if(fields.length===1){o._gzPick=fields[0].id;return;}
@@ -24767,6 +24957,9 @@ async function effPower(c,attacking,inBattle){
   // ♾ バトル中、このクリーチャーのパワーを∞にする（カツムゲン型）。
   //    パワー参照はバトルの中だけなので、盤面の他の「パワーn以上」判定には影響しない。
   if(inBattle&&r&&r.powInfBattle)return Infinity;
+  /* 💪 v16.65 バトル中だけパワーを足す（印鑑D型）。攻撃時だけのパワーアタッカーとは別物で、
+     ブロックした時や相手に攻撃された時のバトルでも乗る。 */
+  if(inBattle&&r&&+r.powBattle)p+=(+r.powBattle||0);
   if(c.hyper&&r&&r.hmPow)p=+r.hmPow;
   if(attacking&&r&&r.pa)p+=(+r.pa||0);
   if(attacking&&r&&+r.gggPA>0){
@@ -25625,10 +25818,10 @@ function resolveOut(Z,o){
      v16.61：置くかどうかと、どの《卍 新世壊 卍》の下に置くかは、解決の終わり（scheduleAutoResolve）で
      先に聞いて `_gzPick`／`_gzNo` に控えておく。ここは控えを適用するだけ（この関数は同期のため）。
      まだ聞けていない場合（別の呪文を唱えて古い解決が押し出された時など）は、その場で確認する。 */
-  if(rg&&grandZeroSpellOk(rg)){
+  if(rg&&grandZeroFieldsOf(S.players.findIndex(P=>P.zones===Z)).some(x=>grandZeroSpellOk(rg,getReg(x)))){
     const pi0=S.players.findIndex(P=>P.zones===Z);
     if(pi0>=0&&!o._gzNo){
-      const fields=grandZeroFieldsOf(pi0);
+      const fields=grandZeroFieldsOf(pi0).filter(x=>grandZeroSpellOk(rg,getReg(x)));
       const picked=o._gzPick?fields.find(x=>x.id===o._gzPick):null;
       delete o._gzPick;delete o._gzNo;
       if(picked){
@@ -30790,6 +30983,8 @@ function renderFxEditor(){
   {const e=$("fxCrystalCharger");if(e)e.checked=!!FXEDIT.crystalCharger;}
   $("fxHoldResolve").checked=!!FXEDIT.holdResolve;
   {const e=$("fxGrandZero");if(e)e.checked=!!FXEDIT.grandZero;}
+  {const e=$("fxGrandZeroFilt");if(e)e.value=FXEDIT.grandZeroFilt||"";}
+  {const e=$("fxGate99");if(e)e.checked=!!FXEDIT.gate99;}
   {const e=$("fxShieldZeroBlocker");if(e)e.checked=!!FXEDIT.shieldZeroBlocker;}
   $("fxCastle").checked=!!FXEDIT.castle;
   $("fxGcRedirect").checked=!!FXEDIT.gcRedirect;
@@ -31102,6 +31297,7 @@ function renderFxEditor(){
   {const e=$("fxStFace");if(e)e.value=String(FXEDIT.stFace|0);}
   {const e=$("fxNoLeaveGearN");if(e)e.value=String(FXEDIT.noLeaveGearN||0);}
   {const e=$("fxPowInfBattle");if(e)e.checked=!!FXEDIT.powInfBattle;}
+  {const e=$("fxPowBattle");if(e)e.value=FXEDIT.powBattle||"";}
   {const e=$("fxStCipToMana");if(e)e.checked=!!FXEDIT.stCipToMana;}
   {const e=$("fxStNoST");if(e)e.checked=!!FXEDIT.stNoST;}
   $("fxCostFloor1").checked=!!FXEDIT.costFloor1;
@@ -33129,6 +33325,8 @@ function openFxEditor(key){
     crystalCharger:cur?!!cur.crystalCharger:false,
     holdResolve:cur?!!cur.holdResolve:false,
     grandZero:cur?!!cur.grandZero:false,
+    grandZeroFilt:cur&&cur.grandZeroFilt||"",
+    gate99:cur?!!cur.gate99:false,
     shieldZeroBlocker:cur?!!cur.shieldZeroBlocker:false,
     castle:cur?!!cur.castle:false,
     gcRedirect:cur?!!cur.gcRedirect:false,
@@ -33436,6 +33634,7 @@ function openFxEditor(key){
     stFace:cur&&(+cur.stFace||0)||0,
     noLeaveGearN:cur&&(+cur.noLeaveGearN||0)||0,
     powInfBattle:cur?!!cur.powInfBattle:false,
+    powBattle:cur?(+cur.powBattle||0):0,
     stCipToMana:cur?!!cur.stCipToMana:false,
     stNoST:cur?!!cur.stNoST:false,
     costFloor1:cur?!!cur.costFloor1:false,
@@ -33728,6 +33927,8 @@ $("fxSave").addEventListener("click",async ()=>{
     crystalCharger:$("fxCrystalCharger")?$("fxCrystalCharger").checked:false,
     holdResolve:$("fxHoldResolve").checked,
     grandZero:$("fxGrandZero")?$("fxGrandZero").checked:false,
+    grandZeroFilt:$("fxGrandZeroFilt")?$("fxGrandZeroFilt").value.trim():"",
+    gate99:$("fxGate99")?$("fxGate99").checked:false,
     shieldZeroBlocker:$("fxShieldZeroBlocker")?$("fxShieldZeroBlocker").checked:false,
     castle:$("fxCastle").checked,
     gcRedirect:$("fxGcRedirect").checked,
@@ -34042,6 +34243,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stFace:$("fxStFace")?(parseInt($("fxStFace").value,10)||0):0,
     noLeaveGearN:$("fxNoLeaveGearN")?(parseInt($("fxNoLeaveGearN").value,10)||0):0,
     powInfBattle:$("fxPowInfBattle")?$("fxPowInfBattle").checked:false,
+    powBattle:Math.max(0,+($("fxPowBattle")?$("fxPowBattle").value:0)||0),
     stCipToMana:$("fxStCipToMana")?$("fxStCipToMana").checked:false,
     stNoST:$("fxStNoST")?$("fxStNoST").checked:false,
     costFloor1:$("fxCostFloor1").checked,
@@ -41215,6 +41417,30 @@ async function doResign(){
    （黙って上書きすると、自分で直した登録が他の人の古い登録に戻る事故が起きるため） */
 const FX_INBOX={from:"",items:{},names:{},links:{}};
 function fxInboxCount(){return Object.keys(FX_INBOX.items).length;}
+/* 🕒 v16.63 _v（更新時刻）が時刻として使えるかどうか。
+   2001年9月より前（1e12未満）の値は、古いパックが入れたハッシュ値や、そもそも _v が無い登録。
+   これを「古い」と見なすと、日数を指定して送る時に永久に漏れる（805件中200件が該当していた）。
+   そこで「時刻として読めない登録は、いつのものか分からない＝取りこぼすより送る」側に倒す。 */
+function fxStampMs(r){
+  const x=Number(r&&r._v);
+  return (isFinite(x)&&x>=1e12)?x:null;
+}
+/* 🗓 v16.63 「◯日ぶん」の境目。1日＝きょう（その日の0時から）。
+   今までは now−24時間だったので、朝に登録して翌朝に「1日」で送ると漏れていた。 */
+function fxRecentThreshold(days){
+  const d0=new Date();
+  d0.setHours(0,0,0,0);
+  return d0.getTime()-(Math.max(1,days|0)-1)*86400000;
+}
+/* 🔗 v16.63 ツインパクトや覚醒リンクの相方を足す（デッキ指定では前からやっていた処理を、日数指定にも効かせる） */
+function fxAddLinked(keys){
+  const set=new Set(keys);
+  for(const k of keys){
+    const l=LINKS.get(k);
+    if(l)for(const f of l)if(FXDB.has(f))set.add(f);
+  }
+  return [...set];
+}
 /* 送る対象のキーを集める。scope＝"all"／"deck"（デッキで使うカードだけ）／"recent"（最近更新した分だけ） */
 function fxShareKeys(scope,deckNames){
   const all=[...FXDB.keys()];
@@ -41228,10 +41454,16 @@ function fxShareKeys(scope,deckNames){
   }
   if(scope==="self")return all.filter(k=>((FXDB.get(k)||{})._src)==="self");
   if(scope==="recent"){
-    // 🗓 days＝何日ぶんの登録を送るか（省略時は7日・v14.84で日数指定に対応）
+    /* 🗓 days＝何日ぶんの登録を送るか（省略時は7日・v14.84で日数指定に対応）
+       v16.63：①境目を「きょうの0時」基準にした ②時刻として読めない _v は対象に含める
+               ③リンクした面（ツインパクト・覚醒リンク）の相方も足す */
     const days=Math.max(1,+arguments[2]||7);
-    const th=Date.now()-days*86400000;
-    return all.filter(k=>(Number((FXDB.get(k)||{})._v)||0)>=th);
+    const th=fxRecentThreshold(days);
+    const hit=all.filter(k=>{
+      const ms=fxStampMs(FXDB.get(k));
+      return (ms===null)||(ms>=th);
+    });
+    return fxAddLinked(hit);
   }
   return all;
 }
@@ -41370,7 +41602,7 @@ function showFxDiffPanel(){
       if(!v||typeof v!=="object")continue; // 受信データは形を確認してから入れる
       let reg;
       try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
-      reg._v=Number(v._v)||Date.now();
+      reg._v=fxStampMs(v)||Date.now();   // 🕒 v16.63 ハッシュ値などの読めない _v は入れ直す
       reg._src="shared:"+(FX_INBOX.from||"共有");
       fxAliasReg(reg);   // v15.1 mach/machf・jd/jdiver・eternalOmega をそろえる
       FXDB.set(k,reg);
@@ -41585,8 +41817,10 @@ async function fxMergeIncoming(pack,from,opts={}){
     const cur=FXDB.get(k);
     // _v は Date.now() の13桁。ビット演算 |0 を使うと32bitへ切り詰められ、
     // 新しい訂正パックを古いと誤判定して取り込まないことがある。
-    const inV=Number(v._v)||0;
-    const curV=cur?(Number(cur._v)||0):0;
+    /* 🕒 v16.63 時刻として読めない _v（古いパックのハッシュ値など）は 0 扱いにする。
+       そのまま比べると、ハッシュ値の小さい新しい登録を「古い」と誤判定して黙って捨てていた。 */
+    const inV=fxStampMs(v)||0;
+    const curV=cur?(fxStampMs(cur)||0):0;
     // 古い共有パックには _v が無いものがある。内容が違うのに「時刻0＝古い」として黙って捨てると、
     // 画像だけ入り効果が更新されないため、内容差分も判定する。自分で編集した登録は必ず確認画面へ。
     const stripMeta=o=>{try{const z=JSON.parse(JSON.stringify(o||{}));delete z._v;delete z._src;return JSON.stringify(z);}catch(e){return "";}};
@@ -41599,7 +41833,7 @@ async function fxMergeIncoming(pack,from,opts={}){
     if(cur&&!differs)continue;
     if(cur&&inV>0&&inV<=curV)continue;
     let reg;try{reg=JSON.parse(JSON.stringify(v));}catch(e){continue;}
-    reg._v=inV||Date.now();
+    reg._v=inV||Date.now();   // 🕒 v16.63 読めない _v は入れ直す（inV は上で 0 にしてある）
     reg._src=srcTag;
     fxAliasReg(reg);   // v15.1 mach/machf・jd/jdiver・eternalOmega をそろえる
     FXDB.set(k,reg);
@@ -48138,7 +48372,9 @@ async function exportDeckShare(deckNames,withImg){
    1／3／7／30日の件数の目安を見せてから選べる。キャンセル＝null。 */
 async function askRecentFxDays(){
   const now=Date.now();
-  const cnt=d2=>[...FXDB.keys()].filter(k=>(Number((FXDB.get(k)||{})._v)||0)>=now-d2*86400000).length;
+  /* v16.63：送る側（fxShareKeys の "recent"）と同じ数え方にそろえる。
+     ここだけ古い式のままだと、目安と実際の件数が食い違う。 */
+  const cnt=d2=>fxShareKeys("recent",null,d2).length;
   let days=await askNumber(`🗓 何日ぶんの効果登録を対象にしますか？\n（きょう登録・更新したものだけ＝1）\n\n目安：1日＝${cnt(1)}件／3日＝${cnt(3)}件／7日＝${cnt(7)}件／30日＝${cnt(30)}件`,7,365);
   if(days==null||isNaN(days))return null;
   return Math.max(1,Math.min(365,days|0));
