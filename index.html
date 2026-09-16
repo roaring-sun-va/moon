@@ -220,10 +220,16 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 .card:active{box-shadow:0 0 0 2px var(--accent),0 8px 22px rgba(0,0,0,.55)}
 .vcard.picked{outline:3px solid var(--accent)!important;outline-offset:-2px;box-shadow:0 0 12px rgba(255,200,60,.45)}
 .vcard.picked::after{content:"✓";position:absolute;top:2px;left:2px;background:var(--accent);color:#000;font-size:11px;font-weight:900;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:6}
+/* 🔢 v16.72 下に重なっている枚数は見落としやすかったので、大きく・濃くした。
+   進化元や無月フィールドの下は枚数がそのまま強さや条件になるため、
+   ぱっと見て分かる必要がある。 */
 .card .stacktag{
-  position:absolute;left:0;bottom:0;z-index:1;
+  position:absolute;left:0;bottom:0;z-index:4;
   background:var(--accent);color:#1a1405;
-  font-size:9px;font-weight:800;padding:0 5px;border-top-right-radius:6px;
+  font-size:12px;font-weight:900;line-height:1.15;padding:1px 6px;
+  border-top-right-radius:8px;
+  box-shadow:0 0 0 1px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.5);
+  letter-spacing:.02em;
 }
 .card .facetag{
   position:absolute;right:0;top:0;z-index:1;
@@ -2684,7 +2690,10 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxCharger"> チャージャー（呪文使用後マナへ／ツインパクト下面も可）</label>
         <label title="水晶チャージャー：この呪文を唱えた後、墓地に置くかわりに裏向きにしてマナゾーンに置く。チャージャーも自動でオンになります"><input type="checkbox" id="fxCrystalCharger"> 💎 水晶チャージャー（裏向きでマナへ）</label>
         <label><input type="checkbox" id="fxHoldResolve"> 🕐 解決中に保持（ザフィヴォ型：処理の途中で他のカードを使う呪文。自動で墓地に置かず、手動で墓地に置いた時に虚無月の門等が誘発）</label>
-        <label title="唱えた呪文を解決後にこのカードの下へ置いて1枚引く／対象呪文の詠唱禁止を無視／下4枚で無月の門99（下の絞り込みが空欄の時だけ）"><input type="checkbox" id="fxGrandZero"> 🌌 解決後に下へ置く（無月フィールド《卍 新世壊 卍》型）</label>
+      </div>
+      <div class="row" style="gap:12px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700">🌌 唱えた呪文をこのカードの下へ置く</span>
+        <label title="唱えた呪文を解決後にこのカードの下へ置いて1枚引く／対象呪文の詠唱禁止を無視／下4枚で無月の門99（下の絞り込みが空欄の時だけ）"><input type="checkbox" id="fxGrandZero"> 使う（新世壊／不夜城艦 クランヴィア型）</label>
         <input type="text" id="fxGrandZeroFilt" placeholder="└ 下に置ける呪文の絞り込み（空欄＝魔導具・「呪文」＝全部・不夜城艦 クランヴィア型）" style="flex:1;min-width:220px">
         <label title="無月の門99（下に4枚以上でゲーム中1回・水のコスト99以下の呪文をタダ唱え）を持たせる。絞り込みが空欄の登録（新世壊型）は書かなくても付きます"><input type="checkbox" id="fxGate99"> └ 無月の門99を持つ</label>
         <label title="自分のシールドが1つもない間だけ、このクリーチャーはブロッカーを得ます"><input type="checkbox" id="fxShieldZeroBlocker"> 🛡 自分の盾が0ならブロッカー</label>
@@ -3531,6 +3540,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <button class="btn small ghost" id="askCopy" style="padding:4px 10px">📋 コピー</button>
       <button class="btn small ghost" id="askPeek" style="padding:4px 10px">👁 盤面を見る</button>
     </div>
+    <div id="askArt" style="display:none;justify-content:center;gap:8px;margin:2px 0 6px;flex-wrap:wrap"></div>
     <div id="askMsg" style="font-size:13px;line-height:1.7;font-weight:700;white-space:pre-line;user-select:text;-webkit-user-select:text"></div>
     <input type="number" id="askNum" min="1" inputmode="numeric" style="display:none">
     <input type="text" id="askTxt" style="display:none">
@@ -4861,7 +4871,36 @@ window.syncLogOverPanel=()=>{
  });}
 {const b=document.getElementById("ldFull");if(b)b.addEventListener("click",()=>{openGameLog();});}
 {const b=document.getElementById("ldDeck");if(b)b.addEventListener("click",()=>{openDeckKnownInfo();});}
+/* 🖼 v16.75 確認パネルに、そのカードの絵を出す。
+   どのカードの話か文字だけで追うのが大変だったため（無月の門・革命チェンジ・
+   S・トリガーの確認など、名前が似たカードが並ぶ場面が多い）。
+   渡せるもの：カードそのもの／登録キー／カード名。複数渡せば横に並べる。 */
+function askArtSet(...targets){
+  const box=document.getElementById("askArt");
+  if(!box)return;
+  box.innerHTML="";box.style.display="none";
+  const keys=[];
+  for(const t of targets.flat()){
+    if(!t)continue;
+    let k=null;
+    try{
+      if(typeof t==="string")k=canonicalCardKey(t)||normName(t);
+      else if(t&&t.name)k=imageKeyForName(faceNameOf(t));
+    }catch(e){}
+    if(k&&!keys.includes(k))keys.push(k);
+  }
+  if(!keys.length)return;
+  for(const k of keys.slice(0,3)){
+    const im=document.createElement("img");
+    im.dataset.imgKey=k;im.draggable=false;im.decoding="async";
+    im.style.cssText="width:92px;max-width:30vw;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.6);background:#0d1119";
+    try{const u=(imgURL.ready&&imgURL.ready(k))?imgURL.get(k):imgURL.get(k);if(u)im.src=u;}catch(e){}
+    box.appendChild(im);
+  }
+  box.style.display="flex";
+}
 function dlgReset(){
+  {const b=document.getElementById("askArt");if(b){b.innerHTML="";b.style.display="none";}}
   $("askNum").style.display="none";$("askTxt").style.display="none";$("askChoices").style.display="none";$("askYN").style.display="";
   /* 👁 「盤面を見る」は対戦中だけ。デッキ編成やカード登録から出た確認では戻り先が盤面ではないので隠す */
   {const p=document.getElementById("askPeek");
@@ -4916,10 +4955,11 @@ async function _serialDlg(acquire,open){
   try{ return await open(); }
   finally{ release(); }
 }
-function ask(msg){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
+function ask(msg,art){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
   // 👻 ゴースト自動応答：確認系（ダイレクトアタック成立など）は「はい」で進める
   if(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO){setTimeout(()=>res(true),100);return;}
   dlgReset();$("askMsg").textContent=msg;
+  if(art)askArtSet(art);   // 🖼 v16.75 どのカードの確認かを絵でも示す
   $("askOlay").classList.add("open");
   $("askYes").onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(true);};
   $("askNo").onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(false);};
@@ -4938,13 +4978,14 @@ function askText(msg,def){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
   $("askYes").onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(inp.value.trim());};
   $("askNo").onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(null);};
 }));}
-function askChoice(msg,options){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
+function askChoice(msg,options,art){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
   // 👻 ゴースト自動応答：処理中は無難な既定回答で解決を進める（判断不能時のみ人間パネルを開く）
   if(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO){
     const gi=ghostAnswerChoice(msg,options);
     if(gi!=null&&gi>=0&&gi<options.length){setTimeout(()=>res(gi),120);return;}
   }
   dlgReset();$("askMsg").textContent=msg;$("askYN").style.display="none";
+  if(art)askArtSet(art);   // 🖼 v16.75
   const box=$("askChoices");box.style.display="";box.innerHTML="";
   // 選択肢が多い/長い時に画面からはみ出さないよう、縦スクロールできるようにする
   box.style.flexDirection="column";box.style.maxHeight="52vh";box.style.overflowY="auto";box.style.gap="6px";
@@ -5420,6 +5461,9 @@ const imgURL=(()=>{
   const api={
     get size(){return known.size;},
     has(k){return known.has(k);},
+    /* 🖼 v16.71 いまメモリに載っているか（読み込みを起こさずに確かめる）。
+       一覧を作る時に get() を呼ぶと、その場で読み込みが始まってしまうため。 */
+    ready(k){return blobs.has(k);},
     keys(){return known.keys();},
     get(k){
       if(!blobs.has(k)){request(k);return undefined;}
@@ -5556,7 +5600,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.70";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.76";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -5748,6 +5792,18 @@ function cantLeaveBattle(pi,c,quiet){
 function d2BaseRot(pi){return (pi===(S.seat|0))?270:90;}
 function applyD2Rot(pi,c){const b=d2BaseRot(pi);c.rot=c.dSw?(b===270?90:270):b;}
 function isD2Reg(r){return !!(r&&(r.d2||r.ctype==="d2"||r.fieldKind==="d2"));}
+/* 🏞 v16.72 フィールド（D2・DG・無月フィールドなど）。
+   クリーチャーではないので、攻撃・タップ・ブロックのボタンは出さない。 */
+function isFieldReg(r){return !!(r&&(r.ctype==="field"||r.fieldKind||r.d2||r.ctype==="d2"));}
+/* 🏞 v16.72 横向きに置くカード。D2フィールドと同じ向きの作り方にそろえる。
+   これまで無月フィールド《卍 新世壊 卍》だけ c.sideways で寝かせていたので、
+   視点を切り替えると向きが合わず、D2と見た目もそろっていなかった。 */
+function isWideReg(r){return !!(r&&(r.d2||r.wide||isFieldReg(r)||r.grandZero));}
+/* 🌌 v16.73 下に敷いたカードが「墓地に置かれる」型か。
+   無月フィールド《卍 新世壊 卍》・不夜城艦 クランヴィアの下は進化元ではなく、
+   本体が離れる時にすべて墓地へ置かれる（本体の行き先は関係ない）。
+   進化元は本体と同じゾーンへ移動するので、別扱いが要る。 */
+function underToGraveOnLeave(r){return !!(r&&r.grandZero);}
 /* 🧑 選択パネル用の表示名。P1／P2だけだとどちらか分からなくなるので、デッキ名を添える。
    ログは短く保ちたいのでこちらには使わない。 */
 function pName(pi){
@@ -6357,7 +6413,10 @@ function markArrive(c,opt){
       if(evo&&isNeoReg(r)&&!(c.neoEvo||(c.under&&c.under.length)))evo=false;
       c.sick=!evo&&!(r&&r.sa);
       // 🌑 魔導具クリーチャーが場に出た → 無月の門の誘発候補（一連の処理後に判定・虚無月は対象外）
-      if(r&&raceMatch(r,"魔導具")&&pOwn!=null){MUGETSU_PENDING.add(pOwn+":cre");MUGETSU_AT[pOwn]=Date.now();}
+      /* 🌑 v16.74 開くのは「魔導具**クリーチャー**が出た時」だけ。
+         クリーチャーかどうかを見ていなかったため、魔導具のフィールド・タマシード・クロスギアが
+         場に出ただけでも門の確認が出ていた。 */
+      if(r&&isCreatureReg(r)&&raceMatch(r,"魔導具")&&pOwn!=null){MUGETSU_PENDING.add(pOwn+":cre");MUGETSU_AT[pOwn]=Date.now();}
       // ⤵ 相手の常在「相手クリーチャーはタップして出る」（ボルシャック・ライジング・NEX型）を、
       //    召喚・進化・ルナティック進化・踏み倒しなど「すべての出方」に適用する（moveCardX以外の経路もここで拾う）。
       if(S.expert&&S.vs&&pOwn!=null&&!c.tapped&&!_flipOnly){
@@ -9147,7 +9206,7 @@ function dealPlayer(pi,pick){
       for(let s=0;s<sealN&&P.zones.deck.length;s++){
         const sc=P.zones.deck.shift();sc.faceup=false;c.seals.push(sc);
       }
-      if(reg&&(reg.d2||reg.wide))applyD2Rot(S.players.indexOf(P),c);
+      if(isWideReg(reg))applyD2Rot(S.players.indexOf(P),c);
       P.zones.battle.push(c);
     }
   }
@@ -9705,7 +9764,7 @@ async function offerGrandZero99(pi){
   });
   if(!fields.length)return;
   const fld=fields[0];
-  if(!await ask(`🌌 無月の門99：${faceNameOf(fld)} の下に${(fld.under||[]).length}枚あります。\nコスト99以下の水の呪文1枚を、手札または墓地からコストを支払わずに唱えますか？\n（ゲーム中に1回だけ）`))return;
+  if(!await ask(`🌌 無月の門99：${faceNameOf(fld)} の下に${(fld.under||[]).length}枚あります。\nコスト99以下の水の呪文1枚を、手札または墓地からコストを支払わずに唱えますか？\n（ゲーム中に1回だけ）`,fld))return;
   const pool=[...Z.hand,...Z.grave].filter(c=>{const r=getReg(c);return r&&(r.ctype==="spell"||r.twin||r.ctype==="twinpact")&&(r.civs||[]).includes("water")&&+r.cost<=99;});
   if(!pool.length){toast("🌌 唱えられる水の呪文が手札・墓地にありません");return;}
   const j=await pickCard("🌌 無月の門99：唱える水の呪文を選択",pool,{hint:"手札または墓地／キャンセル可"});
@@ -13247,7 +13306,7 @@ async function autoTapCost(pi,c){
       toast(`🆓 ${_gzName}の条件を満たしていません（${gz}）。通常コストで召喚します`);
     }else{
       const j=await askChoice(`🆓 ${_gzName}（${faceNameOf(c)}）\n条件：${_mggg?"自分の手札がこのカードだけ":(gz||"（条件未記入）")}${auto===true?"\n※条件を満たしています":""}\nコストを支払わずに${paySide==="creature"?"召喚":"唱え"}ますか？`,
-        [`${_gzName}で使う（コスト0）`,`通常コスト（${cost}）で使う`]);
+        [`${_gzName}で使う（コスト0）`,`通常コスト（${cost}）で使う`],c);
       if(j===0){
         toast(`🆓 ${_gzName}：${faceNameOf(c)} をコストを支払わずに使った`);
         // ✨ 破壊◯体などの条件で出るカード（ネルガルザーク型）は「特殊召喚！」の演出にする（v14.71）
@@ -13685,7 +13744,7 @@ async function autoTapCost(pi,c){
      （フロウ"GIG"ロール型）。墓地に置くシールドは自分で選ぶ。S・トリガーは使えない。 */
   if((+r.shieldCostDown||0)>0&&cost>0&&!c._viaCheat&&paySide==="creature"&&Z.shield.length){
     const _sn=+r.shieldCostDown||0;
-    if(await ask(`🛡 ${faceNameOf(c)}\n自分のシールドを1つ墓地に置いて、召喚コストを${_sn}少なくしますか？\n（置いたシールドのS・トリガーは使えません）`)){
+    if(await ask(`🛡 ${faceNameOf(c)}\n自分のシールドを1つ墓地に置いて、召喚コストを${_sn}少なくしますか？\n（置いたシールドのS・トリガーは使えません）`,c)){
       const _js=Z.shield.length===1?0:await pickCard("🛡 墓地に置くシールドを選択",Z.shield,{hint:"キャンセルで軽減しない"});
       if(_js!==null){
         const _sc=Z.shield.splice(_js,1)[0];
@@ -18010,7 +18069,14 @@ async function runFxList(pi,list,srcCard,inPump){
           removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;
           if(isMana){TZ.mana.push(removed);toast(`💎 ${faceNameOf(removed)} をマナゾーンへ`);}
           else{removed.mark=false;TZ.hand.push(removed);toast(`↩ ${faceNameOf(removed)} を手札に戻した`);}
-          _um.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];if(isMana)TZ.mana.push(u);else if(typeof toHand==="function")toHand(TZ,u);else TZ.hand.push(u);});
+          /* 🌌 v16.73 無月フィールド型の下は進化元ではないので、本体の行き先に関係なく墓地へ。 */
+          const _uToGrave=underToGraveOnLeave(getReg(removed));
+          _um.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];
+            if(_uToGrave)TZ.grave.push(u);
+            else if(isMana)TZ.mana.push(u);
+            else if(typeof toHand==="function")toHand(TZ,u);
+            else TZ.hand.push(u);});
+          if(_uToGrave&&_um.length)toast(`🌌 ${faceNameOf(removed)} の下のカード${_um.length}枚を墓地へ置いた`);
         }
         renderAll();
       }
@@ -20086,7 +20152,7 @@ async function runFxList(pi,list,srcCard,inPump){
         }
       }
       if(_hit&&_optPlay){
-        if(!await ask(`🎴 ${faceNameOf(_top)} をバトルゾーンに出しますか？\n（出さないなら${_toBottom?"山札の一番下":"墓地"}へ）`))_hit=false;
+        if(!await ask(`🎴 ${faceNameOf(_top)} をバトルゾーンに出しますか？\n（出さないなら${_toBottom?"山札の一番下":"墓地"}へ）`,_top))_hit=false;
       }
       toast(`🎴 表向き：${faceNameOf(_top)}`);
       if(_hit){
@@ -22495,6 +22561,21 @@ async function runFxList(pi,list,srcCard,inPump){
           if(!removeUnderMember(pp,host,card.id,"hand"))continue;
           toast(`🏯 ${hostNm2} の下の《${faceNameOf(card)}》を1枚だけ持ち主の手札に戻した`);
           logPush(`🏯 ${S.players[pp].label}：《${hostNm2}》の下の《${faceNameOf(card)}》を手札へ`);
+        }else if(host.under&&host.under.length&&underToGraveOnLeave(getReg(host))){
+          /* 🌌 v16.73 無月フィールド型は、下のカードが進化元ではないので退化しない。
+             本体だけが手札に戻り、下のカードはすべて墓地に置かれる。 */
+          const bi=ZB.battle.findIndex(x=>x.id===host.id);
+          if(bi<0)continue;
+          ZB.battle.splice(bi,1);
+          const kidsG=host.under.splice(0);
+          kidsG.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;ZB.grave.push(u);});
+          if(host.gear&&host.gear.length){host.gear.splice(0).forEach(g=>gearOut(ZB,g));}
+          if(host.seals&&host.seals.length){host.seals.splice(0).forEach(x2=>{x2.faceup=true;ZB.grave.push(x2);});}
+          host.faceup=true;host.tapped=false;host.sideways=false;host.rot=0;host.buff=null;host.mark=false;host.neoEvo=false;host.isCross=false;
+          if(typeof toHand==="function")toHand(ZB,host);else ZB.hand.push(host);
+          toast(`🌌 ${faceNameOf(host)} を手札に戻し、下のカード${kidsG.length}枚を墓地へ置いた`);
+          logPush(`🌌 ${S.players[pp].label}：《${faceNameOf(host)}》を手札へ（下の${kidsG.length}枚は墓地）`);
+          runWatchFx(pp,"selfLeave",host);
         }else if(host.under&&host.under.length){
           // 🔽 退化：一番上のカードだけを戻し、下のカードを場に残す
           const bi=ZB.battle.findIndex(x=>x.id===host.id);
@@ -23537,6 +23618,15 @@ function grandZeroPut(pi,fld,o){
   fld.under.push(o);
   draw(pi,1);
   o._resolvedToGrandZero=true;
+  /* 🌑 v16.76 虚無月の門の合図は「水の魔導具呪文が解決した時」。
+     合図を立てていたのは墓地に置く経路だけだったため、
+     新世壊の下に置くとその呪文では門が開かなくなっていた（唱えたことは変わらない）。 */
+  try{
+    const rg2=getReg(o);
+    if(rg2&&raceMatch(rg2,"魔導具")&&rg2.civs&&rg2.civs.includes("water")){
+      MUGETSU_PENDING.add(pi+":spl");MUGETSU_AT[pi]=Date.now();
+    }
+  }catch(e){}
   toast(`🌌 ${faceNameOf(o)} を ${faceNameOf(fld)} の下に置き、1枚引いた`);
   return true;
 }
@@ -23548,7 +23638,7 @@ async function offerGrandZeroPlace(pi,o){
     if(!S.expert||!rg)return;
     const fields=grandZeroFieldsOf(pi).filter(x=>grandZeroSpellOk(rg,getReg(x)));
     if(!fields.length)return;
-    if(!await ask(`🌌 ${faceNameOf(fields[0])}\n解決した《${faceNameOf(o)}》を、墓地のかわりに《卍 新世壊 卍》の下に置き、カードを1枚引きますか？`)){o._gzNo=true;return;}
+    if(!await ask(`🌌 ${faceNameOf(fields[0])}\n解決した《${faceNameOf(o)}》を、墓地のかわりに《卍 新世壊 卍》の下に置き、カードを1枚引きますか？`,[o,fields[0]])){o._gzNo=true;return;}
     if(fields.length===1){o._gzPick=fields[0].id;return;}
     const j=await pickCard("🌌 どの《卍 新世壊 卍》の下に置きますか？",fields,{hint:"キャンセルで置かない"});
     if(j===null){o._gzNo=true;return;}
@@ -26271,7 +26361,7 @@ async function processBroken(op,stack,label){
         // 🃏 v10.56：ツインパクトはクリーチャー面（上面）で出す
         {const rT=getReg(c);if(rT&&(rT.twin||rT.ctype==="twinpact"))c.face=0;}
         c.faceup=true;Z.battle.push(c);markArrive(c);sfx("move");
-        const r=getReg(c);if(r&&(r.d2||r.wide))applyD2Rot(op,c);
+        const r=getReg(c);if(isWideReg(r))applyD2Rot(op,c);
         logOnly(`${S.players[op].label}：⚡S・トリガー！《${faceNameOf(c)}》を出した（${stDefer.length+1}番目・出た時効果はパネル完了後）`);
         fxShare("trig","S・トリガー発動！",`${S.players[op].label}`,true,c.name,op);
         bumpEv("stTrig",op);
@@ -33945,6 +34035,41 @@ $("fxCancel").addEventListener("click",fxBackToSettings);
    }
  });}
 $("fxSave").addEventListener("click",async ()=>{
+  /* 🛟 v16.71 見つけにくい欄が、気づかないうちに外れるのを防ぐ。
+     チェックが並んだ長い行の中にある項目は、画面で見落としたまま保存すると黙って外れてしまう。
+     （不夜城艦 クランヴィアの「解決後に下へ置く」が、保存のたびに外れていた）
+     前の登録で入っていたのに、いま画面では空になっているものがあれば、一度だけ確認する。 */
+  {
+    const _prev=FXDB.get(FXEDIT.key)||{};
+    const _watch=[
+      ["grandZero","🌌 解決後に下へ置く",e=>e.checked],
+      ["grandZeroFilt","🌌 下へ置く対象の絞り込み",e=>e.value.trim()],
+      ["gate99","🌌 無月の門99",e=>e.checked],
+      ["masterGgg","🔥 マスターG・G・G",e=>e.checked],
+      ["stNoCheatHand","🚫 相手は手札以外から出せない",e=>e.checked],
+      ["brkDeckDraw","🔀 ブレイクした盾を山札の下へ",e=>e.checked],
+      ["foeEntrySickHm","⛔ 出たターン攻撃不可はHM中だけ",e=>e.checked],
+      ["stAuraGggOnly","✨ 付与はG・G・G中だけ",e=>e.checked],
+      ["powBattle","💪 バトル中パワー＋",e=>+e.value||0],
+      ["cstBk","💥 条件付きブレイク数",e=>+e.value||0],
+      ["shieldCostDown","🛡 盾1つで召喚コスト−",e=>+e.value||0],
+      ["qqqx","🃏 Q.Q.QX型",e=>e.checked],
+    ];
+    const _lost=[];
+    for(const [key,label,get] of _watch){
+      const el=document.getElementById("fx"+key.charAt(0).toUpperCase()+key.slice(1));
+      if(!el)continue;
+      const before=_prev[key];
+      const now=get(el);
+      const had=(typeof before==="string")?!!before.trim():!!before;
+      const has=(typeof now==="string")?!!now.trim():!!now;
+      if(had&&!has)_lost.push(label);
+    }
+    if(_lost.length){
+      const ok2=await ask(`⚠ 次の設定が外れた状態で保存されます。\n\n${_lost.join("\n")}\n\nこのまま保存しますか？\n（意図していない場合は「いいえ」を選び、その欄にチェックを入れ直してください。「🔎 項目をしぼり込み」で探せます）`);
+      if(!ok2)return;
+    }
+  }
   const p=$("fxPower").value.trim();
   FXDB.set(FXEDIT.key,{
     ...(FXDB.get(FXEDIT.key)||{}), // UI未対応の新しい汎用属性も編集保存で消さない
@@ -36783,7 +36908,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     const OWZ=zonesOf(pFrom);
     if(c.under&&c.under.length){
       const _leaveReg=getReg(c);
-      if(_leaveReg&&_leaveReg.grandZero){
+      if(underToGraveOnLeave(_leaveReg)){
         const _gzUnder=c.under.splice(0);
         _gzUnder.forEach(u=>{u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.frozen=false;u.jd=false;u.gl=false;u.faceup=true;OWZ.grave.push(u);});
         toast(`🌌 ${faceNameOf(c)} が離れるため、下のカード${_gzUnder.length}枚を墓地へ置いた`);
@@ -36863,7 +36988,9 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   else{
     markDeckKnownFromPublic(c,fromZone,toZone);   // 🔍 見えていた場所→山札 は確認済みで残す（v14.76）
     placeCard(Z,toZone,c);
-    {const _pr=getReg(c);if(toZone==="battle"&&_pr&&_pr.grandZero){c.sideways=true;c.tapped=false;c.rot=0;}}
+    /* 🏞 v16.72 無月フィールドの向きは、D2フィールドと同じ作りにそろえる（sideways ではなく rot）。
+       これまでは sideways で寝かせていたため、視点を切り替えると向きが合わなかった。 */
+    {const _pr=getReg(c);if(toZone==="battle"&&_pr&&isWideReg(_pr)){c.sideways=false;c.tapped=false;applyD2Rot(pTo,c);}}
   }
   if(!_reorder){c._mvxRep=true;try{markArrive(c);}finally{delete c._mvxRep;}} // 🔧 配置後に呼ぶ（並べ替えでは出直し扱いにしない・置換ロックは本体側で判定するためフラグで除外）
   // 🛡 表向きでシールドに置く操作は誤操作しやすいので確認（城/Gキャッスルは除く）
@@ -37029,7 +37156,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       if(_rep==="replaced")return;
     }
     const reg=getReg(c);
-    if(reg&&(reg.d2||reg.wide))applyD2Rot(pTo,c);
+    if(isWideReg(reg))applyD2Rot(pTo,c);
     if(S.expert&&reg&&reg.gimmick==="complex"&&!reg.complexArc){c.tapped=true;c.under=c.under||[];toast(`⬛ ${c.name} はタップして出る（下に8枚でアンタップ）`);}
     if(S.expert&&reg&&reg.gimmick==="complex"&&reg.complexArc){c.under=c.under||[];}
     if(S.expert&&reg&&reg.tapIn&&(!reg.gimmick||reg.gimmick!=="complex")){c.tapped=true;toast(`⤵ ${c.name} はタップして出る`);}
@@ -38400,6 +38527,21 @@ function cardEl(pi,zone,c){
     ey.style.cssText="position:absolute;left:2px;top:2px;z-index:6;font-size:11px;background:#000b;border-radius:6px;padding:0 3px;pointer-events:none";
     el.appendChild(ey);
   }
+  /* 👁 v16.72 下に重なっているカードは、札そのものから開けるようにした。
+     これまでは札をタップ→メニューの「下のカード／メテオバーン」まで行く必要があり、
+     進化クリーチャーの進化元や、無月フィールドの下を見るのに手数がかかっていた。 */
+  if(c.under&&c.under.length&&zone==="battle"&&!hidden&&showBBtn&&(!S.vs||pi===(S.seat|0))){
+    const ub2=document.createElement("button");
+    ub2.textContent="👁"+c.under.length;
+    ub2.title=`下に重なっているカード${c.under.length}枚を見る（メテオバーン・退化もここから）`;
+    ub2.style.cssText="position:absolute;right:-6px;bottom:22%;z-index:8;min-width:30px;height:24px;padding:0 5px;border-radius:12px;border:2px solid #fbbf24;background:#2a2005;color:#fbbf24;font-size:11px;font-weight:900;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.6);line-height:1";
+    ub2.addEventListener("click",ev=>{
+      ev.stopPropagation();ev.preventDefault();
+      try{openStackPanel(pi,zone,c.id);}catch(e2){}
+    });
+    ub2.addEventListener("pointerdown",ev=>ev.stopPropagation());
+    el.appendChild(ub2);
+  }
   if(c.under&&c.under.length){
     const st=document.createElement("span");st.className="stacktag";
     if(zone==="shield"){
@@ -38408,7 +38550,8 @@ function cardEl(pi,zone,c){
       st.textContent="+"+c.under.length+(fu>1?` 表${fu}`:"");
       st.title=`全${total}枚（表${fu}・裏${total-fu}）`;
     }else{
-      st.textContent="+"+c.under.length;
+      st.textContent="下"+c.under.length;   // 🔢 v16.72 「+3」より「下3」の方が何の数か分かる
+      st.title=`下に${c.under.length}枚重なっています（全${1+c.under.length}枚）`;
     }
     el.appendChild(st);
   }
@@ -38590,7 +38733,7 @@ function cardEl(pi,zone,c){
   // 🅳 D2フィールドは攻撃もタップもしないので、代わりに「Dスイッチ」ボタンを出す
   const isD2Card=isD2Reg(getReg(c));
   // 🅳 視点を切り替えても向きが崩れないよう、描画のたびに向きを作り直す
-  if(zone==="battle"&&isD2Card)applyD2Rot(pi,c);
+  if(zone==="battle"&&isWideReg(getReg(c)))applyD2Rot(pi,c);
   if(zone==="battle"&&isD2Card&&!hidden&&c.faceup&&(!S.vs||pi===S.seat)&&showBBtn){
     const on=!!c.dSw;
     const db=document.createElement("button");
@@ -38801,7 +38944,8 @@ function cardEl(pi,zone,c){
   }
   // 禁断の鼓動は攻撃しないので、攻撃ボタンは出さない（ボタンが重なるのを防ぐ）
   const _isBeat=!!(getReg(c)&&getReg(c).ctype==="kindanbeat");
-  if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden&&!isSealed(c)&&showBBtn&&!isGearCard&&!isD2Card&&!_isBeat){
+  const _isField=isFieldReg(getReg(c));   // 🏞 v16.72 フィールドは攻撃しない
+  if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden&&!isSealed(c)&&showBBtn&&!isGearCard&&!isD2Card&&!_isBeat&&!_isField){
     const ab=document.createElement("button");
     ab.textContent="⚔";
     ab.title="攻撃";
@@ -39271,7 +39415,7 @@ async function checkMugetsu(atTurnEnd){
           return mt&&!MUGETSU_THIS_TRIG.has(pi+":"+g.h.id);
         }).length;
         const _zn=zn==="grave"?"🪦 墓地":"✋ 手札";
-        const yes=await ask(`🌑 ${label}：${trigTxt} → 条件成立！ 魔導具 ${condTxt}\n\n【${_zn}】《${faceNameOf(h)}》\nコストを支払わずに召喚しますか？${_rest?`\n（このあと残り${_rest}枚の確認があります）`:""}`);
+        const yes=await ask(`🌑 ${label}：${trigTxt} → 条件成立！ 魔導具 ${condTxt}\n\n【${_zn}】《${faceNameOf(h)}》\nコストを支払わずに召喚しますか？${_rest?`\n（このあと残り${_rest}枚の確認があります）`:""}`,h);
         if(yes)await doMugetsuSummon(pi,zn,h.id);
       }catch(e){}
       finally{MUGETSU_BUSY=false;}
@@ -45124,14 +45268,43 @@ function imageKeyForName(name){
   for(const [k,dn] of dispName){if(imgURL.has(k)&&normName(dn||k)===nk)return k;}
   return nk;
 }
+/* 👀 v16.71 その画像が画面の近くにあるか。
+   デッキ編集のカード一覧は登録枚数だけ絵札を並べる（いまは800枚超）。
+   画像が1枚届くたびに**画面の全部の img について imgURL.get() を呼んでいた**ため、
+   見えていない何百枚もの読み込みが毎回走り、iPhoneの上限（64MB）を越えて
+   「読んでは捨てる」を繰り返していた。1枚操作するたびに暗くなるカードが変わるのはこれ。
+   画面から1.5画面ぶん以上離れているものは、そのまま置いておく。
+   （大きさが測れない時＝画面に出ていない時は触らない。ただし画面の仕組みが無い場所では今までどおり） */
+function imgNearView(el){
+  try{
+    if(!el||!el.getBoundingClientRect)return true;
+    const r=el.getBoundingClientRect();
+    if(!r||(r.width===0&&r.height===0&&r.top===0&&r.left===0))return true; // 測れない環境では今までどおり
+    const h=(window.innerHeight||800), w=(window.innerWidth||600);
+    return r.bottom>-h*1.5 && r.top<h*2.5 && r.right>-w && r.left<w*2;
+  }catch(e){return true;}
+}
 function refreshLazyImages(){
   document.querySelectorAll("img[data-img-key]").forEach(im=>{
+    if(!imgNearView(im))return;   // 👀 v16.71 画面の近くにあるものだけ読む
     const u=imgURL.get(im.dataset.imgKey);
     if(!u||im.src===u)return;
     im.src=u;
     const p=im.parentElement;if(p){const np=p.querySelector(".nameplate,.lazy-nameplate");if(np)np.remove();}
   });
 }
+/* 📜 v16.71 スクロールで画面に入ってきた絵札を貼る。
+   v16.71 から「画面の近くにあるものだけ読む」ようにしたので、
+   動かした後に読み直す合図が要る。0.15秒まとめてから1回だけ走らせる。 */
+let _lazyScrollTimer=null;
+function scheduleLazyRefresh(){
+  if(_lazyScrollTimer)return;
+  _lazyScrollTimer=setTimeout(()=>{_lazyScrollTimer=null;try{refreshLazyImages();}catch(e){}},150);
+}
+try{
+  document.addEventListener("scroll",scheduleLazyRefresh,{passive:true,capture:true});
+  window.addEventListener("resize",scheduleLazyRefresh,{passive:true});
+}catch(e){}
 /* 🛡 中身を伏せたまま選ばせる時の札。スリーブ（裏面）と位置の番号だけを出す */
 function pi0Of(opts){const n=Number(opts&&opts.maskPi);return Number.isFinite(n)?(n|0):(S.who|0);}
 function vCardBackEl(pi,label){
@@ -45153,7 +45326,14 @@ function vCardBackEl(pi,label){
 function vCardEl(name,opts={}){
   const el=document.createElement("div");el.className="vcard"+(opts.side?" side":"");
   const th=document.createElement("div");th.className="thumb";
-  const key=imageKeyForName(name),url=imgURL.get(key);
+  /* 🖼 v16.71 一覧を作る時点では、まだ画面に無い絵札の画像を要求しない。
+     要求すると IndexedDB から読み込まれてメモリに載るので、800枚ぶん一度に頼むと
+     上限を越えて読み直しが止まらなくなる。すでにメモリにある分だけ貼り、
+     残りはスクロールで近づいた時に refreshLazyImages が貼る。 */
+  const key=imageKeyForName(name);
+  /* すでにメモリにある画像だけその場で貼る。無いものは読み込みを起こさず、
+     スクロールで画面に近づいた時に refreshLazyImages が貼る。 */
+  const url=(imgURL.ready&&imgURL.ready(key))?imgURL.get(key):"";
   const im=document.createElement("img");im.dataset.imgKey=key;im.draggable=false;im.loading="lazy";im.decoding="async";if(url)im.src=url;th.appendChild(im);
   if(!url){const np=document.createElement("div");np.className="nameplate";np.textContent=name;th.appendChild(np);}
   el.appendChild(th);
@@ -47204,7 +47384,7 @@ $("btnNextTurn").addEventListener("click",async function(){
         if(_pC&&!zoneCondOk(_pC,pl,h))continue;
         const _pMsg=[_pN>0?`このターンの着地数：${landed}体（発動条件：${_pN}体以上・成立）`:"",
                      _pC?`条件：${_pC}（成立）`:""].filter(Boolean).join("\n");
-        const go=await ask(`🌀 ペテンシー型（${faceNameOf(h)}）\n${_pMsg}${_pMsg?"\n":""}コストを支払わずに${rH.ctype==="spell"?"唱え":"使い"}ますか？`);
+        const go=await ask(`🌀 ペテンシー型（${faceNameOf(h)}）\n${_pMsg}${_pMsg?"\n":""}コストを支払わずに${rH.ctype==="spell"?"唱え":"使い"}ますか？`,h);
         if(!go)continue;
         snap();
         const hi=Zp.hand.findIndex(x=>x.id===h.id);
