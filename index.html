@@ -223,6 +223,9 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 /* 🔢 v16.72 下に重なっている枚数は見落としやすかったので、大きく・濃くした。
    進化元や無月フィールドの下は枚数がそのまま強さや条件になるため、
    ぱっと見て分かる必要がある。 */
+/* 🖼 v16.79 横向きカードの絵札：90度回した画像が枠に収まるよう、縦横を入れ替えて敷く */
+.vcard.wide-art .thumb{overflow:hidden;display:flex;align-items:center;justify-content:center}
+.vcard.wide-art .thumb img{width:auto;height:100%;max-width:none;max-height:none}
 .card .stacktag{
   position:absolute;left:0;bottom:0;z-index:4;
   background:var(--accent);color:#1a1405;
@@ -4892,23 +4895,37 @@ function askArtSet(...targets){
      どのカードの効果を解決しているのかが分かるだけで迷いが減る。 */
   let list=targets.flat().filter(Boolean);
   if(!list.length&&typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)list=[FX_NOW_CARD];
-  const keys=[];
+  /* 🖼 v16.80 {card:…,cap:"見えた盾"} の形で渡すと、絵の下に短い見出しを付けられる。
+     どちらが「いま処理しているカード」で、どちらが「その対象」かを取り違えないため。 */
+  const items=[];
   for(const t of list){
     if(!t)continue;
+    const src=(t&&t.card!==undefined)?t.card:t;
+    const cap=(t&&t.cap)||"";
+    if(!src)continue;
     let k=null;
     try{
-      if(typeof t==="string")k=canonicalCardKey(t)||normName(t);
-      else if(t&&t.name)k=imageKeyForName(faceNameOf(t));
+      if(typeof src==="string")k=canonicalCardKey(src)||normName(src);
+      else if(src&&src.name)k=imageKeyForName(faceNameOf(src));
     }catch(e){}
-    if(k&&!keys.includes(k))keys.push(k);
+    if(k&&!items.some(x=>x.k===k))items.push({k,cap});
   }
-  if(!keys.length)return;
-  for(const k of keys.slice(0,3)){
+  if(!items.length)return;
+  for(const it of items.slice(0,3)){
+    const wrap=document.createElement("div");
+    wrap.style.cssText="display:flex;flex-direction:column;align-items:center;gap:2px";
     const im=document.createElement("img");
-    im.dataset.imgKey=k;im.draggable=false;im.decoding="async";
+    im.dataset.imgKey=it.k;im.draggable=false;im.decoding="async";
     im.style.cssText="width:78px;max-width:22vw;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.6);background:#0d1119;display:block";
-    try{const u=(imgURL.ready&&imgURL.ready(k))?imgURL.get(k):imgURL.get(k);if(u)im.src=u;}catch(e){}
-    box.appendChild(im);
+    try{const u=imgURL.get(it.k);if(u)im.src=u;}catch(e){}
+    wrap.appendChild(im);
+    if(it.cap){
+      const cp=document.createElement("div");
+      cp.textContent=it.cap;
+      cp.style.cssText="font-size:10px;font-weight:800;color:var(--muted);line-height:1.2;text-align:center";
+      wrap.appendChild(cp);
+    }
+    box.appendChild(wrap);
   }
   box.style.display="flex";
 }
@@ -5025,7 +5042,30 @@ function askChoice(msg,options,art){return _serialDlg(ASK_GATE,()=>new Promise(r
     b.className="btn small"+(i===0?" primary":"");
     // 長いラベルは折り返す（.btnのwhite-space:nowrapを上書き）
     b.style.cssText="flex:0 0 auto;width:100%;text-align:left;white-space:normal;word-break:break-word;line-height:1.45;height:auto;padding:9px 12px";
-    b.textContent=op;
+    /* 🖼 v16.80 選択肢に絵を付けられるようにした。
+       {text:"エメラル",card:"エメラル"} の形で渡すと、ボタンの左に小さな絵札が出る。
+       カード名を選ぶ場面（パーロックのミラクルフィーバー型）のように、
+       名前だけ並んでいると探しにくい所で使う。 */
+    const _txt=(op&&typeof op==="object")?(op.text||""):op;
+    const _cd=(op&&typeof op==="object")?(op.card||null):null;
+    if(_cd){
+      b.style.display="flex";b.style.alignItems="center";b.style.gap="8px";
+      let k=null;
+      try{k=(typeof _cd==="string")?(canonicalCardKey(_cd)||normName(_cd)):imageKeyForName(faceNameOf(_cd));}catch(e){}
+      if(k){
+        const im=document.createElement("img");
+        im.dataset.imgKey=k;im.draggable=false;im.decoding="async";
+        im.style.cssText="width:40px;flex:0 0 auto;border-radius:4px;background:#0d1119;box-shadow:0 1px 4px rgba(0,0,0,.6)";
+        try{const u=imgURL.get(k);if(u)im.src=u;}catch(e){}
+        b.appendChild(im);
+      }
+      const sp=document.createElement("span");
+      sp.style.cssText="flex:1 1 auto;min-width:0";
+      sp.textContent=_txt;
+      b.appendChild(sp);
+    }else{
+      b.textContent=_txt;
+    }
     b.onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(i);};
     box.appendChild(b);
   });
@@ -5631,7 +5671,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.78";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.80";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -16460,7 +16500,9 @@ async function runFxList(pi,list,srcCard,inPump){
       const _names=[...new Set((_P.mainList||[]).map(x=>x&&x.name).filter(Boolean))].sort();
       const _NOTIN="（デッキにない名前を言う）";
       if(!_names.length){toast("🔮 デッキが登録されていないため名前を選べません");continue;}
-      const _j=await askChoice(`🔮 カードの名前をひとつ選んで言う（デッキ${_names.length}種類）`,[..._names,_NOTIN]);
+      /* 🖼 v16.80 名前だけ並ぶと探しにくいので、選択肢に絵札を付ける。 */
+      const _j=await askChoice(`🔮 カードの名前をひとつ選んで言う（デッキ${_names.length}種類）`,
+        [..._names.map(nm=>({text:nm,card:nm})),_NOTIN]);
       if(_j===null)continue;
       const _say=(_j<_names.length)?_names[_j]:null;
       snap();
@@ -17692,7 +17734,8 @@ async function runFxList(pi,list,srcCard,inPump){
         logOnly(`👀 ${S.players[pi].label}：${S.players[tp].label} の盾${j+1}を見た → 《${faceNameOf(sh)}》`);
         // ④ 墓地に置くかどうか（任意）
         const jg=await askChoice(`🛡 ${S.players[tp].label} の盾${j+1}：《${faceNameOf(sh)}》\n${_toBtm?"山札の一番下に置きますか？":"墓地に置きますか？"}`,
-          [`${_toBtm?"山札の一番下に置く":"墓地に置く"}（→ そのプレイヤーは山札の上から1枚をシールド化）`,"置かない（シールドはそのまま・補充もなし）"]);
+          [`${_toBtm?"山札の一番下に置く":"墓地に置く"}（→ そのプレイヤーは山札の上から1枚をシールド化）`,"置かない（シールドはそのまま・補充もなし）"],
+          [{card:sh,cap:"見えた盾"},{card:srcCard,cap:"処理中"}]);   // 🖼 v16.80 めくれた盾を先に、処理中のカードを後ろに
         if(jg!==0){
           toast(`👀 見ただけで、シールドは動かさなかった（補充なし）`);
           logOnly(`👀 ${S.players[pi].label}：盾を墓地に置かなかったため、シールド化は行われない`);
@@ -18055,6 +18098,7 @@ async function runFxList(pi,list,srcCard,inPump){
       for(let i=0;i<n;i++){
         // 🔧 エレメント＝バトルゾーンのカード＋クロス中のクロスギア（クロス中のギアは配列に並ばないためzoneCardsで拾う）
         let pool=isElem?zoneCards(TZ,"battle").slice():TZ.battle.filter(x=>isCreatureReg(getReg(x)));
+        const _sideLbl=S.vs?(tp===pi?"自分":"相手"):"";   // 👥 v16.80 どちら側の一覧かを札にも出す
         pool=pool.filter(x=>!takenT.has(x.id));
         // 🔢 第4引数＝効果の持ち主。「コスト以下バトル:火」のような動的コスト条件は
         //    この持ち主のゾーンを数えるので、渡さないと条件が丸ごと外れる。
@@ -18074,7 +18118,8 @@ async function runFxList(pi,list,srcCard,inPump){
         }
         const _selT=chosen.length?`／選択中：${chosen.map(faceNameOf).join("、")}`:"";
         const j=await pickCard(`🎯 ${chooser?chooser+"：":""}${act}する${unit}を選択${pickFilt?`（${pickFilt}）`:""}（${i+1}/${n}${isElem?"個":"体"}目・キャンセルで終了）`,pool,
-          {sub:x=>x.tapped?"タップ":"",hint:`タップで選択　／　キャンセルで終了${_selT}`});
+          {sub:x=>[_sideLbl,x.tapped?"タップ":""].filter(Boolean).join("・"),   // 👥 v16.80 どちら側かも出す
+           hint:`タップで選択　／　キャンセルで終了${_selT}`});
         if(j===null)break;
         chosen.push(pool[j]);takenT.add(pool[j].id);
       }
@@ -22581,7 +22626,12 @@ async function runFxList(pi,list,srcCard,inPump){
         const j=await pickCard(`🏯 手札に戻すカードを1枚選択${filtB?`（${filtB}）`:""}（${i+1}/${n}）`,
           cands.map(o=>o.card),
           {hint:"重ねているカードは1枚ずつ選べます（一番上だけを戻すと、下のカードが場に残ります＝退化）",
-           sub:o=>{const e=cands.find(c=>c.card.id===o.id);return e?(e.top?(e.host.under&&e.host.under.length?"一番上":""):"重ねている下のカード"):"";}});
+           sub:o=>{const e=cands.find(c=>c.card.id===o.id);
+             if(!e)return "";
+             /* 👥 v16.80 自分と相手のカードが同じ一覧に並ぶので、どちら側かを必ず出す。 */
+             const side=S.vs?(e.pp===pi?"自分":"相手"):"";
+             const tail=e.top?(e.host.under&&e.host.under.length?"一番上":""):"下のカード";
+             return [side,tail].filter(Boolean).join("・");}});
         if(j===null)break;
         const {pp,host,card,top}=cands[j];
         const ZB=zonesOf(pp);
@@ -38403,6 +38453,7 @@ function glOrderParts(c){
   return out.concat(rest);
 }
 function cardEl(pi,zone,c){
+  const _isField=isFieldReg(getReg(c));   // 🏞 v16.72/16.80 フィールドは攻撃もタップもしない
   const el=document.createElement("div");
   el.className="card";
   /* 🩺 v16.15 作った札を数え、ブラウザが回収したかを見る（診断中だけ） */
@@ -38799,8 +38850,10 @@ function cardEl(pi,zone,c){
     xb.addEventListener("pointerdown",ev=>ev.stopPropagation());
     el.appendChild(xb);
   }
-  // 禁断の鼓動はアンタップ・タップをしないので、タップボタンも出さない
-  if((zone==="battle"||zone==="mana")&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!(zone==="battle"&&(isGearCard||isD2Card))
+  /* 禁断の鼓動はアンタップ・タップをしないので、タップボタンも出さない。
+     🏞 v16.80 フィールド（無月フィールド・DGフィールド等）も同じ。タップ・アンタップの概念が無い。
+     D2フィールドは以前から除外していたが、それ以外のフィールドが残っていた。 */
+  if((zone==="battle"||zone==="mana")&&!hidden&&(!S.vs||pi===S.seat)&&showBBtn&&!(zone==="battle"&&(isGearCard||isD2Card||_isField))
      &&!(zone==="battle"&&getReg(c)&&getReg(c).ctype==="kindanbeat")){
     const tb=document.createElement("button");
     tb.textContent=c.tapped?"⤴":"⤵";
@@ -38978,7 +39031,6 @@ function cardEl(pi,zone,c){
   }
   // 禁断の鼓動は攻撃しないので、攻撃ボタンは出さない（ボタンが重なるのを防ぐ）
   const _isBeat=!!(getReg(c)&&getReg(c).ctype==="kindanbeat");
-  const _isField=isFieldReg(getReg(c));   // 🏞 v16.72 フィールドは攻撃しない
   if(zone==="battle"&&S.vs&&pi===S.who&&!c.tapped&&c.faceup&&!hidden&&!isSealed(c)&&showBBtn&&!isGearCard&&!isD2Card&&!_isBeat&&!_isField){
     const ab=document.createElement("button");
     ab.textContent="⚔";
@@ -45377,7 +45429,19 @@ function vCardEl(name,opts={}){
   /* すでにメモリにある画像だけその場で貼る。無いものは読み込みを起こさず、
      スクロールで画面に近づいた時に refreshLazyImages が貼る。 */
   const url=(imgURL.ready&&imgURL.ready(key))?imgURL.get(key):"";
-  const im=document.createElement("img");im.dataset.imgKey=key;im.draggable=false;im.loading="lazy";im.decoding="async";if(url)im.src=url;th.appendChild(im);
+  const im=document.createElement("img");im.dataset.imgKey=key;im.draggable=false;im.loading="lazy";im.decoding="async";if(url)im.src=url;
+  /* 🖼 v16.79 横向きのカード（無月フィールド・D2フィールド・ドルマゲドン等）は、
+     絵札の枠が縦なので、そのまま貼ると上下に余白が出て小さく見えていた。
+     90度回して枠いっぱいに収める。盤面と同じ「横向き」の見え方にそろえる。 */
+  try{
+    const _wr=FXDB.get(canonicalCardKey(name)||key);
+    if(isWideReg(_wr)){
+      el.classList.add("wide-art");
+      im.style.transform="rotate(90deg)";
+      im.style.transformOrigin="center center";
+    }
+  }catch(e){}
+  th.appendChild(im);
   if(!url){const np=document.createElement("div");np.className="nameplate";np.textContent=name;th.appendChild(np);}
   el.appendChild(th);
   if(opts.idx!=null){const x=document.createElement("span");x.className="idx";x.textContent=opts.idx;el.appendChild(x);}
