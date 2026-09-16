@@ -223,9 +223,12 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 /* 🔢 v16.72 下に重なっている枚数は見落としやすかったので、大きく・濃くした。
    進化元や無月フィールドの下は枚数がそのまま強さや条件になるため、
    ぱっと見て分かる必要がある。 */
-/* 🖼 v16.79 横向きカードの絵札：90度回した画像が枠に収まるよう、縦横を入れ替えて敷く */
-.vcard.wide-art .thumb{overflow:hidden;display:flex;align-items:center;justify-content:center}
-.vcard.wide-art .thumb img{width:auto;height:100%;max-width:none;max-height:none}
+/* 🖼 v16.81 横向きカードの絵札は、枠そのものを横長にする。
+   絵札の枠は 5:7 の縦長で object-fit:cover なので、横長の画像は左右が切り落とされていた
+   （回すのではなく枠を入れ替えるのが素直で、文字も読める）。 */
+.vcard.wide-art .thumb{aspect-ratio:7/5}
+/* 🖼 v16.81 盤面の横向きカード：札そのものを回して置くので、絵は切り落とさず全体を見せる */
+.card.wide-card img{object-fit:contain;background:#0b0f18}
 .card .stacktag{
   position:absolute;left:0;bottom:0;z-index:4;
   background:var(--accent);color:#1a1405;
@@ -5671,7 +5674,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.80";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.81";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -38454,8 +38457,9 @@ function glOrderParts(c){
 }
 function cardEl(pi,zone,c){
   const _isField=isFieldReg(getReg(c));   // 🏞 v16.72/16.80 フィールドは攻撃もタップもしない
+  const _isWideC=isWideReg(getReg(c));   // 🖼 v16.81 横向きカードは絵を切り落とさない
   const el=document.createElement("div");
-  el.className="card";
+  el.className="card"+(_isWideC?" wide-card":"");
   /* 🩺 v16.15 作った札を数え、ブラウザが回収したかを見る（診断中だけ） */
   if(DIAG_ON){EL_MADE_N++;try{if(EL_REG)EL_REG.register(el,1);}catch(e){}}
   if(HILITE_ID&&c.id===HILITE_ID){el.style.outline="4px solid #ffcf3a";el.style.outlineOffset="1px";el.style.boxShadow="0 0 18px 5px rgba(255,207,58,.8)";el.style.zIndex="30";}
@@ -45434,12 +45438,8 @@ function vCardEl(name,opts={}){
      絵札の枠が縦なので、そのまま貼ると上下に余白が出て小さく見えていた。
      90度回して枠いっぱいに収める。盤面と同じ「横向き」の見え方にそろえる。 */
   try{
-    const _wr=FXDB.get(canonicalCardKey(name)||key);
-    if(isWideReg(_wr)){
-      el.classList.add("wide-art");
-      im.style.transform="rotate(90deg)";
-      im.style.transformOrigin="center center";
-    }
+    const _wr=FXDB.get(canonicalCardKey(name)||key)||FXDB.get(key);
+    if(isWideReg(_wr))el.classList.add("wide-art");   // 🖼 v16.81 枠を横長にする（CSS側）
   }catch(e){}
   th.appendChild(im);
   if(!url){const np=document.createElement("div");np.className="nameplate";np.textContent=name;th.appendChild(np);}
