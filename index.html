@@ -223,11 +223,13 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 /* 🔢 v16.72 下に重なっている枚数は見落としやすかったので、大きく・濃くした。
    進化元や無月フィールドの下は枚数がそのまま強さや条件になるため、
    ぱっと見て分かる必要がある。 */
-/* 🖼 v16.81 横向きカードの絵札は、枠そのものを横長にする。
-   絵札の枠は 5:7 の縦長で object-fit:cover なので、横長の画像は左右が切り落とされていた
-   （回すのではなく枠を入れ替えるのが素直で、文字も読める）。 */
-.vcard.wide-art .thumb{aspect-ratio:7/5}
+/* 🖼 v16.83 一覧の絵札は、横向きカードもふつうの縦枠のまま出す。
+   公式のカード画像は、横向きカードでも「縦の枠に絵を回して入れた」形（D2の博才 サイバーダイス・ベガス等）
+   なので、枠を横長にすると逆にそこだけ浮いてしまう。 */
 /* 🖼 v16.81 盤面の横向きカード：札そのものを回して置くので、絵は切り落とさず全体を見せる */
+/* 🖼 v16.83 盤面の横向きカードは、札そのものを回して置く（applyD2Rot）。
+   公式画像は縦の枠に絵を回して入れた形なので、絵の切り出し方は変えない。
+   自分で切り出した横長の画像を使っている間だけ、はみ出さないよう contain にする。 */
 .card.wide-card img{object-fit:contain;background:#0b0f18}
 .card .stacktag{
   position:absolute;left:0;bottom:0;z-index:4;
@@ -4930,6 +4932,20 @@ function askArtSet(...targets){
     }
     box.appendChild(wrap);
   }
+  /* 🖼 v16.82 1枚なら文の左に縦置き、2枚以上なら文の上に横並び。
+     縦に積むと文が短い時に右側が大きく空いて間延びして見えるため。 */
+  const body=document.getElementById("askBody");
+  if(items.length>=2){
+    box.style.flexDirection="row";
+    box.style.flexWrap="wrap";
+    box.style.justifyContent="center";
+    if(body)body.style.flexDirection="column";
+  }else{
+    box.style.flexDirection="column";
+    box.style.flexWrap="nowrap";
+    box.style.justifyContent="flex-start";
+    if(body)body.style.flexDirection="row";
+  }
   box.style.display="flex";
 }
 /* 🖼 v16.77 選ぶ画面（pickCard）の見出しにも、いま処理中のカードを出す。 */
@@ -4951,7 +4967,8 @@ function pickArtSet(card){
   box.style.display="flex";
 }
 function dlgReset(){
-  {const b=document.getElementById("askArt");if(b){b.innerHTML="";b.style.display="none";}}
+  {const b=document.getElementById("askArt");if(b){b.innerHTML="";b.style.display="none";b.style.flexDirection="column";}
+   const bd=document.getElementById("askBody");if(bd)bd.style.flexDirection="row";}
   $("askNum").style.display="none";$("askTxt").style.display="none";$("askChoices").style.display="none";$("askYN").style.display="";
   /* 👁 「盤面を見る」は対戦中だけ。デッキ編成やカード登録から出た確認では戻り先が盤面ではないので隠す */
   {const p=document.getElementById("askPeek");
@@ -5674,7 +5691,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.81";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.83";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -17732,8 +17749,9 @@ async function runFxList(pi,list,srcCard,inPump){
           if(j===null)break;
         }
         const sh=ZT.shield[j];
-        // ③ 中身を見る（画像つきパネル）
-        await pickCard(`👀 ${S.players[tp].label} の盾${j+1}を見た`,[sh],{hint:"タップして次へ　／　このあと墓地に置くかどうかを選びます"});
+        /* ③ v16.82：「見た」だけのパネルは省く。
+           次の「墓地に置きますか？」の確認に、見えた盾の絵が出るようになったため、
+           同じカードを2回タップさせる必要がなくなった。 */
         logOnly(`👀 ${S.players[pi].label}：${S.players[tp].label} の盾${j+1}を見た → 《${faceNameOf(sh)}》`);
         // ④ 墓地に置くかどうか（任意）
         const jg=await askChoice(`🛡 ${S.players[tp].label} の盾${j+1}：《${faceNameOf(sh)}》\n${_toBtm?"山札の一番下に置きますか？":"墓地に置きますか？"}`,
@@ -39047,7 +39065,9 @@ function cardEl(pi,zone,c){
     ab.addEventListener("pointerdown",ev=>ev.stopPropagation());
     el.appendChild(ab);
   }
-  if(showBLab&&c.sick&&zone==="battle"&&(()=>{const r=getReg(c);return !(r&&r.sa);})()){
+  /* 💤 v16.83 フィールドは召喚酔いしない（クリーチャーではない）ので印も出さない。
+     攻撃ボタン（v16.72）・タップ/アンタップ（v16.80）と同じ扱い。 */
+  if(showBLab&&c.sick&&zone==="battle"&&!_isField&&(()=>{const r=getReg(c);return !(r&&r.sa);})()){
     // ⚡ 付与などでSAになっている場合は「💤召喚酔い」の代わりに「⚡SA」を表示
     const _saSrc=saGrantSource(pi,c,getReg(c));
     const zz=document.createElement("span");
@@ -45437,10 +45457,6 @@ function vCardEl(name,opts={}){
   /* 🖼 v16.79 横向きのカード（無月フィールド・D2フィールド・ドルマゲドン等）は、
      絵札の枠が縦なので、そのまま貼ると上下に余白が出て小さく見えていた。
      90度回して枠いっぱいに収める。盤面と同じ「横向き」の見え方にそろえる。 */
-  try{
-    const _wr=FXDB.get(canonicalCardKey(name)||key)||FXDB.get(key);
-    if(isWideReg(_wr))el.classList.add("wide-art");   // 🖼 v16.81 枠を横長にする（CSS側）
-  }catch(e){}
   th.appendChild(im);
   if(!url){const np=document.createElement("div");np.className="nameplate";np.textContent=name;th.appendChild(np);}
   el.appendChild(th);
