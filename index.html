@@ -5556,7 +5556,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.67";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.70";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -29923,6 +29923,19 @@ function fxRowEl(faceIdx,i){
     iaWrap.appendChild(document.createTextNode("🔮 オーラも対象に含める"));
     bot.appendChild(iaWrap);
   }
+  /* 🧮 v16.69 実行条件（cnd）の欄。v16.66 で仕組みだけ入れて画面の欄が無かったため、
+     登録に書いてあっても見えず、このカードを開いて保存し直すと消えていた。
+     上の「条件」（cond）は対象の絞り込み、こちらはその時の盤面の状況。 */
+  {
+    const cd2=document.createElement("input");
+    cd2.type="text";
+    cd2.placeholder="実行条件（例：マナ:火>=1／G・G・G・満たさなければこの行は行わない・空欄=常時）";
+    cd2.title="この行を行うための盤面の条件。満たしていなければ、この行だけをとばします。\n上の「条件」は対象の絞り込みで、別物です。\n例：マナ:火>=1／手札<=1／G・G・G／盾<=2または相手盾<=2";
+    cd2.style.cssText="flex:1 1 100%;min-width:0;font-size:12px";
+    cd2.value=f.cnd||"";
+    cd2.onchange=()=>{const v=cd2.value.trim();if(v)f.cnd=v;else delete f.cnd;};
+    bot.appendChild(cd2);
+  }
   row.appendChild(top);row.appendChild(bot);
   return row;
 }
@@ -30116,7 +30129,16 @@ function fxTrigRowEl(i){
   cnd2.style.cssText="flex:1 1 100%;min-width:0;font-size:12px";
   cnd2.value=f.cond2||"";
   cnd2.onchange=()=>{f.cond2=cnd2.value.trim();};
-  const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);condWrap.appendChild(cnd2);
+  /* 🧮 v16.69 誘発にも実行条件（cnd）の欄。v16.65 で仕組みだけ入れて欄が無かった。
+     上の条件欄は「誘発するかどうか（何に反応するか）」、こちらは「その時の盤面の状況」。 */
+  const cnd3=document.createElement("input");
+  cnd3.type="text";
+  cnd3.placeholder="実行条件（例：G・G・G／手札<=1・満たさなければ誘発しない・空欄=常時）";
+  cnd3.title="この誘発を起こすための盤面の条件。満たしていなければ誘発しません。\n同じ誘発に何行か並べても、判定はまとめて1回なので、1行目の結果で2行目が落ちることはありません。\n例：G・G・G／手札<=1／マナ:火>=1";
+  cnd3.style.cssText="flex:1 1 100%;min-width:0;font-size:12px";
+  cnd3.value=f.cnd||"";
+  cnd3.onchange=()=>{const v=cnd3.value.trim();if(v)f.cnd=v;else delete f.cnd;};
+  const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);condWrap.appendChild(cnd2);condWrap.appendChild(cnd3);
   bot.appendChild(condWrap);
   row.appendChild(top);row.appendChild(bot);
   return row;
@@ -30892,8 +30914,13 @@ function buildFxJump(){
     });
   }
   // 入力欄・チェック・選択の中で、実際に値が入っているものだけ
+  /* 💪 v16.68 パワーは「プルダウン（よく使う値）」と「直接入力」の2つの欄が同じ値を持つため、
+     登録済みの項目に「パワー＝4000」が2つ並んでいた。直接入力に値があれば、そちらだけ出す。 */
+  const _powNum=document.getElementById("fxPower");
+  const _powDup=!!(_powNum&&String(_powNum.value||"").trim());
   box.querySelectorAll("input,select,textarea").forEach(el=>{
     if(el.closest("#fxJumpWrap")||el.closest("#fxJumpChips"))return;
+    if(el.id==="fxPowerSel"&&_powDup)return;
     if(el.closest("#fxList0")||el.closest("#fxList1")||el.closest("#fxTrigList"))return;
     if(el.id==="fxFinder"||el.id==="fxTwin")return;
     if(fxHiddenBox(el))return;
@@ -34433,7 +34460,10 @@ function pickImage(title,hint){
     let tf="";
     const pickCivSel=new Set();
     const pickCostSel=new Set();   // 💠 コストの絞り込み（8は「8以上」）
-    let pickSort="name"; // 並び順："name"=名前順（既定） / "added"=登録した順
+    /* 🗂 v16.68 並び順は、パネルを開き直しても保つ。
+       効果登録パネルへ移って「閉じる」で戻ると毎回 名前順 に戻っていた。
+       v16.70：覚えるのはアプリを開いている間だけ。開き直したら名前順から始める。 */
+    let pickSort=(B._pickSort==="added")?"added":"name";
     const g=$("vGrid");
     const fb=$("vTypeFilter");
     if(fb){fb.style.display="";fb.value="";fb.onchange=()=>{tf=fb.value;render();};}
@@ -34455,7 +34485,11 @@ function pickImage(title,hint){
         ? (pickSort==="added"?"↕ 追加順":"↕ 名前順")
         : (pickSort==="added"?"並び順：追加した順（タップで名前順へ）":"並び順：名前順（タップで追加した順へ）");
       sb.title="タップで「名前順 ⇄ 追加した順」を切り替えます";
-      sb.onclick=()=>{pickSort=(pickSort==="added"?"name":"added");render();};
+      sb.onclick=()=>{
+        pickSort=(pickSort==="added"?"name":"added");
+        B._pickSort=pickSort;   // 🗂 v16.70 開いている間は覚えるが、端末には残さない（アプリを開き直したら名前順に戻る）
+        render();
+      };
       bar.appendChild(sb);
       // 🔢 横に何枚並べるか（カードの大きさが変わる。0＝自動）
       {
