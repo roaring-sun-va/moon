@@ -2705,6 +2705,7 @@ body.shake{animation:bodyShake .4s ease-out}
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <span style="font-size:12px;font-weight:700">🌌 唱えた呪文をこのカードの下へ置く</span>
         <label title="唱えた呪文を解決後にこのカードの下へ置いて1枚引く／対象呪文の詠唱禁止を無視／下4枚で無月の門99（下の絞り込みが空欄の時だけ）"><input type="checkbox" id="fxGrandZero"> 使う（新世壊／不夜城艦 クランヴィア型）</label>
+        <label title="コストを支払うかわりに、自分の魔導具をバトルゾーンと墓地から2つずつ、ランダムな順番で自分の山札の下に置いて唱えられる（卍夜の降凰祭型）。手札のカードをタップすると出ます"><input type="checkbox" id="fxMugetsuShu"> 🌑 無月の門・終（魔導具2つずつを山下に置いて唱える）</label>
         <input type="text" id="fxGrandZeroFilt" placeholder="└ 下に置ける呪文の絞り込み（空欄＝魔導具・「呪文」＝全部・不夜城艦 クランヴィア型）" style="flex:1;min-width:220px">
         <label title="無月の門99（下に4枚以上でゲーム中1回・水のコスト99以下の呪文をタダ唱え）を持たせる。絞り込みが空欄の登録（新世壊型）は書かなくても付きます"><input type="checkbox" id="fxGate99"> └ 無月の門99を持つ</label>
         <label title="自分のシールドが1つもない間だけ、このクリーチャーはブロッカーを得ます"><input type="checkbox" id="fxShieldZeroBlocker"> 🛡 自分の盾が0ならブロッカー</label>
@@ -2970,6 +2971,9 @@ body.shake{animation:bodyShake .4s ease-out}
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="龍装者 バルチュリス型：自分のクリーチャーが攻撃する時、このカードが自分の手札にあり、その攻撃がこのターンn度目のクリーチャーによる攻撃であれば、攻撃の後、このターン自分の同名がバトルゾーンに出ていなければ出せる。宣言は攻撃する時、出るのはブレイクとS・トリガーの処理が終わってから"><input type="checkbox" id="fxAtkJoin"> 🐉 n度目の攻撃で手札から公開して出す（攻撃の後）／このターン<input type="number" id="fxAtkJoinN" min="1" max="9" value="2" style="width:48px">度目</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="マスターJトルネード：相手のターンの終わりに、このカードが自分の手札にあれば、自分のジョーカーズ・クリーチャーをコストの合計がこの数以上になるように好きな数だけ手札に戻して、このカードをコストを支払わずに出せる（ジョリー・ザ・ジョルネード型）。このターン中に自分の他のマスターJトルネードを使っていない時だけ使えます。0＝無効"><input type="checkbox" id="fxMasterJT"> 🌀 マスターJトルネード（相手のターンの終わりに、味方を手札に戻して手札から出す）／コスト合計<input type="number" id="fxMasterJTSum" min="0" max="99" value="10" style="width:56px">以上／対象<input type="text" id="fxMasterJTF" list="raceList" placeholder="例：ジョーカーズ（空欄＝ジョーカーズ）" style="width:170px"></label>
         <label><input type="checkbox" id="fxAbyss"> アビスラッシュ（墓地から召喚・SA・ターン終わりに山下へ）</label>
+        <label title="自分の墓地からこのクリーチャーを召喚できる（凶鬼砕号 バリレッダ型）。アビスラッシュと違い、SAは付かず、ターンの終わりに山札の下にも行きません"><input type="checkbox" id="fxGraveSummon"> ⚰ 墓地から召喚できる</label>
+        <input type="number" id="fxGraveSummonCost" style="width:90px" placeholder="コスト" title="墓地から召喚する時に支払うコスト（空欄＝カードのコストのまま）">
+        <input type="text" id="fxGraveSummonCond" placeholder="└ 条件式（例：バトル:マフィ・ギャング>=1・空欄＝条件なし）" style="flex:1;min-width:200px">
         <label><input type="checkbox" id="fxYobinion"> ヨビニオン（召喚時、山上からコストの小さいクリーチャーが出るまでめくって出す）</label>
         <label title="このクリーチャーがタップしていれば、相手が自分のターン中にクリーチャーを召喚するか呪文を唱えた時、そのターンの残りが飛ぶ（禁断機関 ViVy-R型）。「〜した時」の誘発なので、実行した瞬間にタップしていれば誘発が確定し、そのあとデーモン・ハンド等でこのクリーチャーが除去されてもターンは飛びます"><input type="checkbox" id="fxEndTurnOppPlay"> ⏭ タップ中なら、相手がクリーチャー召喚／呪文を唱えた時に相手のターンを終わらせる（ViVy-R型）</label>
         <label><input type="checkbox" id="fxJD"> ジャストダイバー（出た時にアナウンスのみ・付与はメニューから手動）</label>
@@ -3416,6 +3420,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxDragonB"> ドラゴン・ブレイカー（ブレイク数ぶん山上を盾へ）</label>
         <label><input type="checkbox" id="fxShieldBurn"> シールド焼却（このクリーチャーがブレイクした盾は手札に加えず墓地へ・S・トリガー不可／ボルメテウス型）</label>
         <label title="召喚する時、自分のシールドを1つ墓地に置いてもよい。そうしたら召喚コストをこの数だけ少なくする（フロウ&quot;GIG&quot;ロール型）"><span style="font-size:12px;font-weight:700">🛡 盾1つを墓地に置いて召喚コスト−</span><input type="number" id="fxShieldCostDown" style="width:70px" placeholder="0" min="0" max="20"></label>
+        <label title="召喚する時、自分の手札を1枚捨ててもよい。そうしたら召喚コストをこの数だけ少なくする（凶鬼02号 ドゴンギヨス型）"><span style="font-size:12px;font-weight:700">🗑 手札1枚を捨てて召喚コスト−</span><input type="number" id="fxHandCostDown" style="width:70px" placeholder="0" min="0" max="20"></label>
         <label title="このクリーチャーがシールドをブレイクする時、相手はそのシールドを手札に加えるかわりに山札の一番下に置く。その後、各プレイヤーはこうして置かれた数だけカードを引く（切札竜 ボルメテウス・リバース・ドラゴン型）"><input type="checkbox" id="fxBrkDeckDraw"> 🔀 ブレイクした盾は山札の下へ→その数だけ各プレイヤーが引く</label>
         <label title="上の効果をハイパーモード中だけ働かせる"><input type="checkbox" id="fxBrkDeckDrawHm"> └ HM中だけ</label>
         <label title="「相手のクリーチャーは出たターンに攻撃できない」をハイパーモード中だけ働かせる"><input type="checkbox" id="fxFoeEntrySickHm"> └ 出たターン攻撃不可はHM中だけ</label>
@@ -5691,7 +5696,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.85";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.87";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -12895,6 +12900,9 @@ const FX_TYPES=[
   ["meteorBurnX","☄ メテオバーンX：このカードの下にあるドラゴンをすべて墓地に置いてもよい。置いた枚数で、9枚以上＝相手のシールドをすべて墓地／6枚以上＝相手のブロッカーをすべて破壊／3枚以上＝相手のシールドをすべてブレイク（枚数を満たすものは全部起きる・超無限神星 アポロヌス・アガペリオス型）"],
   ["killMaxPowFoe","💥 相手の、パワーが一番大きいクリーチャーをすべて破壊する（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く侵略 レッドゾーン型）"],
   ["castSelfToBattle","🃏 この呪文を唱えた後、墓地に置くかわりに、このカード自身をバトルゾーンに出す（ツインパクトの上のクリーチャーとして出ます・「千客万来砲にゃ！」型）"],
+  ["dolsuzakRitual","🌑 自分の山札からランダムな魔導具をn枚墓地に置く。その後、山札からドルスザク・クリーチャーを1体まで選び（超探索）、自分の墓地から魔導具をn枚選んで、その上にコストを支払わずに召喚する。山札はシャッフルする（卍夜の降凰祭型）"],
+  ["graveSelfOut","⚰ 自分の墓地から**このクリーチャー自身**をバトルゾーンに出す（ビックリーノ型・墓地にある時だけ働きます）"],
+  ["killSelf","💀 このクリーチャーを破壊する（攻撃の後に自壊する型・ジル・トクヴィル）"],
   ["handAllDeckBottomDraw","🔄 自分の手札をすべてランダムな順番で山札の下に置き、カードをn枚引く（金運メカ マネーキング型／手札が無くても引けます）"],
   ["manaPickThenManaRecruit","🌱 相手のクリーチャーを1体選び、持ち主のマナゾーンに置く。その後、そのクリーチャーの**コスト以下**の、条件に合うクリーチャーを1体、自分のマナゾーンからバトルゾーンに出してもよい（極楽轟破5.S.トラップ型／条件欄＝例：自然）"],
   ["revealTopUnderSpell","🎴 自分の山札をシャッフルし、上からn枚を表向きにする。その中の呪文をすべてこのクリーチャーの下に置き、残りを墓地に置く（不夜城艦 クランヴィア型）"],
@@ -13888,6 +13896,28 @@ async function autoTapCost(pi,c){
         sfx("grave");renderAll();
         toast(`🛡 シールド1つを墓地に置き、コスト${cost} で召喚`);
         logOnly(`🛡 ${S.players[pi].label}：シールドを1つ墓地に置いて《${faceNameOf(c)}》のコストを${_sn}下げた`);
+      }
+    }
+  }
+  /* 🗑 v16.86 召喚する時、自分の手札を1枚捨ててもよい。そうしたら召喚コストをn少なくする
+     （凶鬼02号 ドゴンギヨス型）。盾を置く版（shieldCostDown・v16.62）と同じ形。 */
+  if((+r.handCostDown||0)>0&&cost>0&&!c._viaCheat&&paySide==="creature"&&Z.hand.some(x=>x.id!==c.id)){
+    const _hn=+r.handCostDown||0;
+    if(await ask(`🗑 ${faceNameOf(c)}\n自分の手札を1枚捨てて、召喚コストを${_hn}少なくしますか？`,c)){
+      const _pool=Z.hand.filter(x=>x.id!==c.id);
+      const _j=_pool.length===1?0:await pickCard("🗑 捨てる手札を選択",_pool,{hint:"キャンセルで軽減しない"});
+      if(_j!==null){
+        const _dc=_pool[_j];
+        const _ix=Z.hand.findIndex(x=>x.id===_dc.id);
+        if(_ix>=0){
+          Z.hand.splice(_ix,1);
+          _dc.faceup=true;_dc.tapped=false;Z.grave.push(_dc);
+          cost=Math.max(0,cost-_hn);
+          sfx("grave");renderAll();
+          toast(`🗑 ${faceNameOf(_dc)} を捨てて、コスト${cost} で召喚`);
+          logOnly(`🗑 ${S.players[pi].label}：手札1枚を捨てて《${faceNameOf(c)}》のコストを${_hn}下げた`);
+          afterHandDiscard(pi,_dc,pi);
+        }
       }
     }
   }
@@ -20554,6 +20584,74 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("ok");renderAll();
       toast(`🔮 ${faceNameOf(_sp)} をコストを支払わずに唱えた`);
       logOnly(`🔮 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}下から《${faceNameOf(_sp)}》を唱えた`);
+    }else if(f.t==="dolsuzakRitual"){
+      /* 🌑 v16.87 卍夜の降凰祭の本体。
+         ①山札からランダムな魔導具をn枚墓地へ → ②山札のドルスザクを超探索して1体まで選ぶ
+         → ③墓地の魔導具をn枚選び、その上に置いて（下に敷いて）コストを支払わずに召喚 → ④シャッフル
+         ドルスザクを選ばなければ①とシャッフルだけで終わる。 */
+      snap();
+      const _isMad=x=>{const rx=getReg(x);return !!(rx&&raceMatch(rx,"魔導具"));};
+      const _madIdx=Z.deck.map((x,ix)=>_isMad(x)?ix:-1).filter(ix=>ix>=0);
+      for(let i=_madIdx.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[_madIdx[i],_madIdx[k]]=[_madIdx[k],_madIdx[i]];}
+      const _take=_madIdx.slice(0,n).sort((x,y)=>y-x);
+      const _moved=[];
+      for(const ix of _take){const c2=Z.deck.splice(ix,1)[0];c2.faceup=true;c2.tapped=false;Z.grave.push(c2);_moved.push(faceNameOf(c2));}
+      if(_moved.length)toast(`🌑 山札からランダムな魔導具${_moved.length}枚を墓地へ：${_moved.join("、")}`);
+      else toast("🌑 山札に魔導具がありません");
+      renderAll();
+      const _dol=Z.deck.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(raceMatch(rx,"ドルスザク")||raceMatch(rx,"マスター・ドルスザク"));});
+      if(!_dol.length){toast("🌑 山札にドルスザク・クリーチャーがいません");shuffle(Z.deck);renderAll();continue;}
+      const _jd=await pickCard("🌑 超探索：山札からドルスザク・クリーチャーを1体選ぶ",_dol,{hint:"キャンセルで選ばない（山札をシャッフルして終わります）"});
+      if(_jd===null){shuffle(Z.deck);renderAll();toast("🌑 選ばなかった（山札をシャッフル）");continue;}
+      const _dc=_dol[_jd];
+      const _gm=Z.grave.filter(_isMad);
+      if(_gm.length<n){toast(`🌑 墓地の魔導具が足りません（${_gm.length}/${n}）。召喚は行いません`);shuffle(Z.deck);renderAll();continue;}
+      const _under=[];
+      for(let i=0;i<n;i++){
+        const _pool=Z.grave.filter(_isMad);
+        if(!_pool.length)break;
+        const _j2=_pool.length===1?0:await pickCard(`🌑 下に敷く魔導具を選択（${i+1}/${n}）`,_pool,{hint:"選んだ魔導具の上に召喚します"});
+        if(_j2===null)break;
+        const _t=_pool[_j2];
+        const _ix=Z.grave.findIndex(x=>x.id===_t.id);
+        if(_ix<0)break;
+        _under.push(Z.grave.splice(_ix,1)[0]);
+      }
+      const _di=Z.deck.findIndex(x=>x.id===_dc.id);
+      if(_di<0){_under.forEach(u=>Z.grave.push(u));shuffle(Z.deck);renderAll();continue;}
+      const _cc=Z.deck.splice(_di,1)[0];
+      _cc.faceup=true;_cc.tapped=false;_cc.sideways=false;_cc.rot=0;_cc.buff=null;_cc.seals=[];_cc.mark=false;
+      _cc.under=_under.map(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;return u;});
+      if(!cheatEnterBattle(pi,_cc)){
+        _cc.under.splice(0).forEach(u=>Z.grave.push(u));
+        Z.deck.push(_cc);shuffle(Z.deck);renderAll();continue;
+      }
+      enqueueFx(pi,_cc);
+      shuffle(Z.deck);
+      sfx("ok");renderAll();
+      toast(`🌑 ${faceNameOf(_cc)} を墓地の魔導具${_cc.under.length}枚の上にコストを支払わずに召喚した`);
+      logOnly(`🌑 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[pi].label} が《${faceNameOf(_cc)}》を魔導具${_cc.under.length}枚の上に召喚`);
+    }else if(f.t==="graveSelfOut"){
+      /* ⚰ v16.86 自分の墓地からこのクリーチャー自身を出す（ビックリーノ型）。 */
+      if(!srcCard){toast("⚰ このカード自身が分かりません");continue;}
+      const _gi=Z.grave.findIndex(x=>x.id===srcCard.id);
+      if(_gi<0){toast("⚰ このカードは墓地にありません");continue;}
+      snap();
+      const _c=Z.grave.splice(_gi,1)[0];
+      _c.faceup=true;_c.tapped=false;_c.sideways=false;_c.rot=0;_c.buff=null;_c.seals=[];_c.mark=false;
+      if(!cheatEnterBattle(pi,_c)){Z.grave.push(_c);renderAll();continue;}
+      enqueueFx(pi,_c);
+      sfx("ok");renderAll();
+      toast(`⚰ ${faceNameOf(_c)} を墓地からバトルゾーンに出した`);
+      logOnly(`⚰ ${S.players[pi].label}：《${faceNameOf(_c)}》を墓地から出した`);
+    }else if(f.t==="killSelf"){
+      /* 💀 v16.86 このクリーチャーを破壊する（攻撃の後に自壊する型）。 */
+      if(!srcCard){toast("💀 このカード自身が分かりません");continue;}
+      if(!Z.battle.some(x=>x.id===srcCard.id)){toast("💀 すでにバトルゾーンにいません");continue;}
+      snap();
+      await destroyWithReplace(pi,srcCard);
+      sfx("grave");renderAll();
+      toast(`💀 ${faceNameOf(srcCard)} を破壊した`);
     }else if(f.t==="handAllDeckBottomDraw"){
       /* 🔄 v16.64 手札をすべてランダムな順番で山札の下に置き、n枚引く（金運メカ マネーキング型）。
          「置いてもよい」は登録の任意（opt）で聞く。 */
@@ -26490,6 +26588,9 @@ async function processBroken(op,stack,label){
          [S]効果（SSTボーナス）の判定は「自分の盾が0枚」で近似していたため、
          盾が0枚の時に普通に召喚しただけでもボーナスが出ていた。
          この印があるカードは、印を優先して判定する（無い時は従来どおり盾0枚で近似）。 */
+      /* 🌟 v16.86 相手から見た「相手がS・トリガーを実行した時」を起こす（ビックリーノ型）。
+         盾を割られた側（op）が使ったので、反応するのは pi 側。 */
+      try{if(S.vs)runWatchFx(op?0:1,"foeUsedST",c);}catch(e){}
       if(zone==="resolve"||zone==="battle")c._viaSST=(Z.shield.length===0);
       else c._viaSST=undefined;
       if(zone==="grave"){c.faceup=true;Z.grave.push(c);sfx("grave");wentGrave=true;logOnly(`${S.players[op].label}：ブレイクされた《${faceNameOf(c)}》を墓地へ置いた（S・バック/サバキZコスト等）`);}
@@ -30186,6 +30287,7 @@ const TRIG_EVS=[
   ["selfLeave","このクリーチャーがバトルゾーンを離れる時（破壊・手札・マナ・山札・盾送りすべて・ヴィーナス型メテオバーン）"],
   ["toGraveBattle","このクリーチャーがバトルゾーンから墓地に置かれた時（破壊・離場で墓地へ。手札やマナ・山札から捨てられた時は発動しない）"],
   ["toGrave","このカードがどこからでも墓地に置かれた時（手札から捨てられた時も発動・キューブリック型／cnd欄でマナ条件など指定可）"],
+  ["foeUsedST","相手が「S・トリガー」を持つカードを実行した時（ビックリーノ型）"],
   ["tapAbility","タップ能力（攻撃の代わりにタップ）"],
   ["selfAtk","このクリーチャーが攻撃する時（対象問わず）"],
   ["selfWinBattle","このクリーチャーがバトルに勝った時"],
@@ -31286,6 +31388,7 @@ function renderFxEditor(){
   {const e=$("fxCrystalCharger");if(e)e.checked=!!FXEDIT.crystalCharger;}
   $("fxHoldResolve").checked=!!FXEDIT.holdResolve;
   {const e=$("fxGrandZero");if(e)e.checked=!!FXEDIT.grandZero;}
+  {const e=$("fxMugetsuShu");if(e)e.checked=!!FXEDIT.mugetsuShu;}
   {const e=$("fxGrandZeroFilt");if(e)e.value=FXEDIT.grandZeroFilt||"";}
   {const e=$("fxGate99");if(e)e.checked=!!FXEDIT.gate99;}
   {const e=$("fxShieldZeroBlocker");if(e)e.checked=!!FXEDIT.shieldZeroBlocker;}
@@ -31489,6 +31592,9 @@ function renderFxEditor(){
   {const e=$("fxMasterJTF");if(e)e.value=FXEDIT.masterJTF||"";}
   {const e=$("fxOniEndCiv");if(e)e.value=FXEDIT.oniEndCiv||"";}
   $("fxAbyss").checked=!!FXEDIT.abyss;
+  {const e=$("fxGraveSummon");if(e)e.checked=!!FXEDIT.graveSummon;}
+  {const e=$("fxGraveSummonCost");if(e)e.value=(FXEDIT.graveSummonCost!=null?FXEDIT.graveSummonCost:"");}
+  {const e=$("fxGraveSummonCond");if(e)e.value=FXEDIT.graveSummonCond||"";}
   $("fxFushigi").value=String(FXEDIT.fushigi||0);
   $("fxRyuArm").value=String(FXEDIT.ryuArm||0);
   $("fxMDrive").value=String(FXEDIT.mDrive||0);
@@ -31559,6 +31665,7 @@ function renderFxEditor(){
   {const e=$("fxStAuraGggOnly");if(e)e.checked=!!FXEDIT.stAuraGggOnly;}
   {const e=$("fxCstBk");if(e)e.value=FXEDIT.cstBk||"";}
   {const e=$("fxShieldCostDown");if(e)e.value=FXEDIT.shieldCostDown||"";}
+  {const e=$("fxHandCostDown");if(e)e.value=FXEDIT.handCostDown||"";}
   {const e=$("fxGggPA");if(e)e.value=FXEDIT.gggPA||0;}
   {const e=$("fxGggCantAtk");if(e)e.checked=!!FXEDIT.gggCantAtk;}
   {const e=$("fxNeedOtherAtk");if(e)e.checked=!!FXEDIT.needOtherAtk;}
@@ -33629,6 +33736,7 @@ function openFxEditor(key){
     crystalCharger:cur?!!cur.crystalCharger:false,
     holdResolve:cur?!!cur.holdResolve:false,
     grandZero:cur?!!cur.grandZero:false,
+    mugetsuShu:cur?!!cur.mugetsuShu:false,
     grandZeroFilt:cur&&cur.grandZeroFilt||"",
     gate99:cur?!!cur.gate99:false,
     shieldZeroBlocker:cur?!!cur.shieldZeroBlocker:false,
@@ -33788,6 +33896,9 @@ function openFxEditor(key){
     masterJTF:cur&&cur.masterJTF||"",
     oniEndCiv:cur&&cur.oniEndCiv||"",
     abyss:cur?!!cur.abyss:false,
+    graveSummon:cur?!!cur.graveSummon:false,
+    graveSummonCost:(cur&&cur.graveSummonCost!=null)?cur.graveSummonCost:"",
+    graveSummonCond:cur&&cur.graveSummonCond||"",
     fushigi:cur&&(+cur.fushigi||0)||0,
     ryuArm:cur&&(+cur.ryuArm||0)||0,
     mDrive:cur&&(+cur.mDrive||0)||0,
@@ -33897,6 +34008,7 @@ function openFxEditor(key){
     stAuraGggOnly:cur?!!cur.stAuraGggOnly:false,
     cstBk:cur?(+cur.cstBk||0):0,
     shieldCostDown:cur?(+cur.shieldCostDown||0):0,
+    handCostDown:cur?(+cur.handCostDown||0):0,
     gggPA:cur&&(+cur.gggPA||0)||0,
     gggCantAtk:cur?!!cur.gggCantAtk:false,
     needOtherAtk:cur?!!cur.needOtherAtk:false,
@@ -34267,6 +34379,7 @@ $("fxSave").addEventListener("click",async ()=>{
     crystalCharger:$("fxCrystalCharger")?$("fxCrystalCharger").checked:false,
     holdResolve:$("fxHoldResolve").checked,
     grandZero:$("fxGrandZero")?$("fxGrandZero").checked:false,
+    mugetsuShu:$("fxMugetsuShu")?$("fxMugetsuShu").checked:false,
     grandZeroFilt:$("fxGrandZeroFilt")?$("fxGrandZeroFilt").value.trim():"",
     gate99:$("fxGate99")?$("fxGate99").checked:false,
     shieldZeroBlocker:$("fxShieldZeroBlocker")?$("fxShieldZeroBlocker").checked:false,
@@ -34471,6 +34584,9 @@ $("fxSave").addEventListener("click",async ()=>{
     masterJTF:$("fxMasterJTF")?$("fxMasterJTF").value.trim():"",
     oniEndCiv:$("fxOniEndCiv")?$("fxOniEndCiv").value.trim():"",
     abyss:$("fxAbyss").checked,
+    graveSummon:$("fxGraveSummon")?$("fxGraveSummon").checked:false,
+    graveSummonCost:($("fxGraveSummonCost")&&String($("fxGraveSummonCost").value).trim()!=="")?Math.max(0,+$("fxGraveSummonCost").value||0):"",
+    graveSummonCond:$("fxGraveSummonCond")?$("fxGraveSummonCond").value.trim():"",
     fushigi:+$("fxFushigi").value||0,
     ryuArm:+$("fxRyuArm").value||0,
     mDrive:+$("fxMDrive").value||0,
@@ -34542,6 +34658,7 @@ $("fxSave").addEventListener("click",async ()=>{
     stAuraGggOnly:$("fxStAuraGggOnly")?$("fxStAuraGggOnly").checked:false,
     cstBk:Math.max(0,+($("fxCstBk")?$("fxCstBk").value:0)||0),
     shieldCostDown:Math.max(0,+($("fxShieldCostDown")?$("fxShieldCostDown").value:0)||0),
+    handCostDown:Math.max(0,+($("fxHandCostDown")?$("fxHandCostDown").value:0)||0),
     gggPA:$("fxGggPA")?(Math.abs(+$("fxGggPA").value)||0):0,
     gggCantAtk:$("fxGggCantAtk")?$("fxGggCantAtk").checked:false,
     needOtherAtk:$("fxNeedOtherAtk")?$("fxNeedOtherAtk").checked:false,
@@ -43196,6 +43313,53 @@ function openCardSheet(ctx){
       },"",true));
     }
   }
+  /* 🌑 v16.87 無月の門・終（卍夜の降凰祭型）。
+     コストを支払うかわりに、自分の魔導具をバトルゾーンと墓地から2つずつ、
+     ランダムな順番で自分の山札の下に置いて唱える。 */
+  {
+    const rMS=getReg(c);
+    if(rMS&&rMS.mugetsuShu&&ctx.zone==="hand"&&(rMS.ctype==="spell"||rMS.twin||rMS.ctype==="twinpact")){
+      const ZM=zonesOf(ctx.p);
+      const isMad2=x=>{const rx=getReg(x);return !!(rx&&raceMatch(rx,"魔導具"));};
+      const bn=ZM.battle.filter(isMad2).length, gn=ZM.grave.filter(isMad2).length;
+      const okMS=(bn>=2&&gn>=2);
+      box.appendChild(actBtn(`🌑 無月の門・終で唱える（場と墓地の魔導具2つずつを山札の下へ）　場${bn}／墓${gn}`,async ()=>{
+        if(!okMS&&!await ask("🌑 魔導具がバトルゾーンと墓地に2つずつありません。それでも唱えますか？",c))return;
+        snap();
+        const pay=[];
+        for(const zn of ["battle","grave"]){
+          for(let i=0;i<2;i++){
+            const pool=ZM[zn].filter(isMad2);
+            if(!pool.length)break;
+            const j=pool.length===1?0:await pickCard(`🌑 山札の下に置く魔導具を選択（${zn==="battle"?"バトルゾーン":"墓地"}・${i+1}/2）`,pool,{hint:"ランダムな順番で山札の下に置かれます"});
+            if(j===null)break;
+            const t=pool[j];
+            const ix=ZM[zn].findIndex(x=>x.id===t.id);
+            if(ix<0)break;
+            const rm=ZM[zn].splice(ix,1)[0];
+            if(zn==="battle"&&rm.under&&rm.under.length)rm.under.splice(0).forEach(u=>{u.faceup=true;ZM.grave.push(u);});
+            rm.faceup=false;rm.seen=false;rm.tapped=false;rm.sideways=false;rm.rot=0;rm.buff=null;rm.seals=[];rm.mark=false;
+            pay.push(rm);
+          }
+        }
+        for(let i=pay.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[pay[i],pay[k]]=[pay[k],pay[i]];}
+        pay.forEach(x=>ZM.deck.push(x));
+        const hi=ZM.hand.findIndex(x=>x.id===c.id);
+        if(hi>=0){
+          const sp=ZM.hand.splice(hi,1)[0];
+          sp.faceup=true;sp.tapped=false;
+          {const rT=getReg(sp);if(rT&&(rT.twin||rT.ctype==="twinpact"))sp.face=1;}
+          ZM.resolve.push(sp);
+          S.spellTurn=S.spellTurn||[0,0];S.spellTurn[ctx.p]=(S.spellTurn[ctx.p]||0)+1;
+          emitEvent(ctx.p,"spell",sp);scheduleAutoResolve(ctx.p,sp);enqueueFx(ctx.p,sp);
+        }
+        closeSheet();closeSel();sfx("ok");renderAll();
+        toast(`🌑 無月の門・終：魔導具${pay.length}枚を山札の下に置いて ${faceNameOf(c)} を唱えた`);
+        logOnly(`🌑 ${S.players[ctx.p].label}：無月の門・終で《${faceNameOf(c)}》を唱えた（魔導具${pay.length}枚を山下へ）`);
+        await waitFxIdle();renderAll();
+      },okMS?"primary":"",true));
+    }
+  }
   // ✨ 呪文をバトルゾーンに置いてしまった時の直し道。解決中へ動かすとそこで初めて効果が出る
   //    （バトルゾーンに置いた時点では効果を出していないので、二重にはならない）
   if(ctx.zone==="battle"&&(()=>{const rSp=getReg(c);return rSp&&rSp.ctype==="spell"&&!rSp.twin;})()){
@@ -43815,6 +43979,37 @@ function openCardSheet(ctx){
         };
         $("viewerOlay").classList.add("open");if(typeof updateVPeek==="function")updateVPeek();
       },"",true));
+    }
+  }
+  {
+    /* ⚰ v16.86 墓地から召喚（凶鬼砕号 バリレッダ型）。
+       条件（自分のマフィ・ギャングがあれば等）と、支払うコストを登録で決められる。
+       アビスラッシュと違い、SAも付かず、ターンの終わりに山札の下にも行かない。 */
+    const rGS=getReg(c);
+    if(rGS&&rGS.graveSummon&&ctx.zone==="grave"){
+      const gsCost=(rGS.graveSummonCost!=null&&rGS.graveSummonCost!=="")?(+rGS.graveSummonCost||0):null;
+      const gsCond=String(rGS.graveSummonCond||"").trim();
+      const okc=!gsCond||(()=>{try{return zoneCondOk(gsCond,ctx.p,c);}catch(e){return false;}})();
+      box.appendChild(actBtn(`⚰ 墓地から召喚${gsCost!=null?`（コスト${gsCost}）`:""}${gsCond?`／条件：${gsCond}${okc?"（満たしています）":"（満たしていません）"}`:""}`,async ()=>{
+        if(!okc&&!await ask(`⚰ 条件（${gsCond}）を満たしていません。それでも召喚しますか？`,c))return;
+        snap();
+        const f2=findCard(ctx.p,"grave",ctx.id);
+        if(!f2)return;
+        f2.arr.splice(f2.idx,1);
+        const cc=f2.card;
+        cc.faceup=true;cc.tapped=false;cc.sick=true;
+        if(!cheatEnterBattle(ctx.p,cc)){renderAll();return;}
+        /* 支払うコストが違う（例：④で召喚）ので、自動タップには任せず案内だけ出す。 */
+        if(gsCost!=null)toast(`⚰ コスト${gsCost}ぶんマナをタップしてください`);
+        else if(S.expert&&S.autoTap&&!S.freePlay){
+          MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(ctx.p,cc)).catch(()=>{});
+        }
+        emitEvent(ctx.p,"summon");
+        enqueueFx(ctx.p,cc);
+        closeSheet();closeSel();closeViewer();sfx("ok");renderAll();
+        toast(`⚰ ${faceNameOf(cc)} を墓地から召喚${gsCost!=null?`（コスト${gsCost}）`:""}`);
+        await waitFxIdle();renderAll();
+      },okc?"primary":"",true));
     }
   }
   {
