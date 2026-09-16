@@ -2684,7 +2684,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxCharger"> チャージャー（呪文使用後マナへ／ツインパクト下面も可）</label>
         <label title="水晶チャージャー：この呪文を唱えた後、墓地に置くかわりに裏向きにしてマナゾーンに置く。チャージャーも自動でオンになります"><input type="checkbox" id="fxCrystalCharger"> 💎 水晶チャージャー（裏向きでマナへ）</label>
         <label><input type="checkbox" id="fxHoldResolve"> 🕐 解決中に保持（ザフィヴォ型：処理の途中で他のカードを使う呪文。自動で墓地に置かず、手動で墓地に置いた時に虚無月の門等が誘発）</label>
-        <label title="魔導具呪文を解決後にこのカードの下へ置いて1枚引く／対象呪文の詠唱禁止を無視／下4枚で無月の門99"><input type="checkbox" id="fxGrandZero"> 🌌 無月フィールド《卍 新世壊 卍》</label>
+        <label title="唱えた呪文を解決後にこのカードの下へ置いて1枚引く／対象呪文の詠唱禁止を無視／下4枚で無月の門99（下の絞り込みが空欄の時だけ）"><input type="checkbox" id="fxGrandZero"> 🌌 解決後に下へ置く（無月フィールド《卍 新世壊 卍》型）</label>
         <input type="text" id="fxGrandZeroFilt" placeholder="└ 下に置ける呪文の絞り込み（空欄＝魔導具・「呪文」＝全部・不夜城艦 クランヴィア型）" style="flex:1;min-width:220px">
         <label title="無月の門99（下に4枚以上でゲーム中1回・水のコスト99以下の呪文をタダ唱え）を持たせる。絞り込みが空欄の登録（新世壊型）は書かなくても付きます"><input type="checkbox" id="fxGate99"> └ 無月の門99を持つ</label>
         <label title="自分のシールドが1つもない間だけ、このクリーチャーはブロッカーを得ます"><input type="checkbox" id="fxShieldZeroBlocker"> 🛡 自分の盾が0ならブロッカー</label>
@@ -2898,7 +2898,8 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="1">下面だけ</option>
         </select>
         <span style="font-size:12px;font-weight:700">G・ゼロ</span>
-        <input type="text" id="fxGZero" placeholder="条件（例：バトル:進化>=1／文章でも可）空欄=なし" title="条件がゾーン条件式なら自動で判定します。文章で書いた場合は、召喚時に文面を見せて満たしているか確認します" style="flex:1;min-width:130px">
+        <input type="text" id="fxGZero" placeholder="条件（例：バトル:進化>
+        <label title="自分の手札がこのカードだけなら、コストを支払わずに唱える（召喚する）。G・ゼロ欄に何か書いてある場合はそちらが優先されます"><input type="checkbox" id="fxMasterGgg"> 🔥 マスターG・G・G</label>=1／文章でも可）空欄=なし" title="条件がゾーン条件式なら自動で判定します。文章で書いた場合は、召喚時に文面を見せて満たしているか確認します" style="flex:1;min-width:130px">
       </div>
       <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;font-weight:700">マナ武装</span>
@@ -5555,7 +5556,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.65";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.67";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9265,6 +9266,18 @@ function libWinHolderOf(pi){
   const Z=zonesOf(pi);
   return Z.battle.find(x=>{const r=getReg(x);return r&&r.libWin&&!isSealed(x)&&!isIgnored(x,pi);})||null;
 }
+/* 🃏 v16.67 Q.Q.QX：相手の場に Q.Q.QX 型があるとき、横向きのカードを引いたらその人が負ける。
+   引く処理があちこちにあり、盤面のドロー（draw関数）でしか見ていなかったため、
+   効果によるドローでは何も起きていなかった。ここに集約して、どの経路からでも同じ判定にする。
+   引いた1枚を渡して true が返ったら、その時点でドローを打ち切ること。 */
+function qqqxDrawLose(pi,Z,c){
+  if(!(S.vs&&c&&(c.qqqxSide||c.sideways)&&qqqxOwnerOpp(pi)))return false;
+  c.faceup=true;c.sideways=false;c.qqqxSide=false;
+  Z.hand.push(c);markArrive(c);
+  sfx("draw");emitEvent(pi,"draw");renderAll();
+  declareWin(pi?0:1,`Q.Q.QX：${S.players[pi].label} が横向きのカードを引いてしまった（特殊敗北）`);
+  return true;
+}
 function draw(pi,n=1){
   const Z=S.players[pi].zones;
   let _kept=0; // 🃏 dmps：手札超過で墓地に落ちた分は「ドローしたことにならない」（wiki準拠）
@@ -9275,12 +9288,10 @@ function draw(pi,n=1){
       break;
     }
     const c=Z.deck.shift();
-    if(S.vs&&c.qqqxSide&&qqqxOwnerOpp(pi)){
-      c.faceup=true;c.sideways=false;c.qqqxSide=false;Z.hand.push(c);markArrive(c);
-      sfx("draw");emitEvent(pi,"draw");renderAll();
-      declareWin(pi?0:1,`Q.Q.QX：${S.players[pi].label} が横向きのカードを引いてしまった（特殊敗北）`);
-      return;
-    }
+    /* 🃏 v16.67 Q.Q.QX の特殊敗北は「横向きのカードを引いた時」。
+       いままで Q.Q.QX 自身が刺した印（qqqxSide）しか見ていなかったため、
+       5.S.D.（極楽轟破5.S.トラップ）のように別のカードが横向きにした分では負けにならなかった。 */
+    if(qqqxDrawLose(pi,Z,c))return;
     c.faceup=true;c.sideways=false;c.qqqxSide=false;
     const kept=toHand(Z,c); // デュエプレ：手札上限超過は墓地へ
     if(kept){markArrive(c);_kept++;bumpEv("draws",pi);}
@@ -12697,7 +12708,7 @@ const FX_TYPES=[
   ["manaPickThenManaRecruit","🌱 相手のクリーチャーを1体選び、持ち主のマナゾーンに置く。その後、そのクリーチャーの**コスト以下**の、条件に合うクリーチャーを1体、自分のマナゾーンからバトルゾーンに出してもよい（極楽轟破5.S.トラップ型／条件欄＝例：自然）"],
   ["revealTopUnderSpell","🎴 自分の山札をシャッフルし、上からn枚を表向きにする。その中の呪文をすべてこのクリーチャーの下に置き、残りを墓地に置く（不夜城艦 クランヴィア型）"],
   ["castFromUnder","🔮 このクリーチャーの下から、条件に合う呪文1枚を墓地に置いてもよい。そうしたら、その呪文をコストを支払わずに唱える（不夜城艦 クランヴィア型／条件欄に「マナと同じ文明」と書くと、自分のマナゾーンにある文明の呪文だけになります）"],
-  ["foeDeckSideways","🃏 相手の山札の上からn枚目を横向きにする（5.S.D.型・目印だけで、ゲームの進行は変わりません）"],
+  ["foeDeckSideways","🃏 相手の山札の上からn枚目を横向きにする（5.S.D.型）。相手の場に Q.Q.QX 型があれば、その相手が横向きのカードを引いた時に特殊敗北します"],
   ["destroySumCostDiscard","🗑💥 自分の手札を1枚捨て、**捨てたカードのコスト以下**になるように、相手のクリーチャーをコストの合計で好きな数選び、破壊する（ゴゴゴ・Cho絶・ラッシュ型／条件欄で捨てる対象を絞れる）"],
   ["shieldFaceUpDraw","🛡👁 自分のシールドゾーンにある裏向きのカードをn枚表向きにする。条件に合えばその1枚につきカードを1枚引く。表向きにしたカードはシールドゾーンにある間そのまま（紫天ノ裁キ型／条件欄＝例：メタリカ｜裁きの紋章）"],
   ["selfDiscardRandom","🗑 自分の手札をランダムにn枚捨てる（ホメホメ老句型・自分で選べない）"],
@@ -12778,6 +12789,7 @@ function cardInfoText(key){
   if(r.breaks&&r.breaks>1)kw.push(`${r.breaks===2?"W":r.breaks===3?"T":r.breaks+""}・ブレイカー`);
   if(r.sympathy)kw.push(`シンパシー(${r.sympathy}${r.symX>1?`×${r.symX}`:""}${r.symFace==="0"?"・上面だけ":r.symFace==="1"?"・下面だけ":""})`);
   if(r.gzero)kw.push(`G・ゼロ(${r.gzero})`);
+  else if(r.masterGgg)kw.push("マスターG・G・G");
   if(r.altCost!=null)kw.push(`代替コスト[${r.altCost}]${r.altCond?`(${r.altCond})`:""}`);
   if(r.firstRed)kw.push(`最初の召喚-${r.firstRed}${r.firstRedF?`(${r.firstRedF})`:""}`);
   if(r.stAuraSA)kw.push(`味方SA付与${r.stAuraFilt?`(${r.stAuraFilt})`:""}`);
@@ -13219,23 +13231,28 @@ async function autoTapCost(pi,c){
   //    （ハンド・オブ・ウィッシュ型。「必要な味方」を書いた場合はそれが場にある時だけ選べる）
   // 🆓 G・ゼロ：条件を満たしていればコストを支払わずに召喚できる。
   //    条件欄がゾーン条件式として読める時は自動で判定し、読めない時は文面を見せて確認する。
-  if(r.gzero&&cost>0){
-    const gz=String(r.gzero).trim();
+  /* 🔥 v16.66 マスターG・G・G：自分の手札がこのカードだけなら、コストを支払わずに唱える（召喚する）。
+     中身は G・ゼロ の「手札<=1」と同じだが、名前が違うと画面に「G・ゼロ」と出てしまうので、
+     専用の欄（masterGgg）にして呼び名を変えた。G・ゼロ欄にも書いてあれば、そちらの条件を使う。 */
+  const _mggg=!!(r&&r.masterGgg&&!String(r.gzero||"").trim());
+  if((r.gzero||_mggg)&&cost>0){
+    const gz=_mggg?"手札<=1":String(r.gzero).trim();
+    const _gzName=_mggg?"マスターG・G・G":"G・ゼロ";
     let auto=null;
     try{
       const parseable=/(?:<=|>=|<|>|＝|=|以上|以下)/.test(gz)||/^(?:自分|相手)?(?:の)?(?:マナ|墓地|手札|盾|シールド|バトル|山札)/.test(gz);
       if(parseable)auto=!!zoneCondOk(gz,pi,c);
     }catch(e){auto=null;}
     if(auto===false){
-      toast(`🆓 G・ゼロの条件を満たしていません（${gz}）。通常コストで召喚します`);
+      toast(`🆓 ${_gzName}の条件を満たしていません（${gz}）。通常コストで召喚します`);
     }else{
-      const j=await askChoice(`🆓 G・ゼロ（${faceNameOf(c)}）\n条件：${gz||"（条件未記入）"}${auto===true?"\n※条件を満たしています":""}\nコストを支払わずに召喚しますか？`,
-        [`G・ゼロで召喚（コスト0）`,`通常コスト（${cost}）で召喚`]);
+      const j=await askChoice(`🆓 ${_gzName}（${faceNameOf(c)}）\n条件：${_mggg?"自分の手札がこのカードだけ":(gz||"（条件未記入）")}${auto===true?"\n※条件を満たしています":""}\nコストを支払わずに${paySide==="creature"?"召喚":"唱え"}ますか？`,
+        [`${_gzName}で使う（コスト0）`,`通常コスト（${cost}）で使う`]);
       if(j===0){
-        toast(`🆓 G・ゼロ：${faceNameOf(c)} をコストを支払わずに召喚`);
+        toast(`🆓 ${_gzName}：${faceNameOf(c)} をコストを支払わずに使った`);
         // ✨ 破壊◯体などの条件で出るカード（ネルガルザーク型）は「特殊召喚！」の演出にする（v14.71）
-        fxKeyword(pi,(/破壊/.test(gz)?"特殊召喚！":"G・ゼロ！"),c.name,"コストを支払わずに召喚");
-        logOnly(`🆓 G・ゼロ：${S.players[pi].label} が ${faceNameOf(c)} をコストなしで召喚`);
+        fxKeyword(pi,(_mggg?"マスターG・G・G！":(/破壊/.test(gz)?"特殊召喚！":"G・ゼロ！")),c.name,"コストを支払わずに使った");
+        logOnly(`🆓 ${_gzName}：${S.players[pi].label} が ${faceNameOf(c)} をコストなしで使った`);
         if(paySide==="creature")noteSummonTurn(pi,c);
         return;
       }
@@ -14937,6 +14954,19 @@ async function runFxList(pi,list,srcCard,inPump){
       continue;
     }
     try{stampShieldSrc(_srcLbl);}catch(e){} // 前の効果で増えた盾を取りこぼさないよう、各行の頭でも刻む
+    /* 🧮 v16.66 行ごとの実行条件（cnd）。条件式（zoneCondOk）を満たす時だけこの行を行う。
+       「自分のマナゾーンに火のカードがあれば、カードを1枚引く」のような
+       “条件を満たしていれば〜する”を、効果を新しく足さずに書けるようにするため。
+       条件欄（cond）は対象の絞り込み、cnd は盤面の状況、と役割が分かれている。
+       v16.65 で誘発（watchFx）に足した cnd と同じ書き方。 */
+    if(f&&f.cnd&&String(f.cnd).trim()){
+      let _okc=false;
+      try{_okc=!!zoneCondOk(String(f.cnd).trim(),pi,srcCard);}catch(e){_okc=false;}
+      if(!_okc){
+        toast(`🧮 条件を満たしていないので、この効果は行いません（${String(f.cnd).trim()}）`);
+        continue;
+      }
+    }
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
     /* 🔗 v15.50「そうした場合」の連動（ifPrev）。
@@ -15144,7 +15174,14 @@ async function runFxList(pi,list,srcCard,inPump){
     if(f.t==="drawToHandLimit"){
       drawUpToHandLimit(pi,n);
     }else if(f.t==="draw"){
-      let dc=0,ov=0;for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;if(toHand(Z,c)){markArrive(c);dc++;}else ov++;} // ✋ 超過分はドローにならない（wiki準拠）
+      let dc=0,ov=0,_qx=false;
+      for(let i=0;i<n&&Z.deck.length;i++){
+        const c=Z.deck.shift();
+        if(qqqxDrawLose(pi,Z,c)){_qx=true;break;}   // 🃏 v16.67 横向きを引いたら特殊敗北
+        c.faceup=true;c.sideways=false;
+        if(toHand(Z,c)){markArrive(c);dc++;}else ov++;
+      } // ✋ 超過分はドローにならない（wiki準拠）
+      if(_qx){renderAll();continue;}
       if(dc>0)bumpEv("draws",pi,dc);
       sfx("draw");if(dc>0||S.gameMode==="tcg")emitEvent(pi,"draw");
       if(ov)toast(`✋ ${ov}枚は手札上限のため墓地へ（ドローしたことにならない）`);
@@ -20320,11 +20357,15 @@ async function runFxList(pi,list,srcCard,inPump){
       for(let i=_mix.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[_mix[i],_mix[j]]=[_mix[j],_mix[i]];}
       _mix.forEach(c2=>{c2.faceup=false;c2.seen=false;c2.tapped=false;c2.sideways=false;Z.deck.push(c2);});
       let _dc=0;
+      let _qx2=false;
       for(let i=0;i<n&&Z.deck.length;i++){
-        const c2=Z.deck.shift();c2.faceup=true;c2.sideways=false;
+        const c2=Z.deck.shift();
+        if(qqqxDrawLose(pi,Z,c2)){_qx2=true;break;}   // 🃏 v16.67
+        c2.faceup=true;c2.sideways=false;
         if(toHand(Z,c2)){markArrive(c2);_dc++;}
       }
       if(_dc>0){bumpEv("draws",pi,_dc);emitEvent(pi,"draw");}
+      if(_qx2){renderAll();continue;}
       sfx("draw");renderAll();
       toast(`🔄 手札${_hn}枚をランダムな順で山札の下へ置き、${_dc}枚引いた`);
       logOnly(`🔄 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[pi].label} が手札${_hn}枚を山札の下へ置き${_dc}枚引いた`);
@@ -31333,6 +31374,7 @@ function renderFxEditor(){
   $("fxInvCost").value=FXEDIT.invCost||"";
   $("fxInvPow").value=FXEDIT.invPow||"";
   $("fxGZero").value=FXEDIT.gzero||"";
+  {const e=$("fxMasterGgg");if(e)e.checked=!!FXEDIT.masterGgg;}
   $("fxManaArm").value=String(FXEDIT.manaArm||0);
   $("fxManaArmCiv").value=FXEDIT.manaArmCiv||"";
   $("fxMugen").value=String(FXEDIT.mugen||0);
@@ -33680,6 +33722,7 @@ function openFxEditor(key){
     invCost:cur&&(+cur.invCost||0)||0,
     invPow:cur&&(+cur.invPow||0)||0,
     gzero:cur&&cur.gzero||"",
+    masterGgg:cur?!!cur.masterGgg:false,
     manaArm:cur&&(+cur.manaArm||0)||0,
     manaArmCiv:cur&&cur.manaArmCiv||"",
     mugen:cur&&(+cur.mugen||0)||0,
@@ -34279,6 +34322,7 @@ $("fxSave").addEventListener("click",async ()=>{
     invCost:+$("fxInvCost").value||0,
     invPow:+$("fxInvPow").value||0,
     gzero:$("fxGZero").value.trim(),
+    masterGgg:$("fxMasterGgg")?$("fxMasterGgg").checked:false,
     manaArm:+$("fxManaArm").value||0,
     manaArmCiv:$("fxManaArmCiv").value||"",
     mugen:+$("fxMugen").value||0,
@@ -34839,7 +34883,10 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.crystalCharger)attrs.push("💎水晶チャージャー（裏向きでマナへ）");
     else if(v.charger)attrs.push("チャージャー");
     if(v.holdResolve)attrs.push("🕐解決中に保持");
-    if(v.grandZero)attrs.push("🌌無月フィールド《卍 新世壊 卍》");
+    if(v.grandZero){
+      const _gf=String(v.grandZeroFilt||"").trim();
+      attrs.push(_gf?`🌌解決後に下へ置く（対象：${_gf}）`:"🌌無月フィールド《卍 新世壊 卍》");
+    }
     if(v.shieldZeroBlocker)attrs.push("🛡自分の盾が0ならブロッカー");
     if(v.castle)attrs.push("城/要塞");
     if(v.gcRedirect)attrs.push("🏰ブレイク肩代わり");
@@ -35050,6 +35097,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.gimmick==="complex")attrs.push(v.complexArc?"COMPLEX型(ARC REALITY)":"COMPLEX型");
     if(v.gimmick==="phoenixfield")attrs.push("フェニックス・フィールド");
     if(v.gzero)attrs.push("G・ゼロ");
+    if(v.masterGgg)attrs.push("マスターG・G・G（手札がこれだけなら無料）");
     if(v.manaArm)attrs.push(`マナ武装${v.manaArm}`);
     if(v.mugen)attrs.push(`ムゲンクライム${v.mugen}${v.mugenCiv?`〔${({w:"水",d:"闇",wd:"水/闇"})[v.mugenCiv]||""}〕`:""}`);
     if(v.exlife)attrs.push("EXライフ");
@@ -50144,6 +50192,13 @@ function zoneCondOk(expr,pi,selfCard){
     /* 🔗 v16.32 「かつ」（&&）で条件をつなげられる。
        「バトル:水>=1かつバトル:闇>=1」のように、両方を満たす時だけ真。
        ブレイン・スラッシュの「自分のクリーチャーまたはタマシードの中に水と闇があれば」用。 */
+    /* 🔥 v16.67 条件式に「G・G・G」を足した（＝自分の手札が1枚以下・gggOn と同じ判定）。
+       G・G・G はカードごとに専用の欄（gggSA／gggPA／gggCantAtk／stAuraGggOnly／masterGgg）で
+       持たせてきたが、それ以外の書き方をしたい時に毎回ちがう書き方になっていた。
+       これで cnd（効果の行・誘発）でも「G・G・G」と書けば同じ判定になる。 */
+    {const _g=String(expr||"").replace(/[\s　・]/g,"").toUpperCase();
+     if(_g==="GGG"||_g==="GGGちゅう")return gggOn(pi);
+     if(_g==="GGG未達"||_g==="GGGみたつ")return !gggOn(pi);}
     {const _e=String(expr||"");
      /* 🔗 v16.62 「または」（||）も書けるようにした。「かつ」より先に切るので、
         「AかつBまたはC」は（AかつB）または C になる。
