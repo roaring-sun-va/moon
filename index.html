@@ -5696,7 +5696,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.87";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.88";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -12587,7 +12587,7 @@ const FX_TYPES=[
   ["oppCreLimitNext","🚫 次の相手のターン、相手はクリーチャーをn体しか出せない（キャンベロ型・体数制限ロック・n＝相手が出せる体数）"],
   ["foeAtkLockP","⚔ 今バトルゾーンにいる相手クリーチャーは、次の自分のターン開始時までプレイヤーを攻撃できない（ドギラゴールデン型・後から出た分は対象外）"],
   ["foeBigCreToDeck","🚫 次の自分のターン開始時まで、相手が自身のマナの枚数より大きいコストのクリーチャーを出した時、相手はそれを自身の山札の一番下に置く（堅珠ノ正裁Z型）"],
-  ["nextSummonCostDownSA","💸⚡ このターン、次に召喚する自分のクリーチャーのコストをn少なくし（0以下にはならない）、そのクリーチャーが出た時に「スピードアタッカー」を与える（T・T・T型／条件欄に「SAなし」でコスト軽減だけ）"],
+  ["nextSummonCostDownSA","💸⚡ このターン、次に召喚する自分のクリーチャーのコストをn少なくし（0以下にはならない）、そのクリーチャーが出た時に「スピードアタッカー」を与える（T・T・T型／条件欄に「SAなし」でコスト軽減だけ／「1文明」で下限が『1とそのクリーチャーの文明の数の大きい方』になる＝キリモミ・ヤマアラシ型）"],
   ["nextSpellCostDown","💸 このターン、自分が次に手札から唱える呪文のコストをn少なくする（0以下にはならない・煌メク聖戦 絶十型）"],
   ["deckTopToShieldStack","🛡 自分の山札の上からn枚を、自分のシールド1つの上に表向きにして置く（盾の枚数は増えない・煌メク聖戦 絶十型）"],
   ["foeNoSpell","🚫 相手は次の自分のターン終了時まで呪文を唱えられない（唱えた側の次ターンまで・条件欄でコスト等指定可・空欄＝全呪文）"],
@@ -13526,8 +13526,16 @@ async function autoTapCost(pi,c){
     const rd2=+S._nextSumRed.n||0;
     if(rd2>0){
       const before=cost;
-      cost=Math.max(0,cost-rd2);
-      toast(`💸 次に召喚するクリーチャーのコスト−${rd2}（${before}→${cost}）`);
+      /* 💸 v16.88 下限の決め方。既定は0。
+         「1文明」＝1より少なくならず、かつそのクリーチャーの持つ文明の数より少なくならない
+         （キリモミ・ヤマアラシ型）。 */
+      let floor2=0;
+      if(S._nextSumRed.floor==="civ"){
+        const civN=((getReg(c)||{}).civs||[]).length||1;
+        floor2=Math.max(1,civN);
+      }
+      cost=Math.max(floor2,cost-rd2);
+      toast(`💸 次に召喚するクリーチャーのコスト−${rd2}（${before}→${cost}）${floor2?`／下限${floor2}`:""}`);
     }
     if(S._nextSumRed.sa)c._grantSAOnEnter=true;
     S._nextSumRed=null;   // 使い切り
@@ -18417,8 +18425,12 @@ async function runFxList(pi,list,srcCard,inPump){
     }else if(f.t==="nextSummonCostDownSA"){
       /* 💸⚡ v16.33 このターン、次に召喚する自分のクリーチャーのコストをn少なくする（0以下にはならない）。
          そのクリーチャーが出た時、このターン「スピードアタッカー」を与える（T・T・T型）。 */
-      S._nextSumRed={by:pi,n:(+n||0),turn:S.turn|0,sa:!(f.cond&&/SAなし/.test(String(f.cond)))};
-      toast(`💸 このターン、次に召喚するクリーチャーのコスト−${n}${S._nextSumRed.sa?"\n⚡ そのクリーチャーは出た時にスピードアタッカーを得ます":""}`);
+      /* 🔢 v16.88 条件欄に「1文明」と書くと、下限が「1／そのクリーチャーの文明の数」の大きい方になる
+         （キリモミ・ヤマアラシ型）。空欄なら今までどおり0が下限。 */
+      S._nextSumRed={by:pi,n:(+n||0),turn:S.turn|0,
+        sa:!(f.cond&&/SAなし/.test(String(f.cond))),
+        floor:(f.cond&&/1文明|文明の数|文明数/.test(String(f.cond)))?"civ":null};
+      toast(`💸 このターン、次に召喚するクリーチャーのコスト−${n}${S._nextSumRed.floor==="civ"?"（1とその文明の数より少なくはならない）":""}${S._nextSumRed.sa?"\n⚡ そのクリーチャーは出た時にスピードアタッカーを得ます":""}`);
       logOnly(`💸 ${S.players[pi].label}：次に召喚するクリーチャーのコスト−${n}${S._nextSumRed.sa?"＋SA付与":""}`);
       renderAll();
     }else if(f.t==="nextSpellCostDown"){
