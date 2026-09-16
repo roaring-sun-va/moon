@@ -2076,7 +2076,10 @@ body.shake{animation:bodyShake .4s ease-out}
 <div class="olay" id="viewerOlay" style="z-index:300">
   <div class="panelbox" id="viewerBox">
     <div class="row" style="margin:0 0 4px 0;justify-content:space-between;align-items:center">
-      <h2 id="vTitle" style="margin:0">-</h2>
+      <div class="row" style="margin:0;gap:8px;align-items:center;flex:1 1 auto;min-width:0">
+        <div id="vArt" style="display:none;flex:0 0 auto"></div>
+        <h2 id="vTitle" style="margin:0;min-width:0">-</h2>
+      </div>
       <div class="row" style="gap:6px;flex:0 0 auto;margin:0">
         <button class="btn small ghost" id="vPeek" style="padding:4px 10px;flex:0 0 auto">👁 盤面を見る</button>
         <button class="btn small ghost" id="vCloseTop" title="閉じる" style="padding:4px 10px;flex:0 0 auto">✕</button>
@@ -3540,8 +3543,11 @@ body.shake{animation:bodyShake .4s ease-out}
       <button class="btn small ghost" id="askCopy" style="padding:4px 10px">📋 コピー</button>
       <button class="btn small ghost" id="askPeek" style="padding:4px 10px">👁 盤面を見る</button>
     </div>
-    <div id="askArt" style="display:none;justify-content:center;gap:8px;margin:2px 0 6px;flex-wrap:wrap"></div>
-    <div id="askMsg" style="font-size:13px;line-height:1.7;font-weight:700;white-space:pre-line;user-select:text;-webkit-user-select:text"></div>
+    <!-- 🖼 v16.77 絵は文の左に並べる（縦に積むとボタンが画面外に出やすいため） -->
+    <div id="askBody" style="display:flex;gap:10px;align-items:flex-start">
+      <div id="askArt" style="display:none;flex:0 0 auto;gap:6px;flex-direction:column"></div>
+      <div id="askMsg" style="flex:1 1 auto;min-width:0;font-size:13px;line-height:1.7;font-weight:700;white-space:pre-line;user-select:text;-webkit-user-select:text"></div>
+    </div>
     <input type="number" id="askNum" min="1" inputmode="numeric" style="display:none">
     <input type="text" id="askTxt" style="display:none">
     <div class="row" id="askChoices" style="display:none"></div>
@@ -3903,6 +3909,7 @@ function logLineEl(entry,opt){
    デュエプレの「山札の公開情報」に相当（上から何枚目かも表示）。 */
 function openDeckKnownInfo(){
   $("vTitle").textContent="🔍 山札の公開情報";
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="確認済み・表向き・横差しのカードだけを、上から順に表示します（絵札をタップで拡大）";
   $("vSearch").style.display="none";$("vOk").style.display="none";$("vStatus").textContent="";
   const g=$("vGrid");g.innerHTML="";
@@ -4242,6 +4249,7 @@ window.openLogDock=(on)=>{
 function toggleLogDock(){openLogDock();}
 function openGameLog(){
   $("vTitle").textContent=`📜 ゲームログ（古い順・${GAMELOG.length}件）`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="ターンごとに区切って表示します。自分＝青／相手＝赤の線、丸の色は種類です";
   $("vSearch").style.display="none";$("vOk").style.display="none";$("vStatus").textContent="";
   const g=$("vGrid");g.innerHTML="";
@@ -4879,8 +4887,13 @@ function askArtSet(...targets){
   const box=document.getElementById("askArt");
   if(!box)return;
   box.innerHTML="";box.style.display="none";
+  /* 🖼 v16.77 何も渡されなければ「いま処理中のカード」を出す。
+     効果の解決中に出る確認（任意効果・モード選択・攻撃対象・破壊対象など）は、
+     どのカードの効果を解決しているのかが分かるだけで迷いが減る。 */
+  let list=targets.flat().filter(Boolean);
+  if(!list.length&&typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)list=[FX_NOW_CARD];
   const keys=[];
-  for(const t of targets.flat()){
+  for(const t of list){
     if(!t)continue;
     let k=null;
     try{
@@ -4893,10 +4906,28 @@ function askArtSet(...targets){
   for(const k of keys.slice(0,3)){
     const im=document.createElement("img");
     im.dataset.imgKey=k;im.draggable=false;im.decoding="async";
-    im.style.cssText="width:92px;max-width:30vw;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.6);background:#0d1119";
+    im.style.cssText="width:78px;max-width:22vw;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.6);background:#0d1119;display:block";
     try{const u=(imgURL.ready&&imgURL.ready(k))?imgURL.get(k):imgURL.get(k);if(u)im.src=u;}catch(e){}
     box.appendChild(im);
   }
+  box.style.display="flex";
+}
+/* 🖼 v16.77 選ぶ画面（pickCard）の見出しにも、いま処理中のカードを出す。 */
+function pickArtSet(card){
+  const box=document.getElementById("vArt");
+  if(!box)return;
+  box.innerHTML="";box.style.display="none";
+  let c=card;
+  if(!c&&typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)c=FX_NOW_CARD;
+  if(!c)return;
+  let k=null;
+  try{k=(typeof c==="string")?(canonicalCardKey(c)||normName(c)):imageKeyForName(faceNameOf(c));}catch(e){}
+  if(!k)return;
+  const im=document.createElement("img");
+  im.dataset.imgKey=k;im.draggable=false;im.decoding="async";
+  im.style.cssText="width:56px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.6);background:#0d1119;display:block";
+  try{const u=imgURL.get(k);if(u)im.src=u;}catch(e){}
+  box.appendChild(im);
   box.style.display="flex";
 }
 function dlgReset(){
@@ -4959,7 +4990,7 @@ function ask(msg,art){return _serialDlg(ASK_GATE,()=>new Promise(res=>{
   // 👻 ゴースト自動応答：確認系（ダイレクトアタック成立など）は「はい」で進める
   if(typeof GHOST_AUTO!=="undefined"&&GHOST_AUTO){setTimeout(()=>res(true),100);return;}
   dlgReset();$("askMsg").textContent=msg;
-  if(art)askArtSet(art);   // 🖼 v16.75 どのカードの確認かを絵でも示す
+  askArtSet(art);   // 🖼 v16.75/16.77 渡されなければ「いま処理中のカード」を出す
   $("askOlay").classList.add("open");
   $("askYes").onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(true);};
   $("askNo").onclick=()=>{sfx("tap");$("askOlay").classList.remove("open");res(false);};
@@ -4985,7 +5016,7 @@ function askChoice(msg,options,art){return _serialDlg(ASK_GATE,()=>new Promise(r
     if(gi!=null&&gi>=0&&gi<options.length){setTimeout(()=>res(gi),120);return;}
   }
   dlgReset();$("askMsg").textContent=msg;$("askYN").style.display="none";
-  if(art)askArtSet(art);   // 🖼 v16.75
+  askArtSet(art);   // 🖼 v16.75/16.77
   const box=$("askChoices");box.style.display="";box.innerHTML="";
   // 選択肢が多い/長い時に画面からはみ出さないよう、縦スクロールできるようにする
   box.style.flexDirection="column";box.style.maxHeight="52vh";box.style.overflowY="auto";box.style.gap="6px";
@@ -5600,7 +5631,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.76";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.78";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9569,7 +9600,7 @@ function nextTurn(){
       (async()=>{
         let summoned=false;
         for(const {pi:pz,h,zn,total} of list){
-          const yes=await ask(`🌑 無月の門・絶：条件成立！ 魔導具 場+墓 計${total}（6以上）\n《${faceNameOf(h)}》を${zn==="grave"?"墓地":"手札"}からコストを支払わずに召喚しますか？\n（各ターンの終わり）`);
+          const yes=await ask(`🌑 無月の門・絶：条件成立！ 魔導具 場+墓 計${total}（6以上）\n《${faceNameOf(h)}》を${zn==="grave"?"墓地":"手札"}からコストを支払わずに召喚しますか？\n（各ターンの終わり）`,h);   // 🖼 v16.78 出す予定のカードを見せる
           if(yes){await doMugetsuSummon(pz,zn,h.id);summoned=true;break;}
         }
         if(summoned){
@@ -11710,6 +11741,7 @@ async function jretSummon(pi,zone,id){
     renderAll();return;
   }
   $("vTitle").textContent="🃏 手札に戻すジョーカーズを選択（1体＝コスト1軽減）";
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent=`《${faceNameOf(c)}》コスト${r.cost!=null?r.cost:"？"}。戻した数だけ軽減されます（0体でも召喚できます）`;
   $("vSearch").style.display="none";$("vStatus").textContent="";
   const sel=new Set();
@@ -14591,7 +14623,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
         if(fj!==null){
           cc.face=fj;
           const fr=FXDB.get(lk[fj]);
-          cc.rot=(fr&&(fr.wide||fr.d2))?((pi===S.seat)?270:90):0;
+          cc.rot=isWideReg(fr)?((pi===S.seat)?270:90):0;
         }
       }
     }
@@ -18882,7 +18914,7 @@ async function runFxList(pi,list,srcCard,inPump){
               if(fj!==null){
                 cc.face=fj;
                 const fr=FXDB.get(lk[fj]);
-                cc.rot=(fr&&(fr.wide||fr.d2))?((pi===S.seat)?270:90):0;
+                cc.rot=isWideReg(fr)?((pi===S.seat)?270:90):0;
               }
             }
           }
@@ -19305,7 +19337,7 @@ async function runFxList(pi,list,srcCard,inPump){
               if(fj!==null){
                 cc.face=fj;
                 const fr=FXDB.get(lk[fj]);
-                cc.rot=(fr&&(fr.wide||fr.d2))?((pi===S.seat)?270:90):0;
+                cc.rot=isWideReg(fr)?((pi===S.seat)?270:90):0;
               }
             }
           }
@@ -25262,7 +25294,7 @@ async function offerTrueEscape(pi,c){
       const was=faceNameOf(c);
       c.face=Math.max(0,(c.face|0)-1);
       c.buff=null;c.mark=false;c.sideways=false;
-      {const rB=FXDB.get(lkB[c.face|0]);c.rot=(rB&&(rB.wide||rB.d2))?c.rot:0;}
+      {const rB=FXDB.get(lkB[c.face|0]);c.rot=isWideReg(rB)?c.rot:0;}
       toast(`🔄 解除！ ${was} は離れるかわりに《${faceNameOf(c)}》へ裏返った`);
       logOnly(`🔄 解除：${S.players[pi].label} の《${was}》→《${faceNameOf(c)}》（離場をキャンセル）`);
       try{fxShare("awake","解除！","離れるかわりに裏返る",true,c.name,pi);}catch(e){}
@@ -34579,6 +34611,7 @@ $("fxDelete").addEventListener("click",async ()=>{
 function pickImage(title,hint){
   return new Promise(res=>{
     $("vTitle").textContent=title;
+    {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
     $("vHint").textContent=hint||"";
     $("vOk").style.display="none";$("vStatus").textContent="";
     const search=$("vSearch");search.style.display="";search.value="";
@@ -35446,6 +35479,7 @@ async function bulkTagRace(){
   const has=v=>((v.races||[]).some(x=>x===rc)||(v.races2||[]).some(x=>x===rc));
   $("regOlay").classList.remove("open");
   $("vTitle").textContent=`🏷 種族「${rc}」を付与するカードを選択`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent=`タップで選択/解除。⭐＝既に「${rc}」付き。呪文/タマシードなどまとめて選べます →「決定」`;
   $("vSearch").style.display="";
   $("vSearch").value="";
@@ -36114,7 +36148,7 @@ async function offerAtkedFlipBack(defPi,cid,atkC){
     const was=faceNameOf(t);
     t.face=Math.max(0,(t.face|0)-1);
     t.tapped=false;t.buff=null;t.mark=false;t.sideways=false;
-    {const rB=FXDB.get(lk[t.face|0]);t.rot=(rB&&(rB.wide||rB.d2))?t.rot:0;}
+    {const rB=FXDB.get(lk[t.face|0]);t.rot=isWideReg(rB)?t.rot:0;}
     toast(`🔄 ${was} は《${faceNameOf(t)}》へ裏返ってアンタップし、攻撃を中止した`);
     logOnly(`🔄 ${S.players[defPi].label}：《${was}》→《${faceNameOf(t)}》へ裏返り、${atkC?`《${faceNameOf(atkC)}》の`:""}攻撃を中止`);
     try{fxShare("awake","攻撃中止！",`${S.players[defPi].label}`,true,t.name,defPi);}catch(e){}
@@ -39133,6 +39167,7 @@ function renderPlayer(pi){
     }
     else{
       $("vTitle").textContent=`🛡 表向きの盾（${S.players[pi].label}）`;
+      {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
       $("vHint").textContent="表向きの盾と、その上に表向きで重なっているカードのみ表示します。タップで操作メニュー。";
       $("vSearch").style.display="none";$("vOk").style.display="none";$("vStatus").textContent="";
       const g=$("vGrid");g.innerHTML="";
@@ -40652,6 +40687,7 @@ function endReplay(){
 }
 function showSavedLog(log){
   $("vTitle").textContent=`📜 試合ログ（${log.length}件）`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="";
   $("vSearch").style.display="none";
   $("vStatus").textContent="";
@@ -40669,6 +40705,7 @@ function showMatchDetail(m){
   const d=new Date(m.d);
   const ds=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
   $("vTitle").textContent="📊 試合データ詳細";
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent=`${ds}　${m.deck0} vs ${m.deck1}`;
   $("vSearch").style.display="none";$("vStatus").textContent="";$("vOk").style.display="none";
   const g=$("vGrid");g.innerHTML="";
@@ -40704,6 +40741,7 @@ function openDeckStatsPanel(dk,days){
   const now=Date.now();
   const st=((days&&days>0)?MATCH_STATS.filter(m=>now-m.d<=days*86400000):MATCH_STATS).filter(m=>m.deck0===dk||m.deck1===dk);
   $("vTitle").textContent=`📗 ${dk} の戦績${days?`（直近${days}日）`:""}`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="このデッキがP1/P2どちら側で使われた試合も合算しています（ミラーは両側で1勝1敗と数えます）";
   $("vSearch").style.display="none";$("vStatus").textContent="";$("vOk").style.display="none";
   const wrap=document.createElement("div");
@@ -40780,6 +40818,7 @@ function openStatsPanel(days){
   const stAll=MATCH_STATS;
   const st=(days&&days>0)?stAll.filter(m=>now-m.d<=days*86400000):stAll;
   $("vTitle").textContent=`📊 対戦戦績（${st.length}試合${days?`／直近${days}日`:""}）`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="一人回し・対戦の記録から自動集計。⭐＝お気に入り（リプレイが自動削除されません）";
   $("vSearch").style.display="none";
   $("vStatus").textContent="";
@@ -43242,7 +43281,7 @@ function openCardSheet(ctx){
     box.appendChild(actBtn(`変形（${((c.face||0)+1)%link.length+1}/${link.length}面へ）`,async ()=>{
       c.face=((c.face||0)+1)%link.length;
       const fr=FXDB.get(link[c.face]);
-      if(ctx.zone==="battle")c.rot=(fr&&(fr.wide||fr.d2))?((ctx.p===S.seat)?270:90):0;
+      if(ctx.zone==="battle")c.rot=isWideReg(fr)?((ctx.p===S.seat)?270:90):0;
       if(ctx.zone==="battle"&&c.sick){c.sick=false;toast("⚡ 変形（覚醒/龍解など）：召喚酔いが解けた");}
       sfx("flip");
       {const _rf=FXDB.get(link[0])||{};
@@ -43436,6 +43475,7 @@ function openCardSheet(ctx){
         const pool=Z2.battle.filter(x=>!x.tapped);
         if(!pool.length){toast("タップできるクリーチャーがいません");return;}
         $("vTitle").textContent="⚡ ハイパーエナジー：タップするクリーチャーを選択（1体=2軽減）";
+        {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
         $("vHint").textContent=`《${faceNameOf(c)}》コスト${rHE.cost!=null?rHE.cost:"？"}。残りコストは自動タップ（設定ON時）`;
         $("vSearch").style.display="none";$("vStatus").textContent="";
         const sel=new Set();
@@ -43494,6 +43534,7 @@ function openCardSheet(ctx){
         const Z2=zonesOf(ctx.p);
         const pool=Z2.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
         $("vTitle").textContent=`💥 召喚コスト軽減：破壊するクリーチャーを選択（1体＝${_red}軽減）`;
+        {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
         $("vHint").textContent=`《${faceNameOf(c)}》コスト${rSK.cost!=null?rSK.cost:"？"}。0体でもそのまま召喚できます（コストは0より下がりません）`;
         $("vSearch").style.display="none";$("vStatus").textContent="";
         const sel=new Set();
@@ -43602,6 +43643,7 @@ function openCardSheet(ctx){
           if(!goAnyway)return;
         }
         $("vTitle").textContent=`∞ ムゲンクライム${rG.mugen}：タップするクリーチャーを${rG.mugen}体選択`;
+        {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
         $("vHint").textContent=`タップで選択/解除 →「決定」（マナ${rG.mugen}枚${civLbM?`〔${civLbM}を優先〕`:""}は決定時に自動タップ）`;
         $("vSearch").style.display="none";$("vStatus").textContent="";
         const sel=new Set();
@@ -43812,7 +43854,7 @@ function openCardSheet(ctx){
         if(link2&&link2.length>1)g.face=((g.face||0)+1)%link2.length;
         const fk2=link2&&link2.length?link2[g.face||0]:normName(g.name);
         const fr2=FXDB.get(fk2);
-        g.rot=(fr2&&(fr2.wide||fr2.d2))?((ctx.p===S.seat)?270:90):0;
+        g.rot=isWideReg(fr2)?((ctx.p===S.seat)?270:90):0;
         g.tapped=false;
         zonesOf(ctx.p).battle.push(g);
         markArrive(g,{flip:true});sfx("ok");   // 🐉 龍解＝裏返っただけ
@@ -44185,7 +44227,7 @@ function openCardSheet(ctx){
       const tf=lk?lk.indexOf(normName(reg.lunaTarget)):-1;
       if(lk&&tf>=0){
         base.face=tf;base.tapped=false;
-        const fr=FXDB.get(lk[tf]); if(fr&&(fr.wide||fr.d2))base.rot=90;
+        const fr=FXDB.get(lk[tf]); if(isWideReg(fr))base.rot=90;
         markArrive(base);
         emitEvent(ctx.p,"summon");enqueueFx(ctx.p,base);
         sfx("flip");renderAll();
@@ -45063,6 +45105,7 @@ async function mugetsuGate(pi,hostId,needN){
   if(!pool.length){toast("下に敷けるカードがありません");_gateDone();return;}
   const needTxt=needN?`（魔導具など${needN}枚）`:"";
   $("vTitle").textContent=`🌑 無月の門：${faceNameOf(host)} の下に敷くカードを選択${needTxt}`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="タップで選択/解除（墓地とバトルゾーンから同時に選べます）。⭐＝魔導具（種族） →「決定」";
   $("vSearch").style.display="none";
   $("vStatus").textContent="";
@@ -45411,6 +45454,7 @@ function _pickCardBase(title,cards,opts={}){
   return _serialDlg(PICK_GATE,()=>new Promise(res=>{
     const g=$("vGrid");g.innerHTML="";
     $("vTitle").textContent=title;
+    pickArtSet(opts&&opts.art);   // 🖼 v16.77 いま処理中のカード（opts.art で差し替え可）
     if(typeof B!=="undefined"&&B)B._viewerBack=null; // 対戦中の選択パネルは「盤面を見る」
     if(typeof updateVPeek==="function")try{updateVPeek();}catch(e){}
     $("vHint").textContent=opts.hint||"タップで選択　／　👁 盤面を見る で盤面を確認できます";
@@ -45457,6 +45501,7 @@ function openExileViewer(pi){
   VIEWER_BROWSE=true;   // 👁 中身を眺めるだけのパネル
   const Z=zonesOf(pi);
   $("vTitle").textContent=`ゲーム外ゾーン（${Z.exile.length}枚）　[${S.players[pi].label}]`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="タップ→操作 ／ ドラッグで他のゾーンへ戻せます";
   $("vSearch").style.display="none";
   $("vOk").style.display="none";$("vStatus").textContent="";
@@ -45478,6 +45523,7 @@ function openHyperViewer(pi){
   VIEWER_BROWSE=true;   // 👁 中身を眺めるだけのパネル
   const Z=zonesOf(pi);
   $("vTitle").textContent=`超次元ゾーン（${Z.hyper.length}枚）　[${S.players[pi].label}]`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="タップ→操作 ／ 横にドラッグでバトルゾーンへ直接出せます（公開ゾーン）";
   $("vSearch").style.display="none";
   $("vOk").style.display="none";$("vStatus").textContent="";
@@ -45504,6 +45550,7 @@ function renderManaViewer(pi){
   const untap=manaSumOf(pi,true);
   const zeroN=Z.mana.filter(c=>manaValOf(c)===0).length;
   $("vTitle").textContent=`マナゾーン（使用可 ${untap} / 全 ${manaSumOf(pi,false)}マナ・${Z.mana.length}枚${zeroN?`／うち0マナ${zeroN}枚`:""}）　[${S.players[pi].label}]`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent=S.multi
     ?`☑ 複数選択中（このゾーン ${S.msel.filter(x=>x.p===pi&&x.zone==="mana").length}枚）：カードをタップで選択・解除。下部バーの「操作」でまとめて処理できます`
     :(MV_MENU?"☰メニューモード中：カードをタップすると操作メニュー（回収・移動・確認など）が開きます":"カードをタップ→タップ/アンタップ ／「☑複数選択」で1枚ずつ選択 ／「☰メニュー」でタップ＝操作メニューに切替 ／ 横にドラッグで他ゾーンへ移動");
@@ -45616,6 +45663,7 @@ function renderManaViewer(pi){
 function openOppHandViewer(op){
   const Z=zonesOf(op);
   $("vTitle").textContent=`👁 ${S.players[op].label}の手札（${Z.hand.length}枚）`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="効果による確認です。閉じると再び非公開になります。";
   $("vSearch").style.display="none";
   $("vOk").style.display="none";$("vStatus").textContent="";
@@ -45628,6 +45676,7 @@ function openGraveViewer(pi){VIEWER_BROWSE=true;gvMulti=false;renderGraveViewer(
 function renderGraveViewer(pi){
   const Z=zonesOf(pi);
   $("vTitle").textContent=`墓地（${Z.grave.length}枚）　[${S.players[pi].label}]`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent=gvMulti
     ?"タップで選択/解除。選び終えたら閉じて、下部バーの「操作」から移動・重ねる（無月の門）ができます。"
     :"タップ→操作 ／ 横にドラッグで盤面へ直接移動 ／「複数選択」で無月の門など";
@@ -45659,6 +45708,7 @@ function openShieldViewer(pi){
   const Z=zonesOf(pi);
   const svMulti=!!S.multi; // 🖐 複数選択モード中は、タップで選択／解除にする
   $("vTitle").textContent=`🛡 シールド確認（${Z.shield.length}枚）　[${S.players[pi].label}]`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent=svMulti
     ? "🖐 複数選択中：タップで選択／解除できます。選び終わったら閉じて、下の「操作」からまとめて処理してください。"
     : "表向きのカードのみ内容が見えます。タップで操作（確認/重ね/ブレイクなど）。「1-2」等は重なっているカードです。上部の「複数選択」をオンにすると、ここで複数の盾を選べます。";
@@ -45880,6 +45930,7 @@ function openDeckViewer(pi){
   }
   function build(){
     $("vTitle").textContent=`山札（上から順・${Z.deck.length}枚）${dvSel.size?`　${dvSel.size}枚選択中`:""}`;
+    {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
     const g=$("vGrid");g.innerHTML="";
     Z.deck.forEach((c,i)=>{
       const el=vCardEl(c.name,{idx:i+1,side:c.sideways});
@@ -45890,6 +45941,7 @@ function openDeckViewer(pi){
           el.classList.toggle("picked",dvSel.has(c.id));
           updateBar();
           $("vTitle").textContent=`山札（上から順・${Z.deck.length}枚）${dvSel.size?`　${dvSel.size}枚選択中`:""}`;
+          {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
           return;
         }
         closeViewer();
@@ -46005,6 +46057,7 @@ async function renameImageTo(key,nn){
 }
 function openImageManager(){
   $("vTitle").textContent=`登録画像の管理（${imgURL.size}枚）`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="画像をタップ → 名前の変更 / 削除ができます。検索は名前のほか文明（光水闇火自然無色）でも絞れます。";
   $("vOk").style.display="none";$("vStatus").textContent="";
   // ✖ 閉じたら盤面へ戻す（v14.71）。デッキの「👁見る」が設定した戻り先が残っていると
@@ -46143,6 +46196,7 @@ function openImageManager(){
         if(act===0){
           await renameImage(k);
           $("vTitle").textContent=`登録画像の管理（${imgURL.size}枚）`;
+          {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
           render();
         }else if(act===1){
           if(k==="__back__"){toast("裏面には設定できません");return;}
@@ -46169,6 +46223,7 @@ function openImageManager(){
           if(!await ask(`画像「${name}」を削除しますか？`))return;
           await deleteImage(k);
           $("vTitle").textContent=`登録画像の管理（${imgURL.size}枚）`;
+          {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
           toast(`「${name}」を削除しました`);
           render();
         }
@@ -46215,6 +46270,7 @@ function openImageManager(){
         mgrSel.clear();mgrSelMode=false;
         ok.textContent="☑ 選択→操作（書き出し/削除）";
         $("vTitle").textContent=`登録画像の管理（${imgURL.size}枚）`;
+        {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
         render();renderAll();
         toast("🗑 まとめて削除しました");
       }else if(act===2){
@@ -46290,6 +46346,7 @@ function openSleevePicker(pi){
   if(!imgURL.size){toast("先に画像を登録してください");return;}
   $("deckOlay").classList.remove("open");
   $("vTitle").textContent=`${S.players[pi].label}のスリーブを選ぶ`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="画像を選んだ後も画面は閉じません。上のスライダーで表示位置を確認しながら調整できます。";
   $("vOk").style.display="none";$("vStatus").textContent="";
   const search=$("vSearch");search.style.display="";search.value="";
@@ -46351,6 +46408,7 @@ function openMatPicker(pi){
   const _st={all:false,nArt:0};
   $("deckOlay").classList.remove("open");
   $("vTitle").textContent=`${S.players[pi].label}のプレイマットを選ぶ`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="画像を選んだ後、上の調整欄で表示方法と縦横位置を変更できます。「盤面を見る」で確認できます。";
   $("vOk").style.display="none";$("vStatus").textContent="";
   const search=$("vSearch");search.style.display="";search.value="";
@@ -46436,6 +46494,7 @@ function openFxIconPicker(side,adjustOnly){
   {const d1=$("deckOlay");if(d1)d1.classList.remove("open");
    const d2=$("settingsOlay");if(d2)d2.classList.remove("open");}
   $("vTitle").textContent=`👤 ${S.players[side].label}の演出に出す画像`;
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent=adjustOnly
     ?"丸く切り抜く位置と拡大率を調整します。上の丸が実際の見え方です。"
     :"画像を選んだ後も画面は閉じません。上の丸を見ながら、切り抜く位置と拡大率を調整できます。";
@@ -46519,6 +46578,7 @@ function openArtPicker(){
   if(!imgURL.size){toast("先に画像を登録してください");return;}
   $("deckOlay").classList.remove("open");
   $("vTitle").textContent="🎴 スリーブ・プレマ用の印";
+  {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
   $("vHint").textContent="タップで印の付け外し。印のある画像はカードの一覧に出なくなります（スリーブ・プレイマットの選択には出ます）。";
   $("vOk").style.display="none";$("vStatus").textContent="";
   const search=$("vSearch");search.style.display="";search.value="";
@@ -46827,6 +46887,7 @@ function pickCards(pi,n,title,exclude){
     const picked=new Map();
     const total=()=>Array.from(picked.values()).reduce((s,x)=>s+x,0);
     $("vTitle").textContent=title;
+    {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
     $("vHint").textContent=`タップで枚数を増減（同名はデッキ残数まで）。${n}枚選んで「決定」。`;
     $("vSearch").style.display="none";
     $("vOk").style.display="";$("vOk").textContent="決定";$("vStatus").textContent=`0 / ${n}`;
@@ -51136,6 +51197,7 @@ $("bListView").addEventListener("click",()=>{
     const g=$("vGrid");
     const sc=g.scrollTop;
     $("vTitle").textContent=`📋 現在のリスト（メイン${t(B.counts.main)} / GR${t(B.counts.gr)} / 超次元${t(B.counts.hy)} / ゲーム外${t(B.counts.ex)}）`;
+    {const _va=document.getElementById("vArt");if(_va){_va.innerHTML="";_va.style.display="none";}} // 🖼 v16.77 選ぶ画面以外では絵を出さない
     g.innerHTML="";
     g.classList.add("decklist");
     // 表示の切り替え：確認向き（1枚ずつ並べる）と 編集向き（同じカードをまとめて×N）
