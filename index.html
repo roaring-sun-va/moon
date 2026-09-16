@@ -5691,7 +5691,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.83";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.85";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9180,7 +9180,7 @@ async function reorderDeck(src,tgt,allNames){
   await saveDeckOrder();
   if(DECK_SORT!=="manual")await saveDeckSort("manual");
 }
-async function saveDeck(name,main,gr,hy,sp,ex,cover,coverY){
+async function saveDeck(name,main,gr,hy,sp,ex,cover,coverY,coverRot){
   await loadDeckOrder();
   markDeckCreated(name);
   // 🖼 coverY＝表紙の上下位置（0=上端〜100=下端。null=既定の20%）。
@@ -9190,7 +9190,47 @@ async function saveDeck(name,main,gr,hy,sp,ex,cover,coverY){
     try{const prev=await getDeck(name);coverY=(prev&&prev.coverY!=null)?prev.coverY:null;}catch(e){coverY=null;}
   }
   const cy=(coverY==null||isNaN(+coverY))?null:Math.max(0,Math.min(100,Math.round(+coverY)));
-  if(db)await idbPut("decks",name,{main,gr,hy,sp,ex,cover:cover||null,coverY:cy});else memDecks.set(name,{main,gr,hy,sp,ex,cover:cover||null,coverY:cy});
+  /* 🔄 v16.85 coverRot＝表紙の回転（0/90/180/270）。横向きのカードを表紙にする時に使う。
+     省略したら前の値を引き継ぐ（上下位置と同じ扱い）。 */
+  let crot=coverRot;
+  if(crot===undefined){
+    try{const prev=await getDeck(name);crot=(prev&&prev.coverRot!=null)?prev.coverRot:0;}catch(e){crot=0;}
+  }
+  crot=([0,90,180,270].includes(+crot))?+crot:0;
+  if(db)await idbPut("decks",name,{main,gr,hy,sp,ex,cover:cover||null,coverY:cy,coverRot:crot});
+  else memDecks.set(name,{main,gr,hy,sp,ex,cover:cover||null,coverY:cy,coverRot:crot});
+}
+/* 🔄 v16.85 表紙の回転。背景画像は回せないので、回す時だけ中に画像の層を1枚敷く。
+   90度・270度では縦横が入れ替わるため、親の大きさを測って幅と高さを入れ替える。 */
+function applyDeckCover(el,url,pos,rot){
+  if(!el)return;
+  const r=([0,90,180,270].includes(+rot))?+rot:0;
+  const old=el.querySelector(":scope > .dcovLayer");
+  if(old)old.remove();
+  if(!url){el.style.backgroundImage="";return;}
+  if(!r){
+    el.style.backgroundImage=`url("${url}")`;
+    el.style.backgroundPosition=pos||"";
+    return;
+  }
+  el.style.backgroundImage="";
+  if(getComputedStyle(el).position==="static")el.style.position="relative";
+  el.style.overflow="hidden";
+  const lay=document.createElement("div");
+  lay.className="dcovLayer";
+  const swap=(r===90||r===270);
+  const w=el.clientWidth||el.offsetWidth||160, hgt=el.clientHeight||el.offsetHeight||120;
+  lay.style.cssText=`position:absolute;top:50%;left:50%;z-index:0;pointer-events:none;`
+    +`width:${swap?hgt:w}px;height:${swap?w:hgt}px;`
+    +`background-image:url("${url}");background-size:cover;background-position:${pos||"50% 20%"};`
+    +`transform:translate(-50%,-50%) rotate(${r}deg);`;
+  el.insertBefore(lay,el.firstChild);
+  /* 中身（デッキ名など）が層の下に隠れないようにする */
+  [...el.children].forEach(ch=>{
+    if(ch===lay)return;
+    if(getComputedStyle(ch).position==="static")ch.style.position="relative";
+    if(!ch.style.zIndex)ch.style.zIndex="1";
+  });
 }
 /* 🖼 表紙の上下位置をCSSの background-position に直す */
 function deckCoverPos(d){
@@ -17712,7 +17752,8 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!S.vs){toast("（ソロのためスキップ：相手のシールドがありません）");continue;}
       for(let i=0;i<n;i++){
         if(!OZ.shield.length){toast("相手のシールドがありません");break;}
-        const j=OZ.shield.length===1?0:await pickCard(`🛡→墓地：相手のシールドを1つ選ぶ（${i+1}/${n}）`,OZ.shield,{});
+        const j=OZ.shield.length===1?0:await pickCard(`🛡→墓地：相手のシールドを1つ選ぶ（${i+1}/${n}）`,OZ.shield,
+          {mask:true,maskLabel:"盾",hint:"中身は見ずに選びます（表向きの盾はそのまま見えます）"});
         if(j===null)break;
         const sh=OZ.shield.splice(j,1)[0];
         if(sh.under&&sh.under.length){sh.under.splice(0).forEach(u=>{u.faceup=true;OZ.grave.push(u);});}
@@ -17756,7 +17797,7 @@ async function runFxList(pi,list,srcCard,inPump){
         // ④ 墓地に置くかどうか（任意）
         const jg=await askChoice(`🛡 ${S.players[tp].label} の盾${j+1}：《${faceNameOf(sh)}》\n${_toBtm?"山札の一番下に置きますか？":"墓地に置きますか？"}`,
           [`${_toBtm?"山札の一番下に置く":"墓地に置く"}（→ そのプレイヤーは山札の上から1枚をシールド化）`,"置かない（シールドはそのまま・補充もなし）"],
-          [{card:sh,cap:"見えた盾"},{card:srcCard,cap:"処理中"}]);   // 🖼 v16.80 めくれた盾を先に、処理中のカードを後ろに
+          [{card:sh,cap:"見えた盾"}]);   // 🖼 v16.84 めくれた盾だけを出す（処理中のカードは画面上部の帯に出ているので重複）
         if(jg!==0){
           toast(`👀 見ただけで、シールドは動かさなかった（補充なし）`);
           logOnly(`👀 ${S.players[pi].label}：盾を墓地に置かなかったため、シールド化は行われない`);
@@ -19281,7 +19322,8 @@ async function runFxList(pi,list,srcCard,inPump){
       for(let i=0;i<n;i++){
         const sh=OZ.shield.slice();
         if(!sh.length){if(i===0)toast("相手のシールドがありません");break;}
-        const j=sh.length===1?0:await pickCard(`🛡 マナゾーンに置く相手のシールドを選択（${i+1}/${n}つ目）`,sh,{hint:"タップで選択"});
+        const j=sh.length===1?0:await pickCard(`🛡 マナゾーンに置く相手のシールドを選択（${i+1}/${n}つ目）`,sh,
+          {mask:true,maskLabel:"盾",hint:"中身は見ずに選びます（表向きの盾はそのまま見えます）"});
         if(j===null)break;
         const t=sh[j];
         const idx=OZ.shield.findIndex(x=>x.id===t.id);
@@ -47077,16 +47119,18 @@ async function fillStartDecks(){
 const CIV_DOT={light:"#fde68a",water:"#7dd3fc",dark:"#a78bfa",fire:"#fca5a5",nature:"#86efac",zero:"#e5e7eb"};
 /* 🖼 デッキの絵（表紙）は `d.cover`（normNameのキー）に一本化する。
    デッキ一覧の「🖼 表紙」でも、対戦開始のデッキ選択の「🖼 絵」でも同じ場所を書き換える。 */
-async function saveDeckCover(deckName,imgKey,coverY){
+async function saveDeckCover(deckName,imgKey,coverY,coverRot){
   const d=await getDeck(deckName);
   if(!d)return false;
-  await saveDeck(deckName,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],imgKey||null,coverY);
+  await saveDeck(deckName,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],imgKey||null,coverY,coverRot);
   return true;
 }
 /* 🖼 表紙の上下位置をスライダーで決める小さなパネル（v14.70）。
    決めた位置は「デッキ作成の表紙タイル」「対戦開始の看板」「デッキ一覧のタイル」の全部に効く。
    戻り値：0〜100（決定）／null（既定の20%に戻す）／undefined（やめた＝変更しない） */
-function adjustCoverY(imgKey,cur){
+/* 🔄 v16.85 表紙の調整は「上下位置」と「回転」の2つ。
+   返り値：{y,rot}（決定）／null（既定に戻す）／undefined（やめた） */
+function adjustCoverY(imgKey,cur,curRot){
   return new Promise(res=>{
     const url=imgURL.get(imgKey);
     if(!url){toast("この表紙は画像が読み込まれていません");res(undefined);return;}
@@ -47098,14 +47142,21 @@ function adjustCoverY(imgKey,cur){
     box.style.cssText="background:var(--panel,#131a2a);border:1px solid var(--line,#334);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;width:min(560px,96vw)";
     const ttl=document.createElement("div");
     ttl.style.cssText="font-weight:900;font-size:14px";
-    ttl.textContent="🖼 表紙の位置を調整";
+    ttl.textContent="🖼 表紙の位置と向きを調整";
     box.appendChild(ttl);
     // 見本は表紙タイルと同じ横長の枠。スライダーを動かすとその場で動く
     const prev=document.createElement("div");
     prev.className="stDeckPrev";
     prev.style.cssText="height:150px;margin:0";
     prev.style.backgroundImage=`url("${url}")`;
-    const apply=()=>{prev.style.backgroundPosition=`50% ${y}%`;lb.textContent=`上下位置：${y}%${y===20?"（既定）":""}`;};
+    let rot=([0,90,180,270].includes(+curRot))?+curRot:0;
+    const apply=()=>{
+      prev.style.backgroundPosition=`50% ${y}%`;
+      lb.textContent=`上下位置：${y}%${y===20?"（既定）":""}${rot?`／回転 ${rot}度`:""}`;
+      /* 見本にも回転を反映する（中身は背景なので、見本だけ transform で回す） */
+      prev.style.transform=rot?`rotate(${rot}deg)`:"";
+      prev.style.transformOrigin="center center";
+    };
     box.appendChild(prev);
     const lb=document.createElement("div");
     lb.style.cssText="font-size:12px;font-weight:800;color:var(--muted)";
@@ -47120,16 +47171,36 @@ function adjustCoverY(imgKey,cur){
     const dn=document.createElement("span");dn.textContent="下";dn.style.cssText="font-size:12px;color:var(--muted);font-weight:800";
     row.appendChild(up);row.appendChild(rg);row.appendChild(dn);
     box.appendChild(row);
+    /* 🔄 v16.85 回転（横向きのカードを表紙にする時） */
+    const rrow=document.createElement("div");
+    rrow.style.cssText="display:flex;gap:8px;align-items:center;flex-wrap:wrap";
+    const rlb=document.createElement("span");
+    rlb.textContent="向き";rlb.style.cssText="font-size:12px;color:var(--muted);font-weight:800";
+    rrow.appendChild(rlb);
+    for(const deg of [0,90,180,270]){
+      const rb=document.createElement("button");
+      rb.className="btn small";
+      rb.textContent=deg===0?"そのまま":`${deg}度`;
+      rb.addEventListener("click",()=>{
+        rot=deg;
+        [...rrow.querySelectorAll("button")].forEach(x=>x.classList.remove("primary"));
+        rb.classList.add("primary");
+        apply();
+      });
+      if(deg===rot)rb.classList.add("primary");
+      rrow.appendChild(rb);
+    }
+    box.appendChild(rrow);
     const hint=document.createElement("div");
     hint.className="hint";
-    hint.textContent="カードの見せたい部分（顔など）が枠に入るように上下を動かします。デッキ作成の表紙・対戦開始の看板・デッキ一覧のタイルすべてに同じ位置で出ます。";
+    hint.textContent="カードの見せたい部分（顔など）が枠に入るように上下を動かします。横向きのカードを表紙にする時は「向き」で回してください。デッキ作成の表紙・対戦開始の看板・デッキ一覧のタイルすべてに同じ見え方で出ます。";
     box.appendChild(hint);
     const foot=document.createElement("div");
     foot.style.cssText="display:flex;gap:8px;justify-content:flex-end";
     const mk=(t,cls,fn)=>{const b=document.createElement("button");b.className="btn small "+cls;b.textContent=t;b.addEventListener("click",fn);foot.appendChild(b);return b;};
     mk("やめる","ghost",()=>{ol.remove();res(undefined);});
     mk("↺ 既定に戻す","",()=>{ol.remove();res(null);});
-    mk("この位置にする","primary",()=>{ol.remove();res(y);});
+    mk("この見え方にする","primary",()=>{ol.remove();res({y,rot});});
     box.appendChild(foot);
     ol.appendChild(box);
     ol.addEventListener("click",e=>{if(e.target===ol){ol.remove();res(undefined);}});
@@ -47172,7 +47243,7 @@ async function deckPickCards(){
       imgKey=d.cover;hasImg=true;
       key=dispName.get(d.cover)||d.cover;
     }
-    out.push({name:n,key,imgKey,hasImg,total,pos:deckCoverPos(d),civs:[...civs],
+    out.push({name:n,key,imgKey,hasImg,total,pos:deckCoverPos(d),rot:(d&&d.coverRot)||0,civs:[...civs],
       gr:((d&&d.gr)||[]).reduce((a,x)=>a+(+x.count||0),0),
       hy:((d&&d.hy)||[]).reduce((a,x)=>a+(+x.count||0),0)});
   }
@@ -47230,13 +47301,15 @@ async function pickDeckCover(deckName,after){
   }else{
     const key=normName(cards[j].name);
     // 🖼 選んだあとに上下位置も決められる（v14.70・カードによって顔の位置が違うため）
-    let cy;
+    let cy,crot;
     if(imgURL.has(key)){
       const d0=await getDeck(deckName);
-      cy=await adjustCoverY(key,(d0&&d0.coverY!=null)?d0.coverY:20);
-      if(cy===undefined)cy=(d0&&d0.coverY!=null)?d0.coverY:null;   // やめた＝位置は変えない
+      const rr=await adjustCoverY(key,(d0&&d0.coverY!=null)?d0.coverY:20,(d0&&d0.coverRot)||0);
+      if(rr===undefined){cy=(d0&&d0.coverY!=null)?d0.coverY:null;crot=(d0&&d0.coverRot)||0;}   // やめた＝変えない
+      else if(rr===null){cy=null;crot=0;}                                                      // 既定に戻す
+      else{cy=rr.y;crot=rr.rot;}
     }
-    await saveDeckCover(deckName,key,cy);
+    await saveDeckCover(deckName,key,cy,crot);
     toast(`🖼 「${deckName}」の表紙を《${cards[j].name}》にしました`);
   }
   if(typeof after==="function")await after();
@@ -47335,7 +47408,7 @@ async function openDeckPick(selId,title){
       el.className="dpCard"+(dk.name===cur?" cur":"");
       el.title=dk.name;
       const url=(dk.hasImg&&dk.imgKey)?imgURL.get(dk.imgKey):null;
-      if(url){el.style.backgroundImage=`url("${url}")`;el.style.backgroundPosition=dk.pos||"";}
+      if(url)applyDeckCover(el,url,dk.pos||"",dk.rot||0);   // 🔄 v16.85 回転にも対応
       else{
         const p2=document.createElement("div");p2.className="dpNo";
         p2.textContent=dk.key?`${dk.key}\n（画像未登録）`:"カードなし";
@@ -47444,7 +47517,7 @@ async function stDeckPrevInfo(name){
     if(imgURL.has(k)&&cost>keyCost){key=k;keyCost=cost;}
   }
   if(d.cover&&imgURL.has(d.cover))key=d.cover;
-  return {imgKey:key,total,pos:deckCoverPos(d)};
+  return {imgKey:key,total,pos:deckCoverPos(d),rot:(d&&d.coverRot)||0};
 }
 async function refreshStPrev(pi){
   const box=document.getElementById("stPrev"+pi);
@@ -47455,8 +47528,7 @@ async function refreshStPrev(pi){
   box.style.backgroundImage="";
   if(!info)return; // :empty のまま＝「デッキ未選択」が出る
   const url=info.imgKey?imgURL.get(info.imgKey):null;
-  if(url)box.style.backgroundImage=`url("${url}")`;
-  box.style.backgroundPosition=info.pos||"";   // 🖼 表紙の上下位置（デッキごと）
+  applyDeckCover(box,url,info.pos||"",info.rot||0);   // 🔄 v16.85 表紙の位置と回転
   const cap=document.createElement("div");
   cap.className="sdp-cap";
   cap.textContent=name.includes("/")?name.split("/").slice(1).join("/"):name;
@@ -48010,8 +48082,7 @@ async function refreshDkPrev(){
   box.style.backgroundImage="";
   if(!info)return;
   const url=info.imgKey?imgURL.get(info.imgKey):null;
-  if(url)box.style.backgroundImage=`url("${url}")`;
-  box.style.backgroundPosition=info.pos||"";   // 🖼 表紙の上下位置（デッキごと）
+  applyDeckCover(box,url,info.pos||"",info.rot||0);   // 🔄 v16.85 表紙の位置と回転
   const cap=document.createElement("div");
   cap.className="sdp-cap";
   cap.textContent=name;
@@ -48644,12 +48715,13 @@ $("deckSelect").addEventListener("change",()=>{try{refreshDkPrev();}catch(e){}})
    const info=await stDeckPrevInfo(name);
    if(!info||!info.imgKey){toast("このデッキには表紙の画像がありません（🖼表紙はデッキ一覧から選べます）");return;}
    const d=await getDeck(name);
-   const cy=await adjustCoverY(info.imgKey,(d&&d.coverY!=null)?d.coverY:20);
-   if(cy===undefined)return;
+   const rr=await adjustCoverY(info.imgKey,(d&&d.coverY!=null)?d.coverY:20,(d&&d.coverRot)||0);
+   if(rr===undefined)return;
+   const cy=(rr===null)?null:rr.y, crot=(rr===null)?0:rr.rot;
    // 表紙カードが「自動」のままでも、調整したらそのカードを表紙として固定する
    // （自動のままだと高コストカードの追加で絵が入れ替わり、位置がずれるため）
-   await saveDeckCover(name,(d&&d.cover)||info.imgKey,cy);
-   toast(cy===null?"🖼 表紙の位置を既定に戻しました":`🖼 表紙の位置を保存しました（${cy}%）`);
+   await saveDeckCover(name,(d&&d.cover)||info.imgKey,cy,crot);
+   toast(rr===null?"🖼 表紙の位置と向きを既定に戻しました":`🖼 表紙を保存しました（上下${cy}%${crot?`・回転${crot}度`:""}）`);
    try{refreshDkPrev();}catch(e){}
    try{refreshStPrev(0);refreshStPrev(1);}catch(e){}
  });}
@@ -49689,7 +49761,7 @@ async function renderDeckList(){
         }
         ck=best;
       }
-      if(ck){nm.style.backgroundImage=`url("${imgURL.get(ck)}")`;nm.style.backgroundPosition=deckCoverPos(d);}
+      if(ck)applyDeckCover(nm,imgURL.get(ck),deckCoverPos(d),(d&&d.coverRot)||0);   // 🔄 v16.85
     }
     const civs=new Set();
     for(const it of (d.main||[])){const r2=FXDB.get(canonicalCardKey(it.name));if(r2&&r2.civs)r2.civs.forEach(v=>civs.add(v));}
