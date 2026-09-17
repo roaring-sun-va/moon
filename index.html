@@ -3126,6 +3126,9 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="自分のターン開始時、このカードが自分の墓地にあれば、自分のクリーチャーn体を破壊して、このカードを墓地からバトルゾーンに出せる（偽りの名 ドレッド・ブラッド型）。0＝無効">🪦 自分のターン開始時、墓地にあれば自分のクリーチャー<input type="number" id="fxGraveReviveN" min="0" max="9" value="0" style="width:52px">体を破壊してこのカードを墓地から出す（ドレッド型）</label>
         <label title="このクリーチャーは封印されない（禁断・零龍などの封印を受け付けない・パーフェクト・エイティー型）"><input type="checkbox" id="fxNoSeal"> 🔏 封印されない（自身・パーフェクト・エイティー型）</label>
         <label><input type="checkbox" id="fxStNoHandes"> 常在：自分の手札は相手のカードの効果によって捨てられない</label>
+        <label title="相手のカードの効果で、自分のシールドを墓地・マナ・山札などに置くことを止めます（ブレイクで手札に加えるのは止めません・緑知銀 ジェンバン型）"><input type="checkbox" id="fxShieldHandOnly"> 🛡 常在：相手の効果によって、自分のシールドは手札以外のゾーンに置かれない</label>
+        <label title="このカードが自分のシールドゾーンに表向きである間も、常在のコスト軽減と誘発が働きます（超煌ノ裁キ ダイヤモン将型）"><input type="checkbox" id="fxFaceUpShieldActive"> 🛡👁 シールドゾーンに表向きの間も、常在のコスト軽減・誘発が働く</label>
+        <label title="相手のクリーチャーが攻撃する時、自分のシールドの表向きのカードをこの枚数だけ裏向きにして、手札からコストを支払わずに唱えてもよい（天地ヲ別ツ龍断ノ裁キ型・0＝なし）">⚖ 相手の攻撃時、表向きのシールドを<input type="number" id="fxFoeAtkFlipCast" min="0" max="9" value="0" style="width:52px">枚裏向きにして手札から唱えてよい</label>
         <label><input type="checkbox" id="fxLibWin"> 常在：自分の山札が0枚になったら、負けるかわりに勝利する（シャコガイル型）</label>
         <label><input type="checkbox" id="fxPetensy"> 相手のターンの終わりに、手札からコストを支払わずに使える（ペテンシー型）</label>
         <label title="そのターンに出たクリーチャーの数（両者合算）がこの数以上なら使えます。0にすると着地数を見ません（ブルー・インパルス型）">└ 着地<input type="number" id="fxPetensyN" min="0" max="20" value="3" style="width:52px">体以上（0＝見ない）</label>
@@ -5121,6 +5124,51 @@ function askChoice(msg,options,art){return _serialDlg(ASK_GATE,()=>new Promise(r
    返り値は askChoice と同じ（0＝上面／1＝下面／null＝やめる）。 */
 /* 🃏 v16.105 効果で「クリーチャーを出す」時の多面カード（ツインパクト等）の面選び。
    出せる面（クリーチャーの面）が1つだけなら聞かずにその面で出す。2つ以上ある時だけ選ぶ（神羅／羅月NEX等）。 */
+/* 🛡 v16.107 緑知銀 ジェンバン型：相手の効果で、自分のシールドは手札以外のゾーンに置かれない */
+function shieldHandOnlyBy(owner,actor){
+  if(owner===actor||!S.expert)return null;
+  return zonesOf(owner).battle.find(x=>{const r=getReg(x);return r&&r.shieldHandOnly&&!isSealed(x)&&!isIgnored(x,owner);})||null;
+}
+/* 🛡👁 v16.107 シールドゾーンに表向きで置かれていて、そこでも働くカード（ダイヤモン将型） */
+function faceUpShieldActives(pi){
+  return zonesOf(pi).shield.filter(x=>{if(!x||!x.faceup)return false;const r=getReg(x);return r&&r.faceUpShieldActive;});
+}
+/* ⚖ v16.107 天地ヲ別ツ龍断ノ裁キ型：相手のクリーチャーが攻撃する時、表向きのシールドを裏向きにして手札から唱える */
+async function offerFoeAtkFlipCast(dp){
+  if(!S.expert||!S.vs)return;
+  const Z=zonesOf(dp);
+  const cands=Z.hand.filter(h=>{const r=getReg(h);return r&&(+r.foeAtkFlipCast>0);});
+  for(const h of cands){
+    if(!Z.hand.some(x=>x.id===h.id))continue;
+    const need=+getReg(h).foeAtkFlipCast;
+    const ups=Z.shield.filter(x=>x.faceup);
+    if(ups.length<need)continue;
+    const yes=await ask(`⚖ ${S.players[dp].label}：相手のクリーチャーが攻撃します。\n自分のシールドの表向きのカード${need}枚を裏向きにして、《${faceNameOf(h)}》をコストを支払わずに唱えますか？（表向き${ups.length}枚）`,h);
+    if(!yes)continue;
+    let chosen=ups.slice(0,need);
+    if(ups.length>need){
+      chosen=[];let pool=ups.slice();
+      for(let i=0;i<need;i++){
+        const j=await pickCard(`⚖ 裏向きにする表向きのシールドを選択（${i+1}/${need}）`,pool,{hint:"タップで選択"});
+        if(j===null){chosen=null;break;}
+        chosen.push(pool[j]);pool.splice(j,1);
+      }
+      if(!chosen)continue;
+    }
+    snap();
+    chosen.forEach(x=>{x.faceup=false;});
+    const hi=Z.hand.findIndex(x=>x.id===h.id);if(hi<0)continue;
+    Z.hand.splice(hi,1);
+    h.faceup=true;h.tapped=false;h._castFromHand=true;
+    Z.resolve.push(h);
+    S.spellTurn=S.spellTurn||[0,0];S.spellTurn[dp]=(S.spellTurn[dp]||0)+1;
+    logOnly(`⚖ ${S.players[dp].label}：表向きのシールド${need}枚を裏向きにして《${faceNameOf(h)}》をコストを支払わずに唱えた`);
+    try{fxShare("spell","相手の攻撃に合わせて唱えた！",`${S.players[dp].label}　${faceNameOf(h)}`,true,h.name,dp);}catch(e){}
+    emitEvent(dp,"spell",h);scheduleAutoResolve(dp,h);enqueueFx(dp,h);
+    renderAll();
+    await waitFxIdle();
+  }
+}
 function enterFaceAuto(lk){
   if(!lk||lk.length<2)return null;
   const idx=lk.map((k,i)=>{const fr=FXDB.get(k);return fr&&isCreatureReg(fr)?i:-1;}).filter(i=>i>=0);
@@ -5720,7 +5768,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.105";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.107";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7236,6 +7284,7 @@ async function afterSealPeeled(owner,c,times){
     const lk=LINKS.get(normName(c.name));
     if(lk&&lk.length>1&&(c.face|0)===0){
       c.face=1;c.tapped=false;c.rot=0;
+      c._boomSealed=false;   // 🔏 v16.106 禁断爆発の封印は1回だけ（下の sealFoe で使う）
       try{sfx("flip");}catch(e){}
       try{fxKeyword(owner,"禁断爆発！",faceNameOf(c),"封印がすべて外れた");}catch(e){}
       toast(`🔥 禁断爆発！ ${faceNameOf(c)} に裏返った`);
@@ -11151,7 +11200,7 @@ function runWatchFx(pi,type,trigCard){
     }
   }catch(e){}
   const _scan=(SELF_ONLY_EV.has(type)&&trigCard)?[trigCard]
-    :[...((S.gameMode!=="tcg")?[...zonesOf(pi).battle].reverse():zonesOf(pi).battle),..._gears,..._grave];
+    :[...((S.gameMode!=="tcg")?[...zonesOf(pi).battle].reverse():zonesOf(pi).battle),..._gears,..._grave,...faceUpShieldActives(pi).filter(x=>{const rx=getReg(x);return (rx.watchFx||[]).some(w=>w&&w.ev===type&&w.ev!=="pig");})];   // 🛡👁 v16.107
   for(const c of _scan){
     const r=getReg(c);
     if(r&&r.watchFx&&r.watchFx.length){
@@ -12674,6 +12723,7 @@ const FX_TYPES=[
   ["foeBigCreToDeck","🚫 次の自分のターン開始時まで、相手が自身のマナの枚数より大きいコストのクリーチャーを出した時、相手はそれを自身の山札の一番下に置く（堅珠ノ正裁Z型）"],
   ["nextSummonCostDownSA","💸⚡ このターン、次に召喚する自分のクリーチャーのコストをn少なくし（0以下にはならない）、そのクリーチャーが出た時に「スピードアタッカー」を与える（T・T・T型／条件欄に「SAなし」でコスト軽減だけ／「1文明」で下限が『1とそのクリーチャーの文明の数の大きい方』になる＝キリモミ・ヤマアラシ型）"],
   ["nextSpellCostDown","💸 このターン、自分が次に手札から唱える呪文のコストをn少なくする（0以下にはならない・煌メク聖戦 絶十型）"],
+  ["selfToShieldStackUp","🛡 このカードを、自分のシールド1つの上に表向きにして置く（破壊された時などに使う・超煌ノ裁キ ダイヤモン将型／シールドの束は1つと数える）"],
   ["deckTopToShieldStack","🛡 自分の山札の上からn枚を、自分のシールド1つの上に表向きにして置く（盾の枚数は増えない・煌メク聖戦 絶十型）"],
   ["foeNoSpell","🚫 相手は次の自分のターン終了時まで呪文を唱えられない（唱えた側の次ターンまで・条件欄でコスト等指定可・空欄＝全呪文）"],
   ["lockFoeAtkP","🚫 相手クリーチャーをn体まで選び、次の自分のターン開始時までプレイヤーを攻撃できなくする"],
@@ -13701,6 +13751,7 @@ async function autoTapCost(pi,c){
       }};
       for(const b of zonesOf(pi).battle){scanCR(b);(b.gear||[]).forEach(scanCR);}
       for(const u of evoBases){scanCR(u);(u.gear||[]).forEach(scanCR);} // 🧬 進化元の常在軽減も反映
+      for(const sh of faceUpShieldActives(pi))scanCR(sh);   // 🛡👁 v16.107 シールドゾーンに表向きの間も働く（ダイヤモン将型）
       if(red>0&&cost>1){
         const before=cost;
         cost=Math.max(1,cost-red);
@@ -17216,6 +17267,12 @@ async function runFxList(pi,list,srcCard,inPump){
       //    封印がある間はそのクリーチャーの能力は無効で、攻撃もブロックもできない（既存の isSealed 判定を使う）。
       const tp=(f.t==="sealFoe")?op:pi;
       if(f.t==="sealFoe"&&!S.vs){toast("（ソロのため封印はスキップ）");continue;}
+      /* 🔏 v16.106 禁断爆発（禁断コア型）の「出た時、相手のクリーチャーすべてに封印」は1回だけ。
+         爆発の出た時が二重に解決されて、封印が2枚付くことがあった。 */
+      if(f.t==="sealFoe"&&srcCard&&(()=>{const _rs=getReg(srcCard);return _rs&&_rs.gimmick==="dormacore";})()){
+        if(srcCard._boomSealed){logOnly(`🔏 ${faceNameOf(srcCard)}：禁断爆発の封印はすでに付けたので、2回目は行わない`);continue;}
+        srcCard._boomSealed=true;
+      }
       const TZ=zonesOf(tp);
       let filt=String(f.cond||"").trim();
       // 「すべて」と書かれている、または回数が場のクリーチャー数以上なら、選ばせずに全員に付ける
@@ -17968,9 +18025,30 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🛡→墓地：${S.players[op].label}のランダムなシールドを${gvR}つ墓地へ`);
         logOnly(`🛡 ${S.players[pi].label}：${S.players[op].label}のランダムなシールド${gvR}枚を墓地へ（ブレイクではない）`);
       }
+    }else if(f.t==="selfToShieldStackUp"){
+      // 🛡 v16.107 このカード自身を、自分のシールド1つの上に表向きで置く（ダイヤモン将型）
+      if(!srcCard){toast("🛡 このカードが分かりません");continue;}
+      const own=[0,1].find(p=>["grave","battle","hand","mana","resolve"].some(zn=>(zonesOf(p)[zn]||[]).some(x=>x.id===srcCard.id)));
+      const ow=own==null?pi:own;
+      const OWZ=zonesOf(ow);
+      if(!OWZ.shield.length){toast(`🛡 シールドが無いので、${faceNameOf(srcCard)} は置けません`);continue;}
+      let fromZ=null,fi=-1;
+      for(const zn of ["grave","battle","hand","mana","resolve"]){const k=(OWZ[zn]||[]).findIndex(x=>x.id===srcCard.id);if(k>=0){fromZ=zn;fi=k;break;}}
+      if(fi<0){toast(`🛡 ${faceNameOf(srcCard)} はもう移動しています`);continue;}
+      const idx=(OWZ.shield.length===1)?0:(typeof MONSHO_PICK==="function"?await MONSHO_PICK(OWZ):0);
+      snap();
+      const card=OWZ[fromZ].splice(fi,1)[0];
+      const old0=OWZ.shield[idx];
+      card.faceup=true;card.tapped=false;card.sideways=false;card.rot=0;card.mark=false;card.buff=null;
+      card.under=[old0,...(old0.under?old0.under.splice(0):[])];
+      OWZ.shield[idx]=card;
+      renderAll();
+      toast(`🛡 ${faceNameOf(card)} をシールド${idx+1}の上に表向きで置いた`);
+      logOnly(`🛡 ${S.players[ow].label}：《${faceNameOf(card)}》をシールドの上に表向きで置いた`);
     }else if(f.t==="foeShieldGrave"){
       // 🛡→墓地：相手のシールドをn枚選んで持ち主の墓地に直接置く（ブレイクしない）
       if(!S.vs){toast("（ソロのためスキップ：相手のシールドがありません）");continue;}
+      {const _g=shieldHandOnlyBy(op,pi);if(_g){toast(`🛡 ${faceNameOf(_g)}：相手の効果によって、シールドは手札以外のゾーンに置かれない`);continue;}}
       for(let i=0;i<n;i++){
         if(!OZ.shield.length){toast("相手のシールドがありません");break;}
         const j=OZ.shield.length===1?0:await pickCard(`🛡→墓地：相手のシールドを1つ選ぶ（${i+1}/${n}）`,OZ.shield,
@@ -18019,6 +18097,8 @@ async function runFxList(pi,list,srcCard,inPump){
         const jg=await askChoice(`🛡 ${S.players[tp].label} の盾${j+1}：《${faceNameOf(sh)}》\n${_toBtm?"山札の一番下に置きますか？":"墓地に置きますか？"}`,
           [`${_toBtm?"山札の一番下に置く":"墓地に置く"}（→ そのプレイヤーは山札の上から1枚をシールド化）`,"置かない（シールドはそのまま・補充もなし）"],
           [{card:sh,cap:"見えた盾"}]);   // 🖼 v16.84 めくれた盾だけを出す（処理中のカードは画面上部の帯に出ているので重複）
+        {const _g=(jg===0)?shieldHandOnlyBy(tp,pi):null;   // 🛡 v16.107 ジェンバン型
+         if(_g){toast(`🛡 ${faceNameOf(_g)}：相手の効果によって、シールドは手札以外のゾーンに置かれない`);logOnly(`🛡 ${S.players[tp].label}：${faceNameOf(_g)} によりシールドは動かなかった`);renderAll();continue;}}
         if(jg!==0){
           toast(`👀 見ただけで、シールドは動かさなかった（補充なし）`);
           logOnly(`👀 ${S.players[pi].label}：盾を墓地に置かなかったため、シールド化は行われない`);
@@ -19547,6 +19627,7 @@ async function runFxList(pi,list,srcCard,inPump){
     }else if(f.t==="foeShieldToMana"){
       // 🛡→🌱 相手のシールドをn枚選んで、持ち主のマナゾーンに置く（ブレイクではないのでS・トリガーは使えない）
       const OZ=zonesOf(op);
+      {const _g=shieldHandOnlyBy(op,pi);if(_g){toast(`🛡 ${faceNameOf(_g)}：相手の効果によって、シールドは手札以外のゾーンに置かれない`);continue;}}
       let moved=0;
       for(let i=0;i<n;i++){
         const sh=OZ.shield.slice();
@@ -27832,7 +27913,13 @@ async function dormaChoice(pi,c){
     sfx("ok");
     toast("💥 禁断爆発！「変形」で裏返せます");
     try{fxShare("kindan","禁断爆発！",`${S.players[pi].label}`,true,c.name,pi);}catch(e){}
-    if(S.vs&&await ask("相手のクリーチャーすべてに封印を1つずつ付けますか？（相手の山札の上から）")){
+    /* 🔧 v16.107 裏面（禁断爆発後）の「出た時」に封印の効果が登録されていれば、ここでは付けない。
+       以前はここの確認と、裏返った後の出た時の両方で封印が付き、2枚になっていた。 */
+    const _lkB=LINKS.get(normName(c.name));
+    const _backR=_lkB&&_lkB.length>1?FXDB.get(_lkB[1]):null;
+    const _backSeals=!!(_backR&&((_backR.faces&&_backR.faces[0])||[]).some(f=>f&&(f.t==="sealFoe")));
+    if(_backSeals||(c.face|0)===1){toast("🔏 封印は、禁断爆発で裏返った面の「出た時」で付きます");}
+    else if(S.vs&&await ask("相手のクリーチャーすべてに封印を1つずつ付けますか？（相手の山札の上から）")){
       const OZ=zonesOf(op);
       OZ.battle.forEach(t=>{
         if(!canSeal(op,t))return;
@@ -28173,6 +28260,13 @@ async function startAttack(pi,id){
   const pick=await askChoice(`《${faceNameOf(c)}》の攻撃対象を選択`,targets.map(t=>t.label));
   if(pick===null){renderAll();return;}
   let tg=targets[pick]; // 🔥 革命0トリガーでシールドが増えた場合にブレイクへ差し替えるため let
+  /* ⚖ v16.107 相手のクリーチャーが攻撃する時に唱えられる呪文（天地ヲ別ツ龍断ノ裁キ型） */
+  if(S.expert&&S.vs){try{await offerFoeAtkFlipCast(op);}catch(e){console.warn("offerFoeAtkFlipCast",e);}}
+  /* 👁 v16.106 攻撃する相手のクリーチャーとして選んだ時も「相手に選ばれた時」（アポロヌス・アガペリオスのマナ破壊等） */
+  if(S.expert&&tg.kind==="creature"){
+    const _tgc=OZ.battle.find(x=>x.id===tg.cid);
+    if(_tgc){const _fa=FX_ACTOR;try{FX_ACTOR=pi;noteChosenByFoe(_tgc);}finally{FX_ACTOR=_fa;}}
+  }
   c._atkFxDone=false; // 新規アタック宣言のたびにアタック時効果を再有効化（保留→再開は別経路なので影響なし）
   c._atkPDone=false;c._atkPEarly=false; // ⚡ v16.24 プレイヤーへの攻撃時の誘発も、宣言のたびに1回だけ流す
   c._acAsked=false;   // ✨ アタック・チャンスの確認も、新規宣言のたびに1回だけ出す
@@ -28870,6 +28964,8 @@ async function execAttack(pi,id,tg){
       a=Z.battle.find(x=>x.under&&x.under.some(u=>u.id===id||u.id===CUR_ATTACKER));
     }
     if(a){c=a;id=a.id;CUR_ATTACKER=a.id;}
+    /* 🔏 v16.106 攻撃中に封印が付いたら（ドルマゲドンの禁断爆発など）、攻撃は中止 */
+    if(a&&S.expert&&isSealed(a)){toast(`🔏 ${faceNameOf(a)} に封印が付いたので、この攻撃は中止されます`);return null;}
     return a;
   };
   if(S.expert&&c.sick){
@@ -29564,6 +29660,7 @@ async function execAttack(pi,id,tg){
       await waitFxIdle();renderAll();
     }
   }
+  if(!stillAtk()){renderAll();return;}   // 🔏 v16.106 攻撃が止まっていれば革命0トリガーは聞かない
   await offerRev0();
   if(rev0Used){
     // 🔥 革命0トリガーの解決後も攻撃は続く（ニンジャ・ストライク→ブロック宣言→ブレイク／ダイレクトアタック）。
@@ -30176,6 +30273,7 @@ async function execAttack(pi,id,tg){
     }
     /* 🔧 v16.100 革命0トリガーは「攻撃する時」に1回だけ。以前はここで聞き直していたので、
        不発で手札に戻ったカードを、同じ攻撃の中でもう一度使うかが出ていた。 */
+    if(!stillAtk()){renderAll();return;}   // 🔏 v16.106 ブレイクのトリガー等で攻撃が止まっていれば、ダイレクトアタックも革命0トリガーも無し
     await offerRev0();
     if(rev0Used){
       // 🛡 革命0トリガーでシールドが追加されたら、この攻撃はブレイクに変わる（革命の防壁型・v10.35）
@@ -32142,6 +32240,9 @@ function renderFxEditor(){
   {const e=$("fxGraveReviveN");if(e)e.value=String(FXEDIT.graveReviveN||0);}
   {const e=$("fxNoSeal");if(e)e.checked=!!FXEDIT.noSeal;}
   $("fxStNoHandes").checked=!!FXEDIT.stNoHandes;
+  {const e=$("fxShieldHandOnly");if(e)e.checked=!!FXEDIT.shieldHandOnly;}
+  {const e=$("fxFaceUpShieldActive");if(e)e.checked=!!FXEDIT.faceUpShieldActive;}
+  {const e=$("fxFoeAtkFlipCast");if(e)e.value=+FXEDIT.foeAtkFlipCast||0;}
   $("fxLibWin").checked=!!FXEDIT.libWin;
   $("fxPetensy").checked=!!FXEDIT.petensy;
   $("fxPetensyN").value=(FXEDIT.petensyN==null?3:FXEDIT.petensyN);
@@ -34501,6 +34602,9 @@ function openFxEditor(key){
     gearHostDeadDraw:cur&&+cur.gearHostDeadDraw||0,
     handDestroyN:cur&&+cur.handDestroyN||0,
     stNoHandes:cur?!!cur.stNoHandes:false,
+    shieldHandOnly:cur?!!cur.shieldHandOnly:false,
+    faceUpShieldActive:cur?!!cur.faceUpShieldActive:false,
+    foeAtkFlipCast:cur?(+cur.foeAtkFlipCast||0):0,
     libWin:cur?!!cur.libWin:false,
     petensy:cur?!!cur.petensy:false,
     petensyN:(cur&&cur.petensyN!=null)?+cur.petensyN:3,
@@ -35147,6 +35251,9 @@ $("fxSave").addEventListener("click",async ()=>{
     graveReviveN:$("fxGraveReviveN")?(parseInt($("fxGraveReviveN").value,10)||0):0,
     noSeal:$("fxNoSeal")?$("fxNoSeal").checked:false,
     stNoHandes:$("fxStNoHandes").checked,
+    shieldHandOnly:$("fxShieldHandOnly")?$("fxShieldHandOnly").checked:false,
+    faceUpShieldActive:$("fxFaceUpShieldActive")?$("fxFaceUpShieldActive").checked:false,
+    foeAtkFlipCast:$("fxFoeAtkFlipCast")?(+$("fxFoeAtkFlipCast").value||0):0,
     libWin:$("fxLibWin").checked,
     petensy:$("fxPetensy").checked,
     petensyN:Math.max(0,+$("fxPetensyN").value||0),
