@@ -5096,7 +5096,7 @@ function askChoice(msg,options,art){return _serialDlg(ASK_GATE,()=>new Promise(r
       if(k){
         const im=document.createElement("img");
         im.dataset.imgKey=k;im.draggable=false;im.decoding="async";
-        im.style.cssText="width:40px;flex:0 0 auto;border-radius:4px;background:#0d1119;box-shadow:0 1px 4px rgba(0,0,0,.6)";
+        im.style.cssText=`width:${op.big?72:40}px;flex:0 0 auto;border-radius:${op.big?6:4}px;background:#0d1119;box-shadow:0 1px 4px rgba(0,0,0,.6)`;   // 🖼 v16.103 big＝面を選ぶ時など大きめ
         try{const u=imgURL.get(k);if(u)im.src=u;}catch(e){}
         b.appendChild(im);
       }
@@ -5712,7 +5712,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.101";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.104";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7206,6 +7206,11 @@ function putSealsOn(pi,c,n){
     c.seals.push(sc);put++;
   }
   if(put<n)toast(`🔏 山札が足りないため${put}個だけ付けました`);
+  /* ☠ v16.103 封印で山札が0枚になったら負け（引いて0枚になった時と同じ） */
+  if(put>0&&S.vs&&S.turn>0&&Z.deck.length===0){
+    const _hold=(typeof libWinHolderOf==="function")?libWinHolderOf(pi):null;
+    if(!_hold)setTimeout(()=>{try{declareWin(pi?0:1,`山札切れ：${S.players[pi].label} は封印で山札が0枚になった`);}catch(e){}},0);
+  }
   return put;
 }
 /* 🔓 封印が外れた後の共通処理。ドルマゲドン型（gimmick:"dorma"）は、
@@ -14889,7 +14894,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
       const lk=LINKS.get(normName(cc.name));
       if(lk&&lk.length>1){
         const fj=await askChoice(`《${dispName.get(lk[0])||cc.name}》は多面カードです。どの面で出しますか？`,
-          lk.map(k=>{const fr=FXDB.get(k);const tl=fr?(evoKindOf(fr)?evoKindLabel(evoKindOf(fr)):"クリーチャー"):"";return `《${dispName.get(k)||k}》${tl?`（${tl}${fr&&fr.cost!=null?`・コスト${fr.cost}`:""}）`:""}`;}));
+          lk.map((k,_fi)=>{const fr=FXDB.get(k);const tl=fr?(evoKindOf(fr)?evoKindLabel(evoKindOf(fr)):"クリーチャー"):"";return {text:`《${dispName.get(k)||k}》${tl?`（${tl}${fr&&fr.cost!=null?`・コスト${fr.cost}`:""}）`:""}`,card:k,big:true};}),cc);   // 🖼 v16.103 面ごとの絵
         if(fj!==null){
           cc.face=fj;
           const fr=FXDB.get(lk[fj]);
@@ -14920,6 +14925,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
           continue;
         }
         // asEvo=true → 下の進化ブロックで進化元に重ねる（NEO進化）
+        cc._neoAsEvoChosen=true;   // 🔧 v16.102 下でもう一度「どう出しますか」を聞かない
       }
     }
     // 🂠 進化クロスギア／進化クリーチャーは直接出せない。下敷き（進化元）に重ねる
@@ -15003,8 +15009,9 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
       }else{
         // 進化クリーチャー：重ねて出すか、そのまま出す（非進化として）を選べる（究極進化・ライジングNEX等）
         const evoLbl2=evoKindLabel(evoKindOf(rCC));
-        const evc=await askChoice(`《${faceNameOf(cc)}》は${evoLbl2}クリーチャーです。どう出しますか？`,
-          [`${evoLbl2}として出す（進化元に重ねる）`,"そのまま出す（進化元なし・非進化として）"]);
+        const evc=cc._neoAsEvoChosen?0:await askChoice(`《${faceNameOf(cc)}》は${evoLbl2}クリーチャーです。どう出しますか？`,
+          [`${evoLbl2}として出す（進化元に重ねる）`,"そのまま出す（進化元なし・非進化として）"],cc);
+        delete cc._neoAsEvoChosen;
         if(evc===1){
           cc.neoEvo=false;
           if(!cheatEnterBattle(pi,cc)){renderAll();continue;}
@@ -15019,6 +15026,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
         const host=base.card;
         const _unders=[];
         let _bi=-1;
+        const _hostTapped=!!(base.where==="battle"&&host.tapped);   // 🔧 v16.102 下の処理で進化元をアンタップする前に控える（攻撃中の太陽アイドルに重ねるとアンタップで出ていた）
         for(const b2 of _picked){
           if(b2.where==="battle"){
             const k2=Z.battle.findIndex(x=>x.id===b2.card.id);
@@ -15035,7 +15043,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
           _unders.push(b2.card,...(b2.card.under?b2.card.under.splice(0):[]));
         }
         cc.under=[..._unders,...(cc.under||[])];
-        cc.tapped=(base.where==="battle")?host.tapped:false;
+        cc.tapped=_hostTapped;
         if(host.gear&&host.gear.length)cc.gear=[...(cc.gear||[]),...host.gear.splice(0)];
         if(isNeoReg(rCC))cc.neoEvo=true;
         if(_bi>=0)Z.battle[_bi]=cc;
@@ -19230,7 +19238,7 @@ async function runFxList(pi,list,srcCard,inPump){
             const lk=LINKS.get(normName(cc.name));
             if(lk&&lk.length>1){
               const fj=await askChoice(`《${dispName.get(lk[0])||cc.name}》は多面カードです。どの面で出しますか？`,
-                lk.map(k=>{const fr=FXDB.get(k);const tl=fr?(evoKindOf(fr)?evoKindLabel(evoKindOf(fr)):"クリーチャー"):"";return `《${dispName.get(k)||k}》${tl?`（${tl}${fr&&fr.cost!=null?`・コスト${fr.cost}`:""}）`:""}`;}));
+                lk.map((k,_fi)=>{const fr=FXDB.get(k);const tl=fr?(evoKindOf(fr)?evoKindLabel(evoKindOf(fr)):"クリーチャー"):"";return {text:`《${dispName.get(k)||k}》${tl?`（${tl}${fr&&fr.cost!=null?`・コスト${fr.cost}`:""}）`:""}`,card:k,big:true};}),cc);   // 🖼 v16.103 面ごとの絵
               if(fj!==null){
                 cc.face=fj;
                 const fr=FXDB.get(lk[fj]);
@@ -19654,7 +19662,7 @@ async function runFxList(pi,list,srcCard,inPump){
           {
             const lk=LINKS.get(normName(cc.name));
             if(lk&&lk.length>1){
-              const fj=await askChoice(`《${faceNameOf(cc)}》は多面カードです。どの面で出しますか？`,lk.map(k=>`《${k}》`));
+              const fj=await askChoice(`《${faceNameOf(cc)}》は多面カードです。どの面で出しますか？`,lk.map(k=>{const fr=FXDB.get(k);return {text:`《${dispName.get(k)||k}》${fr&&fr.cost!=null?`（コスト${fr.cost}）`:""}`,card:k,big:true};}),cc);   // 🖼 v16.103
               if(fj!==null){
                 cc.face=fj;
                 const fr=FXDB.get(lk[fj]);
@@ -21640,6 +21648,10 @@ async function runFxList(pi,list,srcCard,inPump){
       const ok=rT&&isCreatureReg(rT)&&lockFilterOk(filt,rT,top);
       toast(`🂠 山札の上：《${faceNameOf(top)}》を表向きにした`);
       if(ok){
+        /* 🔧 v16.103 めくったカードの演出とログを、そのカードの出た時の処理より先に出す */
+        logOnly(`🂠 ${S.players[pi].label}：デッキ進化成功 → 山札の上《${faceNameOf(top)}》をめくり、その上に《${faceNameOf(host)}》`);
+        try{fxShare("evo","デッキ進化成功！",`《${faceNameOf(top)}》をめくった → その上に ${faceNameOf(host)}`,true,top.name,pi);}catch(e){}
+        renderAll();await new Promise(r=>setTimeout(r,900));
         // めくったカードを場に出す（CIPはこのクリーチャーの残り効果より先にキューへ）
         top.tapped=false;top.sideways=false;
         if(!cheatEnterBattle(pi,top)){renderAll();return;}   // 🟥 7面上限を通す
@@ -21660,8 +21672,6 @@ async function runFxList(pi,list,srcCard,inPump){
           host.sick=false;host.neoEvo=true;
           sfx("evo");renderAll();
           toast(`🂠 デッキ進化！ 《${faceNameOf(host)}》を《${faceNameOf(top)}》の上に重ねた（召喚酔いなし）`);
-          logOnly(`🂠 ${S.players[pi].label}：デッキ進化成功 → 山札の上《${faceNameOf(top)}》をめくり、その上に《${faceNameOf(host)}》`);
-          try{fxShare("evo","デッキ進化成功！",`《${faceNameOf(top)}》をめくった → その上に ${faceNameOf(host)}`,true,top.name,pi);}catch(e){}
         }
       }else{
         /* 🔧 v16.98 失敗したら確認を出さずに手札へ戻す（革命0トリガーのボルシャック・ドギラゴン） */
@@ -24348,7 +24358,10 @@ function afterHandDiscard(owner,c,byPi){
       zonesOf(owner).battle.push(c);
       markArrive(c);
       emitEvent(owner,"summon");
-      enqueueFx(owner,c);
+      /* 🔧 v16.102 侵略・革命チェンジの「出た時」を順に解決している途中なら、その解決がすべて終わってから
+         このカードの出た時を解決する（ブラックサイコのハンデスで出たサンナックルNEXが割り込んでいた） */
+      if(INV_RESOLVING){MAD_DEFER.push({pi:owner,c});toast(`😈 ${faceNameOf(c)}：侵略・革命チェンジの効果がすべて終わってから、出た時の効果を解決します`);}
+      else enqueueFx(owner,c);
       sfx("ok");renderAll();
       toast(`😈 マッドネス！ ${faceNameOf(c)} はバトルゾーンに出た${pierce?"（置換ロックも貫通）":""}`);
     };
@@ -25106,6 +25119,8 @@ function leaveBattleCleanup(Z,c,toZone){
    ③ この確認で1枚でも下に置き、下が3枚以上になった時だけ「裏返して進化しますか？」を出す。
       進化すると、下のカードをそのまま進化元にして《超無限神星アポロヌス・アガペリオス》になる（召喚扱い）。 */
 let PF_BUSY=Promise.resolve();
+let INV_RESOLVING=false;   // ⚔ v16.102 侵略・革命チェンジの出た時を順に解決している間
+const MAD_DEFER=[];        // 😈 v16.102 その間に出たマッドネスの出た時（あとでまとめて解決）
 function isPhoenixField(x){const rf=getReg(x);return !!(rf&&rf.gimmick==="phoenixfield"&&((x.face|0)===0));}
 function phoenixEligible(c){
   const r=getReg(c);
@@ -26378,7 +26393,7 @@ async function doMagibomber(pi,atk,r){
     {
       const ef=eligCreatureFaces(t,N);
       if(ef.length>1){
-        const fj=await askChoice(`《${faceNameOf(t)}》は多面カードです。どの面で出しますか？（コスト${N}以下）`,[...ef.map(f=>`${f.name}（コスト${f.cost}）`),"やめる"]);
+        const fj=await askChoice(`《${faceNameOf(t)}》は多面カードです。どの面で出しますか？（コスト${N}以下）`,[...ef.map(f=>{const _lk=LINKS.get(normName(t.name));return {text:`${f.name}（コスト${f.cost}）`,card:(_lk&&_lk[f.face])||f.name,big:true};}),"やめる"],t);   // 🖼 v16.103
         if(fj===null||fj>=ef.length)continue;
         t.face=ef[fj].face;
       }else if(ef.length===1){
@@ -28882,166 +28897,6 @@ async function execAttack(pi,id,tg){
       renderAll();
     }
   }
-  // ⚙ クロス中のクロスギアが持つ「これをクロスしたクリーチャーが攻撃する時」の能力
-  if(S.expert&&!c._gearAtkDone&&c.gear&&c.gear.length){
-    c._gearAtkDone=true;
-    for(const g of c.gear){
-      const rg=getReg(g);
-      if(!rg||!rg.watchFx||!rg.watchFx.length)continue;
-      const gfx=rg.watchFx.filter(w=>w&&w.t&&["selfAtk","selfAtkC","selfAtkP"].includes(w.ev)
-        &&(w.ev==="selfAtk"||(w.ev==="selfAtkC")===(tg.kind==="creature")));
-      if(!gfx.length)continue;
-      toast(`⚙ クロスギアの攻撃時効果：${faceNameOf(g)}（${faceNameOf(c)}）`);
-      await runFxList(pi,gfx,c);
-    }
-  }
-  if(S.expert&&!c._atkFxDone){
-    const aw=getReg(c);
-    if(aw&&aw.watchFx&&aw.watchFx.length){
-      const evs=["selfAtk",tg.kind==="creature"?"selfAtkC":"selfAtkP"];
-      // 各ターン1回（w.once）は、このターン既に使っていれば除外（S._watchOnceで管理＝1手戻すと戻る）
-      S._watchOnce=S._watchOnce||{};
-      const _atkOnceKeys=[];
-      const fx=aw.watchFx.filter((w)=>{
-        if(!evs.includes(w.ev))return false;
-        if(w.once){
-          const wi=aw.watchFx.indexOf(w);
-          const k=`${c.id}:atk:${wi}`;
-          if(S._watchOnce[k]===`${S.turn}:${S.who}`){toast(`1️⃣ ${faceNameOf(c)} の攻撃時効果はこのターン使用済み`);return false;}
-          _atkOnceKeys.push(k);
-        }
-        return true;
-      });
-      if(fx.length){
-        toast(`⚡攻撃時効果：${faceNameOf(c)}`);
-        await runFxList(pi,fx,c);
-        // 消費はfx完了後（1手戻すと未使用に戻せる）
-        for(const k of _atkOnceKeys)S._watchOnce[k]=`${S.turn}:${S.who}`;
-        if(FX_HOLD){
-          FX_HOLD=false;
-          c._atkFxDone=true;
-          S.pendingAtk={pi,id,tg:JSON.parse(JSON.stringify(tg))};
-          showResumeBtn();
-          renderAll();
-          return;
-        }
-        if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
-        {
-          const j9=await askChoice(`⚡ 攻撃時効果の処理が終わったら選択`,["⚔ そのまま攻撃を続ける","⏸ 処理中にする（攻撃を保留→▶再開）"]);
-          if(j9===1){
-            c._atkFxDone=true;
-            S.pendingAtk={pi,id,tg:JSON.parse(JSON.stringify(tg))};
-            showResumeBtn();
-            renderAll();
-            return;
-          }
-        }
-      }
-    }
-  }
-  // 💥 スマッシュ・バースト：このクリーチャーが攻撃する時、このカードの呪文側を
-  //    バトルゾーンに置いたままコストを支払わずに唱えてもよい。
-  //    カードは移動しないので、呪文面（faces[1]）をその場で実行する。
-  if(S.expert&&!c._smashDone){
-    const rSB=getReg(c);
-    const sbFx=(rSB&&rSB.smashBurst&&(rSB.twin||rSB.ctype==="twinpact"))?faceFx(rSB,1):[];
-    if(sbFx.length){
-      c._smashDone=true;
-      const kSp=(LINKS.get(normName(c.name))||[])[1];
-      const spName=(kSp&&dispName.get(kSp))||"呪文側";
-      const go=await ask(`💥 スマッシュ・バースト（${faceNameOf(c)}）\n呪文側「${spName}」をコストを支払わずに唱えますか？\n（このクリーチャーはバトルゾーンに残ります）`);
-      if(go){
-        snap();
-        toast(`💥 スマッシュ・バースト：${spName} を唱える（場に残る）`);
-        logOnly(`💥 ${S.players[pi].label}：${faceNameOf(c)} のスマッシュ・バーストで《${spName}》を唱えた`);
-        // 唱えている間だけ呼文面にして、効果側に「呪文として唱えている」と伝える
-        const _f0=c.face|0;
-        c.face=1;
-        try{
-          emitEvent(pi,"spell",c);          // ⚡ 呪文を唱えた時の誘発（公式FAQ：これは呪文を唱えている扱い）
-          await runFxList(pi,sbFx,c);
-        }finally{ c.face=_f0; }
-        renderAll();
-        if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
-      }
-    }
-  }
-  // 🔗 超魂X：攻撃時、下の超魂Xカードの能力を上のクリーチャーで処理できるパネルを出す
-  if(S.expert&&!c._sxAtkDone){
-    const sxs=soulXUnder(c);
-    for(const sx of sxs){
-      const rsx=getReg(sx);
-      if(!rsx)continue;
-      const atkFx=onceFilter(c,(rsx.watchFx||[]).filter(w=>["selfAtk","selfAtkC","selfAtkP"].includes(w.ev)&&w.t));
-      const cipFx=(rsx.faces&&rsx.faces[0]&&rsx.faces[0].length)?rsx.faces[0]:null;
-      const md=modeCountFor(rsx,pi);
-      if(!atkFx.length&&!cipFx&&md<=0)continue;
-      const opts=[];
-      if(atkFx.length)opts.push("⚡ 攻撃時の能力を実行");
-      if(md>0)opts.push("🎯 選択効果を実行");
-      if(cipFx)opts.push("✨ 登録効果(出た時)を実行（任意）");
-      opts.push("使わない");
-      const j=await askChoice(`🔗 超魂X（攻撃時）：下の《${faceNameOf(sx)}》の能力（攻撃：${faceNameOf(c)}）`,opts);
-      if(j===null||opts[j]==="使わない")continue;
-      snap();
-      const lbl=opts[j];
-      if(lbl.startsWith("⚡")){toast(`🔗 超魂X 攻撃時：${faceNameOf(sx)}`);await runFxList(pi,atkFx,c);}
-      else if(lbl.startsWith("🎯")){
-        await runModeChoice(pi,rsx,c);
-      }
-      else{toast(`🔗 超魂X：${faceNameOf(sx)} の登録効果を実行`);await runFxList(pi,cipFx,c);}
-      if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
-    }
-    c._sxAtkDone=true;
-  }
-  // ⚡ どちらのクリーチャーが攻撃した時でも誘発する（anyAtk）：自分と相手の両方の場を見る。
-  //    誘発ジョブ経由なので「各ターン1回」「条件式」「任意」の設定がそのまま効く
-  //    （黄金卍罠＝各ターン、初めてクリーチャーが攻撃する時／デンジャデオン型）
-  if(S.expert&&!c._anyAtkDone){
-    c._anyAtkDone=true;
-    runWatchFx(pi,"anyAtk",c);
-    runWatchFx(op,"anyAtk",c);
-  }
-  // ⚡ 味方全体付与の攻撃時誘発（allyAtk）：自分の場のクリーチャー／シールドのG城が「自分のクリーチャーが攻撃する時」を付与している場合
-  if(S.expert&&!c._allyAtkDone){
-    const granters=[...Z.battle,...Z.shield].filter(x=>{
-      if(isSealed(x))return false;
-      if(Z.shield.includes(x)&&!x.faceup)return false; // 裏向きの盾は対象外（表向きG城のみ）
-      const rx=getReg(x);
-      return rx&&rx.watchFx&&rx.watchFx.some(w=>w.ev==="allyAtk");
-    });
-    for(const gc of granters){
-      const rg=getReg(gc);
-      /* 🔧 v16.95 atkF＝「攻撃するクリーチャー」の絞り込み（自分のドラゴンが攻撃する時＝ダイハード・リュウセイ等）。
-         合わない攻撃では案内を出さない。条件欄（cond）は効果の対象の絞り込みに使うカードがあるので別の欄にした。 */
-      const gfx=rg.watchFx.filter(w=>w.ev==="allyAtk"&&(!w.atkF||(()=>{try{return lockFilterOk(String(w.atkF),getReg(c),c);}catch(e){return false;}})()));
-      if(!gfx.length)continue;
-      const j=await askChoice(`⚡《${faceNameOf(gc)}》：味方クリーチャー攻撃時の効果（攻撃：${faceNameOf(c)}）`,
-        [gfx.some(w=>w.t)?"✨ 登録済みの効果を実行":"✨ 任意の効果を選択（効果メニュー）","⏸ 処理中にする（攻撃を保留→▶再開）","使わない"]);
-      if(j===null||j===2)continue;
-      if(j===1){
-        c._allyAtkDone=true;
-        S.pendingAtk={pi,id,tg:JSON.parse(JSON.stringify(tg))};
-        showResumeBtn();
-        renderAll();
-        return;
-      }
-      if(gfx.some(w=>w.t)){
-        toast(`⚡味方攻撃時効果：${faceNameOf(gc)}`);
-        await runFxList(pi,gfx,gc);
-      }else{
-        toast(`✨ 効果メニューから任意の効果を選んでください（${faceNameOf(gc)}）`);
-        openEffects();
-        c._allyAtkDone=true;
-        S.pendingAtk={pi,id,tg:JSON.parse(JSON.stringify(tg))};
-        showResumeBtn();
-        renderAll();
-        return;
-      }
-      if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
-    }
-    c._allyAtkDone=true;
-  }
   // 💣 マジボンバー／W・マジボンバー（攻撃する時）：侵略・革命チェンジより先に処理する
   if(S.expert){
     const rMB0=getReg(c);
@@ -29056,7 +28911,10 @@ async function execAttack(pi,id,tg){
   let invadedOnce=false;
   let changedOnce=false,warnedInvOrder=false; // 🃏 dmps：チェンジ実行後は侵略を宣言できない（wiki解決順準拠）
   const _declared=[];   // ⚡ v16.94 宣言した侵略／革命チェンジ（重ねた順）
-  if(S.expert)while(true){
+  const _origAtk=c;     // ⚔ v16.104 攻撃を宣言したクリーチャー（攻撃する時の効果の持ち主）
+  const _invSkip=!!c._invDeclDone;   // ⚔ v16.103 攻撃時効果の保留から再開した時は、宣言をやり直さない
+  c._invDeclDone=true;
+  if(S.expert&&!_invSkip)while(true){
     if(changedOnce)break;   // ♻ v16.94 革命チェンジは1回の攻撃に1枚。行った後はさらに宣言できない
     const sZones=v=>{
       if(v==="primal"||v==="deck")return ["hand","mana"];
@@ -29216,9 +29074,184 @@ async function execAttack(pi,id,tg){
     }
     break;
   }
+  /* ⚔ v16.103→v16.104 順番：①侵略・革命チェンジをすべて宣言 → ②攻撃する時の効果（クロスギア・自身・スマッシュ・
+     バースト・超魂X・どちらの攻撃でも・味方全体付与）→ ③宣言したカードの「出た時」を重ねた順に解決。
+     ②は「攻撃を宣言したクリーチャー」の効果（革命チェンジで手札に戻っていても、攻撃する時にすでに誘発している）。
+     革命チェンジで出たクリーチャーは、この攻撃の「攻撃する時」には誘発しない。 */
+  const _newTop=c,_newId=id;
+  const _trigOrig=_declared.length>0&&_origAtk.id!==_newId;
+  if(_trigOrig){_newTop._invDeclDone=true;c=_origAtk;id=_origAtk.id;}
+  const _stillAtkT=()=>_trigOrig?true:stillAtk();
+  c._invDeclDone=true;
+  {const _atkTrigRes=await (async()=>{
+  // ⚙ クロス中のクロスギアが持つ「これをクロスしたクリーチャーが攻撃する時」の能力
+  if(S.expert&&!c._gearAtkDone&&c.gear&&c.gear.length){
+    c._gearAtkDone=true;
+    for(const g of c.gear){
+      const rg=getReg(g);
+      if(!rg||!rg.watchFx||!rg.watchFx.length)continue;
+      const gfx=rg.watchFx.filter(w=>w&&w.t&&["selfAtk","selfAtkC","selfAtkP"].includes(w.ev)
+        &&(w.ev==="selfAtk"||(w.ev==="selfAtkC")===(tg.kind==="creature")));
+      if(!gfx.length)continue;
+      toast(`⚙ クロスギアの攻撃時効果：${faceNameOf(g)}（${faceNameOf(c)}）`);
+      await runFxList(pi,gfx,c);
+    }
+  }
+  if(S.expert&&!c._atkFxDone){
+    const aw=getReg(c);
+    if(aw&&aw.watchFx&&aw.watchFx.length){
+      const evs=["selfAtk",tg.kind==="creature"?"selfAtkC":"selfAtkP"];
+      // 各ターン1回（w.once）は、このターン既に使っていれば除外（S._watchOnceで管理＝1手戻すと戻る）
+      S._watchOnce=S._watchOnce||{};
+      const _atkOnceKeys=[];
+      const fx=aw.watchFx.filter((w)=>{
+        if(!evs.includes(w.ev))return false;
+        if(w.once){
+          const wi=aw.watchFx.indexOf(w);
+          const k=`${c.id}:atk:${wi}`;
+          if(S._watchOnce[k]===`${S.turn}:${S.who}`){toast(`1️⃣ ${faceNameOf(c)} の攻撃時効果はこのターン使用済み`);return false;}
+          _atkOnceKeys.push(k);
+        }
+        return true;
+      });
+      if(fx.length){
+        toast(`⚡攻撃時効果：${faceNameOf(c)}`);
+        await runFxList(pi,fx,c);
+        // 消費はfx完了後（1手戻すと未使用に戻せる）
+        for(const k of _atkOnceKeys)S._watchOnce[k]=`${S.turn}:${S.who}`;
+        if(FX_HOLD){
+          FX_HOLD=false;
+          c._atkFxDone=true;
+          S.pendingAtk={pi,id:_trigOrig?_newId:id,tg:JSON.parse(JSON.stringify(tg))};
+          showResumeBtn();
+          renderAll();
+          return "abort";
+        }
+        if(!_stillAtkT()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return "abort";}
+        {
+          const j9=await askChoice(`⚡ 攻撃時効果の処理が終わったら選択`,["⚔ そのまま攻撃を続ける","⏸ 処理中にする（攻撃を保留→▶再開）"]);
+          if(j9===1){
+            c._atkFxDone=true;
+            S.pendingAtk={pi,id:_trigOrig?_newId:id,tg:JSON.parse(JSON.stringify(tg))};
+            showResumeBtn();
+            renderAll();
+            return "abort";
+          }
+        }
+      }
+    }
+  }
+  // 💥 スマッシュ・バースト：このクリーチャーが攻撃する時、このカードの呪文側を
+  //    バトルゾーンに置いたままコストを支払わずに唱えてもよい。
+  //    カードは移動しないので、呪文面（faces[1]）をその場で実行する。
+  if(S.expert&&!c._smashDone){
+    const rSB=getReg(c);
+    const sbFx=(rSB&&rSB.smashBurst&&(rSB.twin||rSB.ctype==="twinpact"))?faceFx(rSB,1):[];
+    if(sbFx.length){
+      c._smashDone=true;
+      const kSp=(LINKS.get(normName(c.name))||[])[1];
+      const spName=(kSp&&dispName.get(kSp))||"呪文側";
+      const go=await ask(`💥 スマッシュ・バースト（${faceNameOf(c)}）\n呪文側「${spName}」をコストを支払わずに唱えますか？\n（このクリーチャーはバトルゾーンに残ります）`);
+      if(go){
+        snap();
+        toast(`💥 スマッシュ・バースト：${spName} を唱える（場に残る）`);
+        logOnly(`💥 ${S.players[pi].label}：${faceNameOf(c)} のスマッシュ・バーストで《${spName}》を唱えた`);
+        // 唱えている間だけ呼文面にして、効果側に「呪文として唱えている」と伝える
+        const _f0=c.face|0;
+        c.face=1;
+        try{
+          emitEvent(pi,"spell",c);          // ⚡ 呪文を唱えた時の誘発（公式FAQ：これは呪文を唱えている扱い）
+          await runFxList(pi,sbFx,c);
+        }finally{ c.face=_f0; }
+        renderAll();
+        if(!_stillAtkT()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return "abort";}
+      }
+    }
+  }
+  // 🔗 超魂X：攻撃時、下の超魂Xカードの能力を上のクリーチャーで処理できるパネルを出す
+  if(S.expert&&!c._sxAtkDone){
+    const sxs=soulXUnder(c);
+    for(const sx of sxs){
+      const rsx=getReg(sx);
+      if(!rsx)continue;
+      const atkFx=onceFilter(c,(rsx.watchFx||[]).filter(w=>["selfAtk","selfAtkC","selfAtkP"].includes(w.ev)&&w.t));
+      const cipFx=(rsx.faces&&rsx.faces[0]&&rsx.faces[0].length)?rsx.faces[0]:null;
+      const md=modeCountFor(rsx,pi);
+      if(!atkFx.length&&!cipFx&&md<=0)continue;
+      const opts=[];
+      if(atkFx.length)opts.push("⚡ 攻撃時の能力を実行");
+      if(md>0)opts.push("🎯 選択効果を実行");
+      if(cipFx)opts.push("✨ 登録効果(出た時)を実行（任意）");
+      opts.push("使わない");
+      const j=await askChoice(`🔗 超魂X（攻撃時）：下の《${faceNameOf(sx)}》の能力（攻撃：${faceNameOf(c)}）`,opts);
+      if(j===null||opts[j]==="使わない")continue;
+      snap();
+      const lbl=opts[j];
+      if(lbl.startsWith("⚡")){toast(`🔗 超魂X 攻撃時：${faceNameOf(sx)}`);await runFxList(pi,atkFx,c);}
+      else if(lbl.startsWith("🎯")){
+        await runModeChoice(pi,rsx,c);
+      }
+      else{toast(`🔗 超魂X：${faceNameOf(sx)} の登録効果を実行`);await runFxList(pi,cipFx,c);}
+      if(!_stillAtkT()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return "abort";}
+    }
+    c._sxAtkDone=true;
+  }
+  // ⚡ どちらのクリーチャーが攻撃した時でも誘発する（anyAtk）：自分と相手の両方の場を見る。
+  //    誘発ジョブ経由なので「各ターン1回」「条件式」「任意」の設定がそのまま効く
+  //    （黄金卍罠＝各ターン、初めてクリーチャーが攻撃する時／デンジャデオン型）
+  if(S.expert&&!c._anyAtkDone){
+    c._anyAtkDone=true;
+    runWatchFx(pi,"anyAtk",c);
+    runWatchFx(op,"anyAtk",c);
+  }
+  // ⚡ 味方全体付与の攻撃時誘発（allyAtk）：自分の場のクリーチャー／シールドのG城が「自分のクリーチャーが攻撃する時」を付与している場合
+  if(S.expert&&!c._allyAtkDone){
+    const granters=[...Z.battle,...Z.shield].filter(x=>{
+      if(isSealed(x))return false;
+      if(Z.shield.includes(x)&&!x.faceup)return false; // 裏向きの盾は対象外（表向きG城のみ）
+      const rx=getReg(x);
+      return rx&&rx.watchFx&&rx.watchFx.some(w=>w.ev==="allyAtk");
+    });
+    for(const gc of granters){
+      const rg=getReg(gc);
+      /* 🔧 v16.95 atkF＝「攻撃するクリーチャー」の絞り込み（自分のドラゴンが攻撃する時＝ダイハード・リュウセイ等）。
+         合わない攻撃では案内を出さない。条件欄（cond）は効果の対象の絞り込みに使うカードがあるので別の欄にした。 */
+      const gfx=rg.watchFx.filter(w=>w.ev==="allyAtk"&&(!w.atkF||(()=>{try{return lockFilterOk(String(w.atkF),getReg(c),c);}catch(e){return false;}})()));
+      if(!gfx.length)continue;
+      const j=await askChoice(`⚡《${faceNameOf(gc)}》：味方クリーチャー攻撃時の効果（攻撃：${faceNameOf(c)}）`,
+        [gfx.some(w=>w.t)?"✨ 登録済みの効果を実行":"✨ 任意の効果を選択（効果メニュー）","⏸ 処理中にする（攻撃を保留→▶再開）","使わない"]);
+      if(j===null||j===2)continue;
+      if(j===1){
+        c._allyAtkDone=true;
+        S.pendingAtk={pi,id:_trigOrig?_newId:id,tg:JSON.parse(JSON.stringify(tg))};
+        showResumeBtn();
+        renderAll();
+        return "abort";
+      }
+      if(gfx.some(w=>w.t)){
+        toast(`⚡味方攻撃時効果：${faceNameOf(gc)}`);
+        await runFxList(pi,gfx,gc);
+      }else{
+        toast(`✨ 効果メニューから任意の効果を選んでください（${faceNameOf(gc)}）`);
+        openEffects();
+        c._allyAtkDone=true;
+        S.pendingAtk={pi,id:_trigOrig?_newId:id,tg:JSON.parse(JSON.stringify(tg))};
+        showResumeBtn();
+        renderAll();
+        return "abort";
+      }
+      if(!_stillAtkT()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return "abort";}
+    }
+    c._allyAtkDone=true;
+  }
+  return "ok";})();
+   if(_trigOrig){c=_newTop;id=_newId;}
+   if(_atkTrigRes==="abort")return;}
   /* ⚡ v16.94 宣言した順（重ねた順）に出た時の効果を解決する */
   /* 侵略したカードを革命チェンジで手札に戻した場合も、侵略したカードの効果は重ねた順にすべて解決し、
      最後に革命チェンジで出たカードを解決する（宣言した順＝この並び）。 */
+  INV_RESOLVING=_declared.length>0;
+  try{
   for(const {hcard,isRevCh} of _declared){
     markArrive(hcard,{entryMethod:isRevCh?"revChange":"invade"});
     hcard._viaRevChange=!!isRevCh; // 旧登録・互換用
@@ -29240,6 +29273,15 @@ async function execAttack(pi,id,tg){
           renderAll();await waitFxIdle();
         }else toast("⚡ ファイナル革命：このターンすでに他のファイナル革命を使っているため発動しません");
       }
+    }
+  }
+  }finally{INV_RESOLVING=false;}
+  /* 😈 v16.102 途中で出たマッドネス等の「出た時」をここでまとめて解決する */
+  if(MAD_DEFER.length){
+    for(const d of MAD_DEFER.splice(0)){
+      if(!zonesOf(d.pi).battle.some(x=>x.id===d.c.id))continue;
+      enqueueFx(d.pi,d.c);renderAll();
+      await waitFxIdle();
     }
   }
   /* ⚔ v16.97 出たクリーチャーの格納確認（パトス）が残っていれば、それが終わるまで待つ。
@@ -41714,7 +41756,7 @@ let GHOST_AUTO_PI=0;
 function ghostAnswerChoice(msg,options){
   if(!GHOST_AUTO)return null;
   const m=String(msg||"");
-  const opt=options.map(o=>String(o||""));
+  const opt=options.map(o=>(o&&typeof o==="object")?String(o.text||""):String(o||""));   // 🔧 v16.103 絵つきの選択肢（{text,card}）も文字で判定
   const findIdx=re=>opt.findIndex(o=>re.test(o));
   // よくある yes/no・任意効果：能力は「使う／する／発動」を選ぶ（ゴーストは効果を最大限使う方針）
   const useI=findIdx(/使う|する|発動|唱える|出す|加える|引く|破壊|選ぶ|見る|マナ|ブースト|探す|サーチ|回収|置く/);
