@@ -5701,7 +5701,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.91";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.95";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9211,12 +9211,27 @@ async function saveDeck(name,main,gr,hy,sp,ex,cover,coverY,coverRot){
   else memDecks.set(name,{main,gr,hy,sp,ex,cover:cover||null,coverY:cy,coverRot:crot});
 }
 /* 🔄 v16.85 表紙の回転。背景画像は回せないので、回す時だけ中に画像の層を1枚敷く。
-   90度・270度では縦横が入れ替わるため、親の大きさを測って幅と高さを入れ替える。 */
+   90度・270度では縦横が入れ替わるため、親の大きさを測って幅と高さを入れ替える。
+   🔧 v16.92 直し：
+   ・タイルを画面に置く前（大きさ0）に測っていたので、仮の160×120で固まり、
+     横向きのカードを回すとタイルの真ん中に小さく出ていた。
+     → 大きさが決まった時・変わった時に測り直す（ResizeObserver）。
+   ・上下位置は「画面の上下」で効くように、回した向きに合わせて絵のどちら側を動かすか入れ替える
+     （90度＝絵の左右、180度＝上下を逆に、270度＝左右を逆に）。 */
+function coverRotPos(pos,r){
+  const m=String(pos||"").match(/(-?[\d.]+)%\s+(-?[\d.]+)%/);
+  const y=m?Math.max(0,Math.min(100,+m[2])):20;
+  if(r===90)return `${y}% 50%`;
+  if(r===180)return `50% ${100-y}%`;
+  if(r===270)return `${100-y}% 50%`;
+  return pos||`50% ${y}%`;
+}
 function applyDeckCover(el,url,pos,rot){
   if(!el)return;
   const r=([0,90,180,270].includes(+rot))?+rot:0;
   const old=el.querySelector(":scope > .dcovLayer");
   if(old)old.remove();
+  if(el._dcovRO){try{el._dcovRO.disconnect();}catch(e){}el._dcovRO=null;}
   if(!url){el.style.backgroundImage="";return;}
   if(!r){
     el.style.backgroundImage=`url("${url}")`;
@@ -9224,21 +9239,40 @@ function applyDeckCover(el,url,pos,rot){
     return;
   }
   el.style.backgroundImage="";
-  if(getComputedStyle(el).position==="static")el.style.position="relative";
+  /* 🔧 v16.92 画面に置く前の要素は getComputedStyle が空文字を返すため、
+     「static なら relative に」の判定が素通りし、回した絵がタイルの外（ページ基準）に出ていた。 */
+  {const _ps=getComputedStyle(el).position;if(!_ps||_ps==="static")el.style.position="relative";}
   el.style.overflow="hidden";
   const lay=document.createElement("div");
   lay.className="dcovLayer";
   const swap=(r===90||r===270);
-  const w=el.clientWidth||el.offsetWidth||160, hgt=el.clientHeight||el.offsetHeight||120;
   lay.style.cssText=`position:absolute;top:50%;left:50%;z-index:0;pointer-events:none;`
-    +`width:${swap?hgt:w}px;height:${swap?w:hgt}px;`
-    +`background-image:url("${url}");background-size:cover;background-position:${pos||"50% 20%"};`
+    +`background-image:url("${url}");background-size:cover;background-repeat:no-repeat;background-position:${coverRotPos(pos,r)};`
     +`transform:translate(-50%,-50%) rotate(${r}deg);`;
+  /* 大きさは親に合わせる。まだ置かれていない（0）間は、親いっぱい＋はみ出し分で仮置きしておく */
+  const fit=()=>{
+    const w=el.clientWidth||el.offsetWidth||0, hgt=el.clientHeight||el.offsetHeight||0;
+    if(!w||!hgt){
+      lay.style.width=swap?"200%":"100%";lay.style.height=swap?"200%":"100%";
+      return false;
+    }
+    lay.style.width=`${swap?hgt:w}px`;lay.style.height=`${swap?w:hgt}px`;
+    return true;
+  };
+  fit();
   el.insertBefore(lay,el.firstChild);
+  if(typeof ResizeObserver!=="undefined"){
+    try{
+      const ro=new ResizeObserver(()=>{if(!lay.isConnected){try{ro.disconnect();}catch(e){}return;}fit();});
+      ro.observe(el);el._dcovRO=ro;
+    }catch(e){}
+  }
+  /* ResizeObserver が無い環境の保険：置かれた直後にもう一度測る */
+  try{requestAnimationFrame(()=>{fit();requestAnimationFrame(fit);});}catch(e){}
   /* 中身（デッキ名など）が層の下に隠れないようにする */
   [...el.children].forEach(ch=>{
     if(ch===lay)return;
-    if(getComputedStyle(ch).position==="static")ch.style.position="relative";
+    {const _pc=getComputedStyle(ch).position;if(!_pc||_pc==="static")ch.style.position="relative";}
     if(!ch.style.zIndex)ch.style.zIndex="1";
   });
 }
@@ -10945,7 +10979,7 @@ function cipToManaCheck(pi,c){
     leaveBattleCleanup(ZB,tgt,"mana");                    // 装備・封印・重なっていたカードを整理
     ZB.battle.splice(idx2,1);
     tgt.faceup=true;tgt.tapped=false;tgt.sideways=false;tgt.rot=0;tgt.buff=null;tgt.seals=[];tgt.mark=false;
-    if(manaTapIn(tgt))tgt.tapped=true;                    // 多色はタップイン
+    if(manaTapIn(tgt,_own))tgt.tapped=true;                    // 多色はタップイン
     ZB.mana.push(tgt);
     sfx("move");renderAll();
     toast(`🌱 ${faceNameOf(live)}：《${faceNameOf(tgt)}》は「出た時」能力を持つため、持ち主のマナゾーンへ`);
@@ -11278,7 +11312,16 @@ function cardCivsOf(x){const r=getReg(x);return (r&&r.civs)||[];}
 async function offerSealPeel(actor){
   if(!S.expert)return;
   const AZ=zonesOf(actor);
-  const cmds=AZ.battle.filter(x=>(arrived.has(x.id)||x._sealPeelPending)&&!x._sealPeelDone&&(()=>{const r=getReg(x);return r&&raceMatch(r,"コマンド");})());
+  let cmds=AZ.battle.filter(x=>(arrived.has(x.id)||x._sealPeelPending)&&!x._sealPeelDone&&(()=>{const r=getReg(x);return r&&raceMatch(r,"コマンド");})());
+  /* 🔧 v16.93 召喚コストの支払い（手札を捨てて軽減＝ドゴンギヨス型など）が終わってから封印を扱う。
+     支払いはカードが場に出た後に別の流れで進むため、以前は「捨てる確認」と「封印を外す確認・
+     ドルマゲドンの効果選択」が交互に出ていた。候補だけ先に控えて、支払いと効果の解決を待つ。 */
+  if(cmds.length){
+    cmds.forEach(x=>{x._sealPeelPending=true;});
+    try{await MOVE_TAP_CHAIN;}catch(e){}
+    try{await waitFxIdle();}catch(e){}
+    cmds=cmds.filter(x=>AZ.battle.some(y=>y.id===x.id)&&!x._sealPeelDone);
+  }
   for(const cmd of cmds){
     cmd._sealPeelDone=true;cmd._sealPeelPending=false;
     const cmdCivs=cardCivsOf(cmd);
@@ -12789,6 +12832,7 @@ const FX_TYPES=[
   ["foeManaRecruit","🌱 相手のマナゾーンから条件に合うクリーチャーをn体選び、相手のバトルゾーンに出す（父なる大地型／条件欄＝例：進化以外）"],
   ["destroySameName","💥 バトルゾーンに同じ名前のクリーチャーが2体以上あれば、それらをすべて破壊する（両者・天使と悪魔の墳墓型）"],
   ["manaSameNameGrave","💎 すべてのマナゾーンを見て、同じ名前のカードが2枚以上あれば、それらをすべて持ち主の墓地に置く（天使と悪魔の墳墓型）"],
+  ["atkUnSelf","⚔ このクリーチャーは、そのターン、アンタップしているクリーチャーを攻撃できる（伝説のレジェンド ドギラゴン型・選ぶ画面は出ない）"],
   ["grantAtkUn","⚔ 自分のクリーチャーをn体選び、そのターン「アンタップしているクリーチャーを攻撃できる」を与える（勝利のガイアール・カイザー型）"],
   ["gachinko","🎲 相手とガチンコ・ジャッジをn回行う（山札の上を1枚ずつ見せてコスト比べ→見せたカードは山札の一番下へ）"],
   ["hakiJudge","🎲 相手のシールドの数だけガチンコ・ジャッジし、勝った回数まで自分の手札／墓地／マナから進化ではないクリーチャーを出す（刃鬼型／条件欄＝出す対象・例：ハンター）"],
@@ -14839,7 +14883,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
         const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
         let asEvo=false;
         if(basePool.length){
-          const ev=await askChoice(`《${faceNameOf(cc)}》はNEOクリーチャーです。どう出しますか？`,["進化元に重ねて出す（NEO進化）","そのまま出す（非進化）"]);
+          const ev=await askChoice(`《${faceNameOf(cc)}》はNEOクリーチャーです。どう出しますか？`,["進化元に重ねて出す（NEO進化）","そのまま出す（非進化）"],cc);   // 🖼 v16.93 出すカードの絵（渡さないと、効果を出したNEXの絵になっていた）
           if(ev===0)asEvo=true;
         }
         if(!asEvo){
@@ -15268,11 +15312,19 @@ async function runFxList(pi,list,srcCard,inPump){
        1行目（比べる相手がない）は常に実行する。 */
     {
       const _sigNow=fxBoardSig(pi);
+      const _prevSigBefore=_prevSig;
       const _prevDid=(_prevSig===null)?true:(_sigNow!==_prevSig);
       _prevSig=_sigNow;
       if(f.ifPrev&&!_prevDid){
         toast("🔗 直前の効果を行わなかったため、この効果は行いません");
         logOnly("🔗 「そうした場合」の連動：直前が不成立のためスキップ");
+        continue;
+      }
+      /* 🔗 v16.94「そうしなかった場合」（ifNotPrev）：直前の行で盤面が動いていたら、この行は行わない
+         （ボルシャック・サンシュタット「バトルさせてもよい。そうしなかった場合、山札の上から1枚をマナへ」用） */
+      if(f.ifNotPrev&&_prevDid&&_prevSigBefore!==null){
+        toast("🔗 直前の効果を行ったため、この効果は行いません");
+        logOnly("🔗 「そうしなかった場合」の連動：直前が成立したためスキップ");
         continue;
       }
     }
@@ -15308,6 +15360,10 @@ async function runFxList(pi,list,srcCard,inPump){
     }
     if(f.evoOnly&&srcCard&&!isNeoEvoInstance(srcCard)){
       toast(`（進化して出た時だけの効果なのでスキップ）`);continue;
+    }
+    // 🔥 v16.94 「革命0トリガーで出た時のみ」の効果（ボルシャック・ドギラゴンのデッキ進化）。通常召喚・進化で出た時は黙って飛ばす
+    if(f.rev0Only&&srcCard&&!srcCard._wasRev0){
+      toast(`（革命0トリガーで出た時だけの効果なのでスキップ：${faceNameOf(srcCard)}）`);continue;
     }
     if(f.madOnly&&srcCard&&!srcCard._viaMadness){
       toast(`（マッドネスで出た時だけの効果なのでスキップ）`);continue;
@@ -15698,6 +15754,13 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("grave");renderAll();
       toast(`💎 マナの同名カードをすべて墓地へ：${names}`);
       logOnly(`💎 すべてのマナゾーンの同名カードを持ち主の墓地へ（${names}・計${hit.length}枚）`);
+    }else if(f.t==="atkUnSelf"){
+      // ⚔ v16.95 このクリーチャー自身に、そのターン「アンタップしているクリーチャーを攻撃できる」
+      const me=srcCard&&Z.battle.find(x=>x.id===srcCard.id);
+      if(!me){toast("⚔ このクリーチャーがバトルゾーンにいません");continue;}
+      me.buff=me.buff||{};me.buff.attackUntapped=true;markBuffTurn(me,["attackUntapped"]);
+      sfx("ok");renderAll();
+      toast(`⚔ ${faceNameOf(me)} は、このターン、アンタップしているクリーチャーを攻撃できる`);
     }else if(f.t==="grantAtkUn"){
       // ⚔ 自分のクリーチャーに「アンタップしているクリーチャーを攻撃できる」を与える（そのターン）
       const filt=String(f.cond||"").trim();
@@ -19601,7 +19664,11 @@ async function runFxList(pi,list,srcCard,inPump){
         sfx("move");renderAll();
         // 出したクリーチャーの「出た時」は、この効果の解決後に処理キューへ（pumpが1体ずつ順に解決する）
         for(const cc of played){
-          if(!Z.battle.some(x=>x.id===cc.id))continue;
+          /* 🔧 v16.94 同じ効果で出した進化クリーチャーの下に重ねられたカードも、出たことに変わりはないので
+             「出た時」を解決する（以前は場に見えないので飛ばしていた＝ライジングNEXで進化元にした時にCIPが出ない） */
+          const onTop=Z.battle.some(x=>x.id===cc.id);
+          const asBase=!onTop&&Z.battle.some(x=>(x.under||[]).some(u=>u.id===cc.id));
+          if(!onTop&&!asBase)continue;
           LAST_ARRIVED=cc;
           emitEvent(pi,"summon");enqueueFx(pi,cc);
         }
@@ -23787,6 +23854,7 @@ function zoneCountSimple(zn,filt,pi){
     if(filt==="呪文")return rr.ctype==="spell"||rr.ctype==="twinpact"||!!rr.twin;
     if(filt==="クロスギア")return rr.ctype==="crossgear"||rr.ctype==="evocrossgear";
     if(filt==="多色")return !!(rr.civs&&rr.civs.length>=2);
+    if(filt==="フィールド"||filt==="D2"||filt==="D2フィールド")return isFieldReg(rr);   // 🏞 v16.92
     return raceMatch(rr,filt)||String(x.name||"").includes(filt);
   }).length;
 }
@@ -23927,6 +23995,7 @@ function lockFilterOk(filt,r,c,lockPi,face){
       return !!(r&&r.ctype!=="spell");
     }
     if(tk==="ツインパクト")return !!(r&&(r.twin||r.ctype==="twinpact"));
+    if(tk==="フィールド"||tk==="D2"||tk==="D2フィールド")return isFieldReg(r);   // 🏞 v16.92 種類で見る（裏返った面は数えない）
     if(civMap[tk])return !!(r&&r.civs&&r.civs.includes(civMap[tk]));
     return !!((r&&raceMatch(r,tk))||nameHas(tk));
   };
@@ -24623,7 +24692,10 @@ async function pumpFx(){
     }
     // 🔥 革命0トリガー持ち：革命0以外（通常召喚・進化）で出た場合、「革命0で出た時」限定の出た時効果はスキップできる
     //    （ボルシャック・ドギラゴンは通常進化なら山札をめくらない）
-    if(reg&&reg.rev0&&!c._rev0Entry){
+    /* 🔧 v16.94 効果の行に「革命0で出た時のみ」（rev0Only）が付いていれば、行ごとに自動で飛ばすので聞かない。
+       付いていない行が混ざっている時だけ、これまでどおり確認する。 */
+    c._wasRev0=!!c._rev0Entry;
+    if(reg&&reg.rev0&&!c._rev0Entry&&(((reg.faces&&reg.faces[c.face|0])||[]).some(f=>!f.rev0Only))){
       const go=await ask(`🔥 《${faceNameOf(c)}》は革命0トリガー以外（通常召喚・進化など）で出ました。\n出た時効果が「革命0トリガーで出た時」限定なら山札はめくりません。\n出た時効果を実行しますか？`);
       if(!go){toast(`（通常召喚のため出た時効果をスキップ：${faceNameOf(c)}）`);continue;}
     }
@@ -24976,59 +25048,84 @@ function leaveBattleCleanup(Z,c,toZone){
     {const _pi=S.players.findIndex(P=>P.zones===Z);if(_pi>=0)noteUnderToGrave(_pi,kids,kz);}  // 🧬 v16.25
   }
 }
+/* 🔥 v16.93 フェニックス・フィールド（双炎祭壇 アポロヌス・パトス）を作り直した。
+   ① 出たクリーチャーは、その場で聞かずに「待ち行列」に積む。効果・誘発・他のパネルがすべて
+      終わってから、出た順に1体ずつ「このカードの下に置きますか？」と聞く。
+      以前は出た瞬間に聞いていたため、捨てる確認や封印の処理と交互に出ていた。
+   ② その時にまだバトルゾーンにいて、火のドラゴンとして出ているものだけを聞く。
+      ツインパクトの呪文面（face=1）で唱えたカードは対象にしない
+      （以前は登録の上面＝ドラゴンを見て、呪文で使っても案内が出ていた）。
+   ③ この確認で1枚でも下に置き、下が3枚以上になった時だけ「裏返して進化しますか？」を出す。
+      進化すると、下のカードをそのまま進化元にして《超無限神星アポロヌス・アガペリオス》になる（召喚扱い）。 */
+function isPhoenixField(x){const rf=getReg(x);return !!(rf&&rf.gimmick==="phoenixfield"&&((x.face|0)===0));}
+function phoenixEligible(c){
+  const r=getReg(c);
+  if(!r||!r.civs||!r.civs.includes("fire")||!raceMatch(r,"ドラゴン"))return false;
+  if((r.twin||r.ctype==="twinpact")&&(c.face|0)===1)return false;   // 呪文面で使ったツインパクト
+  return true;
+}
 async function offerPhoenixStore(pi,newCard){
-  if(!S.expert)return;
+  if(!S.expert||!newCard)return;
   const Z=zonesOf(pi);
-  const fld0=Z.battle.find(x=>x.id!==newCard.id&&(()=>{const rf=getReg(x);return rf&&rf.gimmick==="phoenixfield";})());
-  if(!fld0)return;
-  if(newCard._pfAsked)return;
-  newCard._pfAsked=true;
-  try{await waitFxIdle();}catch(e){}
-  await new Promise(r=>setTimeout(r,80));
-  if(!Z.battle.find(x=>x.id===newCard.id)){newCard._pfAsked=false;return;}
-  const fld=Z.battle.find(x=>x.id!==newCard.id&&(()=>{const rf=getReg(x);return rf&&rf.gimmick==="phoenixfield";})());
-  if(!fld)return;
-  const reg=getReg(newCard);
-  if(!reg||!reg.civs||!reg.civs.includes("fire")||!raceMatch(reg,"ドラゴン")){
-    if(!newCard._pfDiag){
-      newCard._pfDiag=true;
-      const why=!reg?"効果登録なし":(!reg.civs||!reg.civs.includes("fire"))?"文明「火」が未登録":"種族に「ドラゴン」を含む登録なし";
-      toast(`🔥 フェニックス・フィールド：${faceNameOf(newCard)} は対象外（${why}）`);
+  if(!Z.battle.some(isPhoenixField))return;
+  S._pfQueue=S._pfQueue||[[],[]];
+  const q=S._pfQueue[pi];
+  if(newCard._pfAsked||q.includes(newCard.id))return;
+  q.push(newCard.id);
+  if(S._pfFlushing&&S._pfFlushing[pi])return;   // すでにまとめて確認する予定がある
+  S._pfFlushing=S._pfFlushing||[false,false];
+  S._pfFlushing[pi]=true;
+  try{
+    /* 効果の解決とパネルがすべて終わるまで待つ（終わった直後に別の効果が始まることがあるので2回見る） */
+    for(let k=0;k<2;k++){
+      try{await waitFxIdle();}catch(e){}
+      await new Promise(r=>setTimeout(r,150));
+      try{const rel=await ASK_GATE();rel();}catch(e){}
     }
-    return;
-  }
+    do{ await phoenixFlush(pi); }while(S._pfQueue[pi].length);
+  }finally{S._pfFlushing[pi]=false;}
+}
+async function phoenixFlush(pi){
+  const Z=zonesOf(pi);
+  const q=S._pfQueue[pi];
+  let fld=Z.battle.find(isPhoenixField);
+  if(!fld){q.length=0;return;}
   fld.under=fld.under||[];
-  while(true){
-    const pool=Z.battle.filter(x=>x.id!==fld.id&&(()=>{const rx=getReg(x);return rx&&raceMatch(rx,"ドラゴン");})());
-    if(!pool.length)break;
-    const j=await askChoice(`🔥 フェニックス・フィールド：ドラゴンを下に置きますか？（現在${fld.under.length}枚）`,
-      [...pool.map(x=>faceNameOf(x)),"置かない/終了"]);
-    if(j===null||j>=pool.length)break;
+  let storedNow=0;
+  while(q.length){
+    const id=q.shift();
+    const c=Z.battle.find(x=>x.id===id);
+    if(!c||c.id===fld.id||c._pfAsked)continue;
+    if(!phoenixEligible(c))continue;
+    c._pfAsked=true;
+    fld=Z.battle.find(isPhoenixField);if(!fld)break;
+    const yes=await ask(`🔥 ${faceNameOf(fld)}\n自分の火のドラゴン《${faceNameOf(c)}》が出ました。\nこのカードの下に置きますか？（いま下に${fld.under.length}枚）`,[c,fld]);
+    if(!yes)continue;
+    const bi=Z.battle.findIndex(x=>x.id===c.id);
+    if(bi<0)continue;
     snap();
-    const t=pool[j];
-    const bi=Z.battle.findIndex(x=>x.id===t.id);
     Z.battle.splice(bi,1);
-    if(t.gear&&t.gear.length){const gs=t.gear.splice(0);gs.forEach(g=>gearOut(Z,g));}
-    const st=[t,...(t.under?t.under.splice(0):[])];
-    st.forEach(x=>{x.tapped=false;x.faceup=true;fld.under.push(x);});
+    if(c.gear&&c.gear.length){const gs=c.gear.splice(0);gs.forEach(g=>gearOut(Z,g));}
+    const st=[c,...(c.under?c.under.splice(0):[])];
+    st.forEach(x=>{x.tapped=false;x.faceup=true;x.buff=null;fld.under.push(x);});
+    storedNow++;
     renderAll();
-    toast(`格納：${faceNameOf(t)} → フィールドの下（計${fld.under.length}枚）`);
+    logOnly(`🔥 ${S.players[pi].label}：《${faceNameOf(c)}》を《${faceNameOf(fld)}》の下に置いた（下に${fld.under.length}枚）`);
+    toast(`🔥 格納：${faceNameOf(c)} → ${faceNameOf(fld)} の下（計${fld.under.length}枚）`);
   }
-  if(fld.under.length>=3&&(fld.face||0)===0){
-    const lk=LINKS.get(normName(fld.name));
-    if(lk&&lk.length>1){
-      const yes=await ask(`✨ 下にカードが${fld.under.length}枚！ 進化しますか？（召喚扱い・出た時効果も誘発）`);
-      if(yes){
-        snap();
-        fld.face=1;fld.tapped=false;fld.rot=0;fld.sideways=false;
-        markArrive(fld);
-        emitEvent(pi,"summon");
-        enqueueFx(pi,fld);
-        toast(`✨ 進化！ ${faceNameOf(fld)}（召喚扱い）`);
-      }
-    }
-  }
-  renderAll();
+  if(!fld||!storedNow||fld.under.length<3||(fld.face|0)!==0)return;
+  const lk=LINKS.get(normName(fld.name));
+  if(!lk||lk.length<2){toast("🔥 進化先（裏面）の登録がありません");return;}
+  const yes=await ask(`✨ ${faceNameOf(fld)} の下にドラゴンが${fld.under.length}枚あります。\n裏返して進化しますか？（下のカードを進化元にする・召喚扱い）`,fld);
+  if(!yes)return;
+  snap();
+  fld.face=1;fld.tapped=false;fld.rot=0;fld.sideways=false;
+  markArrive(fld);
+  emitEvent(pi,"summon");
+  enqueueFx(pi,fld);
+  sfx("flip");renderAll();
+  logOnly(`✨ ${S.players[pi].label}：${faceNameOf(fld)} に進化（進化元${fld.under.length}枚）`);
+  toast(`✨ 進化！ ${faceNameOf(fld)}（召喚扱い）`);
 }
 async function offerInvadeZeroPrompt(def){
   if(!S.expert)return;
@@ -28846,7 +28943,10 @@ async function execAttack(pi,id,tg){
     });
     for(const gc of granters){
       const rg=getReg(gc);
-      const gfx=rg.watchFx.filter(w=>w.ev==="allyAtk");
+      /* 🔧 v16.95 atkF＝「攻撃するクリーチャー」の絞り込み（自分のドラゴンが攻撃する時＝ダイハード・リュウセイ等）。
+         合わない攻撃では案内を出さない。条件欄（cond）は効果の対象の絞り込みに使うカードがあるので別の欄にした。 */
+      const gfx=rg.watchFx.filter(w=>w.ev==="allyAtk"&&(!w.atkF||(()=>{try{return lockFilterOk(String(w.atkF),getReg(c),c);}catch(e){return false;}})()));
+      if(!gfx.length)continue;
       const j=await askChoice(`⚡《${faceNameOf(gc)}》：味方クリーチャー攻撃時の効果（攻撃：${faceNameOf(c)}）`,
         [gfx.some(w=>w.t)?"✨ 登録済みの効果を実行":"✨ 任意の効果を選択（効果メニュー）","⏸ 処理中にする（攻撃を保留→▶再開）","使わない"]);
       if(j===null||j===2)continue;
@@ -28886,7 +28986,9 @@ async function execAttack(pi,id,tg){
   // 侵略・革命チェンジ・S級侵略（ゾーン横断・複数回可・重ねた順に処理）
   let invadedOnce=false;
   let changedOnce=false,warnedInvOrder=false; // 🃏 dmps：チェンジ実行後は侵略を宣言できない（wiki解決順準拠）
+  const _declared=[];   // ⚡ v16.94 宣言した侵略／革命チェンジ（重ねた順）
   if(S.expert)while(true){
+    if(changedOnce)break;   // ♻ v16.94 革命チェンジは1回の攻撃に1枚。行った後はさらに宣言できない
     const sZones=v=>{
       if(v==="primal"||v==="deck")return ["hand","mana"];
       if(v==="undead"||v==="grave")return ["hand","grave"];
@@ -28970,6 +29072,7 @@ async function execAttack(pi,id,tg){
     //    3. アタック・チャンス」（wiki準拠）。候補を侵略系→チェンジ系の順に並べ、チェンジ実行後は侵略を宣言できない。
     //    TCGモードは従来どおり自由な順で選択可。
     const isChangeCand=({h})=>{const r=getReg(h);return !(r.invade||r.sInvade||r.pInvade);};
+    if(changedOnce)break;
     if(S.gameMode!=="tcg"){
       if(changedOnce){
         const b4=cands.length;
@@ -28980,7 +29083,7 @@ async function execAttack(pi,id,tg){
     }
     if(!cands.length)break;
     {
-      const j=await askChoice(`⚔ ${invadedOnce?"さらに":"攻撃時："}侵略／革命チェンジしますか？\n（侵略が先→革命チェンジの順。重ねた順に効果処理）`,
+      const j=await askChoice(`⚔ ${invadedOnce?"さらに":"攻撃時："}侵略／革命チェンジしますか？\n（侵略は何枚でも順に重ねられます。革命チェンジは1枚だけで、行うと宣言は終わりです。効果は重ねた順に解決）`,
         [...cands.map(({h,zn,jchange,sKakumei})=>{const r=getReg(h);return (sKakumei?"🐉S革命チェンジ：":jchange?"🃏J・チェンジ：":zn==="hyper"?(r.pInvade?"🌌P侵略：":"🌌P革命チェンジ："):r.sInvade?(r.sInvade==="sss"||r.sInvade==="tensai"?"🌠SSS級侵略：":"🌟S級侵略："):r.invade?"⚡侵略：":"♻革命チェンジ：")+faceNameOf(h)+`（${zLb[zn]}）`;}),"しない"]);
       if(j!==null&&j<cands.length){
         const {h:hcard,zn:srcZone,jchange:isJ}=cands[j];
@@ -29029,39 +29132,46 @@ async function execAttack(pi,id,tg){
           try{fxShare("evo",(_toShield?"S革命チェンジ！":isJ?"J・チェンジ！":r.pKakumei?"P革命チェンジ！":"革命チェンジ！"),
             `${S.players[pi].label}　${faceNameOf(c)} と入れ替え`,true,hcard.name,pi);}catch(e){}
         }
-        // CIPをキューへ入れる前に入場方法を確定する。waitFxIdleの成否に依存させない。
-        markArrive(hcard,{entryMethod:isRevCh?"revChange":"invade"});
-        hcard._viaRevChange=!!isRevCh; // 旧登録・互換用
-        emitEvent(pi,"summon");
-        enqueueFx(pi,hcard);
-        renderAll();
-        await waitFxIdle();
-        hcard._viaRevChange=false;
-        // 🐉 ヒカリスマ型：革命チェンジで出た時、山上2枚を見て1枚を表向きシールド化・1枚を手札（攻撃時はselfAtk側で処理）
-        {const rH2=getReg(hcard);if(rH2&&rH2.hikarisma){toast(`🐉 ${faceNameOf(hcard)}：革命チェンジで出た時の効果`);await runFxList(pi,[{t:"peekShieldHand",n:2}],hcard);renderAll();await waitFxIdle();}}
-        // ⚡ ファイナル革命：革命チェンジ系で出た時、そのターンまだ他のファイナル革命を使っていなければ発動
-        if(isRevCh){
-          const rH=getReg(hcard);
-          if(rH&&rH.watchFx&&rH.watchFx.some(w=>w.ev==="revFinal")){
-            S.finalRevUsed=S.finalRevUsed||{};
-            const tk=S.pturn|0;
-            if(!S.finalRevUsed[tk]){
-              S.finalRevUsed[tk]=hcard.id;
-              toast("⚡ ファイナル革命！");
-              await runFxList(pi,onceFilter(hcard,rH.watchFx.filter(w=>w.ev==="revFinal")),hcard);
-              renderAll();await waitFxIdle();
-            }else toast("⚡ ファイナル革命：このターンすでに他のファイナル革命を使っているため発動しません");
-          }
-        }
+        /* 🔧 v16.94 宣言と解決を分ける。
+           ここでは重ねる／入れ替えるだけにして、出た時の効果は宣言が終わってから重ねた順に解決する。
+           革命チェンジは1回の攻撃に1枚だけで、行ったらそれ以上の宣言はできない。 */
+        _declared.push({hcard,isRevCh});
         c=hcard;
         id=hcard.id;
         if(!_atkChain.some(x=>x.id===hcard.id))_atkChain.push(hcard);
         renderAll();
         invadedOnce=true;
+        if(isRevCh)break;
         continue;
       }
     }
     break;
+  }
+  /* ⚡ v16.94 宣言した順（重ねた順）に出た時の効果を解決する */
+  /* 侵略したカードを革命チェンジで手札に戻した場合も、侵略したカードの効果は重ねた順にすべて解決し、
+     最後に革命チェンジで出たカードを解決する（宣言した順＝この並び）。 */
+  for(const {hcard,isRevCh} of _declared){
+    markArrive(hcard,{entryMethod:isRevCh?"revChange":"invade"});
+    hcard._viaRevChange=!!isRevCh; // 旧登録・互換用
+    emitEvent(pi,"summon");
+    enqueueFx(pi,hcard);
+    renderAll();
+    await waitFxIdle();
+    hcard._viaRevChange=false;
+    {const rH2=getReg(hcard);if(rH2&&rH2.hikarisma){toast(`🐉 ${faceNameOf(hcard)}：革命チェンジで出た時の効果`);await runFxList(pi,[{t:"peekShieldHand",n:2}],hcard);renderAll();await waitFxIdle();}}
+    if(isRevCh){
+      const rH=getReg(hcard);
+      if(rH&&rH.watchFx&&rH.watchFx.some(w=>w.ev==="revFinal")){
+        S.finalRevUsed=S.finalRevUsed||{};
+        const tk=S.pturn|0;
+        if(!S.finalRevUsed[tk]){
+          S.finalRevUsed[tk]=hcard.id;
+          toast("⚡ ファイナル革命！");
+          await runFxList(pi,onceFilter(hcard,rH.watchFx.filter(w=>w.ev==="revFinal")),hcard);
+          renderAll();await waitFxIdle();
+        }else toast("⚡ ファイナル革命：このターンすでに他のファイナル革命を使っているため発動しません");
+      }
+    }
   }
   if(invadedOnce&&S.vs){
     await offerInvadeZeroPrompt(op);
@@ -30248,6 +30358,13 @@ function fxRowEl(faceIdx,i){
   mcb.onchange=()=>{f.madOnly=mcb.checked;};
   madL.appendChild(mcb);
   madL.appendChild(document.createTextNode("😈マッドネス時のみ"));
+  // 🔥 v16.94 革命0トリガーで出た時のみ
+  const r0L=document.createElement("label");
+  r0L.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
+  r0L.title="この効果は「革命0トリガーで出た時」だけ実行されます（通常召喚・進化で出た時は自動でスキップ）";
+  const r0Cb=document.createElement("input");r0Cb.type="checkbox";r0Cb.checked=!!f.rev0Only;
+  r0Cb.onchange=()=>{f.rev0Only=r0Cb.checked;};
+  r0L.appendChild(r0Cb);r0L.appendChild(document.createTextNode("🔥革命0時のみ"));
   // 🌟 [S]効果（スーパー・S・トリガーのボーナス）：自分の盾が1枚以上ある時は自動スキップ
   const sstL=document.createElement("label");
   sstL.style.cssText="display:inline-flex;gap:3px;align-items:center;font-size:11px;white-space:nowrap";
@@ -30332,7 +30449,7 @@ function fxRowEl(faceIdx,i){
   const top=document.createElement("div");top.className="fxr-top";
   const bot=document.createElement("div");bot.className="fxr-bot";
   top.appendChild(sel);top.appendChild(fb);top.appendChild(num);top.appendChild(shb);top.appendChild(up);top.appendChild(dn);top.appendChild(del);
-  bot.appendChild(sumL);bot.appendChild(g1La);bot.appendChild(madL);bot.appendChild(sstL);bot.appendChild(spL);bot.appendChild(optL);bot.appendChild(revL);bot.appendChild(evoL);bot.appendChild(faceL);
+  bot.appendChild(sumL);bot.appendChild(g1La);bot.appendChild(madL);bot.appendChild(r0L);bot.appendChild(sstL);bot.appendChild(spL);bot.appendChild(optL);bot.appendChild(revL);bot.appendChild(evoL);bot.appendChild(faceL);
   bot.appendChild(obL);bot.appendChild(pbL);bot.appendChild(skL);bot.appendChild(fxHenreiEl(f));
   cnd.classList.add("fxr-cond-input");
   const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);
@@ -30370,6 +30487,17 @@ function fxRowEl(faceIdx,i){
     ipWrap.appendChild(ip);
     ipWrap.appendChild(document.createTextNode("🔗 そうした場合（直前の効果を行った時だけ）"));
     bot.appendChild(ipWrap);
+    /* 🔗 v16.94「そうしなかった場合」 */
+    const inWrap=document.createElement("label");
+    inWrap.className="fxr-cond";
+    inWrap.style.cssText="flex:1 1 100%;display:flex;align-items:center;gap:6px;font-size:12px";
+    inWrap.title="「〜してもよい。そうしなかった場合〜」の後半に付けます。直前の行で盤面が動いた時は、この行を行いません";
+    const inp2=document.createElement("input");
+    inp2.type="checkbox";inp2.checked=!!f.ifNotPrev;
+    inp2.onchange=()=>{f.ifNotPrev=inp2.checked;};
+    inWrap.appendChild(inp2);
+    inWrap.appendChild(document.createTextNode("🔗 そうしなかった場合（直前の効果を行わなかった時だけ）"));
+    bot.appendChild(inWrap);
   }
   /* 🪧 v15.74「召喚によって出た時」だけ動く誘発（出たクリーチャー側を見る） */
   {
@@ -38102,7 +38230,7 @@ async function runHotkey(act){
   }else if(act==="boost"){
     if(!Z.deck.length){toast("山札がありません");return;}
     snap();const c=Z.deck.shift();c.faceup=true;c.tapped=false;
-    const tp=manaTapIn(c);
+    const tp=manaTapIn(c,pi);
     Z.mana.push(c);markArrive(c);
     if(S.anim!==false){const pe=document.querySelector(`#sysrow-${pi} [data-zone="deckTop"]`);if(pe&&typeof flyGhost==="function")flyGhost(pe.getBoundingClientRect(),c,null);}
     sfx("move");renderAll();toast(tp?`ブースト（多色・タップイン）：${faceNameOf(c)} をマナへ`:`ブースト：${faceNameOf(c)} をマナへ`);
@@ -38440,7 +38568,7 @@ function buildBoards(){
         if(!Z.deck.length){toast("山札がありません");return;}
         snap();
         const c=Z.deck.shift();c.faceup=true;c.sideways=false;
-        const tp=manaTapIn(c);
+        const tp=manaTapIn(c,pi);
         Z.mana.push(c);markArrive(c);
         renderAll();toast(tp?`マナチャージ（多色・タップイン）：${c.name}`:`マナチャージ：${c.name}`);
       }else if(act==="tapall"){
@@ -38934,6 +39062,10 @@ function cardEl(pi,zone,c){
   if(url||ikey){const im=document.createElement("img");if(ikey)im.dataset.imgKey=ikey;if(url)im.src=url;im.alt="";im.draggable=false;if(!showFace&&!topOver)applySleevePosition(im,pi);if(!showFace&&!topOver&&pi!==S.seat)im.style.transform="rotate(180deg)";el.appendChild(im);}
   if(!url){const np=document.createElement("div");np.className="nameplate";np.textContent=showFace?faceNameOf(c):(topOver?topOver.name:(zone==="shield"?"盾":"?"));el.appendChild(np);}
   }
+  /* 🔧 v16.93 横向きのカード（フィールド等）の向きは、回す前に作り直す。
+     以前はこの下（ボタンを作る所）で作り直していたので、ターンが変わって視点（S.seat）が
+     切り替わった最初の描画だけ古い向きで回り、フィールドが逆さまに見えていた（1操作で直る）。 */
+  if(zone==="battle"&&isWideReg(getReg(c)))applyD2Rot(pi,c);
   if(c.rot){
     el.style.transform=`rotate(${c.rot}deg)${c.tapped?" scale(.9)":""}`;
     if(c.rot%180===90&&zone==="battle"){
@@ -41720,7 +41852,7 @@ async function ghostTurn(opts){
       if(ci>=0){
         const mc=Z.hand.splice(ci,1)[0];
         mc.faceup=true;mc.sideways=false;
-        const tp=manaTapIn(mc);
+        const tp=manaTapIn(mc,pi);
         Z.mana.push(mc);markArrive(mc);
         S.ghostCharged._k=chKey;
         toast(`👻💠 マナチャージ（手札から）：${faceNameOf(mc)}${tp?"（多色・タップイン）":""}`);
@@ -42019,6 +42151,26 @@ async function declareWin(winner,reason,askFirst=true){
         S._loseAtOwnStart=S._loseAtOwnStart||{};S._loseAtOwnStart[loser]=faceNameOf(reps[j]);
         toast(`☀ 敗北を置換。${S.players[loser].label}は次の自分のターンのはじめに敗北します`);renderAll();return;
       }
+    }
+  }
+  /* 🏆 v16.95「このターン、自分はゲームに負けず、相手はゲームに勝てない」（コッコ・ルピア・レジェンドドギラゴン・
+     ダイハード・リュウセイ）。以前は警告を出すだけで、勝敗を付けるかは手で決めていた。
+     効果中の側が負ける（＝相手が勝つ）場合は、勝敗を付けずに止める。 */
+  if(S.expert){
+    const loserN=winner===0?1:0;
+    if(S.noLoseCnt&&S.noLoseCnt[loserN]>0){
+      toast(`🏆 ${S.players[loserN].label} は「ゲームに負けない」効果中なので、負けません（${reason}）`);
+      logOnly(`🏆 ${S.players[loserN].label}：負けない効果中のため敗北しない（${reason}）`);
+      sfx("ok");renderAll();return;
+    }
+    /* 💥 v16.95 ダイハード・リュウセイ型：負ける時、かわりにこのクリーチャーを破壊する（強制の置換） */
+    const dh=zonesOf(loserN).battle.filter(x=>{const r=getReg(x);return r&&r.loseRepDestroy&&!isSealed(x)&&!isIgnored(x,loserN);});
+    if(dh.length){
+      const h=dh[0];
+      toast(`💥 ${S.players[loserN].label} が負けるかわりに、${faceNameOf(h)} を破壊します`);
+      logOnly(`💥 敗北置換：${faceNameOf(h)} を破壊して負けなかった（${reason}）`);
+      await destroyWithReplace(loserN,h);
+      renderAll();return;
     }
   }
   // 💀 ジャオウガ型の敗北置換：負ける側に「負けるかわりに下のカードを1枚墓地へ」があれば、先に確認する
@@ -45759,7 +45911,7 @@ $("stDegrade").addEventListener("click",async ()=>{
   const dest=["hand","deckTop","deckBottom","grave","mana","hyper"][dz];
   if(dest==="deckTop")Zp.deck.unshift(c);
   else if(dest==="deckBottom")Zp.deck.push(c);
-  else if(dest==="mana"){if(manaTapIn(c))toast(`多色：${faceNameOf(c)} はタップしてマナへ`);Zp.mana.push(c);}
+  else if(dest==="mana"){if(manaTapIn(c,stCtx.p))toast(`多色：${faceNameOf(c)} はタップしてマナへ`);Zp.mana.push(c);}
   else Zp[dest].push(c);
   sfx(dest==="grave"?"grave":"move");
   const dLbl={hand:"手札",deckTop:"山札の上",deckBottom:"山札の下",grave:"墓地",mana:"マナ",hyper:"超次元"}[dest];
@@ -47496,14 +47648,13 @@ function adjustCoverY(imgKey,cur,curRot){
     const prev=document.createElement("div");
     prev.className="stDeckPrev";
     prev.style.cssText="height:150px;margin:0";
-    prev.style.backgroundImage=`url("${url}")`;
+    prev.appendChild(document.createElement("span"));   // 「デッキ未選択」の文字（:empty）を出さない
     let rot=([0,90,180,270].includes(+curRot))?+curRot:0;
     const apply=()=>{
-      prev.style.backgroundPosition=`50% ${y}%`;
       lb.textContent=`上下位置：${y}%${y===20?"（既定）":""}${rot?`／回転 ${rot}度`:""}`;
-      /* 見本にも回転を反映する（中身は背景なので、見本だけ transform で回す） */
-      prev.style.transform=rot?`rotate(${rot}deg)`:"";
-      prev.style.transformOrigin="center center";
+      /* 🔧 v16.92 見本は枠ごと回していたため、横向きの札を回すと枠からはみ出してパネルに被っていた。
+         タイルと同じ applyDeckCover で、枠はそのまま・中の絵だけ回す。 */
+      applyDeckCover(prev,url,`50% ${y}%`,rot);
     };
     box.appendChild(prev);
     const lb=document.createElement("div");
@@ -50941,6 +51092,11 @@ function zoneFiltCount(arrs,filt){
       if(tk==="ブロッカー")return !!((r&&r.blocker)||(x.buff&&x.buff.blocker)||shieldZeroBlockerOn(x)||gearBlockerOn(x)||auraBlockerOn(x));
       if(tk==="進化")return isEvoReg(r)&&(!["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype)||isNeoEvoInstance(x)); // NEO系：NEO進化状態（下に進化元あり）の時だけ「進化」
       if(tk==="クロスギア")return !!(r&&(r.ctype==="crossgear"||r.ctype==="evocrossgear"));
+      /* 🏞 v16.92「フィールド」はカードの種類で見る。以前は種族名・カード名に「フィールド」が
+         入っているかで見ていたため、最終禁断フィールド（種族に入っている）しか数えず、
+         D2フィールドや普通のフィールドは「自分のフィールドがあれば」で数えていなかった。
+         getReg はいまの面を見るので、禁断爆発してクリーチャーに裏返ったドルマゲドンは数えない。 */
+      if(tk==="フィールド"||tk==="D2"||tk==="D2フィールド")return isFieldReg(r);
       if(tk==="無色"||tk==="ゼロ文明")return !!(r&&(!r.civs||!r.civs.length||(r.civs.length===1&&r.civs[0]==="zero")));
       if(tk==="サイキック")return !!((r&&(r.ctype==="psychic"||r.ctype==="psyevo"))||(x&&x.isPsy));
       if(civMap[tk])return r&&r.civs&&r.civs.includes(civMap[tk]);
