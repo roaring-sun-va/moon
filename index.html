@@ -5712,7 +5712,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.99";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.101";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -15327,6 +15327,22 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🧮 条件を満たしていないので、この効果は行いません（${String(f.cnd).trim()}）`);
         continue;
       }
+    }
+    /* 🔍 v16.101「山札の上から1枚目を表向きにする。それが〔条件〕なら〜」（topIf）。
+       この行の前に1枚目を表向きにして見せ、条件に合わなければこの行を行わない。
+       表向きにしたカードは山札の上に戻す（反逆狼の紋章型）。 */
+    if(f&&f.topIf&&String(f.topIf).trim()){
+      const _Zt=zonesOf(pi);
+      if(!_Zt.deck.length){toast("🔍 山札がないので、この効果は行いません");continue;}
+      const _top=_Zt.deck[0];
+      const _rt=getReg(_top);
+      const _okT=!!(_rt&&lockFilterOk(String(f.topIf).trim(),_rt,_top));
+      _top.seen=true;
+      toast(`🔍 山札の上：《${faceNameOf(_top)}》を表向きにした → ${_okT?"条件に合うので効果を行う":"条件（"+String(f.topIf).trim()+"）に合わないので何もしない"}`);
+      logOnly(`🔍 ${S.players[pi].label}：山札の上《${faceNameOf(_top)}》を表向きにした（${_okT?"条件に合う":"条件外"}・山札の上に戻す）`);
+      try{fxShare("evo",_okT?"表向きにした：条件に合う":"表向きにした：条件外",`${S.players[pi].label}　《${faceNameOf(_top)}》`,false,_top.name,pi);}catch(e){}
+      await new Promise(r=>setTimeout(r,500));
+      if(!_okT)continue;
     }
     const Z=zonesOf(pi), OZ=zonesOf(op);
     const n=Math.max(1,f.n|0);
@@ -29412,9 +29428,18 @@ async function execAttack(pi,id,tg){
     rev0Asked=true;
     if(!S.expert||OZ.shield.length)return;
     const r0s=OZ.hand.filter(h=>{const r=getReg(h);return r&&r.rev0;});
+    /* 🔧 v16.100 侵略と同じく、使う革命0トリガーを先にすべて宣言し、宣言した順に解決する。 */
+    const _decl=[];
     for(const h of r0s){
-      const yes=await ask(`🔥 革命0トリガー！\n${S.players[op].label}：《${faceNameOf(h)}》を公開してコストを支払わずに使いますか？\n（条件はプレイヤー判断）`);
-      if(!yes)continue;
+      const yes=await ask(`🔥 革命0トリガー！${_decl.length?`（宣言済み：${_decl.map(faceNameOf).join("→")}）`:""}\n${S.players[op].label}：《${faceNameOf(h)}》を公開してコストを支払わずに使いますか？\n（使うものをすべて宣言してから、宣言した順に解決します）`,h);
+      if(yes)_decl.push(h);
+    }
+    if(_decl.length>1){
+      toast(`🔥 革命0トリガー：${_decl.map(faceNameOf).join(" → ")} の順に解決します`);
+      logOnly(`🔥 ${S.players[op].label}：革命0トリガーを宣言 → ${_decl.map(x=>`《${faceNameOf(x)}》`).join("→")}`);
+    }
+    for(const h of _decl){
+      if(!OZ.hand.some(x=>x.id===h.id))continue;
       snap();
       const hi=OZ.hand.findIndex(x=>x.id===h.id);
       OZ.hand.splice(hi,1);
@@ -30099,7 +30124,8 @@ async function execAttack(pi,id,tg){
       document.body.classList.add("shake");
       setTimeout(()=>document.body.classList.remove("shake"),450);
     }
-    rev0Asked=false;
+    /* 🔧 v16.100 革命0トリガーは「攻撃する時」に1回だけ。以前はここで聞き直していたので、
+       不発で手札に戻ったカードを、同じ攻撃の中でもう一度使うかが出ていた。 */
     await offerRev0();
     if(rev0Used){
       // 🛡 革命0トリガーでシールドが追加されたら、この攻撃はブレイクに変わる（革命の防壁型・v10.35）
@@ -30597,6 +30623,15 @@ function fxRowEl(faceIdx,i){
     cd2.value=f.cnd||"";
     cd2.onchange=()=>{const v=cd2.value.trim();if(v)f.cnd=v;else delete f.cnd;};
     bot.appendChild(cd2);
+    /* 🔍 v16.101 山札の上1枚目の条件（topIf） */
+    const tp2=document.createElement("input");
+    tp2.type="text";
+    tp2.placeholder="🔍 山札の上1枚目を表向きにして、それが〔この条件〕ならこの行を行う（例：闇／クリーチャー・空欄=見ない）";
+    tp2.title="「自分の山札の上から1枚目を表向きにする。それが闇のクリーチャーなら〜」型。表向きにしたカードは山札の上に戻ります";
+    tp2.style.cssText="flex:1 1 100%;min-width:0;font-size:12px";
+    tp2.value=f.topIf||"";
+    tp2.onchange=()=>{const v=tp2.value.trim();if(v)f.topIf=v;else delete f.topIf;};
+    bot.appendChild(tp2);
   }
   row.appendChild(top);row.appendChild(bot);
   return row;
