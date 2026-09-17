@@ -230,7 +230,8 @@ body.compact-head #btnNextTurn{font-size:13px;padding:9px;min-width:110px}
 /* 🖼 v16.83 盤面の横向きカードは、札そのものを回して置く（applyD2Rot）。
    公式画像は縦の枠に絵を回して入れた形なので、絵の切り出し方は変えない。
    自分で切り出した横長の画像を使っている間だけ、はみ出さないよう contain にする。 */
-.card.wide-card img{object-fit:contain;background:#0b0f18}
+/* 🔧 v16.96 裏向き（スリーブ）の時は contain にしない。横向きのカードが盾や手札に裏向きで入ると、スリーブだけ小さく出ていた */
+.card.wide-card img[data-img-key]{object-fit:contain;background:#0b0f18}
 .card .stacktag{
   position:absolute;left:0;bottom:0;z-index:4;
   background:var(--accent);color:#1a1405;
@@ -2754,6 +2755,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxRepShield"> 離れるかわりに表向きの盾カードを1枚墓地へ（サッヴァーク型）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="このクリーチャーが離れる時、かわりに自分のバトルゾーンにある表向きのカード（自身を除く）をn枚破壊して場に残る（ジャオウガ型）。破壊・バウンス・マナ送り・盾送りなど、離れるすべてに働きます"><input type="checkbox" id="fxUnderLeaveRep"> 🔽 離れるかわりに、自分の表向きのカードを<input type="number" id="fxUnderLeaveRepN" min="1" max="9" value="3" style="width:52px">枚破壊（ジャオウガ型）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="自分がゲームに負ける時、かわりに自分のバトルゾーンにある表向きのカード（自身を除く）をn枚破壊して負けない（ジャオウガ型）"><input type="checkbox" id="fxUnderLoseRep"> 💀 負けるかわりに、自分の表向きのカードを<input type="number" id="fxUnderLoseRepN" min="1" max="9" value="3" style="width:52px">枚破壊（ジャオウガ型）</label>
+        <label style="display:inline-flex;align-items:center;gap:4px" title="自分がゲームに負ける時、かわりにこのクリーチャーを破壊する（強制・不敗のダイハード・リュウセイ型）"><input type="checkbox" id="fxLoseRepDestroy"> 💥 負けるかわりに、このクリーチャーを破壊（ダイハード型）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="上の2つの置換で、「表向きのカードをn枚破壊」のかわりに「自分のシールドを1つ墓地に置く」も選べるようにします（CRY-S-MAX ジャオウガ型）"><input type="checkbox" id="fxUnderRepShield"> 🛡 上の置換で「自分のシールドを1つ墓地に置く」も選べる（カリスマックス型）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap" title="自分がゲームに負ける時、かわりに手札から〔対象〕のクリーチャー1体を、このカードの上に置いて負けない（一王二命三眼槍の封＝バラド・ヴィナ・シューラ型）。対象は種族や「コスト5以下」で指定できます"><input type="checkbox" id="fxLoseRepTop"> 💀 負けるかわりに、手札から1体をこの上に置く／対象<input type="text" id="fxLoseRepTopF" list="raceList" placeholder="例：デモニオ（空欄＝すべて）" style="width:150px">コスト<input type="number" id="fxLoseRepTopC" min="0" max="99" value="0" style="width:52px">以下（0＝制限なし）</label>
         <label style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap"><input type="checkbox" id="fxRepLeave"> 離れるかわりに、自分の
@@ -4933,6 +4935,15 @@ function askArtSet(...targets){
     im.dataset.imgKey=it.k;im.draggable=false;im.decoding="async";
     im.style.cssText="width:78px;max-width:22vw;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.6);background:#0d1119;display:block";
     try{const u=imgURL.get(it.k);if(u)im.src=u;}catch(e){}
+    /* 🔄 v16.98 横向きのカード（フィールド・D2など）は、盤面と同じく横に寝かせて見せる */
+    let _wideA=false;try{_wideA=isWideReg(FXDB.get(it.k));}catch(e){}
+    if(_wideA){
+      const rb=document.createElement("div");
+      rb.style.cssText="position:relative;width:109px;height:78px;flex:0 0 auto";
+      im.style.position="absolute";im.style.left="50%";im.style.top="50%";im.style.maxWidth="none";
+      im.style.transform="translate(-50%,-50%) rotate(270deg)";
+      rb.appendChild(im);wrap.appendChild(rb);
+    }else
     wrap.appendChild(im);
     if(it.cap){
       const cp=document.createElement("div");
@@ -5701,7 +5712,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.95";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.99";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -8157,6 +8168,16 @@ function fxBanner(kind,title,sub,big,cardName,side){
         const cn=el.querySelector(".cnt");if(cn)cn.remove();
         const ix=el.querySelector(".idx");if(ix)ix.remove();
         const vn=el.querySelector(".vname");if(vn)vn.remove();
+        /* 🔄 v16.98 横向きのカード（ドルマゲドン等のフィールド）は横に寝かせて出す */
+        let _wideB=false;try{_wideB=isWideReg(FXDB.get(canonicalCardKey(String(cardName))));}catch(e){}
+        if(_wideB){
+          const w0=big?92:70, h0=Math.round(w0*88/63);
+          const rb=document.createElement("div");
+          rb.style.cssText=`position:relative;width:${h0}px;height:${w0}px;flex:0 0 auto;pointer-events:none`;
+          el.style.position="absolute";el.style.left="50%";el.style.top="50%";
+          el.style.transform="translate(-50%,-50%) rotate(270deg)";
+          rb.appendChild(el);row.appendChild(rb);
+        }else
         row.appendChild(el);
       }catch(e){}
     }
@@ -11318,7 +11339,10 @@ async function offerSealPeel(actor){
      ドルマゲドンの効果選択」が交互に出ていた。候補だけ先に控えて、支払いと効果の解決を待つ。 */
   if(cmds.length){
     cmds.forEach(x=>{x._sealPeelPending=true;});
-    try{await MOVE_TAP_CHAIN;}catch(e){}
+    /* 🔧 v16.97 支払いの流れは「出た」合図の直後につながれるので、1拍おいてから、
+       つながりが増えなくなるまで待つ（以前は合図の時点の流れだけ待ち、捨てるカードを選ぶ前に封印の確認が出ていた）。 */
+    await new Promise(r=>setTimeout(r,0));
+    for(let _k=0;_k<20;_k++){const _ch=MOVE_TAP_CHAIN;try{await _ch;}catch(e){}await new Promise(r=>setTimeout(r,30));if(_ch===MOVE_TAP_CHAIN)break;}
     try{await waitFxIdle();}catch(e){}
     cmds=cmds.filter(x=>AZ.battle.some(y=>y.id===x.id)&&!x._sealPeelDone);
   }
@@ -19882,13 +19906,17 @@ async function runFxList(pi,list,srcCard,inPump){
       let filt=String(f.cond||"").trim();
       const _missGrave=/外れは墓地|それ以外は墓地/.test(filt);
       if(_missGrave)filt=filt.replace(/[／\/、,]?\s*(?:外れは墓地|それ以外は墓地)\s*/,"").trim();
+      /* 🔧 v16.97 条件欄に「タップ」（使用可能マナは増えない）と書くと、置いたマナをタップして置く（メンデルスゾーン型）。
+         以前はアンタップで置いていたので、使用可能マナが増えていた。 */
+      const _tapIn=/タップ|使用可能マナは増えない/.test(filt);
+      if(_tapIn)filt=filt.replace(/[／\/、,]?\s*(?:タップして置く|タップ|使用可能マナは増えない)\s*/g,"").trim();
       for(let i=0;i<n;i++){
         if(!Z.deck.length){toast("山札がありません");break;}
         const tc=Z.deck.shift();tc.faceup=true;renderAll();
         const rx=getReg(tc);
         const okM=!filt||lockFilterOk(filt,rx,tc);
         if(okM){
-          tc.tapped=false;Z.mana.push(tc);
+          tc.tapped=_tapIn;manaTapIn(tc,pi);Z.mana.push(tc);
           bumpEv("manaAccel",pi,1);
           toast(`🔍 表向き：${faceNameOf(tc)} → ${filt?`「${filt}」なので`:""}マナゾーンへ`);
         }else if(_missGrave){
@@ -21616,10 +21644,14 @@ async function runFxList(pi,list,srcCard,inPump){
           host.sick=false;host.neoEvo=true;
           sfx("evo");renderAll();
           toast(`🂠 デッキ進化！ 《${faceNameOf(host)}》を《${faceNameOf(top)}》の上に重ねた（召喚酔いなし）`);
+          logOnly(`🂠 ${S.players[pi].label}：デッキ進化成功 → 山札の上《${faceNameOf(top)}》をめくり、その上に《${faceNameOf(host)}》`);
+          try{fxShare("evo","デッキ進化成功！",`《${faceNameOf(top)}》をめくった → その上に ${faceNameOf(host)}`,true,top.name,pi);}catch(e){}
         }
       }else{
-        const j=await askChoice(`🂠 《${faceNameOf(top)}》は進化元の条件（${filt}）に合いません。デッキ進化失敗。\nこのクリーチャー《${faceNameOf(host)}》をどうしますか？`,
-          ["墓地に置く（召喚失敗扱い）","手札に戻す","そのまま場に残す（非進化・召喚酔い）"]);
+        /* 🔧 v16.98 失敗したら確認を出さずに手札へ戻す（革命0トリガーのボルシャック・ドギラゴン） */
+        const j=1;
+        logOnly(`🂠 ${S.players[pi].label}：デッキ進化失敗 → 山札の上《${faceNameOf(top)}》は条件（${filt}）外。《${faceNameOf(host)}》を手札に戻した`);
+        try{fxShare("evo","デッキ進化失敗",`《${faceNameOf(top)}》をめくった → ${faceNameOf(host)} は手札へ`,false,top.name,pi);}catch(e){}
         // めくったカードは山札の上に戻す（裏向き）
         top.faceup=false;Z.deck.unshift(top);
         if(j===0){const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const cc=Z.battle.splice(bi,1)[0];cc.faceup=true;leaveBattleCleanup(Z,cc,"grave");Z.grave.push(cc);}toast(`🂠 ${faceNameOf(host)} は墓地へ（進化失敗）`);}
@@ -24695,7 +24727,7 @@ async function pumpFx(){
     /* 🔧 v16.94 効果の行に「革命0で出た時のみ」（rev0Only）が付いていれば、行ごとに自動で飛ばすので聞かない。
        付いていない行が混ざっている時だけ、これまでどおり確認する。 */
     c._wasRev0=!!c._rev0Entry;
-    if(reg&&reg.rev0&&!c._rev0Entry&&(((reg.faces&&reg.faces[c.face|0])||[]).some(f=>!f.rev0Only))){
+    if(reg&&reg.rev0&&!c._rev0Entry&&!(((reg.faces&&reg.faces[c.face|0])||[]).some(f=>f.rev0Only))){   // 🔧 v16.98 1行でも「革命0時のみ」があれば行ごとに判定するので聞かない
       const go=await ask(`🔥 《${faceNameOf(c)}》は革命0トリガー以外（通常召喚・進化など）で出ました。\n出た時効果が「革命0トリガーで出た時」限定なら山札はめくりません。\n出た時効果を実行しますか？`);
       if(!go){toast(`（通常召喚のため出た時効果をスキップ：${faceNameOf(c)}）`);continue;}
     }
@@ -25057,6 +25089,7 @@ function leaveBattleCleanup(Z,c,toZone){
       （以前は登録の上面＝ドラゴンを見て、呪文で使っても案内が出ていた）。
    ③ この確認で1枚でも下に置き、下が3枚以上になった時だけ「裏返して進化しますか？」を出す。
       進化すると、下のカードをそのまま進化元にして《超無限神星アポロヌス・アガペリオス》になる（召喚扱い）。 */
+let PF_BUSY=Promise.resolve();
 function isPhoenixField(x){const rf=getReg(x);return !!(rf&&rf.gimmick==="phoenixfield"&&((x.face|0)===0));}
 function phoenixEligible(c){
   const r=getReg(c);
@@ -25075,6 +25108,7 @@ async function offerPhoenixStore(pi,newCard){
   if(S._pfFlushing&&S._pfFlushing[pi])return;   // すでにまとめて確認する予定がある
   S._pfFlushing=S._pfFlushing||[false,false];
   S._pfFlushing[pi]=true;
+  let _pfDone;PF_BUSY=new Promise(r=>{_pfDone=r;});   // ⚔ v16.97 攻撃の途中なら、この確認が終わるまで攻撃を進めない
   try{
     /* 効果の解決とパネルがすべて終わるまで待つ（終わった直後に別の効果が始まることがあるので2回見る） */
     for(let k=0;k<2;k++){
@@ -25083,7 +25117,7 @@ async function offerPhoenixStore(pi,newCard){
       try{const rel=await ASK_GATE();rel();}catch(e){}
     }
     do{ await phoenixFlush(pi); }while(S._pfQueue[pi].length);
-  }finally{S._pfFlushing[pi]=false;}
+  }finally{S._pfFlushing[pi]=false;try{_pfDone();}catch(e){}}
 }
 async function phoenixFlush(pi){
   const Z=zonesOf(pi);
@@ -25092,14 +25126,32 @@ async function phoenixFlush(pi){
   if(!fld){q.length=0;return;}
   fld.under=fld.under||[];
   let storedNow=0;
+  /* 🔧 v16.99 誘発するのは「自分の火のドラゴンが出た時」だけ。誘発したら、
+     その時バトルゾーンにいる自分のドラゴン（火以外も・もともといたものも）すべてに、1体ずつ格納を確認する。
+     順番は、今回出た火のドラゴン（出た順）→ それ以外のドラゴン（左から）。 */
+  const trig=[];
   while(q.length){
     const id=q.shift();
     const c=Z.battle.find(x=>x.id===id);
     if(!c||c.id===fld.id||c._pfAsked)continue;
-    if(!phoenixEligible(c))continue;
     c._pfAsked=true;
+    if(phoenixEligible(c))trig.push(c);
+  }
+  if(!trig.length)return;
+  const isDragonHere=x=>{
+    if(!x||x.id===fld.id)return false;
+    const r=getReg(x);
+    if(!r||!isCreatureReg(r)||!raceMatch(r,"ドラゴン"))return false;
+    if((r.twin||r.ctype==="twinpact")&&(x.face|0)===1)return false;
+    return true;
+  };
+  const order=[...trig,...Z.battle.filter(x=>isDragonHere(x)&&!trig.some(t=>t.id===x.id))];
+  toast(`🔥 ${faceNameOf(fld)}：${trig.map(faceNameOf).join("、")} が出たので、自分のドラゴン${order.length}体に格納を確認します`);
+  for(const c of order){
     fld=Z.battle.find(isPhoenixField);if(!fld)break;
-    const yes=await ask(`🔥 ${faceNameOf(fld)}\n自分の火のドラゴン《${faceNameOf(c)}》が出ました。\nこのカードの下に置きますか？（いま下に${fld.under.length}枚）`,[c,fld]);
+    if(!Z.battle.some(x=>x.id===c.id)||!isDragonHere(c))continue;
+    const isNew=trig.some(t=>t.id===c.id);
+    const yes=await ask(`🔥 ${faceNameOf(fld)}\n${isNew?"出た":"バトルゾーンにいる"}ドラゴン《${faceNameOf(c)}》を、このカードの下に置きますか？（いま下に${fld.under.length}枚）`,[c,fld]);
     if(!yes)continue;
     const bi=Z.battle.findIndex(x=>x.id===c.id);
     if(bi<0)continue;
@@ -25109,6 +25161,7 @@ async function phoenixFlush(pi){
     const st=[c,...(c.under?c.under.splice(0):[])];
     st.forEach(x=>{x.tapped=false;x.faceup=true;x.buff=null;fld.under.push(x);});
     storedNow++;
+    if(typeof CUR_ATTACKER!=="undefined"&&CUR_ATTACKER===c.id){toast(`⚔ 攻撃中の${faceNameOf(c)}を下に置いたので、この攻撃は中止されます`);logOnly(`⚔ ${S.players[pi].label}：攻撃中のクリーチャーを格納したため攻撃は中止`);}
     renderAll();
     logOnly(`🔥 ${S.players[pi].label}：《${faceNameOf(c)}》を《${faceNameOf(fld)}》の下に置いた（下に${fld.under.length}枚）`);
     toast(`🔥 格納：${faceNameOf(c)} → ${faceNameOf(fld)} の下（計${fld.under.length}枚）`);
@@ -29173,6 +29226,13 @@ async function execAttack(pi,id,tg){
       }
     }
   }
+  /* ⚔ v16.97 出たクリーチャーの格納確認（パトス）が残っていれば、それが終わるまで待つ。
+     攻撃しているクリーチャーを格納したら、その攻撃は中止。 */
+  if(S.expert){
+    await new Promise(r=>setTimeout(r,0));
+    try{await PF_BUSY;}catch(e){}
+    if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
+  }
   if(invadedOnce&&S.vs){
     await offerInvadeZeroPrompt(op);
   }
@@ -30741,7 +30801,17 @@ function fxTrigRowEl(i){
   cnd3.style.cssText="flex:1 1 100%;min-width:0;font-size:12px";
   cnd3.value=f.cnd||"";
   cnd3.onchange=()=>{const v=cnd3.value.trim();if(v)f.cnd=v;else delete f.cnd;};
-  const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);condWrap.appendChild(cnd2);condWrap.appendChild(cnd3);
+  /* ⚔ v16.96 味方攻撃時（allyAtk）だけ使う欄：攻撃するクリーチャーの絞り込み（例：ドラゴン）。合わない攻撃では誘発しない */
+  const atkF=document.createElement("input");
+  atkF.type="text";
+  atkF.placeholder="⚔ 攻撃するクリーチャーの絞り込み（味方攻撃時だけ・例：ドラゴン・空欄＝すべて）";
+  atkF.title="「自分のドラゴンが攻撃する時」のように、攻撃するクリーチャーを絞ります。味方攻撃時（allyAtk）の誘発でだけ使います";
+  atkF.style.cssText="flex:1 1 100%;min-width:0;font-size:12px";
+  atkF.value=f.atkF||"";
+  atkF.onchange=()=>{const v=atkF.value.trim();if(v)f.atkF=v;else delete f.atkF;};
+  const syncAtkF=()=>{atkF.style.display=(f.ev==="allyAtk")?"":"none";};
+  syncAtkF();try{ev.addEventListener("change",syncAtkF);}catch(e){}
+  const condWrap=document.createElement("div");condWrap.className="fxr-cond";condWrap.appendChild(cnd);condWrap.appendChild(cnd2);condWrap.appendChild(cnd3);condWrap.appendChild(atkF);
   bot.appendChild(condWrap);
   row.appendChild(top);row.appendChild(bot);
   return row;
@@ -31687,6 +31757,7 @@ function renderFxEditor(){
   {const e=$("fxUnderLeaveRep");if(e)e.checked=!!FXEDIT.underLeaveRep;}
   {const e=$("fxUnderLeaveRepN");if(e)e.value=String(FXEDIT.underLeaveRepN||3);}
   {const e=$("fxUnderLoseRep");if(e)e.checked=!!FXEDIT.underLoseRep;}
+  {const e=$("fxLoseRepDestroy");if(e)e.checked=!!FXEDIT.loseRepDestroy;}
   {const e=$("fxUnderLoseRepN");if(e)e.value=String(FXEDIT.underLoseRepN||3);}
   {const e=$("fxUnderRepShield");if(e)e.checked=!!FXEDIT.underRepShield;}
   {const e=$("fxLoseRepTop");if(e)e.checked=!!FXEDIT.loseRepTop;}
@@ -34036,6 +34107,7 @@ function openFxEditor(key){
     underLeaveRep:cur?!!cur.underLeaveRep:false,
     underLeaveRepN:cur&&+cur.underLeaveRepN||3,
     underLoseRep:cur?!!cur.underLoseRep:false,
+    loseRepDestroy:cur?!!cur.loseRepDestroy:false,
     underLoseRepN:cur&&+cur.underLoseRepN||3,
     underRepShield:cur?!!cur.underRepShield:false,
     loseRepTop:cur?!!cur.loseRepTop:false,
@@ -34686,6 +34758,7 @@ $("fxSave").addEventListener("click",async ()=>{
     underLeaveRep:$("fxUnderLeaveRep")?$("fxUnderLeaveRep").checked:false,
     underLeaveRepN:$("fxUnderLeaveRepN")?(parseInt($("fxUnderLeaveRepN").value,10)||3):3,
     underLoseRep:$("fxUnderLoseRep")?$("fxUnderLoseRep").checked:false,
+    loseRepDestroy:$("fxLoseRepDestroy")?$("fxLoseRepDestroy").checked:false,
     underLoseRepN:$("fxUnderLoseRepN")?(parseInt($("fxUnderLoseRepN").value,10)||3):3,
     underRepShield:$("fxUnderRepShield")?$("fxUnderRepShield").checked:false,
     loseRepTop:$("fxLoseRepTop")?$("fxLoseRepTop").checked:false,
