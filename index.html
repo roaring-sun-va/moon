@@ -2582,7 +2582,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="ガーゴイル"><option value="ガーディアン"><option value="ガイア・コマンド"><option value="ガイア・コマンド・ドラゴン"><option value="カレンダー"><option value="キカイヒーロー"><option value="キマイラ"><option value="ギャング・ビート"><option value="グラディエーター"><option value="グランセクト">
           <option value="グランセクト・ワード"><option value="グランド・デビル"><option value="グリーン・コマンド・ドラゴン"><option value="クリスタル・コマンド・ドラゴン"><option value="グレートメカオー"><option value="グレンモルト"><option value="ゲル・フィッシュ"><option value="ゴースト"><option value="コスモ・ウォーカー"><option value="ゴッド">
           <option value="ゴッド・ノヴァ"><option value="ゴッド・ノヴァOMG"><option value="コマンド・ドラゴン"><option value="コロニー・ビートル"><option value="サイバー・ウイルス"><option value="サイバー・コマンド"><option value="サイバー・ドラゴン"><option value="サイバー・ムーン"><option value="サイバーロード"><option value="サバイバー">
-          <option value="サムライ"><option value="シノビ"><option value="ジャイアント"><option value="ジャイアント・インセクト"><option value="ジャイアント・スキル"><option value="ジャイアント・スノーフェアリー"><option value="ジャイアント・ドラゴン"><option value="ジャスティス・ウイング"><option value="ジャッジメント・エンブレム"><option value="ジュラシック・コマンド・ドラゴン">
+          <option value="サムライ"><option value="サバキスト"><option value="裁きの紋章"><option value="裁きの紋章Z"><option value="シノビ"><option value="ジャイアント"><option value="ジャイアント・インセクト"><option value="ジャイアント・スキル"><option value="ジャイアント・スノーフェアリー"><option value="ジャイアント・ドラゴン"><option value="ジャスティス・ウイング"><option value="ジャッジメント・エンブレム"><option value="ジュラシック・コマンド・ドラゴン">
           <option value="ジョーカーズ"><option value="ジョーカーズ・ドラゴン"><option value="ジョーカーズZ"><option value="スーパーカードラゴン"><option value="スターライト・ツリー"><option value="スチーム・ナイト"><option value="スノーフェアリー"><option value="スノーフェアリー風"><option value="スピリット・クォーツ"><option value="スプラッシュ・クイーン"><option value="スペース・サーパント">
           <option value="スペシャルズ"><option value="ゼニス"><option value="ゼノパーツ"><option value="セラフィム"><option value="ソニック・コマンド"><option value="ソルトルーパー"><option value="ダークロード"><option value="ダイナモ"><option value="チームACE"><option value="チームウェイブ">
           <option value="チームボンバー"><option value="チーム銀河"><option value="チーム切札"><option value="チーム零"><option value="ツリーフォーク"><option value="ディープ・マリーン"><option value="ディスタス"><option value="ディスペクター"><option value="ティラノ・ドレイク"><option value="デーモン・コマンド">
@@ -3128,6 +3128,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxStNoHandes"> 常在：自分の手札は相手のカードの効果によって捨てられない</label>
         <label title="相手のカードの効果で、自分のシールドを墓地・マナ・山札などに置くことを止めます（ブレイクで手札に加えるのは止めません・緑知銀 ジェンバン型）"><input type="checkbox" id="fxShieldHandOnly"> 🛡 常在：相手の効果によって、自分のシールドは手札以外のゾーンに置かれない</label>
         <label title="このカードが自分のシールドゾーンに表向きである間も、常在のコスト軽減と誘発が働きます（超煌ノ裁キ ダイヤモン将型）"><input type="checkbox" id="fxFaceUpShieldActive"> 🛡👁 シールドゾーンに表向きの間も、常在のコスト軽減・誘発が働く</label>
+        <label title="どちらのクリーチャーが攻撃する時でも使える（煌世主 サッヴァーク∞型）。オフなら相手の攻撃時だけ"><input type="checkbox" id="fxFlipCastBoth"> ⚖ 上の「表向きのシールドを裏向きにして手札から」を、自分の攻撃時にも使える</label>
         <label title="相手のクリーチャーが攻撃する時、自分のシールドの表向きのカードをこの枚数だけ裏向きにして、手札からコストを支払わずに唱えてもよい（天地ヲ別ツ龍断ノ裁キ型・0＝なし）">⚖ 相手の攻撃時、表向きのシールドを<input type="number" id="fxFoeAtkFlipCast" min="0" max="9" value="0" style="width:52px">枚裏向きにして手札から唱えてよい</label>
         <label><input type="checkbox" id="fxLibWin"> 常在：自分の山札が0枚になったら、負けるかわりに勝利する（シャコガイル型）</label>
         <label><input type="checkbox" id="fxPetensy"> 相手のターンの終わりに、手札からコストを支払わずに使える（ペテンシー型）</label>
@@ -5134,16 +5135,19 @@ function faceUpShieldActives(pi){
   return zonesOf(pi).shield.filter(x=>{if(!x||!x.faceup)return false;const r=getReg(x);return r&&r.faceUpShieldActive;});
 }
 /* ⚖ v16.107 天地ヲ別ツ龍断ノ裁キ型：相手のクリーチャーが攻撃する時、表向きのシールドを裏向きにして手札から唱える */
-async function offerFoeAtkFlipCast(dp){
+async function offerFoeAtkFlipCast(dp,who){
   if(!S.expert||!S.vs)return;
   const Z=zonesOf(dp);
-  const cands=Z.hand.filter(h=>{const r=getReg(h);return r&&(+r.foeAtkFlipCast>0);});
+  /* ⚖ v16.111 who="mine"（自分の攻撃）の時は、登録の「どちらの攻撃でも」（flipCastBoth）が付いたカードだけ。
+     クリーチャーなら手札からバトルゾーンに出す（煌世主 サッヴァーク∞型）。 */
+  const cands=Z.hand.filter(h=>{const r=getReg(h);return r&&(+r.foeAtkFlipCast>0)&&(who!=="mine"||r.flipCastBoth);});
   for(const h of cands){
     if(!Z.hand.some(x=>x.id===h.id))continue;
     const need=+getReg(h).foeAtkFlipCast;
     const ups=Z.shield.filter(x=>x.faceup);
     if(ups.length<need)continue;
-    const yes=await ask(`⚖ ${S.players[dp].label}：相手のクリーチャーが攻撃します。\n自分のシールドの表向きのカード${need}枚を裏向きにして、《${faceNameOf(h)}》をコストを支払わずに唱えますか？（表向き${ups.length}枚）`,h);
+    const _isCre=(()=>{const rr=getReg(h);return rr&&isCreatureReg(rr);})();
+    const yes=await ask(`⚖ ${S.players[dp].label}：${who==="mine"?"クリーチャーが攻撃します。":"相手のクリーチャーが攻撃します。"}\n自分のシールドの表向きのカード${need}枚を裏向きにして、《${faceNameOf(h)}》を${_isCre?"バトルゾーンに出し":"コストを支払わずに唱え"}ますか？（表向き${ups.length}枚）`,h);
     if(!yes)continue;
     let chosen=ups.slice(0,need);
     if(ups.length>need){
@@ -5160,6 +5164,12 @@ async function offerFoeAtkFlipCast(dp){
     const hi=Z.hand.findIndex(x=>x.id===h.id);if(hi<0)continue;
     Z.hand.splice(hi,1);
     h.faceup=true;h.tapped=false;h._castFromHand=true;
+    if(_isCre){
+      logOnly(`⚖ ${S.players[dp].label}：表向きのシールド${need}枚を裏向きにして《${faceNameOf(h)}》をバトルゾーンに出した`);
+      await summonCreatureNeoAware(dp,h,{});
+      renderAll();await waitFxIdle();
+      continue;
+    }
     Z.resolve.push(h);
     S.spellTurn=S.spellTurn||[0,0];S.spellTurn[dp]=(S.spellTurn[dp]||0)+1;
     logOnly(`⚖ ${S.players[dp].label}：表向きのシールド${need}枚を裏向きにして《${faceNameOf(h)}》をコストを支払わずに唱えた`);
@@ -5168,6 +5178,72 @@ async function offerFoeAtkFlipCast(dp){
     renderAll();
     await waitFxIdle();
   }
+}
+/* 🛡 v16.109 裁きの紋章で置いたカードを、別のシールドの上へ置き直す（EXモードの選択） */
+async function monshoRelocateAsk(pi,o){
+  try{
+    const Z=zonesOf(pi);
+    const at=Z.shield.findIndex(x=>x.id===o.id);
+    if(at<0||Z.shield.length<2)return;
+    const j=await pickCard(`🏵 ${faceNameOf(o)} をどのシールドの上に置きますか？（いまはシールド${at+1}）`,Z.shield,{mask:true,maskPi:pi,maskLabel:"盾",hint:"タップで決定／キャンセルはそのまま"});
+    if(j===null||j===at)return;
+    snap();
+    const base=(o.under&&o.under.length)?o.under.splice(0):[];
+    Z.shield[at]=base.shift()||null;
+    if(Z.shield[at])Z.shield[at].under=base;
+    else Z.shield.splice(at,1);
+    const k=Z.shield.findIndex((x,i2)=>i2===(j>at&&Z.shield.length<j+1?j-1:j))>=0?Math.min(j,Z.shield.length-1):Z.shield.length-1;
+    const tgt=Z.shield[k];
+    o.under=[tgt,...(tgt.under?tgt.under.splice(0):[])];
+    Z.shield[k]=o;
+    renderAll();
+    toast(`🏵 ${faceNameOf(o)} をシールド${k+1}の上に置き直した`);
+    logOnly(`🏵 ${S.players[pi].label}：《${faceNameOf(o)}》をシールド${k+1}の上に置き直した`);
+  }catch(e){}
+}
+/* 🛡 v16.109 シールドを手札に加える時は、重なっているカード（裁きの紋章など）もすべて一緒に加える */
+function shieldStackToHand(Z,sh){
+  const out=[sh,...(sh.under?sh.under.splice(0):[])];
+  out.forEach(x=>{x.faceup=true;x.tapped=false;x.sideways=false;x.rot=0;x.mark=false;toHand(Z,x);});
+  return out;
+}
+/* ⚔ v16.109 サバキZ：手札のサバキZ持ちを、いま手札に加わったカード1枚を捨てて使う（ブレイク以外の「盾→手札」でも使える） */
+async function offerSabakiZAdded(pi,added){
+  try{
+    if(!S.expert||!added||!added.length)return;
+    const Z=zonesOf(pi);
+    const ids=new Set(added.map(x=>x.id));
+    const szs=Z.hand.filter(x=>{const r=getReg(x);return r&&r.sabaki;});
+    for(const sc of szs){
+      if(!Z.hand.some(h=>h.id===sc.id))continue;
+      const cands=Z.hand.filter(x=>ids.has(x.id)&&x.id!==sc.id);
+      if(!cands.length)continue;
+      const rsc=getReg(sc);
+      const yes=await ask(`⚔ サバキZ（${faceNameOf(sc)}）\n手札に加わったカードを1枚捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rsc&&rsc.ctype==="spell"?"唱え":"召喚し"}ますか？`,sc);
+      if(!yes)continue;
+      const jd=(cands.length===1)?0:await pickCard(`🗑 サバキZで捨てるカードを選択（${faceNameOf(sc)}）`,cands);
+      if(jd===null)continue;
+      const dc=cands[jd];
+      const di=Z.hand.findIndex(x=>x.id===dc.id);if(di<0)continue;
+      snap();
+      const gone=Z.hand.splice(di,1)[0];gone.faceup=true;Z.grave.push(gone);
+      afterHandDiscard(pi,gone,pi);
+      const si=Z.hand.findIndex(x=>x.id===sc.id);if(si<0)continue;
+      const card=Z.hand.splice(si,1)[0];
+      logOnly(`⚔ ${S.players[pi].label}：サバキZ → 《${faceNameOf(gone)}》を捨てて《${faceNameOf(card)}》をコストを支払わずに使用`);
+      if(rsc&&rsc.ctype==="spell"){
+        card.faceup=true;card.tapped=false;
+        if(Z.resolve.length){const olds=Z.resolve.splice(0);olds.forEach(o=>resolveOut(Z,o));}
+        Z.resolve.push(card);
+        S.spellTurn=S.spellTurn||[0,0];S.spellTurn[pi]=(S.spellTurn[pi]||0)+1;
+        emitEvent(pi,"spell",card);scheduleAutoResolve(pi,card);enqueueFx(pi,card);
+      }else{
+        await summonCreatureNeoAware(pi,card,{});
+      }
+      renderAll();
+      await waitFxIdle();
+    }
+  }catch(e){console.warn("offerSabakiZAdded",e);}
 }
 function enterFaceAuto(lk){
   if(!lk||lk.length<2)return null;
@@ -5768,7 +5844,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.107";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.112";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -12722,7 +12798,8 @@ const FX_TYPES=[
   ["foeAtkLockP","⚔ 今バトルゾーンにいる相手クリーチャーは、次の自分のターン開始時までプレイヤーを攻撃できない（ドギラゴールデン型・後から出た分は対象外）"],
   ["foeBigCreToDeck","🚫 次の自分のターン開始時まで、相手が自身のマナの枚数より大きいコストのクリーチャーを出した時、相手はそれを自身の山札の一番下に置く（堅珠ノ正裁Z型）"],
   ["nextSummonCostDownSA","💸⚡ このターン、次に召喚する自分のクリーチャーのコストをn少なくし（0以下にはならない）、そのクリーチャーが出た時に「スピードアタッカー」を与える（T・T・T型／条件欄に「SAなし」でコスト軽減だけ／「1文明」で下限が『1とそのクリーチャーの文明の数の大きい方』になる＝キリモミ・ヤマアラシ型）"],
-  ["nextSpellCostDown","💸 このターン、自分が次に手札から唱える呪文のコストをn少なくする（0以下にはならない・煌メク聖戦 絶十型）"],
+  ["nextSpellCostDown","💸 このターン、自分が次に手札から実行するカードのコストをn少なくする（0以下にはならない・重ねがけで足し算・条件欄で対象を絞る：例 光／呪文・煌メク聖戦 絶十型）"],
+  ["foeElemShieldStackUp","🛡 相手のエレメント1つを表向きにして、自分のシールド1つの上に置く（盾の枚数は増えない・煌龍サッヴァーク型／条件欄で対象）"],
   ["selfToShieldStackUp","🛡 このカードを、自分のシールド1つの上に表向きにして置く（破壊された時などに使う・超煌ノ裁キ ダイヤモン将型／シールドの束は1つと数える）"],
   ["deckTopToShieldStack","🛡 自分の山札の上からn枚を、自分のシールド1つの上に表向きにして置く（盾の枚数は増えない・煌メク聖戦 絶十型）"],
   ["foeNoSpell","🚫 相手は次の自分のターン終了時まで呪文を唱えられない（唱えた側の次ターンまで・条件欄でコスト等指定可・空欄＝全呪文）"],
@@ -13681,13 +13758,12 @@ async function autoTapCost(pi,c){
     S._nextSumRed=null;   // 使い切り
   }
   // 💸 「次に手札から唱える呪文のコスト−n」（煌メク聖戦 絶十型）。同じターンの1回だけ使える。
-  if(paySide!=="creature"&&cost>0&&S._nextSpellRed
-     &&(S._nextSpellRed.by|0)===(pi|0)&&(S._nextSpellRed.turn|0)===(S.turn|0)){
+  if(cost>0&&nextRedOk(r,pi)){   // 💸 v16.110 呪文だけでなく手札から出すカードも対象・条件欄で絞る
     const rd=+S._nextSpellRed.n||0;
     if(rd>0){
       const before2=cost;
       cost=Math.max(0,cost-rd);
-      if(cost<before2)toast(`💸 呪文コスト−${before2-cost}（残り${cost}）`);
+      if(cost<before2)toast(`💸 コスト−${before2-cost}（残り${cost}）`);
     }
     S._nextSpellRed=null;   // 使い切り
   }
@@ -17678,8 +17754,9 @@ async function runFxList(pi,list,srcCard,inPump){
     }else if(f.t==="shieldAnyToHandNoST"){
       /* ↩ v16.40 S・トリガーは使えないが、S・バックは「手札に加わった時」に使えるので最後に確認する（デビル・ドレーン型）。 */
       let moved=0;const _sbAdd2=[];
-      while(Z.shield.length){const j=await pickCard(`🛡 手札に加える盾を選択（${moved}枚選択済み／キャンセルで終了）`,Z.shield,{mask:true,maskPi:pi,maskLabel:"盾"});if(j===null)break;const sh=Z.shield.splice(j,1)[0];sh.faceup=true;sh.tapped=false;toHand(Z,sh);_sbAdd2.push(sh);moved++;renderAll();}
+      while(Z.shield.length){const j=await pickCard(`🛡 手札に加える盾を選択（${moved}枚選択済み／キャンセルで終了）`,Z.shield,{mask:true,maskPi:pi,maskLabel:"盾"});if(j===null)break;const sh=Z.shield.splice(j,1)[0];_sbAdd2.push(...shieldStackToHand(Z,sh));moved++;renderAll();}
       if(moved)await notifyShieldLeave(pi);
+      await offerSabakiZAdded(pi,_sbAdd2);
       await offerSBack(pi,_sbAdd2);
     }else if(f.t==="selfShieldGraveDestroy"){
       if(!Z.shield.length){toast("自分のシールドがありません");continue;}const j=await pickCard("🛡 墓地に置く自分のシールドを選択",Z.shield,{mask:true,maskPi:pi,maskLabel:"盾"});if(j===null)continue;
@@ -18025,6 +18102,31 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🛡→墓地：${S.players[op].label}のランダムなシールドを${gvR}つ墓地へ`);
         logOnly(`🛡 ${S.players[pi].label}：${S.players[op].label}のランダムなシールド${gvR}枚を墓地へ（ブレイクではない）`);
       }
+    }else if(f.t==="foeElemShieldStackUp"){
+      // 🛡 v16.111 相手のエレメント1つを表向きにして、自分のシールドの上に置く（煌龍サッヴァーク）
+      if(!Z.shield.length){toast("🛡 自分のシールドが無いため置けません");continue;}
+      const _filt=String(f.cond||"").trim();
+      const pool=OZ.battle.filter(x=>!_filt||lockFilterOk(_filt,getReg(x),x));
+      if(!pool.length){toast("対象の相手エレメントがいません");continue;}
+      const j=(pool.length===1)?0:await pickCard("🛡 シールドの上に置く相手のエレメントを選択",pool,{});
+      if(j===null)continue;
+      const tgt=pool[j];
+      const bi=OZ.battle.findIndex(x=>x.id===tgt.id);if(bi<0)continue;
+      const k=(Z.shield.length===1)?0:await pickCard("🛡 どのシールドの上に置きますか？",Z.shield,{mask:true,maskPi:pi,maskLabel:"盾"});
+      if(k===null)continue;
+      snap();
+      OZ.battle.splice(bi,1);
+      if(tgt.gear&&tgt.gear.length){const gs=tgt.gear.splice(0);gs.forEach(g=>gearOut(OZ,g));}
+      const unders=tgt.under?tgt.under.splice(0):[];
+      unders.forEach(u=>{u.faceup=true;OZ.grave.push(u);});
+      const old0=Z.shield[k];
+      tgt.faceup=true;tgt.tapped=false;tgt.sideways=false;tgt.rot=0;tgt.mark=false;tgt.buff=null;
+      tgt.under=[old0,...(old0.under?old0.under.splice(0):[])];
+      Z.shield[k]=tgt;
+      renderAll();
+      toast(`🛡 ${faceNameOf(tgt)} を表向きにしてシールド${k+1}の上に置いた`);
+      logOnly(`🛡 ${S.players[pi].label}：相手の《${faceNameOf(tgt)}》を表向きにして自分のシールドの上に置いた`);
+      try{await notifyShieldPlaced(pi,[tgt]);}catch(e){}
     }else if(f.t==="selfToShieldStackUp"){
       // 🛡 v16.107 このカード自身を、自分のシールド1つの上に表向きで置く（ダイヤモン将型）
       if(!srcCard){toast("🛡 このカードが分かりません");continue;}
@@ -18035,7 +18137,11 @@ async function runFxList(pi,list,srcCard,inPump){
       let fromZ=null,fi=-1;
       for(const zn of ["grave","battle","hand","mana","resolve"]){const k=(OWZ[zn]||[]).findIndex(x=>x.id===srcCard.id);if(k>=0){fromZ=zn;fi=k;break;}}
       if(fi<0){toast(`🛡 ${faceNameOf(srcCard)} はもう移動しています`);continue;}
-      const idx=(OWZ.shield.length===1)?0:(typeof MONSHO_PICK==="function"?await MONSHO_PICK(OWZ):0);
+      /* 🛡 v16.112 どのシールドの上に置くかを選べる（裏向きの中身は見せない） */
+      const idx=(OWZ.shield.length===1)?0:await (async()=>{
+        const j=await pickCard(`🛡 ${faceNameOf(srcCard)} をどのシールドの上に置きますか？`,OWZ.shield,{mask:true,maskPi:ow,maskLabel:"盾",hint:"タップで決定／キャンセルは左端"});
+        return (j===null)?0:j;
+      })();
       snap();
       const card=OWZ[fromZ].splice(fi,1)[0];
       const old0=OWZ.shield[idx];
@@ -18045,6 +18151,7 @@ async function runFxList(pi,list,srcCard,inPump){
       renderAll();
       toast(`🛡 ${faceNameOf(card)} をシールド${idx+1}の上に表向きで置いた`);
       logOnly(`🛡 ${S.players[ow].label}：《${faceNameOf(card)}》をシールドの上に表向きで置いた`);
+      try{await notifyShieldPlaced(ow,[card]);}catch(e){}   // 🛡 v16.110
     }else if(f.t==="foeShieldGrave"){
       // 🛡→墓地：相手のシールドをn枚選んで持ち主の墓地に直接置く（ブレイクしない）
       if(!S.vs){toast("（ソロのためスキップ：相手のシールドがありません）");continue;}
@@ -18162,15 +18269,22 @@ async function runFxList(pi,list,srcCard,inPump){
           {hint:"実際のシールドをタップして選択（裏向きの中身は見えません／キャンセルで終了）",mask:true,maskPi:pi,maskLabel:"盾"});
         if(j===null)break;
         const sh=Z.shield.splice(j,1)[0];
-        const kids=sh.under?sh.under.splice(0):[];
+        const kids0=sh.under?sh.under.splice(0):[];
+        /* 🛡 v16.109 城（要塞化）は墓地、そのほか（裁きの紋章で重ねたカード・重なった盾）は一緒に手札へ */
+        const isCastle=x=>{const rx=getReg(x);return !!(rx&&/^(castle|gcastle)$/.test(String(rx.ctype||"")));};
+        const kids=kids0.filter(isCastle);
+        const kids2=kids0.filter(x=>!isCastle(x));
         sh.faceup=true;sh.tapped=false;sh.mark=false;sh.sideways=false;
         const kept=typeof toHand==="function"?toHand(Z,sh):(Z.hand.push(sh),true);
+        kids2.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.mark=false;if(typeof toHand==="function")toHand(Z,u);else Z.hand.push(u);_sbAdded.push(u);});
+        if(kids2.length)toast(`🛡 重なっていた${kids2.length}枚も一緒に手札へ`);
         kids.forEach(u=>{u.faceup=true;u.tapped=false;Z.grave.push(u);});
         if(kids.length)toast(`盾の下の${kids.length}枚（要塞化の城など）は墓地へ`);
         toast(`🛡→✋ 盾${j+1}を${kept?"手札へ":"手札上限のため墓地へ"}（S・トリガーは使えない）：${faceNameOf(sh)}`);
         moved++;_sbAdded.push(sh);sfx(kept?"move":"grave");renderAll();
       }
       if(moved)await notifyShieldLeave(pi);
+      await offerSabakiZAdded(pi,_sbAdded);   // ⚔ v16.109 サバキZも使える（デビル・ドレーンと同じ扱い）
       await offerSBack(pi,_sbAdded);   // ↩ v16.40 S・トリガーは使えないが、S・バックは使える
     }else if(f.t==="selfShieldMove"){
       // 🛡 自分のシールドをn枚、墓地/マナ/手札へ（誘発型：ダグラジャパニカン／ルピア＆ガ：ナテハ／ジャドク丸 等）
@@ -18702,8 +18816,13 @@ async function runFxList(pi,list,srcCard,inPump){
       renderAll();
     }else if(f.t==="nextSpellCostDown"){
       // 💸 このターン、次に手札から唱える呪文のコストを n 少なくする（1回だけ・0以下にならない）
-      S._nextSpellRed={by:pi,n:(+n||0),turn:S.turn|0};
-      toast(`💸 このターン、次に手札から唱える呪文のコスト−${n}`);
+      /* 💸 v16.110 重ねがけで足し算。条件欄で対象を絞れる（絶十＝光のカード）。呪文だけでなく手札から出すカードも対象。 */
+      {
+        const _cnd=String(f.cond||"").trim();
+        const keep=(S._nextSpellRed&&(S._nextSpellRed.by|0)===(pi|0)&&(S._nextSpellRed.turn|0)===(S.turn|0)&&String(S._nextSpellRed.cond||"")===_cnd)?(+S._nextSpellRed.n||0):0;
+        S._nextSpellRed={by:pi,n:keep+(+n||0),turn:S.turn|0,cond:_cnd};
+        toast(`💸 このターン、次に手札から実行する${_cnd?`${_cnd}の`:""}カードのコスト−${S._nextSpellRed.n}${keep?"（重ねがけ）":""}`);
+      }
       renderAll();
     }else if(f.t==="deckTopToShieldStack"){
       // 🛡 山札の上からn枚を、自分のシールド1つの上に表向きで置く（盾の枚数は増えない）
@@ -18723,7 +18842,9 @@ async function runFxList(pi,list,srcCard,inPump){
         putS++;
         toast(`🛡 ${faceNameOf(topS)} をシールド${idxS+1}の上に表向きで置いた`);
       }
-      if(putS){sfx("flip");logOnly(`🛡 ${S.players[pi].label}：山札の上${putS}枚をシールドの上に表向きで置いた`);}
+      if(putS){sfx("flip");logOnly(`🛡 ${S.players[pi].label}：山札の上${putS}枚をシールドの上に表向きで置いた`);
+        try{await notifyShieldPlaced(pi,Z.shield.filter(x=>x.faceup).slice(-1));}catch(e){}   // 🛡 v16.110 重ねて置くのも「シールドゾーンに置かれた時」
+      }
       renderAll();
     }else if(f.t==="foeNoSpell"){
       // 🚫 相手は次の自分（唱えた側）のターン終了時まで呪文を唱えられない。f.cond＝対象条件（コストN以下等・空欄＝全呪文）。
@@ -21131,7 +21252,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const _pool=Z.shield.filter(x=>!x.faceup);
         if(!_pool.length){toast("🛡 裏向きのシールドがありません");break;}
         if(i===0)snap();
-        const _js=_pool.length===1?0:await pickCard("🛡 表向きにするシールドを選択",_pool,{hint:"中身は表向きにするまで見えません"});
+        const _js=_pool.length===1?0:await pickCard("🛡 表向きにするシールドを選択",_pool,{hint:"中身は表向きにするまで見えません",mask:true,maskPi:pi,maskLabel:"盾"});   // 🛡 v16.110 裏向きの中身を見せない
         if(_js===null)break;
         const _sc=_pool[_js];
         _sc.faceup=true;_sc.seen=true;
@@ -23699,7 +23820,7 @@ async function runFxList(pi,list,srcCard,inPump){
       renderAll();
     }else if(f.t==="shieldRandToHand"){
       // 🛡→✋ 自分のランダムなシールドをn枚、手札に加える（そのS・トリガーは使えない）
-      let got=0,names=[];
+      let got=0,names=[];const _sbAddR=[];
       for(let i=0;i<n&&Z.shield.length;i++){
         const idx=Math.floor(Math.random()*Z.shield.length);
         const sc=Z.shield.splice(idx,1)[0];
@@ -23709,10 +23830,12 @@ async function runFxList(pi,list,srcCard,inPump){
           if(typeof toHand==="function"){toHand(Z,x);}else Z.hand.push(x);
         });
         got++;names.push(faceNameOf(sc));
+        _sbAddR.push(...stack);
       }
       if(got>0){sfx("draw");logPriv(pi,`🛡→✋ ${S.players[pi].label}：ランダムなシールド${got}枚を手札に加えた（S・トリガーは使えない）：${cnList(names)}`,`🛡→✋ ${S.players[pi].label}：ランダムなシールド${got}枚を手札に加えた（S・トリガーは使えない／内容は非公開）`);toast(`🛡→✋ ランダムなシールド${got}枚を手札に加えた（S・トリガーは使えない）：${names.join("、")}`,null,{noLog:true});}
       else toast("シールドがありません");
       renderAll();
+      if(got){await notifyShieldLeave(pi);await offerSabakiZAdded(pi,_sbAddR);await offerSBack(pi,_sbAddR);}   // ⚔ v16.109
     }else if(f.t==="flip"){
       if(!tgtC){toast("裏返す対象がありません");continue;}
       const lk=LINKS.get(normName(tgtC.name));
@@ -25360,6 +25483,17 @@ async function waitFxIdle(inPump){
 }
 
 /* ================= 攻撃・バトル ================= */
+/* 💸 v16.110 「次に手札から実行するカードのコスト−n」（煌メク聖戦 絶十型）が、この登録に効くか */
+function nextRedOk(r,pi){
+  try{
+    const NR=S._nextSpellRed;
+    if(!NR||!r)return false;
+    if((NR.by|0)!==(pi|0)||(NR.turn|0)!==(S.turn|0))return false;
+    const cnd=String(NR.cond||"").trim();
+    if(!cnd)return true;
+    return lockFilterOk(cnd,r,null);
+  }catch(e){return false;}
+}
 function dispCost(c,pi){
   const r=getReg(c);
   if(!r||r.cost==null||isNaN(+r.cost))return null;
@@ -25369,6 +25503,7 @@ function dispCost(c,pi){
     if(+r.includedCostRed>0&&c.under&&c.under.length)
       cost=Math.max(+r.includedCostFloor||0,cost-c.under.length*(+r.includedCostRed));
     if(+r.shieldCostRed>0)cost=Math.max(+r.shieldCostFloor||1,cost-zonesOf(pi).shield.length*(+r.shieldCostRed));
+    if(nextRedOk(r,pi))cost=Math.max(0,cost-(+S._nextSpellRed.n||0));   // 💸 v16.110 札のコスト表示にも反映
     if(typeof isNeoReg==="function"&&isNeoReg(r)){
       let underRed=0;
       for(const host of zonesOf(pi).battle)for(const u of (host.under||[])){
@@ -26624,13 +26759,16 @@ function resolveOut(Z,o){
   if(rg&&rg.monsho){
     const pi0=S.players.findIndex(P=>P.zones===Z);
     if(Z.shield.length){
-      const idx=(Z.shield.length===1)?0:(typeof MONSHO_PICK==="function"?MONSHO_PICK(Z):0);
+      const idx=0;
       const old0=Z.shield[idx];
       o.faceup=true;o.tapped=false;o.sideways=false;o.rot=0;o.mark=false;
       o.under=[old0,...(old0.under?old0.under.splice(0):[])];
       Z.shield[idx]=o;
       toast(`🏵 裁きの紋章：${faceNameOf(o)} をシールド${idx+1}の上に表向きで置いた`);
       if(pi0>=0)logOnly(`🏵 ${S.players[pi0].label}：《${faceNameOf(o)}》を裁きの紋章としてシールドの上へ`);
+      /* 🛡 v16.109 EXモードでは、どのシールドの上に置くかを選べる（resolveOut は同期なので、置いたあとに聞いて動かす） */
+      if(pi0>=0)setTimeout(()=>{try{notifyShieldPlaced(pi0,[o]);}catch(e){}},0);   // 🛡 v16.110 裁きの紋章で重ねるのも「置かれた時」
+      if(S.expert&&Z.shield.length>1&&pi0>=0)setTimeout(()=>{monshoRelocateAsk(pi0,o);},0);
       return true;
     }
     toast(`🏵 裁きの紋章：シールドが無いため ${faceNameOf(o)} は墓地へ`);
@@ -28261,7 +28399,7 @@ async function startAttack(pi,id){
   if(pick===null){renderAll();return;}
   let tg=targets[pick]; // 🔥 革命0トリガーでシールドが増えた場合にブレイクへ差し替えるため let
   /* ⚖ v16.107 相手のクリーチャーが攻撃する時に唱えられる呪文（天地ヲ別ツ龍断ノ裁キ型） */
-  if(S.expert&&S.vs){try{await offerFoeAtkFlipCast(op);}catch(e){console.warn("offerFoeAtkFlipCast",e);}}
+  if(S.expert&&S.vs){try{await offerFoeAtkFlipCast(op,"foe");await offerFoeAtkFlipCast(pi,"mine");}catch(e){console.warn("offerFoeAtkFlipCast",e);}}
   /* 👁 v16.106 攻撃する相手のクリーチャーとして選んだ時も「相手に選ばれた時」（アポロヌス・アガペリオスのマナ破壊等） */
   if(S.expert&&tg.kind==="creature"){
     const _tgc=OZ.battle.find(x=>x.id===tg.cid);
@@ -32243,6 +32381,7 @@ function renderFxEditor(){
   {const e=$("fxShieldHandOnly");if(e)e.checked=!!FXEDIT.shieldHandOnly;}
   {const e=$("fxFaceUpShieldActive");if(e)e.checked=!!FXEDIT.faceUpShieldActive;}
   {const e=$("fxFoeAtkFlipCast");if(e)e.value=+FXEDIT.foeAtkFlipCast||0;}
+  {const e=$("fxFlipCastBoth");if(e)e.checked=!!FXEDIT.flipCastBoth;}
   $("fxLibWin").checked=!!FXEDIT.libWin;
   $("fxPetensy").checked=!!FXEDIT.petensy;
   $("fxPetensyN").value=(FXEDIT.petensyN==null?3:FXEDIT.petensyN);
@@ -34605,6 +34744,7 @@ function openFxEditor(key){
     shieldHandOnly:cur?!!cur.shieldHandOnly:false,
     faceUpShieldActive:cur?!!cur.faceUpShieldActive:false,
     foeAtkFlipCast:cur?(+cur.foeAtkFlipCast||0):0,
+    flipCastBoth:cur?!!cur.flipCastBoth:false,
     libWin:cur?!!cur.libWin:false,
     petensy:cur?!!cur.petensy:false,
     petensyN:(cur&&cur.petensyN!=null)?+cur.petensyN:3,
@@ -35254,6 +35394,7 @@ $("fxSave").addEventListener("click",async ()=>{
     shieldHandOnly:$("fxShieldHandOnly")?$("fxShieldHandOnly").checked:false,
     faceUpShieldActive:$("fxFaceUpShieldActive")?$("fxFaceUpShieldActive").checked:false,
     foeAtkFlipCast:$("fxFoeAtkFlipCast")?(+$("fxFoeAtkFlipCast").value||0):0,
+    flipCastBoth:$("fxFlipCastBoth")?$("fxFlipCastBoth").checked:false,
     libWin:$("fxLibWin").checked,
     petensy:$("fxPetensy").checked,
     petensyN:Math.max(0,+$("fxPetensyN").value||0),
@@ -39346,7 +39487,8 @@ function cardEl(pi,zone,c){
   /* 👁 v16.72 下に重なっているカードは、札そのものから開けるようにした。
      これまでは札をタップ→メニューの「下のカード／メテオバーン」まで行く必要があり、
      進化クリーチャーの進化元や、無月フィールドの下を見るのに手数がかかっていた。 */
-  if(c.under&&c.under.length&&zone==="battle"&&!hidden&&showBBtn&&(!S.vs||pi===(S.seat|0))){
+  /* 👁 v16.109 シールドの束（裁きの紋章など）も、札から中身を見られるようにした */
+  if(c.under&&c.under.length&&(zone==="battle"||(zone==="shield"&&c.faceup))&&!hidden&&showBBtn&&(!S.vs||pi===(S.seat|0))){
     const ub2=document.createElement("button");
     ub2.textContent="👁"+c.under.length;
     ub2.title=`下に重なっているカード${c.under.length}枚を見る（メテオバーン・退化もここから）`;
@@ -42709,16 +42851,19 @@ function pickFxKeysPanel(){
     const pick=new Set();
     const ol=document.createElement("div");
     // 📱 セーフエリア（時計・電波の帯）を自前で避ける。上に食い込んで見出しが読めなかった（v14.69）
-    ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:996;display:flex;flex-direction:column;gap:8px;"
+    /* 🔧 v16.108 ・前面に出す：ログの小窓（確認中は z-index 9400 で前に出る）にボタンが隠れて押せなかった。
+       ・幅を抑える：画面いっぱいに広がって、PCでは札もパネルも大きすぎた。 */
+    ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9500;display:flex;flex-direction:column;align-items:center;gap:8px;"
       +"padding:max(12px, var(--safetop,0px)) 12px max(12px, var(--safebot,0px))";
+    const inner=(el)=>{el.style.width="100%";el.style.maxWidth="900px";return el;};
     const head=document.createElement("div");
     head.style.cssText="color:#fff;font-weight:900;font-size:15px;line-height:1.5";
     head.textContent="📦 送るカードを選ぶ";
-    ol.appendChild(head);
+    ol.appendChild(inner(head));
     const note=document.createElement("div");
     note.style.cssText="color:#9aa4b5;font-size:12px;line-height:1.5";
     note.textContent="タップで選択／解除します。ツインパクトなど多面登録のカードは、選ぶと相方も一緒に送ります。";
-    ol.appendChild(note);
+    ol.appendChild(inner(note));
     const bar=document.createElement("div");
     bar.style.cssText="display:flex;gap:6px;flex-wrap:wrap;align-items:center";
     const sIn=document.createElement("input");
@@ -42735,20 +42880,20 @@ function pickFxKeysPanel(){
     bSort.title="登録した順に並べ替えます（新しく入れたカードが後ろに来ます）";
     mkb("表示中をすべて選ぶ",()=>{shown().forEach(k=>pick.add(k));draw();});
     mkb("選択をすべて外す",()=>{pick.clear();draw();});
-    ol.appendChild(bar);
+    ol.appendChild(inner(bar));
     const cnt=document.createElement("div");
     cnt.style.cssText="color:#fbbf24;font-size:13px;font-weight:800";
-    ol.appendChild(cnt);
+    ol.appendChild(inner(cnt));
     const grid=document.createElement("div");
     // 🖼 タイルの幅（v14.71）：スマホ（520px以下）は画面幅から計算して4列前後の小タイル、
     //    PCは従来どおり縦長の大型表示（add30.js が見張っている形をそのまま使う）。
     const _tw=Math.max(84,Math.round(window.innerWidth/4)-14);
     const _cols=(window.innerWidth<=520)
       ? `repeat(auto-fill,minmax(${_tw}px,1fr))`
-      : "repeat(auto-fill,minmax(clamp(140px,18vw,190px),1fr))";
+      : "repeat(auto-fill,minmax(clamp(104px,9vw,132px),1fr))";   // 🔧 v16.108 PCでも大きすぎない札に
     grid.style.cssText="flex:1;min-height:0;overflow:auto;display:grid;grid-auto-rows:max-content;gap:8px;align-content:start;"
       +`grid-template-columns:${_cols}`;
-    ol.appendChild(grid);
+    ol.appendChild(inner(grid));
     const shown=()=>{
       const q=sIn.value.trim().toLowerCase();
       return keys.filter(k=>!q||qHit(nameOf(k),q));
@@ -42789,7 +42934,7 @@ function pickFxKeysPanel(){
     };
     sIn.oninput=draw;
     const foot=document.createElement("div");
-    foot.style.cssText="display:flex;gap:8px;justify-content:flex-end";
+    foot.style.cssText="display:flex;gap:8px;justify-content:flex-end;flex:0 0 auto;position:relative;z-index:1";
     const bCancel=document.createElement("button");bCancel.className="btn small";bCancel.textContent="やめる";
     bCancel.addEventListener("click",()=>{ol.remove();res(null);});
     const bOk=document.createElement("button");bOk.className="btn small primary";bOk.textContent="この内容で送る";
@@ -42801,7 +42946,7 @@ function pickFxKeysPanel(){
       ol.remove();res([...out]);
     });
     foot.appendChild(bCancel);foot.appendChild(bOk);
-    ol.appendChild(foot);
+    ol.appendChild(inner(foot));
     document.body.appendChild(ol);
     draw();
   });
