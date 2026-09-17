@@ -5119,6 +5119,14 @@ function askChoice(msg,options,art){return _serialDlg(ASK_GATE,()=>new Promise(r
 /* 🃏 ツインパクトの面選び。カードの絵を上下に切り分けて左右に並べ、
    選んでいない側を暗くして見せる。設定「ツインパクトの選び方」で文字の一覧にも戻せる。
    返り値は askChoice と同じ（0＝上面／1＝下面／null＝やめる）。 */
+/* 🃏 v16.105 効果で「クリーチャーを出す」時の多面カード（ツインパクト等）の面選び。
+   出せる面（クリーチャーの面）が1つだけなら聞かずにその面で出す。2つ以上ある時だけ選ぶ（神羅／羅月NEX等）。 */
+function enterFaceAuto(lk){
+  if(!lk||lk.length<2)return null;
+  const idx=lk.map((k,i)=>{const fr=FXDB.get(k);return fr&&isCreatureReg(fr)?i:-1;}).filter(i=>i>=0);
+  if(idx.length!==1)return null;
+  return idx[0];
+}
 function twinFaceLabel(){return (S.twinPick==="text")?"text":"art";}
 function askTwinFace(card,msg,topLabel,botLabel,cancelLabel){
   // 文字で選ぶ設定の時と、ゴーストの自動応答中は、これまでどおりの文字の一覧にする
@@ -5712,7 +5720,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.104";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.105";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7764,7 +7772,7 @@ async function summonCreatureNeoAware(pi,t,opts){
           :`《${faceNameOf(t)}》は${evoLbl}クリーチャー。どう出しますか？${opts.excludeId?"\n（攻撃中のクリーチャーには進化できません）":""}`,
         isNeo
           ?["NEOクリーチャーとして出す（通常召喚・召喚酔いあり）","NEO進化として出す（自分のクリーチャー／シンカライズに重ねる）"]
-          :[`${evoLbl}として出す（進化元に重ねる）`,"そのまま出す（進化元なし・非進化として）"]);
+          :[`${evoLbl}として出す（進化元に重ねる）`,"そのまま出す（進化元なし・非進化として）"],cc);   // 🖼 v16.105 出すカードの絵
       const wantStack=isNeo?(m===1):(m===0);
       if(m!==null&&wantStack){
         const k=bases.length===1?0:await pickCard("進化元を選択（自分のクリーチャー／シンカライズ）",bases,{sub:x=>{const rr=getReg(x);return rr&&rr.shinkalize?"シンカライズ":(rr&&isCreatureReg(rr)?"クリーチャー":"");}});
@@ -14893,7 +14901,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
     {
       const lk=LINKS.get(normName(cc.name));
       if(lk&&lk.length>1){
-        const fj=await askChoice(`《${dispName.get(lk[0])||cc.name}》は多面カードです。どの面で出しますか？`,
+        const fj=(enterFaceAuto(lk)!==null)?enterFaceAuto(lk):await askChoice(`《${dispName.get(lk[0])||cc.name}》は多面カードです。どの面で出しますか？`,
           lk.map((k,_fi)=>{const fr=FXDB.get(k);const tl=fr?(evoKindOf(fr)?evoKindLabel(evoKindOf(fr)):"クリーチャー"):"";return {text:`《${dispName.get(k)||k}》${tl?`（${tl}${fr&&fr.cost!=null?`・コスト${fr.cost}`:""}）`:""}`,card:k,big:true};}),cc);   // 🖼 v16.103 面ごとの絵
         if(fj!==null){
           cc.face=fj;
@@ -19237,7 +19245,7 @@ async function runFxList(pi,list,srcCard,inPump){
           {
             const lk=LINKS.get(normName(cc.name));
             if(lk&&lk.length>1){
-              const fj=await askChoice(`《${dispName.get(lk[0])||cc.name}》は多面カードです。どの面で出しますか？`,
+              const fj=(enterFaceAuto(lk)!==null)?enterFaceAuto(lk):await askChoice(`《${dispName.get(lk[0])||cc.name}》は多面カードです。どの面で出しますか？`,
                 lk.map((k,_fi)=>{const fr=FXDB.get(k);const tl=fr?(evoKindOf(fr)?evoKindLabel(evoKindOf(fr)):"クリーチャー"):"";return {text:`《${dispName.get(k)||k}》${tl?`（${tl}${fr&&fr.cost!=null?`・コスト${fr.cost}`:""}）`:""}`,card:k,big:true};}),cc);   // 🖼 v16.103 面ごとの絵
               if(fj!==null){
                 cc.face=fj;
@@ -19251,7 +19259,7 @@ async function runFxList(pi,list,srcCard,inPump){
           if(rc2&&isEvoReg(rc2)&&!isNoBaseEvoReg(rc2)){
             const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
             if(basePool.length){
-              const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rc2)?"NEOクリーチャー":evoKindLabel(evoKindOf(rc2))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rc2)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"]);
+              const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rc2)?"NEOクリーチャー":evoKindLabel(evoKindOf(rc2))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rc2)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"],cc);   // 🖼 v16.105 出すカードの絵
               if(ev===null){
                 // ❌ キャンセル：出さずに候補へ戻す（従来は非進化で強制的に出ていた不具合を修正）
                 cc.face=0;revealed.push(cc);cancelled=true;
@@ -19662,7 +19670,7 @@ async function runFxList(pi,list,srcCard,inPump){
           {
             const lk=LINKS.get(normName(cc.name));
             if(lk&&lk.length>1){
-              const fj=await askChoice(`《${faceNameOf(cc)}》は多面カードです。どの面で出しますか？`,lk.map(k=>{const fr=FXDB.get(k);return {text:`《${dispName.get(k)||k}》${fr&&fr.cost!=null?`（コスト${fr.cost}）`:""}`,card:k,big:true};}),cc);   // 🖼 v16.103
+              const fj=(enterFaceAuto(lk)!==null)?enterFaceAuto(lk):await askChoice(`《${faceNameOf(cc)}》は多面カードです。どの面で出しますか？`,lk.map(k=>{const fr=FXDB.get(k);return {text:`《${dispName.get(k)||k}》${fr&&fr.cost!=null?`（コスト${fr.cost}）`:""}`,card:k,big:true};}),cc)   // 🖼 v16.103
               if(fj!==null){
                 cc.face=fj;
                 const fr=FXDB.get(lk[fj]);
@@ -19677,7 +19685,7 @@ async function runFxList(pi,list,srcCard,inPump){
             if(rc2&&isEvoReg(rc2)&&!isNoBaseEvoReg(rc2)){
               const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
               if(basePool.length){
-                const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rc2)?"NEOクリーチャー":evoKindLabel(evoKindOf(rc2))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rc2)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"]);
+                const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rc2)?"NEOクリーチャー":evoKindLabel(evoKindOf(rc2))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rc2)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"],cc);   // 🖼 v16.105 出すカードの絵
                 if(ev===0){
                   const bj=basePool.length===1?0:await pickCard("進化元を選択",basePool,{hint:"タップで選択"});
                   if(bj!==null){
@@ -20248,7 +20256,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(rx&&isEvoReg(rx)&&!isNoBaseEvoReg(rx)){
           const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
           if(basePool.length){
-            const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rx)?"NEOクリーチャー":evoKindLabel(evoKindOf(rx))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rx)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"]);
+            const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rx)?"NEOクリーチャー":evoKindLabel(evoKindOf(rx))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rx)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"],cc);   // 🖼 v16.105 出すカードの絵
             if(ev===0){
               const bj=basePool.length===1?0:await pickCard("進化元を選択",basePool);
               if(bj!==null){const base=basePool[bj];const bi2=Z.battle.findIndex(x=>x.id===base.id);cc.under=[base,...(base.under?base.under.splice(0):[]),...(cc.under||[])];if(base.gear&&base.gear.length)cc.gear=[...(cc.gear||[]),...base.gear.splice(0)];cc.tapped=base.tapped;if(isNeoReg(rx))cc.neoEvo=true;Z.battle[bi2]=cc;transferAtkState([base.id],cc);markArrive(cc);sumStacked=true;toast(`⤴ ${faceNameOf(base)} に重ねて${isNeoReg(rx)?"NEO進化":evoKindLabel(evoKindOf(rx))}！ → ${faceNameOf(cc)}`);}
