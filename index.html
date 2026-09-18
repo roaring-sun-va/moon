@@ -5255,7 +5255,9 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
     const isMonshoCard=x=>{const r=getReg(x);return !!(r&&(r.races||[]).some(t=>String(t||"").includes("裁きの紋章")));};
     const pool=()=>(pending?added.filter(x=>ids.has(x.id)):Z.hand.filter(x=>ids.has(x.id))).filter(isMonshoCard);
     /* ⚔ v16.121 解決中ゾーンにあるカード（いま唱えている呪文そのもの）はサバキZの候補にしない。 */
-    const _inResolve=x=>Z.resolve.some(y=>y.id===x.id);
+    const _nowId=(typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)?FX_NOW_CARD.id:null;
+    /* ⚔ v16.123 解決中ゾーンのカードと、いま処理しているカード自身は候補にしない */
+    const _inResolve=x=>Z.resolve.some(y=>y.id===x.id)||zonesOf(pi===0?1:0).resolve.some(y=>y.id===x.id)||(_nowId&&x.id===_nowId);
     const szs=[...(pending?added:[]),...Z.hand].filter(x=>{const r=getReg(x);return r&&r.sabaki&&!_inResolve(x);});
     /* ⚔ v16.114 侵略・革命チェンジと同じく、使うサバキZをすべて宣言してから、宣言した順に解決する。 */
     const _decl=[];
@@ -5264,7 +5266,8 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       const rsc0=getReg(sc);
       const rest=pool().filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
       if(rest.length<=_decl.length)continue;   // 捨てる裁きの紋章が足りない（宣言できる枚数の上限）
-      const yes=await ask(`⚔ サバキZ：《${faceNameOf(sc)}》を使いますか？${_decl.length?`\n（宣言済み：${_decl.map(faceNameOf).join("→")}）`:""}\n加わる裁きの紋章：${rest.map(faceNameOf).join("、")}（あと${rest.length-_decl.length}枚まで宣言できます）\nそのうち1枚を捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rsc0&&rsc0.ctype==="spell"?"唱え":"召喚し"}ますか？\n（使うものをすべて宣言してから、宣言した順に解決します）`,[sc,...rest.slice(0,3)]);
+      const yes=await ask(`⚔ サバキZ：《${faceNameOf(sc)}》を使いますか？${_decl.length?`\n（宣言済み：${_decl.map(faceNameOf).join("→")}）`:""}\n捨てる候補（加わる裁きの紋章）：${rest.length}枚（あと${rest.length-_decl.length}枚まで宣言できます）\nそのうち1枚を捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rsc0&&rsc0.ctype==="spell"?"唱え":"召喚し"}ますか？\n（使うものをすべて宣言してから、宣言した順に解決します）`,
+        [{card:sc,cap:"⚔ 使うサバキZ"},...rest.slice(0,12).map(x=>({card:x,cap:"🗑 捨てる候補"}))]);
       if(yes)_decl.push(sc);
     }
     if(_decl.length>1){
@@ -5904,7 +5907,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.121";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.123";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9617,6 +9620,10 @@ function startGame(picks){
   MUGETSU_BUSY=false;MUGETSU_TE_DONE=false;MUGETSU_ASKED={};MUGETSU_PENDING=new Set();MUGETSU_THIS_TRIG=new Set();
   MUGETSU_OUT_WAIT=new Set();MUGETSU_OUT_BUSY=false;
   S._watchOnce={};S._watchOncePend={};S._once1G={};S.pendingAtk=null;MOVE_BLOCKED=false;
+  /* 🧹 v16.123 試合をやり直した時に、ターンをまたぐ効果の記録も消す
+     （堅珠ノ正裁Zの「マナ超過は山札の下へ」が次の試合まで残っていた） */
+  S._bigCreLock=null;S._nextSpellRed=null;S._nextSumRed=null;S.finalRevUsed={};
+  S._pfQueue=[[],[]];S._pfFlushing=[false,false];
   try{$("fxBanner").classList.remove("show");}catch(e){}
   if(!S.players[0].mainList.length){openDeckPanel();toast("先にデッキを登録してください");return;}
   snap();
@@ -15289,7 +15296,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["shieldPickTuck","graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["shieldPickTuck","nextSpellCostDown","graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -26867,7 +26874,7 @@ function resolveOut(Z,o){
     }
     toast(`🏵 裁きの紋章：シールドが無いため ${faceNameOf(o)} は墓地へ`);
   }
-  if(rg&&rg.charger){
+  if(rg&&rg.charger&&!o._monshoDone){   // ⚡ v16.122 裁きの紋章で置いたあとはマナに行かない
     if(isCrystalChargerReg(rg)){o.faceup=false;o.seen=false;o._crystalMana=true;}
     Z.mana.push(o);return true;
   }
@@ -38019,10 +38026,14 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     return false;
   })()){
     const rgCh=getReg(c);
+    /* ⚡ v16.122 裁きの紋章としてシールドの上に置き終わったカードは、チャージャーでマナに行かない */
+    if(c._monshoDone){toast(`🏵 ${faceNameOf(c)} は裁きの紋章としてシールドの上に置かれています（チャージャーは働きません）`);}
+    else{
     if(isCrystalChargerReg(rgCh)){c.faceup=false;c.seen=false;c._crystalMana=true;}
     placeCard(Z,"mana",c);
     toast(`${isCrystalChargerReg(rgCh)?"💎水晶チャージャー":"⚡チャージャー"}：${faceNameOf(c)} はマナゾーンへ`);
     sfx("move");
+    }
   }
   else if((toZone==="shield"||toZone==="shieldUp")&&(()=>{const rg=getReg(c);return rg&&rg.ctype==="gcastle";})()){
     c.faceup=true;c.mark=S.turn>0;
