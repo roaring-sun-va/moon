@@ -6054,7 +6054,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.145";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.146";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -16363,7 +16363,9 @@ async function runFxList(pi,list,srcCard,inPump){
     }else if(f.t==="manaRecruitLess"){
       // 🌱 現在のマナ枚数よりコストが小さい、進化ではないクリーチャーをマナから出す。
       const manaN=Z.mana.length;
-      const pool=Z.mana.filter(x=>{const r=getReg(x);return r&&isCreatureReg(r)&&!isEvoReg(r)&&+r.cost<manaN;});
+      /* 🧬 v16.146 NEO・GNEOクリーチャーは、進化元なしでも出せるので「進化ではないクリーチャー」に含める */
+      const _nonEvoOk=r=>!!r&&isCreatureReg(r)&&(!isEvoReg(r)||["neoevo","gneo","neodream","gneodream"].includes(r.ctype));
+      const pool=Z.mana.filter(x=>{const r=getReg(x);return _nonEvoOk(r)&&+r.cost<manaN;});
       if(!pool.length){toast(`🌱 コストがマナ枚数（${manaN}）より小さい非進化クリーチャーがありません`);continue;}
       const j=await pickCard(`🌱 マナから出す非進化クリーチャーを選択（コスト＜${manaN}）`,pool);
       if(j===null)continue;
@@ -22199,7 +22201,7 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!bp.length){toast("🌍 対象のクリーチャーがいません");continue;}const bj=await pickCard("🌍 マナゾーンに置くクリーチャーを選択",bp);if(bj===null)continue;
       const tgt=bp[bj];if(!await ask(`🌍 《${faceNameOf(tgt)}》を持ち主のマナゾーンに置きますか？`))continue;
       await moveCardX(tp,"battle",tgt.id,tp,"mana");renderAll();
-      const manaN=TZ.mana.length;const mp=TZ.mana.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&!isEvoReg(rx)&&+rx.cost<=manaN&&(!chosenCiv||(rx.civs||[]).includes(chosenCiv));});
+      const manaN=TZ.mana.length;const mp=TZ.mana.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!isEvoReg(rx)||["neoevo","gneo","neodream","gneodream"].includes(rx.ctype))&&+rx.cost<=manaN&&(!chosenCiv||(rx.civs||[]).includes(chosenCiv));});
       if(!mp.length){toast(`🌍 マナ${manaN}枚以下の対象クリーチャーがいません`);continue;}const mj=await pickCard(`🌍 マナから出すクリーチャーを選択（コスト${manaN}以下）`,mp);if(mj===null)continue;
       const out=mp[mj],mi=TZ.mana.findIndex(x=>x.id===out.id);if(mi<0)continue;TZ.mana.splice(mi,1);out.faceup=true;out.tapped=false;out.sick=!(getReg(out)&&getReg(out).sa);if(!battleEntryOk(tp,out)){TZ.mana.push(out);toast("出せないためマナに戻しました");continue;}TZ.battle.push(out);out._viaCheat=true;markArrive(out);emitEvent(tp,"summon");enqueueFx(tp,out);sfx("move");renderAll();await waitFxIdle(inPump);
     }else if(f.t==="deckEvo"){
@@ -27842,14 +27844,35 @@ async function processBroken(op,stack,label){
               });
               bar.appendChild(b);
             };
-            if(sfSel!==1)mkST("S・トリガー：解決中へ"+(twinSel?"（下面・呪文）":""),"resolve");
-            if(sfSel!==2)mkST("S・トリガー：バトルへ"+(twinSel?"（上面・クリーチャー）":""),"battle");
+            /* ⚡ v16.146 G・ストライクは「手札に加えて攻撃を止める」だけの能力。
+               S・トリガーを持たない札でS・トリガーのボタンを押すと、出た時の効果まで動いてしまうので、
+               G・ストライクしか持たない札ではボタンを出さず、専用のボタンを出す。 */
+            const gsOnly=!!((rSel&&rSel.gs)||shieldGSGrantOk(op,cSel))&&!stOwn&&!stGranted;
+            if(!gsOnly){
+              if(sfSel!==1)mkST("S・トリガー：解決中へ"+(twinSel?"（下面・呪文）":""),"resolve");
+              if(sfSel!==2)mkST("S・トリガー：バトルへ"+(twinSel?"（上面・クリーチャー）":""),"battle");
+            }
             if(twinSel&&(sfSel===1||sfSel===2)){
               const nt=document.createElement("div");
               nt.style.cssText="font-size:11px;color:var(--muted);flex-basis:100%";
               nt.textContent=`🃏 このツインパクトのS・トリガーは${sfSel===1?"上面（クリーチャー）":"下面（呪文）"}のみ：もう一方の面はS・トリガーでは使えません`;
               bar.appendChild(nt);
             }
+          }
+        }
+        /* ⚡ v16.146 G・ストライク専用のボタン：手札に加えて、この攻撃を止める */
+        if(!multi&&selCards.length===1){
+          const cG=selCards[0],rG=getReg(cG);
+          if((rG&&rG.gs)||shieldGSGrantOk(op,cG)){
+            const bG=document.createElement("button");
+            bG.className="btn small";bG.textContent="G・ストライク：手札に加えて攻撃を止める";
+            bG.addEventListener("click",()=>{
+              try{S._gsStop=true;}catch(e){}
+              toast(`⚡ G・ストライク：${faceNameOf(cG)} を手札に加え、この攻撃を止めます（出た時の効果は使いません）`);
+              logOnly(`⚡ ${S.players[op].label}：G・ストライクで攻撃を止めた（${faceNameOf(cG)}）`);
+              putMany("hand");
+            });
+            bar.appendChild(bG);
           }
         }
         mk(multi?`${selCards.length}枚まとめて墓地へ`:"墓地へ（S・バック/サバキZコスト）","grave","warn");
@@ -28748,7 +28771,9 @@ async function startAttack(pi,id){
     }
     return false;
   })();
-  const atkAll=!!(reg&&reg.atkUn)||hasMachF(reg)||_auraMach||!!(c.buff&&c.buff.attackUntapped);
+  /* ⚡ v16.146 ハイパーモード中だけのマッハファイター（hmMach）も、攻撃先の一覧に反映する
+     （ダグラジャパニカン型。これまで「出たターンに殴れる」判定にしか入っていなかった） */
+  const atkAll=!!(reg&&reg.atkUn)||hasMachF(reg)||_auraMach||!!(c.buff&&c.buff.attackUntapped)||!!(reg&&c.hyper&&reg.hmMach);
   const targets=[];
   if(S.noAtkTurn&&S.noAtkTurn.on&&S.noAtkTurn.key===`${S.turn}`){
     toast("⛔ このターン、すべてのクリーチャーは攻撃できません");
@@ -30186,6 +30211,7 @@ async function execAttack(pi,id,tg){
   return "ok";})();
    if(_trigOrig){c=_newTop;id=_newId;}
    if(_atkTrigRes==="abort")return;}
+  if(S._gsStop){S._gsStop=false;toast("⚡ G・ストライク：この攻撃は止まりました");logOnly(`⚡ ${S.players[pi].label}：G・ストライクにより攻撃が止まった`);renderAll();return;}   // ⚡ v16.146
   if(!stillAtk()){renderAll();return;}   // 🔏 v16.106 攻撃が止まっていれば革命0トリガーは聞かない
   await offerRev0();
   if(rev0Used){
@@ -30802,6 +30828,7 @@ async function execAttack(pi,id,tg){
     }
     /* 🔧 v16.100 革命0トリガーは「攻撃する時」に1回だけ。以前はここで聞き直していたので、
        不発で手札に戻ったカードを、同じ攻撃の中でもう一度使うかが出ていた。 */
+    if(S._gsStop){S._gsStop=false;toast("⚡ G・ストライク：この攻撃は止まりました");logOnly(`⚡ ${S.players[pi].label}：G・ストライクにより攻撃が止まった`);renderAll();return;}   // ⚡ v16.146
     if(!stillAtk()){renderAll();return;}   // 🔏 v16.106 ブレイクのトリガー等で攻撃が止まっていれば、ダイレクトアタックも革命0トリガーも無し
     await offerRev0();
     if(rev0Used){
@@ -39956,8 +39983,11 @@ function cardEl(pi,zone,c){
   /* 👁 v16.109 シールドの束（裁きの紋章など）も、札から中身を見られるようにした */
   if(c.under&&c.under.length&&(zone==="battle"||zone==="shield")&&!hidden&&showBBtn&&((zone==="shield")||!S.vs||pi===(S.seat|0))){   // 👁 v16.131 相手の盾の重なりも見られる（中身は裏向きのまま）
     const ub2=document.createElement("button");
-    ub2.textContent="👁"+(1+c.under.length);   // 🔢 v16.121 一番上を含めた合計枚数
-    ub2.title=`重なっているカード全${1+c.under.length}枚を見る（一番上を含む・メテオバーン・退化もここから）`;
+    /* 🔢 v16.146 シールドは「計N（一番上を含む）」、進化・フィールドは今までどおり「下にN枚」 */
+    ub2.textContent=(zone==="shield")?("👁計"+(1+c.under.length)):("👁"+c.under.length);
+    ub2.title=(zone==="shield")
+      ? `重なっているカード全${1+c.under.length}枚を見る（一番上を含む）`
+      : `下に重なっているカード${c.under.length}枚を見る（メテオバーン・退化もここから）`;
     ub2.style.cssText="position:absolute;right:-6px;bottom:22%;z-index:8;min-width:30px;height:24px;padding:0 5px;border-radius:12px;border:2px solid #fbbf24;background:#2a2005;color:#fbbf24;font-size:11px;font-weight:900;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.6);line-height:1";
     ub2.addEventListener("click",ev=>{
       ev.stopPropagation();ev.preventDefault();
@@ -39974,8 +40004,8 @@ function cardEl(pi,zone,c){
       st.textContent="計"+total+(fu?` 表${fu}`:"");   // 🔢 v16.121 下の枚数ではなく、重なっている合計枚数
       st.title=`この盾は全${total}枚（表${fu}・裏${total-fu}）`;
     }else{
-      st.textContent="計"+(1+c.under.length);   // 🔢 v16.121 重なっている合計枚数（このカードを含む）
-      st.title=`このカードを含めて全${1+c.under.length}枚（下に${c.under.length}枚）`;
+      st.textContent="下"+c.under.length;   // 🔢 v16.146 進化・フィールドは今までどおり「下にある枚数」
+      st.title=`下に${c.under.length}枚重なっています（このカードを含めて全${1+c.under.length}枚）`;
     }
     el.appendChild(st);
   }
