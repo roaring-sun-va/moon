@@ -2582,7 +2582,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <option value="ガーゴイル"><option value="ガーディアン"><option value="ガイア・コマンド"><option value="ガイア・コマンド・ドラゴン"><option value="カレンダー"><option value="キカイヒーロー"><option value="キマイラ"><option value="ギャング・ビート"><option value="グラディエーター"><option value="グランセクト">
           <option value="グランセクト・ワード"><option value="グランド・デビル"><option value="グリーン・コマンド・ドラゴン"><option value="クリスタル・コマンド・ドラゴン"><option value="グレートメカオー"><option value="グレンモルト"><option value="ゲル・フィッシュ"><option value="ゴースト"><option value="コスモ・ウォーカー"><option value="ゴッド">
           <option value="ゴッド・ノヴァ"><option value="ゴッド・ノヴァOMG"><option value="コマンド・ドラゴン"><option value="コロニー・ビートル"><option value="サイバー・ウイルス"><option value="サイバー・コマンド"><option value="サイバー・ドラゴン"><option value="サイバー・ムーン"><option value="サイバーロード"><option value="サバイバー">
-          <option value="サムライ"><option value="サバキスト"><option value="裁きの紋章"><option value="裁きの紋章Z"><option value="シノビ"><option value="ジャイアント"><option value="ジャイアント・インセクト"><option value="ジャイアント・スキル"><option value="ジャイアント・スノーフェアリー"><option value="ジャイアント・ドラゴン"><option value="ジャスティス・ウイング"><option value="ジャッジメント・エンブレム"><option value="ジュラシック・コマンド・ドラゴン">
+          <option value="サムライ"><option value="ソニック・コマンド・ワード"><option value="サバキスト"><option value="裁きの紋章"><option value="裁きの紋章Z"><option value="シノビ"><option value="ジャイアント"><option value="ジャイアント・インセクト"><option value="ジャイアント・スキル"><option value="ジャイアント・スノーフェアリー"><option value="ジャイアント・ドラゴン"><option value="ジャスティス・ウイング"><option value="ジャッジメント・エンブレム"><option value="ジュラシック・コマンド・ドラゴン">
           <option value="ジョーカーズ"><option value="ジョーカーズ・ドラゴン"><option value="ジョーカーズZ"><option value="スーパーカードラゴン"><option value="スターライト・ツリー"><option value="スチーム・ナイト"><option value="スノーフェアリー"><option value="スノーフェアリー風"><option value="スピリット・クォーツ"><option value="スプラッシュ・クイーン"><option value="スペース・サーパント">
           <option value="スペシャルズ"><option value="ゼニス"><option value="ゼノパーツ"><option value="セラフィム"><option value="ソニック・コマンド"><option value="ソルトルーパー"><option value="ダークロード"><option value="ダイナモ"><option value="チームACE"><option value="チームウェイブ">
           <option value="チームボンバー"><option value="チーム銀河"><option value="チーム切札"><option value="チーム零"><option value="ツリーフォーク"><option value="ディープ・マリーン"><option value="ディスタス"><option value="ディスペクター"><option value="ティラノ・ドレイク"><option value="デーモン・コマンド">
@@ -6054,7 +6054,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.146";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.147";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13329,6 +13329,7 @@ const FX_TYPES=[
   ["handToMana","🌱 自分の手札からn枚をマナゾーンに置く（任意・キャンセルで置かない／条件欄で対象を絞れる）"],
   ["foeTopPowerToHyper","🌌 相手は自身のパワーが一番大きいクリーチャーをすべて、自身の超次元ゾーンに置く（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く跳躍 テレポートゾーン型）"],
   ["foeRandCreManaHandToDeck","🎲 相手のクリーチャー・相手のマナ・相手の手札からそれぞれランダムにn枚ずつ、相手の山札の一番下に置く（燃えるデット・ソード型）"],
+  ["foeCreToChoice","💀 相手のクリーチャーをn体選び、持ち主の墓地・マナゾーン・手札のどれかに置く（どこに置くかは選ぶ・SSS級天災 デッドダムド型）"],
   ["noLoseNoLeaveNext","🛡⚓ 次の自分のターンのはじめまで、自分はゲームに負けず、相手のカードの効果によって自分のクリーチャーは離れない（烈しき切札 ドギラゴン逆型／効果を使った時にバトルゾーンにいるクリーチャーだけが対象）"],
   ["grantPowNoAtkPNext","💪🚫 クリーチャーをn体まで選び、次の自分のターン開始時までパワーを+〔条件欄の数・既定3000〕し、相手プレイヤーを攻撃できなくする（The スタミナ漢型・自分/相手どちらのクリーチャーでも選べる）"],
   ["manaEachBoth","🌱 各プレイヤーは、自身のクリーチャーをそれぞれn体ずつ選んでマナゾーンに置く（ガイアの目覚め型）"],
@@ -18152,6 +18153,23 @@ async function runFxList(pi,list,srcCard,inPump){
         try{logDeckBottomOrder(op,sentR,"ランダム除去","（クリーチャー/マナ/手札）");}catch(e){}
       }
       renderAll();
+    }else if(f.t==="foeCreToChoice"){
+      /* 💀 v16.147 相手のクリーチャーを選び、墓地／マナ／手札のどれかへ（デッドダムド型） */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      for(let i=0;i<n;i++){
+        const pool=OZ.battle.filter(x=>isCreatureReg(getReg(x))&&!((getReg(x)||{}).noChoose));
+        if(!pool.length){if(i===0)toast("相手のクリーチャーがいません");break;}
+        const j=(pool.length===1)?0:await pickCard(`💀 相手のクリーチャーを選択（${i+1}/${n}）`,pool,{});
+        if(j===null)break;
+        const t=pool[j];
+        const w=await askChoice(`💀 ${faceNameOf(t)} をどこに置きますか？`,["持ち主の墓地へ","持ち主のマナゾーンへ","持ち主の手札に戻す"],t);
+        if(w===null)break;
+        if(i===0)snap();
+        const to=(w===0)?"grave":(w===1)?"mana":"hand";
+        await moveCard(op,"battle",t.id,op,to);
+        renderAll();
+      }
+      await waitFxIdle(inPump);
     }else if(f.t==="noLoseNoLeaveNext"){
       /* 🛡⚓ v16.145 烈しき切札 ドギラゴン逆型。
          「離れない」は、この効果を使った時点でバトルゾーンにいる自分のクリーチャーにだけ付く
