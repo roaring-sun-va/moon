@@ -6054,7 +6054,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.148";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.149";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13333,6 +13333,7 @@ const FX_TYPES=[
   ["handToMana","🌱 自分の手札からn枚をマナゾーンに置く（任意・キャンセルで置かない／条件欄で対象を絞れる）"],
   ["foeTopPowerToHyper","🌌 相手は自身のパワーが一番大きいクリーチャーをすべて、自身の超次元ゾーンに置く（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く跳躍 テレポートゾーン型）"],
   ["foeRandCreManaHandToDeck","🎲 相手のクリーチャー・相手のマナ・相手の手札からそれぞれランダムにn枚ずつ、相手の山札の一番下に置く（燃えるデット・ソード型）"],
+  ["discardAnyKillPow","🗑💥 自分の手札を好きな枚数捨ててもよい。こうして捨てた1枚につき、相手のパワー〔n〕以下のクリーチャーを1体破壊する（“轟轟轟”ブランド型／n＝パワーの上限・条件欄でさらに絞れる）"],
   ["foeCreToChoice","💀 相手のクリーチャーをn体選び、持ち主の墓地・マナゾーン・手札のどれかに置く（どこに置くかは選ぶ・SSS級天災 デッドダムド型）"],
   ["noLoseNoLeaveNext","🛡⚓ 次の自分のターンのはじめまで、自分はゲームに負けず、相手のカードの効果によって自分のクリーチャーは離れない（烈しき切札 ドギラゴン逆型／効果を使った時にバトルゾーンにいるクリーチャーだけが対象）"],
   ["grantPowNoAtkPNext","💪🚫 クリーチャーをn体まで選び、次の自分のターン開始時までパワーを+〔条件欄の数・既定3000〕し、相手プレイヤーを攻撃できなくする（The スタミナ漢型・自分/相手どちらのクリーチャーでも選べる）"],
@@ -18156,6 +18157,38 @@ async function runFxList(pi,list,srcCard,inPump){
         try{logDeckBottomOrder(op,sentR,"ランダム除去","（クリーチャー/マナ/手札）");}catch(e){}
       }
       renderAll();
+    }else if(f.t==="discardAnyKillPow"){
+      /* 🗑💥 v16.149 “轟轟轟”ブランド型：手札を好きな枚数捨て、捨てた数だけパワーn以下を破壊 */
+      const _cap=Math.max(0,+f.n||6000);
+      const _filt=String(f.cond||"").trim();
+      if(!Z.hand.length){toast("🗑 捨てられる手札がありません");continue;}
+      let _dis=0;
+      while(Z.hand.length){
+        const j=await pickCard(`🗑 捨てる手札を選択（捨てた1枚につき、相手のパワー${_cap}以下を1体破壊／キャンセルで終了）`,Z.hand,{hint:"好きな枚数まで・キャンセルで終了"});
+        if(j===null)break;
+        if(_dis===0)snap();
+        const gone=Z.hand.splice(j,1)[0];gone.faceup=true;Z.grave.push(gone);
+        afterHandDiscard(pi,gone,pi);
+        _dis++;renderAll();
+      }
+      if(!_dis){toast("🗑 手札は捨てなかった");continue;}
+      toast(`🗑 手札を${_dis}枚捨てた → 相手のパワー${_cap}以下を${_dis}体まで破壊`);
+      for(let i=0;i<_dis;i++){
+        const pool=OZ.battle.filter(x=>{
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))return false;
+          if(_filt&&!lockFilterOk(_filt,rx,x))return false;
+          if(rx.noChoose&&!isIgnored(x,op))return false;
+          const pw=(typeof powNow==="function")?powNow(x):(+rx.power||0);
+          return pw!=null&&pw<=_cap;
+        });
+        if(!pool.length){toast(`💥 パワー${_cap}以下の相手クリーチャーがいません（残り${_dis-i}回）`);break;}
+        const j2=(pool.length===1)?0:await pickCard(`💥 破壊する相手クリーチャーを選択（${i+1}/${_dis}・パワー${_cap}以下）`,pool,{});
+        if(j2===null)break;
+        await destroyWithReplace(op,pool[j2]);
+        renderAll();
+      }
+      await waitFxIdle(inPump);
     }else if(f.t==="foeCreToChoice"){
       /* 💀 v16.147 相手のクリーチャーを選び、墓地／マナ／手札のどれかへ（デッドダムド型） */
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
