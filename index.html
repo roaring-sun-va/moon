@@ -5263,6 +5263,7 @@ function shieldStackToHand(Z,sh){
   return out;
 }
 /* ⚔ v16.109 サバキZ：手札のサバキZ持ちを、いま手札に加わったカード1枚を捨てて使う（ブレイク以外の「盾→手札」でも使える） */
+const SABAKI_BUSY=new Set();   // ⚔ v16.127 いま解決中のサバキZ（同じカードが何度も呼ばれる堂々巡りを止める）
 async function offerSabakiZAdded(pi,added,pending,inFx){
   /* ⚔ v16.115 pending=true のとき、added はまだ手札に入っていないカード（盾から加わる途中）。
      手札が10枚を超えて溢れる前に、捨てる札をここから選べる。捨てた札は added から抜く。 */
@@ -5279,7 +5280,7 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
     const _nowId=(typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)?FX_NOW_CARD.id:null;
     /* ⚔ v16.123 解決中ゾーンのカードと、いま処理しているカード自身は候補にしない */
     const _inResolve=x=>Z.resolve.some(y=>y.id===x.id)||zonesOf(pi===0?1:0).resolve.some(y=>y.id===x.id)||(_nowId&&x.id===_nowId);
-    const szs=[...(pending?added:[]),...Z.hand].filter(x=>{const r=getReg(x);return r&&r.sabaki&&!_inResolve(x);});
+    const szs=[...(pending?added:[]),...Z.hand].filter(x=>{const r=getReg(x);return r&&r.sabaki&&!_inResolve(x)&&!SABAKI_BUSY.has(x.id);});
     /* ⚔ v16.114 侵略・革命チェンジと同じく、使うサバキZをすべて宣言してから、宣言した順に解決する。 */
     const _decl=[];
     for(const sc of szs){
@@ -5305,7 +5306,9 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
     }
     for(const sc of _decl){
       if(!inHand(sc)&&!Z.hand.some(h=>h.id===sc.id))continue;
-      const cands=pool().filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
+      /* 🗑 v16.127 捨てる候補は「加わった裁きの紋章」すべて（自分自身を除く）。
+         ほかに宣言したサバキZのカードも捨てられ、その場合その宣言は取り消す。 */
+      const cands=pool().filter(x=>x.id!==sc.id);
       if(!cands.length){toast(`⚔ サバキZ（${faceNameOf(sc)}）：捨てられる裁きの紋章が残っていません`);continue;}
       const rsc=getReg(sc);
       const jd=await pickCard(`🗑 サバキZ《${faceNameOf(sc)}》で捨てる裁きの紋章を選択（${cands.length}枚から）`,cands,
@@ -5317,7 +5320,9 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       if(pending){const ai=added.findIndex(x=>x.id===dc.id);if(ai<0)continue;gone=added.splice(ai,1)[0];ids.delete(gone.id);}
       else{const di=Z.hand.findIndex(x=>x.id===dc.id);if(di<0)continue;gone=Z.hand.splice(di,1)[0];}
       gone.faceup=true;Z.grave.push(gone);
+      {const di2=_decl.findIndex(d=>d.id===gone.id);if(di2>=0){_decl.splice(di2,1);toast(`⚔ 《${faceNameOf(gone)}》を捨てたので、その宣言は取り消しました`);}}
       afterHandDiscard(pi,gone,pi);
+      SABAKI_BUSY.add(sc.id);
       let card;
       {const ai=added.findIndex(x=>x.id===sc.id);
        if(pending&&ai>=0){card=added.splice(ai,1)[0];ids.delete(card.id);}
@@ -5335,6 +5340,7 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       renderAll();
       /* 🚑 v16.118 効果の処理の中から呼ばれた時は、ここで待たない（待つと処理が止まったままになる） */
       if(!inFx)await waitFxIdle();
+      setTimeout(()=>{try{SABAKI_BUSY.delete(sc.id);}catch(e){}},1500);
     }
   }catch(e){console.warn("offerSabakiZAdded",e);}
 }
@@ -5937,7 +5943,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.126";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.127";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
