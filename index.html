@@ -5315,10 +5315,12 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
         toast(`⚔ サバキZ（${faceNameOf(sc)}）：捨てられる裁きの紋章が足りないので、これ以上は宣言できません`);
         continue;
       }
-      const _scWhere=(pending?added:[]).some(a=>a.id===sc.id)?"盾から加わるカード":"手札のカード";
+      /* 🖼 v16.139 ブレイクの流れでは、加わったカードはもう手札にある（pending=false）。
+         それでも「盾から加わったカード」と分かるように、added に入っているかで見分ける。 */
+      const _scWhere=added.some(a=>a.id===sc.id)?"盾から加わったカード":"もとから手札のカード";
       const yes=await ask(`⚔ サバキZ：《${faceNameOf(sc)}》（${_scWhere}）を使いますか？${_decl.length?`\n（宣言済み：${_decl.map(faceNameOf).join("→")}）`:""}\n捨てる候補（加わる裁きの紋章）：${rest.length}枚（あと${rest.length-_decl.length}枚まで宣言できます）\nそのうち1枚を捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rsc0&&rsc0.ctype==="spell"?"唱え":"召喚し"}ますか？\n（使うものをすべて宣言してから、宣言した順に解決します）`,
-        [{card:sc,cap:`⚔ 使うサバキZ（${(pending?added:[]).some(a=>a.id===sc.id)?"盾から加わる":"手札"}）`},
-         ...rest.slice(0,12).map(x=>({card:x,cap:"🗑 捨てる候補（盾から加わる）"}))]);
+        [{card:sc,cap:`⚔ 使うサバキZ（${added.some(a=>a.id===sc.id)?"盾から加わった":"もとから手札"}）`},
+         ...rest.slice(0,12).map(x=>({card:x,cap:"🗑 捨てる候補（盾から加わった）"}))]);
       if(yes)_decl.push(sc);
     }
     if(_decl.length>1){
@@ -5344,7 +5346,7 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       const rsc=getReg(sc);
       const jd=await pickCard(`🗑 サバキZ《${faceNameOf(sc)}》で捨てる裁きの紋章を選択（${cands.length}枚から）`,cands,
         {hint:"タップで選択",art:[{card:(typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)?FX_NOW_CARD:null,cap:"処理中"},
-          {card:sc,cap:`⚔ 使うサバキZ（${(pending?added:[]).some(a=>a.id===sc.id)?"盾から加わる":"手札"}）`}].filter(x=>x.card)});
+          {card:sc,cap:`⚔ 使うサバキZ（${added.some(a=>a.id===sc.id)?"盾から加わった":"もとから手札"}）`}].filter(x=>x.card)});
       if(jd===null)continue;
       const dc=cands[jd];
       snap();
@@ -6008,7 +6010,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.138";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.139";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
