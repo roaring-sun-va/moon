@@ -5366,10 +5366,11 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
         S.spellTurn=S.spellTurn||[0,0];S.spellTurn[pi]=(S.spellTurn[pi]||0)+1;
         emitEvent(pi,"spell",card);scheduleAutoResolve(pi,card);enqueueFx(pi,card);
       }else{
-        /* ⚔ v16.135 クリーチャーは後回し（呪文の解決と盾追加が終わってから、宣言した順に出す） */
-        _creLater.push(card);
-        toast(`⚔ サバキZ：${faceNameOf(card)} は、いまの効果が終わってから出します`);
-        SABAKI_PEND_CRE.push({pi,card});
+        /* ⚔ v16.138 クリーチャーは宣言した順にその場で出す。出た時の効果は列に積まれるだけなので、
+           呪文の解決やもとの効果（盾追加など）が終わってから処理される。 */
+        await summonCreatureNeoAware(pi,card,{});
+        toast(`⚔ サバキZ！ ${faceNameOf(card)} をコストを支払わずに召喚した（出た時の効果はあとで処理）`);
+        logOnly(`⚔ ${S.players[pi].label}：サバキZ（クリーチャー）→ 《${faceNameOf(card)}》を召喚`);
         renderAll();
         setTimeout(()=>{try{SABAKI_BUSY.delete(sc.id);}catch(e){}},1500);
         continue;
@@ -6007,7 +6008,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.137";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.138";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
