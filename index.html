@@ -5242,7 +5242,7 @@ function shieldStackToHand(Z,sh){
   return out;
 }
 /* ⚔ v16.109 サバキZ：手札のサバキZ持ちを、いま手札に加わったカード1枚を捨てて使う（ブレイク以外の「盾→手札」でも使える） */
-async function offerSabakiZAdded(pi,added,pending){
+async function offerSabakiZAdded(pi,added,pending,inFx){
   /* ⚔ v16.115 pending=true のとき、added はまだ手札に入っていないカード（盾から加わる途中）。
      手札が10枚を超えて溢れる前に、捨てる札をここから選べる。捨てた札は added から抜く。 */
   try{
@@ -5250,7 +5250,10 @@ async function offerSabakiZAdded(pi,added,pending){
     const Z=zonesOf(pi);
     const ids=new Set(added.map(x=>x.id));
     const inHand=x=>pending?added.some(a=>a.id===x.id):Z.hand.some(h=>h.id===x.id);
-    const pool=()=>pending?added.filter(x=>ids.has(x.id)):Z.hand.filter(x=>ids.has(x.id));
+    /* ⚔ v16.118 サバキZで捨てられるのは「加わった裁きの紋章のカード」だけ。
+       宣言できる枚数も、加わった裁きの紋章の枚数が上限。 */
+    const isMonshoCard=x=>{const r=getReg(x);return !!(r&&(r.races||[]).some(t=>String(t||"").includes("裁きの紋章")));};
+    const pool=()=>(pending?added.filter(x=>ids.has(x.id)):Z.hand.filter(x=>ids.has(x.id))).filter(isMonshoCard);
     const szs=[...(pending?added:[]),...Z.hand].filter(x=>{const r=getReg(x);return r&&r.sabaki;});
     /* ⚔ v16.114 侵略・革命チェンジと同じく、使うサバキZをすべて宣言してから、宣言した順に解決する。 */
     const _decl=[];
@@ -5258,8 +5261,8 @@ async function offerSabakiZAdded(pi,added,pending){
       if(!inHand(sc)&&!Z.hand.some(h=>h.id===sc.id))continue;
       const rsc0=getReg(sc);
       const rest=pool().filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
-      if(rest.length<=_decl.length)continue;   // 捨てる札が足りない
-      const yes=await ask(`⚔ サバキZ（${faceNameOf(sc)}）${_decl.length?`\n（宣言済み：${_decl.map(faceNameOf).join("→")}）`:""}\n手札に加わったカードを1枚捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rsc0&&rsc0.ctype==="spell"?"唱え":"召喚し"}ますか？\n（使うものをすべて宣言してから、宣言した順に解決します）`,sc);
+      if(rest.length<=_decl.length)continue;   // 捨てる裁きの紋章が足りない（宣言できる枚数の上限）
+      const yes=await ask(`⚔ サバキZ（${faceNameOf(sc)}）${_decl.length?`\n（宣言済み：${_decl.map(faceNameOf).join("→")}）`:""}\n加わる裁きの紋章：${rest.map(faceNameOf).join("、")}（あと${rest.length-_decl.length}枚まで宣言できます）\nそのうち1枚を捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rsc0&&rsc0.ctype==="spell"?"唱え":"召喚し"}ますか？\n（使うものをすべて宣言してから、宣言した順に解決します）`,[sc,...rest.slice(0,3)]);
       if(yes)_decl.push(sc);
     }
     if(_decl.length>1){
@@ -5269,7 +5272,7 @@ async function offerSabakiZAdded(pi,added,pending){
     for(const sc of _decl){
       if(!inHand(sc)&&!Z.hand.some(h=>h.id===sc.id))continue;
       const cands=pool().filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
-      if(!cands.length){toast(`⚔ サバキZ（${faceNameOf(sc)}）：捨てるカードが残っていません`);continue;}
+      if(!cands.length){toast(`⚔ サバキZ（${faceNameOf(sc)}）：捨てられる裁きの紋章が残っていません`);continue;}
       const rsc=getReg(sc);
       const jd=(cands.length===1)?0:await pickCard(`🗑 サバキZで捨てるカードを選択（${faceNameOf(sc)}）`,cands);
       if(jd===null)continue;
@@ -5295,7 +5298,8 @@ async function offerSabakiZAdded(pi,added,pending){
         await summonCreatureNeoAware(pi,card,{});
       }
       renderAll();
-      await waitFxIdle();
+      /* 🚑 v16.118 効果の処理の中から呼ばれた時は、ここで待たない（待つと処理が止まったままになる） */
+      if(!inFx)await waitFxIdle();
     }
   }catch(e){console.warn("offerSabakiZAdded",e);}
 }
@@ -5898,7 +5902,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.115";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.118";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -15490,6 +15494,12 @@ async function runFxList(pi,list,srcCard,inPump){
   FX_DEPTH++;   // 🖼 v16.4 効果の処理中は描き直しを間引く
   const _prevFromCre=FX_FROM_CRE;
   const _prevSpellCost=FX_SPELL_COST;
+  /* 🖼 v16.117 効果を出しているカードを「いま処理中のカード」にしておく。確認・選択のパネルは、
+     絵を渡されなければこのカードの絵を出すので、呪文（トライガード・チャージャー等）の処理中でも、
+     どのカードの効果かが絵で分かる。クリーチャーの出た時などは、すでに設定済みなので触らない。 */
+  const _prevNowC=FX_NOW_CARD,_prevNowPi=FX_NOW_PI;
+  let _setNow=false;
+  try{if(srcCard&&!_prevNowC){setFxNow(pi,srcCard);_setNow=true;}}catch(e){}
   try{
     const _rs=srcCard?getReg(srcCard):null;
     FX_FROM_SPELL=!!(_rs&&(_rs.ctype==="spell"||((_rs.twin||_rs.ctype==="twinpact")&&(srcCard.face|0)===1)));
@@ -17808,7 +17818,7 @@ async function runFxList(pi,list,srcCard,inPump){
     }else if(f.t==="shieldAnyToHandNoST"){
       /* ↩ v16.40 S・トリガーは使えないが、S・バックは「手札に加わった時」に使えるので最後に確認する（デビル・ドレーン型）。 */
       let moved=0;const _sbAdd2=[];
-      while(Z.shield.length){const j=await pickCard(`🛡 手札に加える盾を選択（${moved}枚選択済み／キャンセルで終了）`,Z.shield,{mask:true,maskPi:pi,maskLabel:"盾"});if(j===null)break;const sh=Z.shield.splice(j,1)[0];const inc=[sh,...(sh.under?sh.under.splice(0):[])];inc.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.mark=false;});await offerSabakiZAdded(pi,inc,true);inc.forEach(u=>{toHand(Z,u);_sbAdd2.push(u);});moved++;renderAll();}   // ⚔ v16.115 手札に入れる前にサバキZ
+      while(Z.shield.length){const j=await pickCard(`🛡 手札に加える盾を選択（${moved}枚選択済み／キャンセルで終了）`,Z.shield,{mask:true,maskPi:pi,maskLabel:"盾"});if(j===null)break;const sh=Z.shield.splice(j,1)[0];const inc=[sh,...(sh.under?sh.under.splice(0):[])];inc.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.mark=false;});await offerSabakiZAdded(pi,inc,true,true);inc.forEach(u=>{toHand(Z,u);_sbAdd2.push(u);});moved++;renderAll();}   // ⚔ v16.115 手札に入れる前にサバキZ
       if(moved)await notifyShieldLeave(pi);
       await offerSBack(pi,_sbAdd2);
     }else if(f.t==="selfShieldGraveDestroy"){
@@ -18332,7 +18342,7 @@ async function runFxList(pi,list,srcCard,inPump){
         /* ⚔ v16.115 手札に入れる前にサバキZを聞く（手札が溢れる前に捨てる札を選べる） */
         const incoming=[sh,...kids2];
         incoming.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.mark=false;});
-        await offerSabakiZAdded(pi,incoming,true);
+        await offerSabakiZAdded(pi,incoming,true,true);
         let kept=true;
         for(const u of incoming){const k2=typeof toHand==="function"?toHand(Z,u):(Z.hand.push(u),true);if(u.id===sh.id)kept=k2;_sbAdded.push(u);}
         if(kids2.length)toast(`🛡 重なっていた${kids2.length}枚も一緒に手札へ`);
@@ -23892,7 +23902,7 @@ async function runFxList(pi,list,srcCard,inPump){
       if(got>0){sfx("draw");logPriv(pi,`🛡→✋ ${S.players[pi].label}：ランダムなシールド${got}枚を手札に加えた（S・トリガーは使えない）：${cnList(names)}`,`🛡→✋ ${S.players[pi].label}：ランダムなシールド${got}枚を手札に加えた（S・トリガーは使えない／内容は非公開）`);toast(`🛡→✋ ランダムなシールド${got}枚を手札に加えた（S・トリガーは使えない）：${names.join("、")}`,null,{noLog:true});}
       else toast("シールドがありません");
       renderAll();
-      if(got){await notifyShieldLeave(pi);await offerSabakiZAdded(pi,_sbAddR);await offerSBack(pi,_sbAddR);}   // ⚔ v16.109
+      if(got){await notifyShieldLeave(pi);await offerSabakiZAdded(pi,_sbAddR,false,true);await offerSBack(pi,_sbAddR);}   // ⚔ v16.109
     }else if(f.t==="flip"){
       if(!tgtC){toast("裏返す対象がありません");continue;}
       const lk=LINKS.get(normName(tgtC.name));
@@ -24091,6 +24101,7 @@ async function runFxList(pi,list,srcCard,inPump){
   }
   try{stampShieldSrc(_srcLbl);}catch(e){} // 🛡 最後の効果で増えた盾にも追加元を刻む
   }finally{FX_FROM_SPELL=_prevFromSpell;FX_FROM_CRE=_prevFromCre;FX_SPELL_COST=_prevSpellCost;FX_ACTOR=_prevActor;
+    if(_setNow){try{setFxNow(_prevNowPi,_prevNowC);}catch(e){}}
     FX_DEPTH=Math.max(0,FX_DEPTH-1);
     /* 🖼 v16.4 一連の効果が終わったら、間引いて飛ばした分をここで必ず描き直す。 */
     if(FX_DEPTH===0){try{_raLast=0;renderAll();}catch(e){}}
@@ -27808,13 +27819,14 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
       const Z2=zonesOf(pi2);
       for(let i=0;i<shs.length;i++){
         if(!Z2.deck.length){toast("山札がないため、ドラゴン・ブレイカーは終了");break;}
-        const _peek=Z2.deck[0];   // 🐲 v16.115 何を置くかを見せてから選ぶ
-        const pick=await askChoice(`🐲 ドラゴン・ブレイカー（${i+1}/${shs.length}枚目）\n山札の上のカード《${faceNameOf(_peek)}》を：`,
-          ["新しい盾として追加（通常どおり裏向き）","既存の盾に表向きで重ねる","追加しない（終了）"],_peek);
+        /* 🐲 v16.116 この段階ではカードを見せない（裏向きの新しい盾にするか、表向きで重ねるかを先に決める）。
+           「重ねる」を選んだあとで表向きにして、どの盾に置くかを絵つきで選ぶ。 */
+        const pick=await askChoice(`🐲 ドラゴン・ブレイカー（${i+1}/${shs.length}枚目）\n山札の上のカードを：`,
+          ["新しい盾として追加（通常どおり裏向き）","既存の盾に表向きで重ねる","追加しない（終了）"]);
         if(pick===null||pick===2)break;
         const c2=Z2.deck.shift();
         if(pick===1&&Z2.shield.length){
-          const j=await askChoice("どの盾の上に重ねる？",Z2.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表：${x.name}）`:""}${x.under&&x.under.length?` +${x.under.length}`:""}`));
+          const j=await askChoice(`🐲 《${faceNameOf(c2)}》を表向きにした。どの盾の上に重ねる？`,Z2.shield.map((x,k)=>`盾${k+1}${x.faceup?`（表：${x.name}）`:""}${x.under&&x.under.length?` +${x.under.length}`:""}`),c2);   // 🐲 v16.116 重ねるカードを見せる
           if(j===null){Z2.deck.unshift(c2);break;}
           const old=Z2.shield[j];
           c2.faceup=true;c2.mark=true;
