@@ -6010,7 +6010,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.141";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.142";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -19632,6 +19632,7 @@ async function runFxList(pi,list,srcCard,inPump){
         logOnly(`🎴 ${S.players[pi].label}：山札の上${revealed.length}枚をめくった → ${cnList(revealed)}`);
         renderAll();await new Promise(r=>setTimeout(r,500));
         let put=0;
+        const _putOrder=[];   // 🎴 v16.142 出した順（あとでまとめて「出た時」を解決する）
         while(put<cap){
           const pool=revealed.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!filt||lockFilterOk(filt,rx,x));});
           if(!pool.length){if(put===0)toast(`めくった中に該当クリーチャーなし${filt?`（${filt}）`:""}（はずれ）`);break;}
@@ -19679,11 +19680,19 @@ async function runFxList(pi,list,srcCard,inPump){
             if(!battleEntryOk(pi,cc)){revealed.push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないため山札の下へ回します`);continue;}
             Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);
           }
-          LAST_ARRIVED=cc;
-          emitEvent(pi,"summon");enqueueFx(pi,cc);
+          /* 🎴 v16.142 まず全部出してから、出た順に「出た時」を解決する（神歌の天后 ヘブンズ・キリコ型）。
+             クリーチャーを出す効果の途中に、ほかのカードの出た時が割り込まないようにする。 */
+          _putOrder.push(cc);
           put++;toast(`🎴 ${faceNameOf(cc)} をバトルゾーンへ（${put}体目）`);
-          renderAll();await waitFxIdle(inPump);
+          renderAll();
         }
+        /* 🎴 v16.142 出し終わってから、出た順に「出た時」を解決する */
+        for(const oc of _putOrder){
+          if(!Z.battle.some(x=>x.id===oc.id)&&!Z.battle.some(x=>(x.under||[]).some(u=>u.id===oc.id)))continue;
+          LAST_ARRIVED=oc;
+          emitEvent(pi,"summon");enqueueFx(pi,oc);
+        }
+        if(_putOrder.length){renderAll();await waitFxIdle(inPump);}
         // 🔧 防御：バトルゾーン（進化元として下にあるカード含む）に存在するカードは山札の下へ送らない（二重登録・行方不明の防止）
         {
           const onBoard=new Set();
