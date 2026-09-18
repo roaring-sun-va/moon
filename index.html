@@ -4922,17 +4922,21 @@ function askArtSet(...targets){
   for(const t of list){
     if(!t)continue;
     const src=(t&&t.card!==undefined)?t.card:t;
-    const cap=(t&&t.cap)||"";
+    const cap=(t&&t.cap!==undefined)?String(t.cap||""):"";
     if(!src)continue;
     let k=null;
     try{
       if(typeof src==="string")k=canonicalCardKey(src)||normName(src);
       else if(src&&src.name)k=imageKeyForName(faceNameOf(src));
     }catch(e){}
-    if(k&&!items.some(x=>x.k===k))items.push({k,cap});
+    if(!k)continue;
+    /* 🖼 v16.125 同じカードでも見出しが違えば別に出す。同名が複数ある時は「×3」と枚数を付ける。 */
+    const hit=items.find(x=>x.k===k&&x.cap===cap);
+    if(hit)hit.n=(hit.n||1)+1;
+    else items.push({k,cap,n:1});
   }
   if(!items.length)return;
-  for(const it of items.slice(0,3)){
+  for(const it of items.slice(0,8)){
     const wrap=document.createElement("div");
     wrap.style.cssText="display:flex;flex-direction:column;align-items:center;gap:2px";
     const im=document.createElement("img");
@@ -4951,7 +4955,7 @@ function askArtSet(...targets){
     wrap.appendChild(im);
     if(it.cap){
       const cp=document.createElement("div");
-      cp.textContent=it.cap;
+      cp.textContent=it.cap+((it.n>1)?` ×${it.n}`:"");   // 🖼 v16.125 同名が複数ある時は枚数
       cp.style.cssText="font-size:10px;font-weight:800;color:var(--muted);line-height:1.2;text-align:center";
       wrap.appendChild(cp);
     }
@@ -5271,6 +5275,14 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       if(yes)_decl.push(sc);
     }
     if(_decl.length>1){
+      /* ⚔ v16.125 どのカードから使うかを選べる（選ばなければ宣言した順） */
+      const _order=[];let _pool=_decl.slice();
+      while(_pool.length>1){
+        const j=await pickCard(`⚔ サバキZ：${_order.length+1}番目に使うカードを選択（残り${_pool.length}枚・キャンセルで残りはこのままの順）`,_pool,{hint:"タップで決定"});
+        if(j===null)break;
+        _order.push(_pool[j]);_pool.splice(j,1);
+      }
+      _decl.length=0;_decl.push(..._order,..._pool);
       toast(`⚔ サバキZ：${_decl.map(faceNameOf).join(" → ")} の順に解決します`);
       logOnly(`⚔ ${S.players[pi].label}：サバキZを宣言 → ${_decl.map(x=>`《${faceNameOf(x)}》`).join("→")}`);
     }
@@ -5907,7 +5919,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.123";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.125";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -23684,14 +23696,14 @@ async function runFxList(pi,list,srcCard,inPump){
       const _tuckFilt=String(f.cond||"").trim();   // 🛡 v16.120 条件欄は対象の絞り込み（コスト8以下／進化以外 など）
       const isTuck=f.t==="shieldPickTuck";
       const act=isTuck?"シールドに重ねる":"新しいシールドに追加";
-      const pc=await askChoice(`🛡 ${act}（${n}体）：どちらのシールドゾーンへ？`,[`相手（${pName(op)}）のシールドへ`,`自分（${pName(pi)}）のシールドへ`]);
-      if(pc===null)continue;
-      const sp=(pc===0?op:pi);   // シールドの持ち主
+      /* 🛡 v16.125 置き先は相手のシールドゾーンに固定（魂穿ツ煌世ノ正裁Z のテキストどおり）。
+         条件欄に「自分の盾」と書いた時だけ自分のシールドに置く。 */
+      const sp=/自分の?盾|自分のシールド/.test(_tuckFilt)?pi:op;
       const SZ=zonesOf(sp);
       for(let i=0;i<n;i++){
         // 対象クリーチャー（相手/自分どちらの場からでも選べるよう両方提示）
         const pool=[];
-        for(const owp of [op,pi]){for(const x of zonesOf(owp).battle){const rx=getReg(x);
+        for(const owp of [op]){for(const x of zonesOf(owp).battle){const rx=getReg(x);   // 🛡 v16.124 対象は相手のクリーチャーだけ
           if(!isCreatureReg(rx))continue;
           if(_tuckFilt&&!lockFilterOk(_tuckFilt,rx,x))continue;   // 🛡 v16.120 条件欄で絞る
           if(((rx&&rx.noChoose)||momoUntouchable(x))&&owp!==pi&&!isIgnored(x,owp))continue; // 🚫 相手の「選ばれない」は選択不可
@@ -27842,7 +27854,8 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
         /* 🐲 v16.116 この段階ではカードを見せない（裏向きの新しい盾にするか、表向きで重ねるかを先に決める）。
            「重ねる」を選んだあとで表向きにして、どの盾に置くかを絵つきで選ぶ。 */
         const pick=await askChoice(`🐲 ドラゴン・ブレイカー（${i+1}/${shs.length}枚目）\n山札の上のカードを：`,
-          ["新しい盾として追加（通常どおり裏向き）","既存の盾に表向きで重ねる","追加しない（終了）"]);
+          ["新しい盾として追加（通常どおり裏向き）","既存の盾に表向きで重ねる","追加しない（終了）"],
+          attacker||null);   // 🐲 v16.124 ブレイクしているクリーチャーの絵を出す
         if(pick===null||pick===2)break;
         const c2=Z2.deck.shift();
         if(pick===1&&Z2.shield.length){
@@ -38113,15 +38126,26 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       const _stayBuff=!!(c.buff&&c.buff.stayIfPow);
       /* ⚓ v16.119 条件つき常在の「離れない」（サッヴァーク∞型）もここで止める。
          止めた時は MOVE_BLOCKED を立てて「⚠ 移動が完了していません」を出さない。 */
-      if(S.expert&&rCX2&&rCX2.cstFx==="noLeave"&&rCX2.cstCond&&!isIgnored(c,pFrom)&&zoneCondOk(rCX2.cstCond,pFrom,c)){
+      /* ⚓ v16.124 ここに来た時点でカードは行き先へ移してあるので、戻してから止める。
+         （v16.119 は戻さずに return していたため、案内だけ出て移動できてしまっていた） */
+      const _putBack=()=>{
+        const ZTS2=zonesOf(pTo);
+        const keyB=(toZone==="deckTop"||toZone==="deckBottom")?"deck":(toZone==="shieldUp"?"shield":toZone);
+        const arrB=ZTS2[keyB];
+        if(arrB){const ixB=arrB.findIndex(x=>x.id===c.id);if(ixB>=0)arrB.splice(ixB,1);}
+        if(!zonesOf(pFrom).battle.find(x=>x.id===c.id))zonesOf(pFrom).battle.push(c);
+        c.faceup=true;
         MOVE_BLOCKED=true;
-        toast(`⚓ ${faceNameOf(c)} は離れない！（${rCX2.cstCond}）`);
         renderAll();
+      };
+      if(S.expert&&rCX2&&rCX2.cstFx==="noLeave"&&rCX2.cstCond&&!isIgnored(c,pFrom)&&zoneCondOk(rCX2.cstCond,pFrom,c)){
+        _putBack();
+        toast(`⚓ ${faceNameOf(c)} は離れない！（${rCX2.cstCond}）`);
         return;
       }
       if(!isIgnored(c,pFrom)&&!c.sfActive){
         const _sfa=sforceAllSrc(pFrom,"noLeave");
-        if(_sfa){MOVE_BLOCKED=true;toast(`⚓✨ シールド・フォース（${faceNameOf(_sfa)}）：${faceNameOf(c)} は離れない！`);return true;}
+        if(_sfa){_putBack();toast(`⚓✨ シールド・フォース（${faceNameOf(_sfa)}）：${faceNameOf(c)} は離れない！`);return true;}
       }
       const _stayReg=!!(rCX2&&rCX2.cstFx==="stayPow"&&!isIgnored(c,pFrom)&&(!rCX2.cstCond||zoneCondOk(rCX2.cstCond,pFrom,c)));
       if(S.expert&&(_stayBuff||_stayReg)){
