@@ -5966,7 +5966,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.131";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.133";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13890,10 +13890,18 @@ async function autoTapCost(pi,c){
     const rd=+S._nextSpellRed.n||0;
     if(rd>0){
       const before2=cost;
-      cost=Math.max(0,cost-rd);
-      if(cost<before2)toast(`💸 コスト−${before2-cost}（残り${cost}）`);
+      /* 💸 v16.132 「コストは0以下にならない」＝最低1（煌メク聖戦 絶十）。下限を0から1に直した。 */
+      cost=Math.max(1,cost-rd);
+      if(cost<before2){
+        toast(`💸 コスト−${before2-cost}（${before2}→${cost}／下限1）`);
+        logOnly(`💸 ${S.players[pi].label}：${faceNameOf(c)} のコスト ${before2}→${cost}（軽減−${rd}・下限1）`);
+      }
     }
     S._nextSpellRed=null;   // 使い切り
+  }else if(cost>0&&S._nextSpellRed&&(S._nextSpellRed.by|0)===(pi|0)){
+    /* 💸 v16.132 軽減が乗らなかった理由をログに残す（ターン違い／条件に合わない） */
+    const NR=S._nextSpellRed;
+    logOnly(`💸 ${faceNameOf(c)}：コスト軽減は乗りませんでした（登録ターン${NR.turn}／いま${S.turn|0}${NR.cond?`・条件「${NR.cond}」`:""}）`);
   }
   /* 🌌 v15.14 「この呪文を唱える時、自分の手札を1枚、超次元ゾーンに置いてもよい。
      そうしたら、唱えるコストを n 少なくする」（鬼修羅と跳次元の決断型）。
@@ -25650,7 +25658,7 @@ function dispCost(c,pi){
     if(+r.includedCostRed>0&&c.under&&c.under.length)
       cost=Math.max(+r.includedCostFloor||0,cost-c.under.length*(+r.includedCostRed));
     if(+r.shieldCostRed>0)cost=Math.max(+r.shieldCostFloor||1,cost-zonesOf(pi).shield.length*(+r.shieldCostRed));
-    if(nextRedOk(r,pi))cost=Math.max(0,cost-(+S._nextSpellRed.n||0));   // 💸 v16.110 札のコスト表示にも反映
+    if(nextRedOk(r,pi))cost=Math.max(1,cost-(+S._nextSpellRed.n||0));   // 💸 v16.110/16.132 札のコスト表示にも反映（下限1）
     if(typeof isNeoReg==="function"&&isNeoReg(r)){
       let underRed=0;
       for(const host of zonesOf(pi).battle)for(const u of (host.under||[])){
@@ -28537,8 +28545,6 @@ async function startAttack(pi,id){
   const pick=await askChoice(`《${faceNameOf(c)}》の攻撃対象を選択`,targets.map(t=>t.label));
   if(pick===null){renderAll();return;}
   let tg=targets[pick]; // 🔥 革命0トリガーでシールドが増えた場合にブレイクへ差し替えるため let
-  /* ⚖ v16.107 相手のクリーチャーが攻撃する時に唱えられる呪文（天地ヲ別ツ龍断ノ裁キ型） */
-  if(S.expert&&S.vs){try{await offerFoeAtkFlipCast(op,"foe");await offerFoeAtkFlipCast(pi,"mine");}catch(e){console.warn("offerFoeAtkFlipCast",e);}}
   /* 👁 v16.106 攻撃する相手のクリーチャーとして選んだ時も「相手に選ばれた時」（アポロヌス・アガペリオスのマナ破壊等） */
   if(S.expert&&tg.kind==="creature"){
     const _tgc=OZ.battle.find(x=>x.id===tg.cid);
@@ -30105,6 +30111,9 @@ async function execAttack(pi,id,tg){
       }
     }
   }
+  /* ⚖ v16.107→v16.133 表向きのシールドを裏向きにして手札から使う（天地ヲ別ツ龍断ノ裁キ／煌世主 サッヴァーク∞）。
+     アタック・チャンスは攻撃しているプレイヤーのものなので、そちらを先に解決してからこちらを聞く。 */
+  if(S.expert&&S.vs){try{await offerFoeAtkFlipCast(pi,"mine");await offerFoeAtkFlipCast(op,"foe");}catch(e){console.warn("offerFoeAtkFlipCast",e);}}
   /* 🛡 v15.27 ブロックの確認は、攻撃時に動いた効果がすべて終わってから出す。
      J・チェンジで入れ替わった側の「離れた時」や、ジョラゴン・ビッグ1が残っていると、
      手札を捨てる・マナから回収するより先に「ブロックしますか？」が出ていた。
