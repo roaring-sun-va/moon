@@ -5966,7 +5966,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.133";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.134";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -26915,7 +26915,19 @@ function resolveOut(Z,o){
   if(rg&&rg.monsho){
     /* 🛡 v16.114/16.119 聞いている最中・置き終わったあとは、もう一度ここに来ても何もしない
        （二重処理で消えたり、チャージャーでマナに行ったりしていた） */
-    if(o._monshoAsking||o._monshoDone)return true;
+    /* 🛡 v16.134 置く盾を聞いている間にもう一度ここへ来た時、呼び出し側は解決中ゾーンから抜いた後なので、
+       戻しておかないとカードがどこにも無くなる（集結ノ正裁Zが消えていた原因）。 */
+    if(o._monshoAsking){
+      if(!Z.resolve.some(x=>x.id===o.id))Z.resolve.push(o);
+      return true;
+    }
+    if(o._monshoDone){
+      /* すでに盾の上に置いたのに呼ばれた時も、どこにも無いなら解決中ゾーンに戻す（保険） */
+      const _somewhere=[0,1].some(pp=>["battle","hand","mana","grave","deck","shield","resolve"].some(zn=>
+        (zonesOf(pp)[zn]||[]).some(x=>x&&(x.id===o.id||((x.under||[]).some(u=>u.id===o.id))))));
+      if(!_somewhere)Z.resolve.push(o);
+      return true;
+    }
     const pi0=S.players.findIndex(P=>P.zones===Z);
     if(Z.shield.length){
       const pi9=S.players.findIndex(P=>P.zones===Z);
