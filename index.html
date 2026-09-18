@@ -4982,18 +4982,35 @@ function pickArtSet(card){
   const box=document.getElementById("vArt");
   if(!box)return;
   box.innerHTML="";box.style.display="none";
-  let c=card;
-  if(!c&&typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)c=FX_NOW_CARD;
-  if(!c)return;
-  let k=null;
-  try{k=(typeof c==="string")?(canonicalCardKey(c)||normName(c)):imageKeyForName(faceNameOf(c));}catch(e){}
-  if(!k)return;
-  const im=document.createElement("img");
-  im.dataset.imgKey=k;im.draggable=false;im.decoding="async";
-  im.style.cssText="width:56px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.6);background:#0d1119;display:block";
-  try{const u=imgURL.get(k);if(u)im.src=u;}catch(e){}
-  box.appendChild(im);
-  box.style.display="flex";
+  /* 🖼 v16.126 [{card,cap}] の形で複数渡せる（「処理中のカード」と「使うサバキZ」を並べて出す）。 */
+  let list=Array.isArray(card)?card.slice():[card];
+  list=list.filter(Boolean);
+  if(!list.length&&typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)list=[{card:FX_NOW_CARD,cap:"処理中"}];
+  if(!list.length)return;
+  let shown=0;
+  for(const t of list.slice(0,4)){
+    const src=(t&&t.card!==undefined)?t.card:t;
+    const cap=(t&&t.cap)?String(t.cap):"";
+    if(!src)continue;
+    let k=null;
+    try{k=(typeof src==="string")?(canonicalCardKey(src)||normName(src)):imageKeyForName(faceNameOf(src));}catch(e){}
+    if(!k)continue;
+    const wrap=document.createElement("div");
+    wrap.style.cssText="display:flex;flex-direction:column;align-items:center;gap:2px";
+    const im=document.createElement("img");
+    im.dataset.imgKey=k;im.draggable=false;im.decoding="async";
+    im.style.cssText="width:56px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.6);background:#0d1119;display:block";
+    try{const u=imgURL.get(k);if(u)im.src=u;}catch(e){}
+    wrap.appendChild(im);
+    if(cap){
+      const cp=document.createElement("div");
+      cp.textContent=cap;
+      cp.style.cssText="font-size:10px;font-weight:800;color:var(--muted);line-height:1.2;text-align:center";
+      wrap.appendChild(cp);
+    }
+    box.appendChild(wrap);shown++;
+  }
+  if(shown)box.style.display="flex";
 }
 function dlgReset(){
   {const b=document.getElementById("askArt");if(b){b.innerHTML="";b.style.display="none";b.style.flexDirection="column";}
@@ -5291,7 +5308,8 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       const cands=pool().filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
       if(!cands.length){toast(`⚔ サバキZ（${faceNameOf(sc)}）：捨てられる裁きの紋章が残っていません`);continue;}
       const rsc=getReg(sc);
-      const jd=await pickCard(`🗑 サバキZ《${faceNameOf(sc)}》で捨てる裁きの紋章を選択（${cands.length}枚から）`,cands,{hint:"タップで選択"});
+      const jd=await pickCard(`🗑 サバキZ《${faceNameOf(sc)}》で捨てる裁きの紋章を選択（${cands.length}枚から）`,cands,
+        {hint:"タップで選択",art:[{card:(typeof FX_NOW_CARD!=="undefined"&&FX_NOW_CARD)?FX_NOW_CARD:null,cap:"処理中"},{card:sc,cap:"⚔ 使うサバキZ"}].filter(x=>x.card)});
       if(jd===null)continue;
       const dc=cands[jd];
       snap();
@@ -5919,7 +5937,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.125";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.126";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -36752,11 +36770,25 @@ async function savvarkReplace(pi,c){
     });
   }
   if(!opts.length)return false;
-  const j=await askChoice(`🛡✨ ${faceNameOf(c)}：バトルゾーンを離れるかわりに、表向きの盾カードを1枚選んで墓地に置きますか？`,
-    [...opts.map(o=>o.lb),"置換しない（そのまま離れる）"]);
-  if(j===null||j>=opts.length)return false;
+  /* 🛡✨ v16.126 自動で選ぶ：まず相手の表向きの盾からコストが一番小さいもの（同点はランダム）、
+     相手にいなければ自分の表向きの盾から同じ規則で選ぶ。 */
+  const foePi=(pi===0?1:0);
+  const costOf=o=>{
+    const ZS=zonesOf(o.pp);
+    const sc=ZS.shield[o.si];
+    const card=(o.ui<0)?sc:((sc.under||[])[o.ui]);
+    const r=card?getReg(card):null;
+    return (r&&r.cost!=null&&!isNaN(+r.cost))?+r.cost:999;
+  };
+  const pickAuto=(list)=>{
+    if(!list.length)return null;
+    const mn=Math.min(...list.map(costOf));
+    const tie=list.filter(x=>costOf(x)===mn);
+    return tie[Math.floor(Math.random()*tie.length)];
+  };
+  const o=pickAuto(opts.filter(x=>S.vs&&x.pp===foePi))||pickAuto(opts.filter(x=>x.pp===pi));
+  if(!o)return false;
   snap();
-  const o=opts[j];
   const Z2=zonesOf(o.pp);
   const sc=Z2.shield[o.si];
   let moved;
@@ -36775,7 +36807,8 @@ async function savvarkReplace(pi,c){
   moved.faceup=true;moved.tapped=false;
   Z2.grave.push(moved);
   sfx("grave");renderAll();
-  toast(`🛡✨ 置換：${moved.name} を墓地に置き、${faceNameOf(c)} は場に残った`);
+  toast(`🛡✨ 置換：${moved.name}（${o.pp===pi?"自分":"相手"}の表向きの盾・コストが一番小さいもの）を墓地に置き、${faceNameOf(c)} は場に残った`);
+  logOnly(`🛡✨ ${faceNameOf(c)}：離れるかわりに${o.pp===pi?"自分":"相手"}の表向きの盾《${moved.name}》を墓地に置いた（自動選択）`);
   return true;
 }
 async function repLeaveReplace(pi,c,reg){
