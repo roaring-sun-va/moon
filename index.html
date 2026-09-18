@@ -5202,7 +5202,7 @@ async function monshoPlaceAsk(pi,o){
     }
     const ri=Z.resolve.findIndex(x=>x.id===o.id);
     if(ri>=0)Z.resolve.splice(ri,1);
-    delete o._monshoAsking;
+    delete o._monshoAsking;o._monshoDone=true;
     if(!Z.shield.length){o.faceup=true;Z.grave.push(o);renderAll();toast(`🏵 シールドが無いため ${faceNameOf(o)} は墓地へ`);return;}
     const old0=Z.shield[idx];
     o.faceup=true;o.tapped=false;o.sideways=false;o.rot=0;o.mark=false;
@@ -5902,7 +5902,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.118";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.119";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -21316,12 +21316,19 @@ async function runFxList(pi,list,srcCard,inPump){
       const _sf=String(f.cond||"").trim();
       let _drew=0;
       for(let i=0;i<n;i++){
-        const _pool=Z.shield.filter(x=>!x.faceup);
-        if(!_pool.length){toast("🛡 裏向きのシールドがありません");break;}
+        /* 🛡 v16.119 重なりの中（下に重ねられた盾）の裏向きカードも選べる。どの盾の何枚目かを出す。 */
+        const _cand=[];
+        Z.shield.forEach((top,ix)=>{
+          if(!top.faceup)_cand.push({card:top,idx:ix,pos:0});
+          (top.under||[]).forEach((u,k)=>{if(!u.faceup)_cand.push({card:u,idx:ix,pos:k+1});});
+        });
+        if(!_cand.length){toast("🛡 裏向きのカードがシールドゾーンにありません");break;}
         if(i===0)snap();
-        const _js=_pool.length===1?0:await pickCard("🛡 表向きにするシールドを選択",_pool,{hint:"中身は表向きにするまで見えません",mask:true,maskPi:pi,maskLabel:"盾"});   // 🛡 v16.110 裏向きの中身を見せない
+        const _js=_cand.length===1?0:await pickCard("🛡 表向きにするシールドを選択",_cand.map(o=>o.card),
+          {hint:"中身は表向きにするまで見えません",mask:true,maskPi:pi,maskLabel:"盾",
+           sub:x=>{const o=_cand.find(q=>q.card.id===x.id);return o?`盾${o.idx+1}${o.pos?`・上から${o.pos+1}枚目`:"（一番上）"}`:"";}});
         if(_js===null)break;
-        const _sc=_pool[_js];
+        const _sc=_cand[_js].card;
         _sc.faceup=true;_sc.seen=true;
         const _rs=getReg(_sc);
         const _hit=!!(_rs&&(!_sf||lockFilterOk(_sf,_rs,_sc)));
@@ -26826,8 +26833,9 @@ function resolveOut(Z,o){
   // 🏵 裁きの紋章：唱えた後、墓地に置くかわりに自分のシールド1つの上に表向きにして置く。
   //    置いたカードがその盾の一番上になり、元の盾はその下に重なる（盾が離れる時は一緒に動く）。
   if(rg&&rg.monsho){
-    /* 🛡 v16.114 置くシールドを聞いている最中の呪文は、もう一度ここに来ても何もしない（二重処理で消えていた） */
-    if(o._monshoAsking)return true;
+    /* 🛡 v16.114/16.119 聞いている最中・置き終わったあとは、もう一度ここに来ても何もしない
+       （二重処理で消えたり、チャージャーでマナに行ったりしていた） */
+    if(o._monshoAsking||o._monshoDone)return true;
     const pi0=S.players.findIndex(P=>P.zones===Z);
     if(Z.shield.length){
       const pi9=S.players.findIndex(P=>P.zones===Z);
@@ -26846,6 +26854,7 @@ function resolveOut(Z,o){
       o.faceup=true;o.tapped=false;o.sideways=false;o.rot=0;o.mark=false;
       o.under=[old0,...(old0.under?old0.under.splice(0):[])];
       Z.shield[idx]=o;
+      o._monshoDone=true;
       toast(`🏵 裁きの紋章：${faceNameOf(o)} をシールド${idx+1}の上に表向きで置いた`);
       if(pi0>=0)logOnly(`🏵 ${S.players[pi0].label}：《${faceNameOf(o)}》を裁きの紋章としてシールドの上へ`);
       /* 🛡 v16.109 EXモードでは、どのシールドの上に置くかを選べる（resolveOut は同期なので、置いたあとに聞いて動かす） */
@@ -37856,14 +37865,14 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if(S.expert&&fromZone==="battle"&&!(pFrom===pTo&&toZone==="battle")){
     const rZ=getReg(f.card);
     if(rZ&&rZ.gimmick==="zeron"){
-      toast(`🌙 零龍カードは離れない！`);
+      MOVE_BLOCKED=true;toast(`🌙 零龍カードは離れない！`);
       return;
     }
   }
   if(S.expert&&fromZone==="battle"&&!(pFrom===pTo&&toZone==="battle")){
     const rDC=getReg(f.card);
     if(rDC&&rDC.gimmick==="dormacore"&&(f.card.coreN==null||f.card.coreN>0)){
-      toast(`⚫ ${faceNameOf(f.card)} はバトルゾーンを離れない！ かわりに禁断コアが外れる`);
+      MOVE_BLOCKED=true;toast(`⚫ ${faceNameOf(f.card)} はバトルゾーンを離れない！ かわりに禁断コアが外れる`);
       dormaCoreRemove(pFrom,f.card);
       return;
     }
@@ -38087,9 +38096,17 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     {
       const rCX2=getReg(c);
       const _stayBuff=!!(c.buff&&c.buff.stayIfPow);
+      /* ⚓ v16.119 条件つき常在の「離れない」（サッヴァーク∞型）もここで止める。
+         止めた時は MOVE_BLOCKED を立てて「⚠ 移動が完了していません」を出さない。 */
+      if(S.expert&&rCX2&&rCX2.cstFx==="noLeave"&&rCX2.cstCond&&!isIgnored(c,pFrom)&&zoneCondOk(rCX2.cstCond,pFrom,c)){
+        MOVE_BLOCKED=true;
+        toast(`⚓ ${faceNameOf(c)} は離れない！（${rCX2.cstCond}）`);
+        renderAll();
+        return;
+      }
       if(!isIgnored(c,pFrom)&&!c.sfActive){
         const _sfa=sforceAllSrc(pFrom,"noLeave");
-        if(_sfa){toast(`⚓✨ シールド・フォース（${faceNameOf(_sfa)}）：${faceNameOf(c)} は離れない！`);return true;}
+        if(_sfa){MOVE_BLOCKED=true;toast(`⚓✨ シールド・フォース（${faceNameOf(_sfa)}）：${faceNameOf(c)} は離れない！`);return true;}
       }
       const _stayReg=!!(rCX2&&rCX2.cstFx==="stayPow"&&!isIgnored(c,pFrom)&&(!rCX2.cstCond||zoneCondOk(rCX2.cstCond,pFrom,c)));
       if(S.expert&&(_stayBuff||_stayReg)){
@@ -38101,6 +38118,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
           if(arrS){const ixS=arrS.findIndex(x=>x.id===c.id);if(ixS>=0)arrS.splice(ixS,1);}
           if(!zonesOf(pFrom).battle.find(x=>x.id===c.id))zonesOf(pFrom).battle.push(c);
           c.faceup=true;
+          MOVE_BLOCKED=true;
           toast(`⚓ ${faceNameOf(c)} はパワーが0より大きいため、離れるかわりにバトルゾーンにとどまる！`);
           renderAll();
           return;
