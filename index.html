@@ -5265,7 +5265,21 @@ function shieldStackToHand(Z,sh){
   return out;
 }
 /* ⚔ v16.109 サバキZ：手札のサバキZ持ちを、いま手札に加わったカード1枚を捨てて使う（ブレイク以外の「盾→手札」でも使える） */
-const SABAKI_BUSY=new Set();   // ⚔ v16.127 いま解決中のサバキZ（同じカードが何度も呼ばれる堂々巡りを止める）
+const SABAKI_BUSY=new Set();
+const SABAKI_PEND_CRE=[];   // ⚔ v16.135 あとで出すサバキZのクリーチャー（宣言した順）
+async function flushSabakiPendCre(){
+  if(!SABAKI_PEND_CRE.length)return;
+  const list=SABAKI_PEND_CRE.splice(0);
+  for(const {pi,card} of list){
+    try{
+      await summonCreatureNeoAware(pi,card,{});
+      toast(`⚔ サバキZ！ ${faceNameOf(card)} をコストを支払わずに召喚した`);
+      logOnly(`⚔ ${S.players[pi].label}：サバキZ（クリーチャー）→ 《${faceNameOf(card)}》を召喚`);
+      renderAll();
+      await waitFxIdle();
+    }catch(e){console.warn("flushSabakiPendCre",e);}
+  }
+}   // ⚔ v16.127 いま解決中のサバキZ（同じカードが何度も呼ばれる堂々巡りを止める）
 async function offerSabakiZAdded(pi,added,pending,inFx){
   /* ⚔ v16.115 pending=true のとき、added はまだ手札に入っていないカード（盾から加わる途中）。
      手札が10枚を超えて溢れる前に、捨てる札をここから選べる。捨てた札は added から抜く。 */
@@ -5317,6 +5331,9 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       toast(`⚔ サバキZ：${_decl.map(faceNameOf).join(" → ")} の順に解決します`);
       logOnly(`⚔ ${S.players[pi].label}：サバキZを宣言 → ${_decl.map(x=>`《${faceNameOf(x)}》`).join("→")}`);
     }
+    /* ⚔ v16.135 呪文のサバキZを先に1枚ずつ解決し、クリーチャーのサバキZは
+       いま処理している効果（トライガード・チャージャーの盾追加など）が終わってからまとめて出す。 */
+    const _creLater=[];
     for(const sc of _decl){
       if(!inHand(sc)&&!Z.hand.some(h=>h.id===sc.id))continue;
       /* 🗑 v16.129 捨てる候補は「加わった裁きの紋章」のうち、自分自身と、ほかに宣言したサバキZを除いたもの。 */
@@ -5346,7 +5363,13 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
         S.spellTurn=S.spellTurn||[0,0];S.spellTurn[pi]=(S.spellTurn[pi]||0)+1;
         emitEvent(pi,"spell",card);scheduleAutoResolve(pi,card);enqueueFx(pi,card);
       }else{
-        await summonCreatureNeoAware(pi,card,{});
+        /* ⚔ v16.135 クリーチャーは後回し（呪文の解決と盾追加が終わってから、宣言した順に出す） */
+        _creLater.push(card);
+        toast(`⚔ サバキZ：${faceNameOf(card)} は、いまの効果が終わってから出します`);
+        SABAKI_PEND_CRE.push({pi,card});
+        renderAll();
+        setTimeout(()=>{try{SABAKI_BUSY.delete(sc.id);}catch(e){}},1500);
+        continue;
       }
       renderAll();
       /* 🚑 v16.118 効果の処理の中から呼ばれた時は、ここで待たない（待つと処理が止まったままになる） */
@@ -5355,7 +5378,10 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
          これをしないと、解決中ゾーンに残ったままになる。 */
       if(rsc&&rsc.ctype==="spell"){
         try{
-          await waitFxIdle();
+          /* 🚑 v16.135 効果の中から呼ばれている時は waitFxIdle で待たない（止まってしまうため）。
+             少しだけ待って、解決中ゾーンの片づけへ進む。 */
+          if(inFx)await new Promise(r=>setTimeout(r,120));
+          else await waitFxIdle();
           const ri2=Z.resolve.findIndex(x=>x.id===card.id);
           if(ri2>=0){const done=Z.resolve.splice(ri2,1)[0];resolveOut(Z,done);renderAll();}
         }catch(e){}
@@ -5966,7 +5992,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.134";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.135";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -24189,6 +24215,7 @@ async function runFxList(pi,list,srcCard,inPump){
   try{stampShieldSrc(_srcLbl);}catch(e){} // 🛡 最後の効果で増えた盾にも追加元を刻む
   }finally{FX_FROM_SPELL=_prevFromSpell;FX_FROM_CRE=_prevFromCre;FX_SPELL_COST=_prevSpellCost;FX_ACTOR=_prevActor;
     if(_setNow){try{setFxNow(_prevNowPi,_prevNowC);}catch(e){}}
+    if(FX_DEPTH<=1&&SABAKI_PEND_CRE.length)setTimeout(()=>{flushSabakiPendCre();},0);   // ⚔ v16.135
     FX_DEPTH=Math.max(0,FX_DEPTH-1);
     /* 🖼 v16.4 一連の効果が終わったら、間引いて飛ばした分をここで必ず描き直す。 */
     if(FX_DEPTH===0){try{_raLast=0;renderAll();}catch(e){}}
