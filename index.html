@@ -5254,7 +5254,9 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
        宣言できる枚数も、加わった裁きの紋章の枚数が上限。 */
     const isMonshoCard=x=>{const r=getReg(x);return !!(r&&(r.races||[]).some(t=>String(t||"").includes("裁きの紋章")));};
     const pool=()=>(pending?added.filter(x=>ids.has(x.id)):Z.hand.filter(x=>ids.has(x.id))).filter(isMonshoCard);
-    const szs=[...(pending?added:[]),...Z.hand].filter(x=>{const r=getReg(x);return r&&r.sabaki;});
+    /* ⚔ v16.121 解決中ゾーンにあるカード（いま唱えている呪文そのもの）はサバキZの候補にしない。 */
+    const _inResolve=x=>Z.resolve.some(y=>y.id===x.id);
+    const szs=[...(pending?added:[]),...Z.hand].filter(x=>{const r=getReg(x);return r&&r.sabaki&&!_inResolve(x);});
     /* ⚔ v16.114 侵略・革命チェンジと同じく、使うサバキZをすべて宣言してから、宣言した順に解決する。 */
     const _decl=[];
     for(const sc of szs){
@@ -5262,7 +5264,7 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       const rsc0=getReg(sc);
       const rest=pool().filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
       if(rest.length<=_decl.length)continue;   // 捨てる裁きの紋章が足りない（宣言できる枚数の上限）
-      const yes=await ask(`⚔ サバキZ（${faceNameOf(sc)}）${_decl.length?`\n（宣言済み：${_decl.map(faceNameOf).join("→")}）`:""}\n加わる裁きの紋章：${rest.map(faceNameOf).join("、")}（あと${rest.length-_decl.length}枚まで宣言できます）\nそのうち1枚を捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rsc0&&rsc0.ctype==="spell"?"唱え":"召喚し"}ますか？\n（使うものをすべて宣言してから、宣言した順に解決します）`,[sc,...rest.slice(0,3)]);
+      const yes=await ask(`⚔ サバキZ：《${faceNameOf(sc)}》を使いますか？${_decl.length?`\n（宣言済み：${_decl.map(faceNameOf).join("→")}）`:""}\n加わる裁きの紋章：${rest.map(faceNameOf).join("、")}（あと${rest.length-_decl.length}枚まで宣言できます）\nそのうち1枚を捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rsc0&&rsc0.ctype==="spell"?"唱え":"召喚し"}ますか？\n（使うものをすべて宣言してから、宣言した順に解決します）`,[sc,...rest.slice(0,3)]);
       if(yes)_decl.push(sc);
     }
     if(_decl.length>1){
@@ -5274,7 +5276,7 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       const cands=pool().filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
       if(!cands.length){toast(`⚔ サバキZ（${faceNameOf(sc)}）：捨てられる裁きの紋章が残っていません`);continue;}
       const rsc=getReg(sc);
-      const jd=(cands.length===1)?0:await pickCard(`🗑 サバキZで捨てるカードを選択（${faceNameOf(sc)}）`,cands);
+      const jd=await pickCard(`🗑 サバキZ《${faceNameOf(sc)}》で捨てる裁きの紋章を選択（${cands.length}枚から）`,cands,{hint:"タップで選択"});
       if(jd===null)continue;
       const dc=cands[jd];
       snap();
@@ -5902,7 +5904,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.119";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.121";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -15287,7 +15289,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["shieldPickTuck","graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -23672,6 +23674,7 @@ async function runFxList(pi,list,srcCard,inPump){
       sfx("ok");renderAll();
     }else if(f.t==="shieldPickNew"||f.t==="shieldPickTuck"){
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _tuckFilt=String(f.cond||"").trim();   // 🛡 v16.120 条件欄は対象の絞り込み（コスト8以下／進化以外 など）
       const isTuck=f.t==="shieldPickTuck";
       const act=isTuck?"シールドに重ねる":"新しいシールドに追加";
       const pc=await askChoice(`🛡 ${act}（${n}体）：どちらのシールドゾーンへ？`,[`相手（${pName(op)}）のシールドへ`,`自分（${pName(pi)}）のシールドへ`]);
@@ -23683,6 +23686,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const pool=[];
         for(const owp of [op,pi]){for(const x of zonesOf(owp).battle){const rx=getReg(x);
           if(!isCreatureReg(rx))continue;
+          if(_tuckFilt&&!lockFilterOk(_tuckFilt,rx,x))continue;   // 🛡 v16.120 条件欄で絞る
           if(((rx&&rx.noChoose)||momoUntouchable(x))&&owp!==pi&&!isIgnored(x,owp))continue; // 🚫 相手の「選ばれない」は選択不可
           pool.push({x,owp});}}
         if(!pool.length){
@@ -39592,8 +39596,8 @@ function cardEl(pi,zone,c){
   /* 👁 v16.109 シールドの束（裁きの紋章など）も、札から中身を見られるようにした */
   if(c.under&&c.under.length&&(zone==="battle"||(zone==="shield"&&c.faceup))&&!hidden&&showBBtn&&(!S.vs||pi===(S.seat|0))){
     const ub2=document.createElement("button");
-    ub2.textContent="👁"+c.under.length;
-    ub2.title=`下に重なっているカード${c.under.length}枚を見る（メテオバーン・退化もここから）`;
+    ub2.textContent="👁"+(1+c.under.length);   // 🔢 v16.121 一番上を含めた合計枚数
+    ub2.title=`重なっているカード全${1+c.under.length}枚を見る（一番上を含む・メテオバーン・退化もここから）`;
     ub2.style.cssText="position:absolute;right:-6px;bottom:22%;z-index:8;min-width:30px;height:24px;padding:0 5px;border-radius:12px;border:2px solid #fbbf24;background:#2a2005;color:#fbbf24;font-size:11px;font-weight:900;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.6);line-height:1";
     ub2.addEventListener("click",ev=>{
       ev.stopPropagation();ev.preventDefault();
@@ -39607,11 +39611,11 @@ function cardEl(pi,zone,c){
     if(zone==="shield"){
       const fu=(c.under||[]).filter(x=>x.faceup).length+(c.faceup?1:0);
       const total=1+(c.under?c.under.length:0);
-      st.textContent="+"+c.under.length+(fu>1?` 表${fu}`:"");
-      st.title=`全${total}枚（表${fu}・裏${total-fu}）`;
+      st.textContent="計"+total+(fu?` 表${fu}`:"");   // 🔢 v16.121 下の枚数ではなく、重なっている合計枚数
+      st.title=`この盾は全${total}枚（表${fu}・裏${total-fu}）`;
     }else{
-      st.textContent="下"+c.under.length;   // 🔢 v16.72 「+3」より「下3」の方が何の数か分かる
-      st.title=`下に${c.under.length}枚重なっています（全${1+c.under.length}枚）`;
+      st.textContent="計"+(1+c.under.length);   // 🔢 v16.121 重なっている合計枚数（このカードを含む）
+      st.title=`このカードを含めて全${1+c.under.length}枚（下に${c.under.length}枚）`;
     }
     el.appendChild(st);
   }
@@ -46317,9 +46321,25 @@ function renderStackPanel(){
     $("stackOlay").classList.remove("open");renderAll();return;
   }
   const c=f.card;
-  $("stTitle").textContent=`《${(stCtx.zone==="shield"&&!c.faceup)?"裏向きの盾":faceNameOf(c)}》の下（${c.under.length}枚）　${stSel.size?stSel.size+"枚選択中":"タップ選択／⌘+タップで複数／ドラッグで盤面へ"}`;
+  $("stTitle").textContent=`《${(stCtx.zone==="shield"&&!c.faceup)?"裏向きの盾":faceNameOf(c)}》の重なり（全${1+c.under.length}枚：一番上＋下${c.under.length}枚）　${stSel.size?stSel.size+"枚選択中":"タップ選択／⌘+タップで複数／ドラッグで盤面へ"}`;
   const g=$("stGrid");g.innerHTML="";
   const hideDown=stCtx.zone==="shield";
+  /* 👁 v16.121 一番上のカードも並べて見せる（数え間違いを防ぐ）。こちらは選べない。 */
+  {
+    const showTop=!(hideDown&&!c.faceup);
+    const elT=showTop?vCardEl(faceNameOf(c),{idx:"上"}):vCardEl("（裏向きの盾）",{idx:"上",back:true});
+    if(!showTop){
+      elT.querySelectorAll("img").forEach(im=>im.remove());
+      elT.style.background="#0d1119";elT.style.outline="2px dashed var(--line)";
+      const th=elT.querySelector(".thumb")||elT;
+      const b=backURL(stCtx.p);
+      if(b){const im=document.createElement("img");im.src=b;im.draggable=false;im.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:6px";try{applySleevePosition(im,stCtx.p);}catch(e){}th.innerHTML="";th.appendChild(im);}
+    }
+    elT.style.opacity="0.92";
+    elT.style.outline="2px solid #fbbf24";
+    elT.title="一番上のカード（ここからは動かせません）";
+    g.appendChild(elT);
+  }
   c.under.forEach((u,i)=>{
     const el=(hideDown&&!u.faceup)?vCardEl("（裏向きの盾）",{idx:i+1,back:true}):vCardEl(u.name,{idx:i+1});
     if(hideDown&&!u.faceup){
