@@ -6054,7 +6054,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.147";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.148";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6934,6 +6934,10 @@ function markArrive(c,opt){
    エターナル・Ω   … 一部の登録が eternalOmega になっていた（本体は etOmega しか読まない）。
    fxAliasReg() は登録そのものを両対応に直す。読み込み・パック取り込みのたびに通している。 */
 function hasMachF(r){return !!(r&&(r.machf||r.mach));}
+/* 🧬 v16.148 「進化ではないクリーチャー」の判定をひとまとめにした。
+   NEO・GNEO（NEOドリーム含む）は進化元なしでも出せるので、踏み倒しの対象では非進化として扱う。 */
+function neoLikeReg(r){return ["neoevo","gneo","neodream","gneodream"].includes(r&&r.ctype);}
+function nonEvoPlayable(r){return !!(r&&(!isEvoReg(r)||neoLikeReg(r)));}
 /* 🪆 v15.2 誘発（watchFx）の書き方は2通りある。
      ① 平たい形 … {ev:"allyEnter",t:"draw",n:1,cond:"ドラゴン"}
      ② 入れ子   … {ev:"allyEnter",cond:"ドラゴン",fx:[{t:"draw",n:1},{t:"retrieveHand",n:1,cond:"マナ:ドラゴン"}]}
@@ -16365,8 +16369,7 @@ async function runFxList(pi,list,srcCard,inPump){
       // 🌱 現在のマナ枚数よりコストが小さい、進化ではないクリーチャーをマナから出す。
       const manaN=Z.mana.length;
       /* 🧬 v16.146 NEO・GNEOクリーチャーは、進化元なしでも出せるので「進化ではないクリーチャー」に含める */
-      const _nonEvoOk=r=>!!r&&isCreatureReg(r)&&(!isEvoReg(r)||["neoevo","gneo","neodream","gneodream"].includes(r.ctype));
-      const pool=Z.mana.filter(x=>{const r=getReg(x);return _nonEvoOk(r)&&+r.cost<manaN;});
+      const pool=Z.mana.filter(x=>{const r=getReg(x);return r&&isCreatureReg(r)&&nonEvoPlayable(r)&&+r.cost<manaN;});
       if(!pool.length){toast(`🌱 コストがマナ枚数（${manaN}）より小さい非進化クリーチャーがありません`);continue;}
       const j=await pickCard(`🌱 マナから出す非進化クリーチャーを選択（コスト＜${manaN}）`,pool);
       if(j===null)continue;
@@ -22219,7 +22222,7 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!bp.length){toast("🌍 対象のクリーチャーがいません");continue;}const bj=await pickCard("🌍 マナゾーンに置くクリーチャーを選択",bp);if(bj===null)continue;
       const tgt=bp[bj];if(!await ask(`🌍 《${faceNameOf(tgt)}》を持ち主のマナゾーンに置きますか？`))continue;
       await moveCardX(tp,"battle",tgt.id,tp,"mana");renderAll();
-      const manaN=TZ.mana.length;const mp=TZ.mana.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!isEvoReg(rx)||["neoevo","gneo","neodream","gneodream"].includes(rx.ctype))&&+rx.cost<=manaN&&(!chosenCiv||(rx.civs||[]).includes(chosenCiv));});
+      const manaN=TZ.mana.length;const mp=TZ.mana.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&nonEvoPlayable(rx)&&+rx.cost<=manaN&&(!chosenCiv||(rx.civs||[]).includes(chosenCiv));});
       if(!mp.length){toast(`🌍 マナ${manaN}枚以下の対象クリーチャーがいません`);continue;}const mj=await pickCard(`🌍 マナから出すクリーチャーを選択（コスト${manaN}以下）`,mp);if(mj===null)continue;
       const out=mp[mj],mi=TZ.mana.findIndex(x=>x.id===out.id);if(mi<0)continue;TZ.mana.splice(mi,1);out.faceup=true;out.tapped=false;out.sick=!(getReg(out)&&getReg(out).sa);if(!battleEntryOk(tp,out)){TZ.mana.push(out);toast("出せないためマナに戻しました");continue;}TZ.battle.push(out);out._viaCheat=true;markArrive(out);emitEvent(tp,"summon");enqueueFx(tp,out);sfx("move");renderAll();await waitFxIdle(inPump);
     }else if(f.t==="deckEvo"){
@@ -22611,7 +22614,7 @@ async function runFxList(pi,list,srcCard,inPump){
           for(const x of (Z[zk]||[])){
             const rx=getReg(x);
             if(!rx||!isCreatureReg(rx))continue;
-            if(isEvoReg(rx))continue;                       // 進化ではないクリーチャー
+            if(!nonEvoPlayable(rx))continue;                // 🧬 v16.148 進化ではないクリーチャー（NEO・GNEOは含む）
             if(filt&&!lockFilterOk(filt,rx,x))continue;
             pool.push({x,zk,zja});
           }
