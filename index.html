@@ -3129,6 +3129,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="相手のカードの効果で、自分のシールドを墓地・マナ・山札などに置くことを止めます（ブレイクで手札に加えるのは止めません・緑知銀 ジェンバン型）"><input type="checkbox" id="fxShieldHandOnly"> 🛡 常在：相手の効果によって、自分のシールドは手札以外のゾーンに置かれない</label>
         <label title="このカードが自分のシールドゾーンに表向きである間も、常在のコスト軽減と誘発が働きます（超煌ノ裁キ ダイヤモン将型）"><input type="checkbox" id="fxFaceUpShieldActive"> 🛡👁 シールドゾーンに表向きの間も、常在のコスト軽減・誘発が働く</label>
         <label title="このクリーチャーを自分のマナゾーンから召喚してもよい（メッサー・シュミット型）。マナの札をバトルゾーンへドラッグすると、コストを払うか聞きます"><input type="checkbox" id="fxManaSummon"> 🌱 マナゾーンから召喚してもよい</label>
+        <label title="極限ファイナル革命：このゲーム中に自分が他の「ファイナル革命」を使っていなければ使える（烈しき切札 ドギラゴン逆型）"><input type="checkbox" id="fxFinalRevGame"> ⚡ 極限ファイナル革命（ゲーム中に1回だけ・他のファイナル革命を使っていなければ）</label>
         <label title="相手が呪文を唱える時、その呪文以上のコストを持つ〔ここに書いた条件〕のカード1枚を手札から捨てて、その呪文を墓地に置いてもよい（オラマッハ・ザ・ジョニー型・空欄＝なし）">🃏 相手の呪文を止める：手札から捨てるカードの条件<input type="text" id="fxSpellCounter" placeholder="例：ジョーカーズ" style="width:150px"></label>
         <label title="どちらのクリーチャーが攻撃する時でも使える（煌世主 サッヴァーク∞型）。オフなら相手の攻撃時だけ"><input type="checkbox" id="fxFlipCastBoth"> ⚖ 上の「表向きのシールドを裏向きにして手札から」を、自分の攻撃時にも使える</label>
         <label title="相手のクリーチャーが攻撃する時、自分のシールドの表向きのカードをこの枚数だけ裏向きにして、手札からコストを支払わずに唱えてもよい（天地ヲ別ツ龍断ノ裁キ型・0＝なし）">⚖ 相手の攻撃時、表向きのシールドを<input type="number" id="fxFoeAtkFlipCast" min="0" max="9" value="0" style="width:52px">枚裏向きにして手札から唱えてよい</label>
@@ -6053,7 +6054,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.144";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.145";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6221,6 +6222,12 @@ function cantLeaveBattle(pi,c,quiet){
   const r=getReg(c);
   const IGN=isIgnored(c,pi);
   if(c.buff&&c.buff.noLeave){if(!quiet)toast(`⚓ ${faceNameOf(c)} はこのターン離れない！`);return true;}
+  /* ⚓ v16.145 相手のカードの効果によっては離れない（ドギラゴン逆型）。
+     バトルや自分の効果では離れる。相手が動かしている時（FX_ACTOR が相手）だけ止める。 */
+  if(c.buff&&c.buff.noLeaveFoe&&typeof FX_ACTOR!=="undefined"&&FX_ACTOR!=null&&FX_ACTOR!==pi){
+    if(!quiet)toast(`⚓ ${faceNameOf(c)} は相手のカードの効果では離れない！`);
+    return true;
+  }
   // ⚙ クロスギアがn個以上クロスされていれば離れない（バザガベルグ型）
   if(!IGN&&r&&+r.noLeaveGearN>0&&(c.gear?c.gear.length:0)>=+r.noLeaveGearN){
     if(!quiet)toast(`⚙⚓ ${faceNameOf(c)} はクロスギアが${c.gear.length}つクロスされているため離れない！（${+r.noLeaveGearN}つ以上）`);
@@ -9773,7 +9780,7 @@ function startGame(picks){
   S._watchOnce={};S._watchOncePend={};S._once1G={};S.pendingAtk=null;MOVE_BLOCKED=false;
   /* 🧹 v16.123 試合をやり直した時に、ターンをまたぐ効果の記録も消す
      （堅珠ノ正裁Zの「マナ超過は山札の下へ」が次の試合まで残っていた） */
-  S._bigCreLock=null;S._nextSpellRed=null;S._nextSumRed=null;S.finalRevUsed={};
+  S._bigCreLock=null;S._nextSpellRed=null;S._nextSumRed=null;S.finalRevUsed={};S.finalRevGameUsed={};
   S._pfQueue=[[],[]];S._pfFlushing=[false,false];
   try{$("fxBanner").classList.remove("show");}catch(e){}
   if(!S.players[0].mainList.length){openDeckPanel();toast("先にデッキを登録してください");return;}
@@ -9784,7 +9791,7 @@ function startGame(picks){
   /* 📥 v16.3 この試合で使う画像を先に読む。
      配り終えた直後に呼ぶので、山札・手札・盾のぶんが最初からそろう。 */
   try{if(deviceIsSmall())preloadBoardImages();}catch(e){}
-  S.pturn=0;S.turnLock=[];ENTERED_CNT=0;S.finalRevUsed={};S.exRevPSUsed={};S.sumTurn={};S.firstSumUsed={};
+  S.pturn=0;S.turnLock=[];ENTERED_CNT=0;S.finalRevUsed={};S.finalRevGameUsed={};S.exRevPSUsed={};S.sumTurn={};S.firstSumUsed={};
   // 🔏 ゲーム開始時のセットアップ：禁断の鼓動（ctype＝禁断の鼓動）は、山札から出して
   //    バトルゾーンに置き、登録の「🔏 自分に封印n個」の数だけ封印を付ける。
   //    デッキに複数入っていても1枚だけ置き、残りは山札に戻してシャッフルする。
@@ -13322,6 +13329,7 @@ const FX_TYPES=[
   ["handToMana","🌱 自分の手札からn枚をマナゾーンに置く（任意・キャンセルで置かない／条件欄で対象を絞れる）"],
   ["foeTopPowerToHyper","🌌 相手は自身のパワーが一番大きいクリーチャーをすべて、自身の超次元ゾーンに置く（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く跳躍 テレポートゾーン型）"],
   ["foeRandCreManaHandToDeck","🎲 相手のクリーチャー・相手のマナ・相手の手札からそれぞれランダムにn枚ずつ、相手の山札の一番下に置く（燃えるデット・ソード型）"],
+  ["noLoseNoLeaveNext","🛡⚓ 次の自分のターンのはじめまで、自分はゲームに負けず、相手のカードの効果によって自分のクリーチャーは離れない（烈しき切札 ドギラゴン逆型／効果を使った時にバトルゾーンにいるクリーチャーだけが対象）"],
   ["grantPowNoAtkPNext","💪🚫 クリーチャーをn体まで選び、次の自分のターン開始時までパワーを+〔条件欄の数・既定3000〕し、相手プレイヤーを攻撃できなくする（The スタミナ漢型・自分/相手どちらのクリーチャーでも選べる）"],
   ["manaEachBoth","🌱 各プレイヤーは、自身のクリーチャーをそれぞれn体ずつ選んでマナゾーンに置く（ガイアの目覚め型）"],
   ["chargeDrawIfHit","🌱 自分の山札の上から1枚目をマナゾーンに置く。それが条件欄に合えばカードを1枚引く（オラオラ・ジョーカーズ型／条件欄＝例：ジョーカーズ）"],
@@ -18141,6 +18149,24 @@ async function runFxList(pi,list,srcCard,inPump){
         logOnly(`🎲 ${S.players[op].label}：${doneR.join(" / ")} が山札の一番下へ（ランダム）`);
         try{logDeckBottomOrder(op,sentR,"ランダム除去","（クリーチャー/マナ/手札）");}catch(e){}
       }
+      renderAll();
+    }else if(f.t==="noLoseNoLeaveNext"){
+      /* 🛡⚓ v16.145 烈しき切札 ドギラゴン逆型。
+         「離れない」は、この効果を使った時点でバトルゾーンにいる自分のクリーチャーにだけ付く
+         （あとから出たクリーチャーには付かない）。負けない方は次の自分のターンのはじめまで。 */
+      snap();
+      S.noLoseCnt=S.noLoseCnt||{};
+      S.noLoseCnt[pi]=Math.max(S.noLoseCnt[pi]||0,2);
+      let _cnt=0;
+      for(const x of Z.battle){
+        if(!isCreatureReg(getReg(x)))continue;
+        x.buff=x.buff||{};
+        x.buff.noLeaveFoe=true;
+        markBuffNext(x,["noLeaveFoe"],pi);
+        _cnt++;
+      }
+      toast(`🛡⚓ 次の自分のターンのはじめまで、自分はゲームに負けない／いまいる自分のクリーチャー${_cnt}体は相手の効果で離れない`);
+      logOnly(`🛡⚓ ${S.players[pi].label}：極限ファイナル革命（負けない＋いまバトルゾーンにいる${_cnt}体が相手の効果で離れない）`);
       renderAll();
     }else if(f.t==="grantPowNoAtkPNext"){
       /* 💪🚫 v16.143 The スタミナ漢型：選んだクリーチャーに、次の自分のターン開始時までパワー+n と「相手プレイヤーを攻撃できない」 */
@@ -29693,8 +29719,16 @@ async function execAttack(pi,id,tg){
       if(rH&&rH.watchFx&&rH.watchFx.some(w=>w.ev==="revFinal")){
         S.finalRevUsed=S.finalRevUsed||{};
         const tk=S.pturn|0;
-        if(!S.finalRevUsed[tk]){
+        /* ⚡ v16.145 極限ファイナル革命（finalRevGame）：このゲーム中に自分が他のファイナル革命を
+           使っていなければ使える。ふつうのファイナル革命は今までどおり各ターン1回。 */
+        const _rhG=!!(rH&&rH.finalRevGame);
+        S.finalRevGameUsed=S.finalRevGameUsed||{};
+        if(_rhG&&S.finalRevGameUsed[pi]){
+          toast("⚡ 極限ファイナル革命：このゲームですでにファイナル革命を使っているため発動しません");
+          logOnly(`⚡ ${S.players[pi].label}：極限ファイナル革命は不発（このゲームで既にファイナル革命を使用）`);
+        }else if(!S.finalRevUsed[tk]){
           S.finalRevUsed[tk]=hcard.id;
+          S.finalRevGameUsed[pi]=true;
           toast("⚡ ファイナル革命！");
           await runFxList(pi,onceFilter(hcard,rH.watchFx.filter(w=>w.ev==="revFinal")),hcard);
           renderAll();await waitFxIdle();
@@ -32739,6 +32773,7 @@ function renderFxEditor(){
   {const e=$("fxFaceUpShieldActive");if(e)e.checked=!!FXEDIT.faceUpShieldActive;}
   {const e=$("fxSpellCounter");if(e)e.value=FXEDIT.spellCounter||"";}
   {const e=$("fxManaSummon");if(e)e.checked=!!FXEDIT.manaSummon;}
+  {const e=$("fxFinalRevGame");if(e)e.checked=!!FXEDIT.finalRevGame;}
   {const e=$("fxFoeAtkFlipCast");if(e)e.value=+FXEDIT.foeAtkFlipCast||0;}
   {const e=$("fxFlipCastBoth");if(e)e.checked=!!FXEDIT.flipCastBoth;}
   $("fxLibWin").checked=!!FXEDIT.libWin;
@@ -35104,6 +35139,7 @@ function openFxEditor(key){
     faceUpShieldActive:cur?!!cur.faceUpShieldActive:false,
     spellCounter:cur?(cur.spellCounter||""):"",
     manaSummon:cur?!!cur.manaSummon:false,
+    finalRevGame:cur?!!cur.finalRevGame:false,
     foeAtkFlipCast:cur?(+cur.foeAtkFlipCast||0):0,
     flipCastBoth:cur?!!cur.flipCastBoth:false,
     libWin:cur?!!cur.libWin:false,
@@ -35756,6 +35792,7 @@ $("fxSave").addEventListener("click",async ()=>{
     faceUpShieldActive:$("fxFaceUpShieldActive")?$("fxFaceUpShieldActive").checked:false,
     spellCounter:$("fxSpellCounter")?$("fxSpellCounter").value.trim():"",
     manaSummon:$("fxManaSummon")?$("fxManaSummon").checked:false,
+    finalRevGame:$("fxFinalRevGame")?$("fxFinalRevGame").checked:false,
     foeAtkFlipCast:$("fxFoeAtkFlipCast")?(+$("fxFoeAtkFlipCast").value||0):0,
     flipCastBoth:$("fxFlipCastBoth")?$("fxFlipCastBoth").checked:false,
     libWin:$("fxLibWin").checked,
