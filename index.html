@@ -6010,7 +6010,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.139";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.141";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6183,7 +6183,12 @@ function cantLeaveBattle(pi,c,quiet){
     if(!quiet)toast(`⚙⚓ ${faceNameOf(c)} はクロスギアが${c.gear.length}つクロスされているため離れない！（${+r.noLeaveGearN}つ以上）`);
     return true;
   }
-  if(!IGN&&r&&r.cstCond&&r.cstFx==="noLeave"&&zoneCondOk(r.cstCond,pi,c)){if(!quiet)toast(`✨ 条件常在（${r.cstCond}）：${faceNameOf(c)} は離れない！`);return true;}
+  /* ⚓ v16.140 パワーが0のクリーチャーは離れる（煌世主 サッヴァーク∞「パワーが0より大きければ」）。 */
+  if(!IGN&&r&&r.cstCond&&r.cstFx==="noLeave"&&zoneCondOk(r.cstCond,pi,c)){
+    const _pw=(typeof powNow==="function")?powNow(c):null;
+    if(_pw!=null&&_pw<=0){if(!quiet)toast(`⚓ ${faceNameOf(c)} はパワーが0のため、離れないは働かない`);}
+    else{if(!quiet)toast(`✨ 条件常在（${r.cstCond}）：${faceNameOf(c)} は離れない！`);return true;}
+  }
   if(!IGN&&c.sfActive&&r&&r.sforceFx==="noLeave"){if(!quiet)toast(`⚓✨ シールド・フォース有効中：${faceNameOf(c)} は離れない！`);return true;}
   // 🛡✨ シールド・フォースの効果を「自分のクリーチャー全体」に配る型（叡智のW インビンシブル・ギャラクシー）
   if(!IGN){const src=sforceAllSrc(pi,"noLeave");if(src){if(!quiet)toast(`⚓✨ シールド・フォース（${faceNameOf(src)}）：${faceNameOf(c)} は離れない！`);return true;}}
@@ -10407,7 +10412,7 @@ async function runTurnEndTriggers(cur2){
         const rr=getReg(c);if(!rr||!rr.endBounceUntapped||c.tapped)continue;
         if(await leaveRepToHandGate(cur2,c))continue;
         const bi=ZR.battle.findIndex(x=>x.id===c.id);if(bi<0)continue;
-        ZR.battle.splice(bi,1);c.faceup=true;c.tapped=false;ZR.hand.push(c);
+        ZR.battle.splice(bi,1);c.faceup=true;c.tapped=false;toHand(ZR,c);
         toast(`↩ ターン終了時：${faceNameOf(c)} を手札へ戻した`);renderAll();
       }
     }
@@ -10545,7 +10550,7 @@ async function runTurnEndTriggers(cur2){
         const nm=faceNameOf(h.c);
         moveCard(h.pi,"battle",h.c.id,"deckBottom");
         if(Zj.deck.length){
-          const dc=Zj.deck.shift();dc.faceup=true;Zj.hand.push(dc);
+          const dc=Zj.deck.shift();dc.faceup=true;toHand(Zj,dc);
           toast(`🃏 J・O・E：${nm} を山札の一番下へ置き、カードを1枚引いた`);
         }else{
           toast(`🃏 J・O・E：${nm} を山札の一番下へ置いた（山札が無いためドローなし）`);
@@ -10871,7 +10876,7 @@ async function finishNextTurn(cur){
         const yes=await ask(`🃏 ${faceNameOf(src)}：このターン最初のドローで、もう1枚余分に引きますか？`);
         if(yes){
           snap();
-          const cc=Z.deck.shift();cc.faceup=true;Z.hand.push(cc);
+          const cc=Z.deck.shift();cc.faceup=true;toHand(Z,cc);
           sfx("draw");renderAll();
           toast(`🃏 ${faceNameOf(src)}：余分に1枚引いた`);
           logOnly(`🃏 ${faceNameOf(src)}：${S.players[pi].label} はターン最初のドローで1枚多く引いた`);
@@ -11985,7 +11990,7 @@ async function findByCond(pi){
   const c=Z.deck.splice(idx,1)[0];
   const dst=await askChoice(`《${c.name}》の行き先`,["手札へ","バトルへ","マナへ","墓地へ","シールドへ（裏）","シールドへ（表向き）","解決中へ"]);
   c.faceup=true;c.tapped=false;
-  if(dst===1){if(!battleEntryOk(pi,c)){Z.hand.push(c);markArrive(c);toast(`（出せないため手札へ）`);}else{await summonCreatureNeoAware(pi,c,{});}}
+  if(dst===1){if(!battleEntryOk(pi,c)){toHand(Z,c);markArrive(c);toast(`（出せないため手札へ）`);}else{await summonCreatureNeoAware(pi,c,{});}}
   else if(dst===2)Z.mana.push(c);
   else if(dst===3)Z.grave.push(c);
   else if(dst===4||dst===5){
@@ -11994,7 +11999,7 @@ async function findByCond(pi){
     await notifyShieldPlaced(pi,[c]);  // 🛡「盾が置かれた時」へ通知（ザゼ・ゼーン／チャクラ・デル・フィン型）
   }
   else if(dst===6){Z.resolve.push(c);emitEvent(pi,"spell",c);enqueueFx(pi,c);}
-  else{Z.hand.push(c);markArrive(c);}
+  else{toHand(Z,c);markArrive(c);}
   shuffleDeck(Z);
   toast(`サーチ：${c.name} → 山札をシャッフル`);
   sfx("ok");renderAll();
@@ -12046,7 +12051,7 @@ async function searchZone(pi,zone,kinds){
   const c=src.splice(idx,1)[0];
   const dst=await askChoice(`《${c.name}》の行き先`,["手札へ","バトルへ","マナへ","墓地へ","シールドへ（裏）","シールドへ（表向き）","解決中へ"]);
   c.faceup=true;c.tapped=false;
-  if(dst===1){if(!battleEntryOk(pi,c)){Z.hand.push(c);markArrive(c);toast(`（出せないため手札へ）`);}else{await summonCreatureNeoAware(pi,c,{});}}
+  if(dst===1){if(!battleEntryOk(pi,c)){toHand(Z,c);markArrive(c);toast(`（出せないため手札へ）`);}else{await summonCreatureNeoAware(pi,c,{});}}
   else if(dst===2)Z.mana.push(c);
   else if(dst===3)Z.grave.push(c);
   else if(dst===4||dst===5){
@@ -12055,7 +12060,7 @@ async function searchZone(pi,zone,kinds){
     await notifyShieldPlaced(pi,[c]);  // 🛡「盾が置かれた時」へ通知（ザゼ・ゼーン／チャクラ・デル・フィン型）
   }
   else if(dst===6){Z.resolve.push(c);emitEvent(pi,"spell",c);enqueueFx(pi,c);}
-  else{Z.hand.push(c);markArrive(c);}
+  else{toHand(Z,c);markArrive(c);}
   if(zone==="deck"){shuffleDeck(Z);toast(`探索：${c.name} → 山札をシャッフル`);}
   else toast(`探索：${c.name}`);
   sfx("ok");renderAll();
@@ -12311,7 +12316,7 @@ function enterBattleOrGrave(pi,c){
     const dd=dreamDupOf(pi,c);
     if(dd){
       c.faceup=true;c.tapped=false;c.sideways=false;
-      Z.hand.push(c);
+      toHand(Z,c);
       sfx("flip");
       toast(`🌟 ドリーム（DMR）：同名の《${faceNameOf(dd)}》が自分のバトルゾーンにあるため出ない（簡易処理として手札へ。元のゾーンに戻す場合は手動で）`);
       return false;
@@ -12641,7 +12646,7 @@ const EFFECTS=[
      if(j===null)return;
      snap();
      const cc=Z.deck.splice(j,1)[0];
-     cc.faceup=true;Z.hand.push(cc);markArrive(cc);
+     cc.faceup=true;toHand(Z,cc);markArrive(cc);
      shuffle(Z.deck); // 🔀 v10.30：sortによる乱数シャッフルは偏るためFisher–Yates（shuffle）に統一
      sfx("draw");renderAll();
      toast(`🔍 ${cc.name} を手札に加え、山札をシャッフルした`);
@@ -14723,7 +14728,7 @@ async function destroyCreature(pi,c,opts){
             const si=Math.floor(Math.random()*Zt.shield.length);
             const sc=Zt.shield.splice(si,1)[0];
             const stack=[sc,...(sc.under?sc.under.splice(0):[])];
-            stack.forEach(x=>{x.faceup=true;x.tapped=false;Zt.hand.push(x);});
+            stack.forEach(x=>{x.faceup=true;x.tapped=false;toHand(Zt,x);});
             sfx("move");renderAll();
             toast(`🏃 エスケープP'S：${faceNameOf(c)} は破壊されるかわりに、ランダムなシールド1つを手札へ（S・トリガーは使えない・このターンはもう使えない）`);
             return;
@@ -15281,7 +15286,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
       const _needBase=Math.max(1,(rCC.evoBaseN|0)||1);
       if(!bases.length){
         // 下敷きが無い→進化不成立。手札に戻す（デュエプレの挙動に合わせ、出せないものは出さない）
-        cc.faceup=true;Z.hand.push(cc);
+        cc.faceup=true;toHand(Z,cc);
         toast(`⚠ 《${faceNameOf(cc)}》は${isEvoGear?"重ねられるクロスギア":"進化元のクリーチャー"}がないため出せません（手札へ）`
           +((rCC&&rCC.evoSrcFilt)?`\n※進化元は「${rCC.evoSrcFilt}」のみ`:""));
         renderAll();continue;
@@ -15295,7 +15300,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
           if(!pool2.length){
             if(_picked.length<_needBase){
               // 足りない＝進化不成立。選んだぶんは元のゾーンに残したまま手札へ戻す
-              cc.faceup=true;Z.hand.push(cc);
+              cc.faceup=true;toHand(Z,cc);
               toast(`⚠ 《${faceNameOf(cc)}》は進化元が${_needBase}枚必要ですが足りません（手札へ）`);
               _abort=true;
             }
@@ -15310,7 +15315,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
             pool2.map(b=>b.card),
             {hint:_hint,sub:x=>{const b2=pool2.find(y=>y.card.id===x.id);return b2&&b2.zoneLabel?b2.zoneLabel:(x.tapped?"タップ":"");}});
           if(jj===null){
-            cc.faceup=true;Z.hand.push(cc);toast(`（重ねずに手札へ戻しました）`);_abort=true;break;
+            cc.faceup=true;toHand(Z,cc);toast(`（重ねずに手札へ戻しました）`);_abort=true;break;
           }
           _picked.push(pool2[jj]);
           pool2=pool2.filter(b=>b.card.id!==pool2[jj].card.id);
@@ -15338,7 +15343,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
           toast(`🃏 ${faceNameOf(cc)} をそのまま出した（非進化）`);
           continue;
         }
-        if(evc===null){cc.faceup=true;Z.hand.push(cc);toast(`（出さずに手札へ戻しました）`);renderAll();continue;}
+        if(evc===null){cc.faceup=true;toHand(Z,cc);toast(`（出さずに手札へ戻しました）`);renderAll();continue;}
         // 進化クリーチャー：下敷きの上に重ねる。
         // 🪦 墓地進化GVのように、盤面以外のゾーンから複数枚を進化元にする形にも対応する。
         const host=base.card;
@@ -15381,7 +15386,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
     if(!battleEntryOk(pi,cc)){
       cc.faceup=true;
       if(zone==="deck"){cc.faceup=false;cc.seen=false;Z.deck.push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないため山札の下へ`);}
-      else{Z.hand.push(cc);toast(`⛔ ${faceNameOf(cc)} は出せないため手札へ`);}
+      else{toHand(Z,cc);toast(`⛔ ${faceNameOf(cc)} は出せないため手札へ`);}
       renderAll();continue;
     }
     Z.battle.push(cc);cc._viaCheat=true;markArrive(cc);
@@ -15877,7 +15882,7 @@ async function runFxList(pi,list,srcCard,inPump){
       {
         const capE=Math.max(0,10-Z.hand.length);
         const dnE=Math.min(wantE,capE,Z.deck.length);
-        for(let i=0;i<dnE;i++){const c2=Z.deck.shift();c2.faceup=true;c2.sideways=false;Z.hand.push(c2);markArrive(c2);}
+        for(let i=0;i<dnE;i++){const c2=Z.deck.shift();c2.faceup=true;c2.sideways=false;toHand(Z,c2);markArrive(c2);}
         if(dnE>0){bumpEv("draws",pi,dnE);sfx("draw");emitEvent(pi,"draw");}
         toast(`🃏 ${filtE||""}エレメント${cntE}個ぶん ${dnE}枚引いた${dnE<wantE?`（手札上限／山札不足で${wantE-dnE}枚は引けず）`:""}`);
       }
@@ -16176,17 +16181,17 @@ async function runFxList(pi,list,srcCard,inPump){
       await new Promise(r=>setTimeout(r,700));
       const drop=()=>{const ri=Z.reveal.findIndex(x=>x.id===top.id);if(ri>=0)Z.reveal.splice(ri,1);};
       if(!okFilt||(!isCre&&!isSpl)){
-        drop();top.faceup=true;Z.hand.push(top);
+        drop();top.faceup=true;toHand(Z,top);
         toast(`🎰 ${okFilt?"クリーチャーでも呪文でもない":"条件に合わない"}ため、《${faceNameOf(top)}》は手札に加えました`);
         renderAll();continue;
       }
       const yes=f.opt?await ask(`🎰 《${faceNameOf(top)}》を${isCre?"バトルゾーンに出し":"コストを支払わずに唱え"}ますか？`):true;
-      if(!yes){drop();top.faceup=true;Z.hand.push(top);toast(`🎰 行わなかったため、《${faceNameOf(top)}》は手札へ`);renderAll();continue;}
+      if(!yes){drop();top.faceup=true;toHand(Z,top);toast(`🎰 行わなかったため、《${faceNameOf(top)}》は手札へ`);renderAll();continue;}
       drop();
       if(isCre){
         top.faceup=true;top.tapped=false;top.sideways=false;top.rot=0;top.buff=null;
         top.sick=!(rt&&rt.sa);
-        if(!battleEntryOk(pi,top)){Z.hand.push(top);toast(`⛔ 出せないため手札に加えました`);renderAll();continue;}
+        if(!battleEntryOk(pi,top)){toHand(Z,top);toast(`⛔ 出せないため手札に加えました`);renderAll();continue;}
         Z.battle.push(top);top._viaCheat=true;markArrive(top);
         sfx("move");renderAll();
         toast(`🎰 ${faceNameOf(top)} をバトルゾーンに出した`);
@@ -16223,7 +16228,7 @@ async function runFxList(pi,list,srcCard,inPump){
       if(hitN){
         for(let k=0;k<hitN;k++){
           if(!Z.deck.length){toast("🎯 山札がありません");break;}
-          const dc=Z.deck.shift();dc.faceup=true;Z.hand.push(dc);
+          const dc=Z.deck.shift();dc.faceup=true;toHand(Z,dc);
         }
         sfx("draw");toast(`🎯 的中！ カードを${hitN}枚引いた`);
       }else toast("🎯 はずれ（ドローなし）");
@@ -16338,7 +16343,7 @@ async function runFxList(pi,list,srcCard,inPump){
       for(const cc of taken){
         const ri=Z.reveal.findIndex(x=>x.id===cc.id);
         if(ri>=0)Z.reveal.splice(ri,1);
-        cc.faceup=true;Z.hand.push(cc);
+        cc.faceup=true;toHand(Z,cc);
       }
       const rest=shown.filter(x=>!taken.some(y=>y.id===x.id));
       shuffle(rest);
@@ -16537,14 +16542,14 @@ async function runFxList(pi,list,srcCard,inPump){
           const ix2=Z[zk].findIndex(x=>x.id===srcCard.id);
           const cc=Z[zk].splice(ix2,1)[0];
           cc.faceup=true;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;
-          Z.hand.push(cc);
+          toHand(Z,cc);
           sfx("move");renderAll();
           toast(`🎲 勝ち！ ${faceNameOf(cc)} を墓地に置くかわりに手札に戻した`);
           logOnly(`🎲 ${faceNameOf(cc)}：ガチンコ・ジャッジに勝ったため手札へ（${ZLOG[zk]||zk}から）`);
         }else{
           // 見つからない時は取りこぼさないよう、同じカードを手札に用意する
           srcCard.faceup=true;srcCard.tapped=false;srcCard.sideways=false;
-          Z.hand.push(srcCard);
+          toHand(Z,srcCard);
           sfx("move");renderAll();
           toast(`🎲 勝ち！ ${faceNameOf(srcCard)} を手札に戻した`);
           logOnly(`🎲 ${faceNameOf(srcCard)}：ガチンコ・ジャッジに勝ったため手札へ`);
@@ -17063,7 +17068,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const s=look[si],hd=look[1-si];
         s.faceup=true;s.tapped=false;s.sideways=false;Z.shield.push(s);
         await notifyShieldPlaced(pi,[s]);  // 🛡「盾が置かれた時」へ通知（ザゼ・ゼーン／チャクラ・デル・フィン型）
-        hd.faceup=true;Z.hand.push(hd);markArrive(hd);
+        hd.faceup=true;toHand(Z,hd);markArrive(hd);
         toast(`🛡 ${faceNameOf(s)} を表向きのシールドに／🖐 ${faceNameOf(hd)} を手札に`);
         sfx("move");renderAll();
       }
@@ -17430,7 +17435,7 @@ async function runFxList(pi,list,srcCard,inPump){
       else{
         const cap=Math.max(0,10-Z.hand.length);
         const dn=Math.min(tn,cap,Z.deck.length);
-        for(let i=0;i<dn;i++){const dc=Z.deck.shift();dc.faceup=true;dc.sideways=false;Z.hand.push(dc);markArrive(dc);}
+        for(let i=0;i<dn;i++){const dc=Z.deck.shift();dc.faceup=true;dc.sideways=false;toHand(Z,dc);markArrive(dc);}
         bumpEv("draws",pi,dn);
         sfx("draw");emitEvent(pi,"draw");
         toast(`🃏 相手のタップ中クリーチャー${tn}体 → ${dn}枚ドロー${dn<tn?`（手札上限10枚のため${tn-dn}枚は引けない）`:""}`);
@@ -17442,7 +17447,7 @@ async function runFxList(pi,list,srcCard,inPump){
       const mx=Math.min(tn,Z.deck.length);
       const q=await askChoice(`相手のタップしているクリーチャーは${tn}体です。何枚引きますか？`,Array.from({length:mx+1},(_,i)=>`${i}枚`));
       if(q===null||q===0)continue;
-      for(let i=0;i<q;i++){const dc=Z.deck.shift();dc.faceup=true;Z.hand.push(dc);markArrive(dc);}
+      for(let i=0;i<q;i++){const dc=Z.deck.shift();dc.faceup=true;toHand(Z,dc);markArrive(dc);}
       bumpEv("draws",pi,q);sfx("draw");emitEvent(pi,"draw");renderAll();toast(`🃏 ${q}枚ドロー`);
     }else if(f.t==="drawPerAlly"){
       // 🃏 自分の他の〔対象〕1体につきn枚引く（空中南極ペングィーナ型）。
@@ -17461,7 +17466,7 @@ async function runFxList(pi,list,srcCard,inPump){
       else{
         const capA=Math.max(0,10-Z.hand.length);
         const dnA=Math.min(wantA,capA,Z.deck.length);
-        for(let i=0;i<dnA;i++){const dc=Z.deck.shift();dc.faceup=true;dc.sideways=false;Z.hand.push(dc);markArrive(dc);}
+        for(let i=0;i<dnA;i++){const dc=Z.deck.shift();dc.faceup=true;dc.sideways=false;toHand(Z,dc);markArrive(dc);}
         if(dnA>0){bumpEv("draws",pi,dnA);sfx("draw");emitEvent(pi,"draw");}
         toast(`🃏 自分の他の${filtA||"クリーチャー"}${cntA}体 → ${dnA}枚ドロー${dnA<wantA?`（手札上限10枚のため${wantA-dnA}枚は引かない・山札に残る）`:""}`);
         renderAll();
@@ -17491,7 +17496,7 @@ async function runFxList(pi,list,srcCard,inPump){
           const sel=show[j];
           const di=Z.deck.findIndex(x=>x.id===sel.id);
           if(di>=0)Z.deck.splice(di,1);
-          sel.faceup=true;Z.hand.push(sel);markArrive(sel);
+          sel.faceup=true;toHand(Z,sel);markArrive(sel);
           toast(`👐 公開して手札へ：${faceNameOf(sel)}`);
         }else{
           toast("（手札に加えませんでした）");
@@ -18673,7 +18678,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const c=TZ.battle.splice(j,1)[0];
         c.tapped=false;c.faceup=true;c.rot=0;
         leaveBattleCleanup(TZ,c,"hand"); // ⚙ クロスギアは場に残す（クリーチャーと一緒に離れない）
-        TZ.hand.push(c);markArrive(c);
+        toHand(TZ,c);markArrive(c);
         toast(`バウンス：${faceNameOf(c)} を${S.players[tp].label}の手札へ`);
       }
       sfx("move");
@@ -18814,14 +18819,14 @@ async function runFxList(pi,list,srcCard,inPump){
           if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>gearOut(TZ,gg));}
           removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;
           if(isMana){TZ.mana.push(removed);toast(`💎 ${faceNameOf(removed)} をマナゾーンへ`);}
-          else{removed.mark=false;TZ.hand.push(removed);toast(`↩ ${faceNameOf(removed)} を手札に戻した`);}
+          else{removed.mark=false;toHand(TZ,removed);toast(`↩ ${faceNameOf(removed)} を手札に戻した`);}
           /* 🌌 v16.73 無月フィールド型の下は進化元ではないので、本体の行き先に関係なく墓地へ。 */
           const _uToGrave=underToGraveOnLeave(getReg(removed));
           _um.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];
             if(_uToGrave)TZ.grave.push(u);
             else if(isMana)TZ.mana.push(u);
             else if(typeof toHand==="function")toHand(TZ,u);
-            else TZ.hand.push(u);});
+            else toHand(TZ,u);});
           if(_uToGrave&&_um.length)toast(`🌌 ${faceNameOf(removed)} の下のカード${_um.length}枚を墓地へ置いた`);
         }
         renderAll();
@@ -18861,7 +18866,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const _um2=(removed.under&&removed.under.length)?removed.under.splice(0):[];
         if(removed.gear&&removed.gear.length){removed.gear.splice(0).forEach(gg=>gearOut(TZ,gg));}
         removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.faceup=true;removed.mark=false;
-        TZ.hand.push(removed);
+        toHand(TZ,removed);
         _um2.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];if(typeof toHand==="function")toHand(TZ,u);else TZ.hand.push(u);});
         toast(`↩ ${faceNameOf(removed)} を${S.players[owp].label}の手札に戻した${_um2.length?`（重ねていた${_um2.length}枚も一緒に）`:""}`);
         renderAll();
@@ -18903,11 +18908,11 @@ async function runFxList(pi,list,srcCard,inPump){
         const removed=OZ[zn].splice(idx,1)[0];
         const _ur=(removed.under&&removed.under.length)?removed.under.splice(0):[];
         removed.faceup=true;removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.mark=false;removed.seen=false;
-        OZ.hand.push(removed);
+        toHand(OZ,removed);
         // 下のカード：シールドから回収→城などは墓地へ（シールド離脱の既存規則）／その他ゾーン→一緒に手札へ（バウンス系と同じ規則）
         if(_ur.length){
           if(zn==="shield"){_ur.forEach(u=>{u.faceup=true;u.tapped=false;OZ.grave.push(u);});}
-          else{_ur.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];OZ.hand.push(u);});}
+          else{_ur.forEach(u=>{u.faceup=true;u.tapped=false;u.sideways=false;u.rot=0;u.buff=null;u.seals=[];u.mark=false;u.neoEvo=false;u.under=u.under||[];u.gear=u.gear||[];toHand(OZ,u);});}
         }
         did++;
         toast(`↩ ${faceNameOf(removed)} を${S.players[owp].label}の手札に戻した（${ZLOG[zn]||zn}${_ur.length?`／下のカード${_ur.length}枚は${zn==="shield"?"墓地へ":"一緒に手札へ"}`:""}）`);
@@ -18936,7 +18941,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(idx<0)continue;
         const removed=Z[sel.zn].splice(idx,1)[0];
         removed.faceup=true;removed.tapped=false;removed.sideways=false;removed.rot=0;removed.buff=null;removed.seals=[];removed.mark=false;removed.seen=false;
-        Z.hand.push(removed);
+        toHand(Z,removed);
         did++;
         toast(`↩ ${faceNameOf(removed)} を手札に戻した（${sel.zn==="mana"?"マナ":"墓地"}から）`);
         renderAll();
@@ -18962,7 +18967,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(mi<0)continue;
         const mc=Z.mana.splice(mi,1)[0];
         mc.faceup=true;mc.tapped=false;mc.sideways=false;mc.rot=0;mc.buff=null;mc.seals=[];mc.mark=false;mc.seen=false;
-        Z.hand.push(mc);
+        toHand(Z,mc);
         moved++;
       }
       // 戻した数だけ山札の上からマナゾーンへ
@@ -19129,7 +19134,7 @@ async function runFxList(pi,list,srcCard,inPump){
         if(cc.seals&&cc.seals.length)cc.seals.splice(0).forEach(x=>{x.faceup=true;Z.grave.push(x);});
         if(cc.under&&cc.under.length)cc.under.splice(0).forEach(u=>{u.faceup=true;u.tapped=false;Z.grave.push(u);});
         cc.faceup=true;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;cc.mark=false;cc.seals=[];cc.isCross=false;cc.neoEvo=false;
-        Z.hand.push(cc);
+        toHand(Z,cc);
         ret++;
       }
       if(ret){sfx("move");toast(`↩ ${filt?filt+"を":"自分のクリーチャーを"}${ret}体 手札に戻した`);}
@@ -20367,7 +20372,7 @@ async function runFxList(pi,list,srcCard,inPump){
         renderAll();await new Promise(r=>setTimeout(r,500));
         const take=rev.filter(x=>{const rx=getReg(x);return !filt||lockFilterOk(filt,rx,x);});
         const rest=rev.filter(x=>!take.includes(x));
-        for(const tc of take){tc.faceup=true;tc.tapped=false;Z.hand.push(tc);}
+        for(const tc of take){tc.faceup=true;tc.tapped=false;toHand(Z,tc);}
         // 🔀 v10.44：TCGモードは並び順を選択可（デュエプレはランダム固定・ログも内部で記録）
         {const ordered=await orderForDeckBottom(rest.slice(),"残り",pi);
          ordered.forEach(tc=>{tc.faceup=false;tc.seen=true;Z.deck.push(tc);}); // 🔍 見たカードは「確認済み」を残す（山札の公開情報に順番付きで出す・v14.63）
@@ -20387,7 +20392,7 @@ async function runFxList(pi,list,srcCard,inPump){
         renderAll();await new Promise(r=>setTimeout(r,500));
         const take=rev.filter(x=>{const rx=getReg(x);return !filt||lockFilterOk(filt,rx,x);});
         const rest=rev.filter(x=>!take.includes(x));
-        for(const tc of take){tc.faceup=true;tc.tapped=false;Z.hand.push(tc);}
+        for(const tc of take){tc.faceup=true;tc.tapped=false;toHand(Z,tc);}
         for(const tc of rest){tc.faceup=true;tc.tapped=false;Z.grave.push(tc);}
         sfx("draw");renderAll();
         toast(`👀 ${take.length?`${take.map(faceNameOf).join("、")} を手札へ・`:""}残り${rest.length}枚を墓地へ`);
@@ -20791,7 +20796,7 @@ async function runFxList(pi,list,srcCard,inPump){
       snap();const rev=[];for(let i=0;i<3&&Z.deck.length;i++){const x=Z.deck.shift();x.faceup=true;rev.push(x);}
       toast(`🃏 Mデッキ進化で公開：${rev.map(faceNameOf).join("、")}`);logOnly(`🃏 ${S.players[pi].label}：Mデッキ進化で ${cnList(rev)} を公開`);
       const pool=rev.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
-      if(!pool.length){for(const x of rev){x.tapped=false;Z.grave.push(x);}const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const me=Z.battle.splice(bi,1)[0];leaveBattleCleanup(Z,me,"hand");me.faceup=true;me.tapped=false;Z.hand.push(me);}toast("🃏 クリーチャーがないためMデッキ進化失敗：公開分を墓地、本体を手札へ");renderAll();continue;}
+      if(!pool.length){for(const x of rev){x.tapped=false;Z.grave.push(x);}const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const me=Z.battle.splice(bi,1)[0];leaveBattleCleanup(Z,me,"hand");me.faceup=true;me.tapped=false;toHand(Z,me);}toast("🃏 クリーチャーがないためMデッキ進化失敗：公開分を墓地、本体を手札へ");renderAll();continue;}
       const j=pool.length===1?0:await pickCard("🃏 Mデッキ進化の進化元を1枚選択",pool);
       const base=pool[j===null?0:j];for(const x of rev)if(x.id!==base.id){x.tapped=false;Z.grave.push(x);}
       host.under=host.under||[];host.under.push(base);host.sick=false;host.neoEvo=true;sfx("evo");renderAll();toast(`🃏 Mデッキ進化：《${faceNameOf(base)}》の上に重ねた`);
@@ -21091,7 +21096,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const _y=await ask(`🃏 破壊した${_kn}体ぶん、カードを${_kn}枚引きますか？`);
         if(_y){
           let _dn=0;
-          for(let i=0;i<_kn&&Z.deck.length;i++){const c2=Z.deck.shift();c2.faceup=true;Z.hand.push(c2);_dn++;}
+          for(let i=0;i<_kn&&Z.deck.length;i++){const c2=Z.deck.shift();c2.faceup=true;toHand(Z,c2);_dn++;}
           toast(`🃏 ${_dn}枚引いた`);
           logOnly(`🃏 ${S.players[pi].label}：破壊した${_kn}体ぶん ${_dn}枚ドロー`);
         }
@@ -22090,7 +22095,7 @@ async function runFxList(pi,list,srcCard,inPump){
         // めくったカードは山札の上に戻す（裏向き）
         top.faceup=false;Z.deck.unshift(top);
         if(j===0){const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const cc=Z.battle.splice(bi,1)[0];cc.faceup=true;leaveBattleCleanup(Z,cc,"grave");Z.grave.push(cc);}toast(`🂠 ${faceNameOf(host)} は墓地へ（進化失敗）`);}
-        else if(j===1){const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const cc=Z.battle.splice(bi,1)[0];cc.faceup=true;leaveBattleCleanup(Z,cc,"hand");Z.hand.push(cc);}toast(`🂠 ${faceNameOf(host)} は手札へ（進化失敗）`);}
+        else if(j===1){const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi>=0){const cc=Z.battle.splice(bi,1)[0];cc.faceup=true;leaveBattleCleanup(Z,cc,"hand");toHand(Z,cc);}toast(`🂠 ${faceNameOf(host)} は手札へ（進化失敗）`);}
         else toast(`🂠 ${faceNameOf(host)} は非進化として場に残った（召喚酔いあり）`);
         renderAll();
       }
@@ -22470,7 +22475,7 @@ async function runFxList(pi,list,srcCard,inPump){
         const ZS=zonesOf(side);
         const oldHand=ZS.hand.splice(0);
         const oldMana=ZS.mana.splice(0);
-        for(const x of oldMana){x.tapped=false;x.sideways=false;x.faceup=true;x.buff=null;ZS.hand.push(x);}
+        for(const x of oldMana){x.tapped=false;x.sideways=false;x.faceup=true;x.buff=null;toHand(ZS,x);}
         for(const x of oldHand){x.tapped=true;x.sideways=false;x.faceup=true;x.buff=null;ZS.mana.push(x);}
         toast(`🌀 ${S.players[side].label}：手札${oldHand.length}枚とマナ${oldMana.length}枚を入れ替え（マナはすべてタップ）`);
         logOnly(`🌀 魔天降臨：${S.players[side].label} は手札${oldHand.length}枚とマナ${oldMana.length}枚を交換し、マナをすべてタップ`);
@@ -38260,7 +38265,8 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         MOVE_BLOCKED=true;
         renderAll();
       };
-      if(S.expert&&rCX2&&rCX2.cstFx==="noLeave"&&rCX2.cstCond&&!isIgnored(c,pFrom)&&zoneCondOk(rCX2.cstCond,pFrom,c)){
+      const _pwNL=(typeof powNow==="function")?powNow(c):null;   // ⚓ v16.140 パワー0なら離れる
+      if(S.expert&&rCX2&&rCX2.cstFx==="noLeave"&&rCX2.cstCond&&!isIgnored(c,pFrom)&&(_pwNL==null||_pwNL>0)&&zoneCondOk(rCX2.cstCond,pFrom,c)){
         _putBack();
         toast(`⚓ ${faceNameOf(c)} は離れない！（${rCX2.cstCond}）`);
         return;
