@@ -3128,6 +3128,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxStNoHandes"> 常在：自分の手札は相手のカードの効果によって捨てられない</label>
         <label title="相手のカードの効果で、自分のシールドを墓地・マナ・山札などに置くことを止めます（ブレイクで手札に加えるのは止めません・緑知銀 ジェンバン型）"><input type="checkbox" id="fxShieldHandOnly"> 🛡 常在：相手の効果によって、自分のシールドは手札以外のゾーンに置かれない</label>
         <label title="このカードが自分のシールドゾーンに表向きである間も、常在のコスト軽減と誘発が働きます（超煌ノ裁キ ダイヤモン将型）"><input type="checkbox" id="fxFaceUpShieldActive"> 🛡👁 シールドゾーンに表向きの間も、常在のコスト軽減・誘発が働く</label>
+        <label title="このクリーチャーを自分のマナゾーンから召喚してもよい（メッサー・シュミット型）。マナの札をバトルゾーンへドラッグすると、コストを払うか聞きます"><input type="checkbox" id="fxManaSummon"> 🌱 マナゾーンから召喚してもよい</label>
+        <label title="相手が呪文を唱える時、その呪文以上のコストを持つ〔ここに書いた条件〕のカード1枚を手札から捨てて、その呪文を墓地に置いてもよい（オラマッハ・ザ・ジョニー型・空欄＝なし）">🃏 相手の呪文を止める：手札から捨てるカードの条件<input type="text" id="fxSpellCounter" placeholder="例：ジョーカーズ" style="width:150px"></label>
         <label title="どちらのクリーチャーが攻撃する時でも使える（煌世主 サッヴァーク∞型）。オフなら相手の攻撃時だけ"><input type="checkbox" id="fxFlipCastBoth"> ⚖ 上の「表向きのシールドを裏向きにして手札から」を、自分の攻撃時にも使える</label>
         <label title="相手のクリーチャーが攻撃する時、自分のシールドの表向きのカードをこの枚数だけ裏向きにして、手札からコストを支払わずに唱えてもよい（天地ヲ別ツ龍断ノ裁キ型・0＝なし）">⚖ 相手の攻撃時、表向きのシールドを<input type="number" id="fxFoeAtkFlipCast" min="0" max="9" value="0" style="width:52px">枚裏向きにして手札から唱えてよい</label>
         <label><input type="checkbox" id="fxLibWin"> 常在：自分の山札が0枚になったら、負けるかわりに勝利する（シャコガイル型）</label>
@@ -5411,6 +5413,47 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
     }
   }catch(e){console.warn("offerSabakiZAdded",e);}
 }
+/* 🃏 v16.144 オラマッハ・ザ・ジョニー型：相手が呪文を唱える時、かわりに手札から
+   「その呪文以上のコストを持つ〔条件欄の種族〕」1枚を捨てて、その呪文を墓地に置く（唱えたことにならない）。 */
+async function offerSpellCounter(spPi,sp){
+  try{
+    if(!S.expert||!S.vs||!sp)return false;
+    const dp=(spPi===0?1:0);
+    const DZ=zonesOf(dp);
+    const src=DZ.battle.find(x=>{const r=getReg(x);return r&&r.spellCounter&&!isSealed(x)&&!isIgnored(x,dp);});
+    if(!src)return false;
+    const rS=getReg(src);
+    const need=String(rS.spellCounter||"").trim();
+    const rSp=getReg(sp);
+    const spCost=(rSp&&rSp.cost!=null&&!isNaN(+rSp.cost))?+rSp.cost:0;
+    const cands=DZ.hand.filter(h=>{
+      const rh=getReg(h);
+      if(!rh)return false;
+      if(need&&!lockFilterOk(need,rh,h))return false;
+      const hc=(rh.cost!=null&&!isNaN(+rh.cost))?+rh.cost:-1;
+      return hc>=spCost;
+    });
+    if(!cands.length)return false;
+    const yes=await ask(`🃏 ${faceNameOf(src)}\n相手が《${faceNameOf(sp)}》（コスト${spCost}）を唱えます。\n手札から${need?`${need}の`:""}コスト${spCost}以上のカード1枚を捨てて、この呪文を墓地に置きますか？\n（こうして墓地に置かれた呪文は唱えたことになりません）`,[{card:src,cap:"🃏 止めるカード"},{card:sp,cap:"相手の呪文"}]);
+    if(!yes)return false;
+    const j=(cands.length===1)?0:await pickCard(`🗑 捨てるカードを選択（コスト${spCost}以上${need?`・${need}`:""}）`,cands,{hint:"タップで選択"});
+    if(j===null)return false;
+    snap();
+    const dc=cands[j];
+    const di=DZ.hand.findIndex(x=>x.id===dc.id);
+    if(di<0)return false;
+    const gone=DZ.hand.splice(di,1)[0];gone.faceup=true;DZ.grave.push(gone);
+    afterHandDiscard(dp,gone,dp);
+    const SZ=zonesOf(spPi);
+    const ri=SZ.resolve.findIndex(x=>x.id===sp.id);
+    if(ri>=0)SZ.resolve.splice(ri,1);
+    sp.faceup=true;sp.tapped=false;SZ.grave.push(sp);
+    toast(`🃏 ${faceNameOf(src)}：${faceNameOf(gone)} を捨てて《${faceNameOf(sp)}》を墓地に置いた（唱えたことにならない）`);
+    logOnly(`🃏 ${S.players[dp].label}：${faceNameOf(src)} により《${faceNameOf(sp)}》を打ち消した（${faceNameOf(gone)} を捨てた）`);
+    renderAll();
+    return true;
+  }catch(e){console.warn("offerSpellCounter",e);return false;}
+}
 function enterFaceAuto(lk){
   if(!lk||lk.length<2)return null;
   const idx=lk.map((k,i)=>{const fr=FXDB.get(k);return fr&&isCreatureReg(fr)?i:-1;}).filter(i=>i>=0);
@@ -6010,7 +6053,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.142";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.144";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13279,6 +13322,10 @@ const FX_TYPES=[
   ["handToMana","🌱 自分の手札からn枚をマナゾーンに置く（任意・キャンセルで置かない／条件欄で対象を絞れる）"],
   ["foeTopPowerToHyper","🌌 相手は自身のパワーが一番大きいクリーチャーをすべて、自身の超次元ゾーンに置く（同じパワーが複数なら全部・条件欄で対象を絞れる・轟く跳躍 テレポートゾーン型）"],
   ["foeRandCreManaHandToDeck","🎲 相手のクリーチャー・相手のマナ・相手の手札からそれぞれランダムにn枚ずつ、相手の山札の一番下に置く（燃えるデット・ソード型）"],
+  ["grantPowNoAtkPNext","💪🚫 クリーチャーをn体まで選び、次の自分のターン開始時までパワーを+〔条件欄の数・既定3000〕し、相手プレイヤーを攻撃できなくする（The スタミナ漢型・自分/相手どちらのクリーチャーでも選べる）"],
+  ["manaEachBoth","🌱 各プレイヤーは、自身のクリーチャーをそれぞれn体ずつ選んでマナゾーンに置く（ガイアの目覚め型）"],
+  ["chargeDrawIfHit","🌱 自分の山札の上から1枚目をマナゾーンに置く。それが条件欄に合えばカードを1枚引く（オラオラ・ジョーカーズ型／条件欄＝例：ジョーカーズ）"],
+  ["manaToHandPowUp","🔷 自分のマナから1枚を手札に戻してもよい。そうした場合、このターン、このクリーチャーのパワーを+〔条件欄の数・既定5000〕する（オラマッハ・ザ・ジョニー型）"],
   ["breakPlusPerAllyNoSpell","💥🚫 自分のクリーチャーを数え、自分のクリーチャー1体を選ぶ。このターン、そのクリーチャーはその数だけシールドを多くブレイクし、相手は呪文を唱えられない（ジョジョジョ・マキシマム型）"],
   ["foeTopCostPickToDeck","🎰 相手の山札の上からn枚を表向きにし、自分はその中のコストを1つ選ぶ。選んだコストの相手クリーチャーすべてと表向きのn枚を、ランダムな順番で相手の山札の一番下に置く（7777777型）"],
   ["sealThis","🔏 このクリーチャー自身に封印をn個付ける（燃える禁断 ドルマゲドンW型／自分の山札の上から裏向きで置く）"],
@@ -18093,6 +18140,76 @@ async function runFxList(pi,list,srcCard,inPump){
         toast(`🎲 ${doneR.join(" / ")} をランダムに相手の山札の一番下へ`);
         logOnly(`🎲 ${S.players[op].label}：${doneR.join(" / ")} が山札の一番下へ（ランダム）`);
         try{logDeckBottomOrder(op,sentR,"ランダム除去","（クリーチャー/マナ/手札）");}catch(e){}
+      }
+      renderAll();
+    }else if(f.t==="grantPowNoAtkPNext"){
+      /* 💪🚫 v16.143 The スタミナ漢型：選んだクリーチャーに、次の自分のターン開始時までパワー+n と「相手プレイヤーを攻撃できない」 */
+      const _amt=(()=>{const m=String(f.cond||"").match(/(\d+)/);return m?+m[1]:3000;})();
+      const pool=[...Z.battle,...(S.vs?OZ.battle:[])].filter(x=>isCreatureReg(getReg(x))&&(!srcCard||x.id!==srcCard.id));
+      if(!pool.length){toast("対象のクリーチャーがいません");continue;}
+      let got=0;
+      for(let i=0;i<n;i++){
+        const left=pool.filter(x=>!x._spmDone);
+        if(!left.length)break;
+        const j=await pickCard(`💪 パワー+${_amt}と「相手プレイヤーを攻撃できない」を与えるクリーチャーを選択（${i+1}/${n}・キャンセルで終了）`,left,{hint:"自分・相手どちらでも選べます"});
+        if(j===null)break;
+        const t=left[j];t._spmDone=true;
+        if(i===0)snap();
+        t.buff=t.buff||{};
+        t.buff.pa=(t.buff.pa||0)+_amt;
+        t.buff.cantAtkP=true;
+        markBuffNext(t,["pa","cantAtkP"],pi);   // 次の自分のターン開始時まで
+        got++;
+        toast(`💪 ${faceNameOf(t)}：パワー+${_amt}／相手プレイヤーを攻撃できない（次の自分のターン開始時まで）`);
+      }
+      pool.forEach(x=>{delete x._spmDone;});
+      if(got){logOnly(`💪 ${S.players[pi].label}：${got}体にパワー+${_amt}とプレイヤー攻撃不可（次の自分のターン開始時まで）`);renderAll();}
+    }else if(f.t==="manaEachBoth"){
+      /* 🌱 v16.143 ガイアの目覚め型：各プレイヤーが自分のクリーチャーをn体ずつ選んでマナへ */
+      snap();
+      for(const pp of (S.vs?[pi,op]:[pi])){
+        const ZP=zonesOf(pp);
+        for(let i=0;i<n;i++){
+          const pool=ZP.battle.filter(x=>isCreatureReg(getReg(x)));
+          if(!pool.length){if(i===0)toast(`${S.players[pp].label}：マナに置くクリーチャーがいません`);break;}
+          const j=(pool.length===1)?0:await pickCard(`🌱 ${S.players[pp].label}：マナゾーンに置くクリーチャーを選択（${i+1}/${n}）`,pool,{});
+          if(j===null)break;
+          const t=pool[j];
+          const bi=ZP.battle.findIndex(x=>x.id===t.id);if(bi<0)continue;
+          await moveCard(pp,"battle",t.id,pp,"mana");
+          renderAll();
+        }
+      }
+      await waitFxIdle(inPump);
+    }else if(f.t==="chargeDrawIfHit"){
+      /* 🌱 v16.143 オラオラ・ジョーカーズ型：山札の上から1枚をマナへ。条件に合えば1枚引く */
+      if(!Z.deck.length){toast("山札がありません");continue;}
+      snap();
+      const tc=Z.deck.shift();
+      tc.faceup=true;tc.tapped=false;manaTapIn(tc,pi);Z.mana.push(tc);
+      bumpEv("manaAccel",pi,1);
+      const filt=String(f.cond||"").trim();
+      const rt=getReg(tc);
+      const hit=!!(rt&&(!filt||lockFilterOk(filt,rt,tc)));
+      toast(`🌱 ${faceNameOf(tc)} をマナゾーンへ${hit?`（${filt||"条件"}に合うので1枚引く）`:""}`);
+      logOnly(`🌱 ${S.players[pi].label}：山札の上《${faceNameOf(tc)}》をマナゾーンへ（${hit?"条件に合う":"条件外"}）`);
+      if(hit)draw(pi,1);
+      renderAll();
+    }else if(f.t==="manaToHandPowUp"){
+      /* 🔷 v16.143 オラマッハ・ザ・ジョニー型：マナから1枚手札に戻してもよい。戻したらこのターン、このクリーチャーのパワー+n */
+      const _amt2=(()=>{const m=String(f.cond||"").match(/(\d+)/);return m?+m[1]:5000;})();
+      if(!Z.mana.length){toast("マナゾーンにカードがありません");continue;}
+      const j=await pickCard(`🔷 手札に戻すマナのカードを選択（戻すと このターン ${faceNameOf(srcCard||{})} のパワー+${_amt2}／キャンセルで戻さない）`,Z.mana,{});
+      if(j===null){toast("🔷 マナは戻さなかった");continue;}
+      snap();
+      const mi=j;const mc=Z.mana.splice(mi,1)[0];
+      mc.faceup=true;mc.tapped=false;toHand(Z,mc);
+      toast(`🔷 ${faceNameOf(mc)} をマナから手札へ`);
+      if(srcCard&&Z.battle.some(x=>x.id===srcCard.id)){
+        srcCard.buff=srcCard.buff||{};
+        srcCard.buff.pa=(srcCard.buff.pa||0)+_amt2;
+        markBuffTurn(srcCard,["pa"]);
+        toast(`💪 ${faceNameOf(srcCard)}：このターン パワー+${_amt2}`);
       }
       renderAll();
     }else if(f.t==="breakPlusPerAllyNoSpell"){
@@ -25148,6 +25265,12 @@ async function pumpFx(){
     {const _skipAlly=!S.allyEnterFirst;
      const _cipIsTurnP=(S.gameMode!=="tcg")&&(S.who===pi);
      if(_tcgPick!=="cip"&&!_cipIsTurnP&&TRIG_PENDING.length&&TRIG_PENDING.some(t=>S.who===t.pi&&!(_skipAlly&&(t.ev==="allyEnter"||t.ev==="allyEvo"))))await drainTrig(true,_skipAlly);}
+    /* 🃏 v16.144 解決中の呪文は、処理に入る前に「打ち消し」の確認を出す（オラマッハ・ザ・ジョニー型） */
+    if(zonesOf(pi).resolve.some(x=>x.id===c.id)){
+      const _rSp=getReg(c);
+      const _isSp=!!(_rSp&&(_rSp.ctype==="spell"||((_rSp.twin||_rSp.ctype==="twinpact")&&(c.face|0)===1)));
+      if(_isSp&&await offerSpellCounter(pi,c)){renderAll();continue;}
+    }
     HILITE_ID=c.id;renderAll(); // 🔶 処理中のカードを黄色ハイライト
     // ⚡ どのカードの効果を処理中か常時表示（同時に複数体出た時に取り違えないように・残り待機数も出す）
     {const _bi=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
@@ -26067,6 +26190,9 @@ function auraCrossOk(rb,b){
 }
 async function effPower(c,attacking,inBattle){
   const r=getReg(c);
+  /* ⚔ v16.143 「バトル中、このクリーチャーのパワーを+n」（メッサー・シュミット型）。
+     バトルの計算の時だけ足す（選ばれる時や除去の判定では足さない）。 */
+  const _bpAdd=(inBattle&&r&&+r.battlePow>0&&!isSealed(c))?(+r.battlePow||0):0;
   let p;
   if(r&&r.power!==""&&r.power!=null&&!isNaN(+r.power))p=+r.power;
   else{
@@ -26173,7 +26299,7 @@ async function effPower(c,attacking,inBattle){
     if(condOk)p+=(+r.cstPow||0);
   }
   {const own2=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle.includes(c));if(own2!=null)p+=gearPowSum(c,own2);} // ⚙ クロスギアのパワー付与
-  return p;
+  return ((v=>v===Infinity?v:v+_bpAdd))(p);
 }
 /* 🛡 真・エスケープ：破壊に限らずバトルゾーンを離れる時に発動できる。
    盾があれば最大2枚を手札に加えて「場に残る」（＝離場をキャンセル）／盾が無ければ本体を手札へ戻す（盾なしでも手札へ戻る）。
@@ -27793,6 +27919,14 @@ function pickShieldIdxsAny(op){
 function breakBonusOf(c){
   if(!c)return 0;
   let b=0;
+  /* 💥 v16.143 「すべてのクリーチャーは、シールドをさらに1つブレイクする」（暴命天 バラギアラ型）。
+     どちらのプレイヤーのクリーチャーにも乗る。 */
+  try{
+    for(const pp of [0,1])for(const x of zonesOf(pp).battle){
+      const rx=getReg(x);
+      if(rx&&+rx.breakPlusAll>0&&!isSealed(x)&&!isIgnored(x,pp))b+=(+rx.breakPlusAll)||0;
+    }
+  }catch(e){}
   if(c.buff&&c.buff.breakPlus)b+=(+c.buff.breakPlus)||0;
   const r=getReg(c);
   if(c.sfActive&&r&&r.sforceFx==="break"&&r.sforceN)b+=(+r.sforceN)||0;
@@ -32603,6 +32737,8 @@ function renderFxEditor(){
   $("fxStNoHandes").checked=!!FXEDIT.stNoHandes;
   {const e=$("fxShieldHandOnly");if(e)e.checked=!!FXEDIT.shieldHandOnly;}
   {const e=$("fxFaceUpShieldActive");if(e)e.checked=!!FXEDIT.faceUpShieldActive;}
+  {const e=$("fxSpellCounter");if(e)e.value=FXEDIT.spellCounter||"";}
+  {const e=$("fxManaSummon");if(e)e.checked=!!FXEDIT.manaSummon;}
   {const e=$("fxFoeAtkFlipCast");if(e)e.value=+FXEDIT.foeAtkFlipCast||0;}
   {const e=$("fxFlipCastBoth");if(e)e.checked=!!FXEDIT.flipCastBoth;}
   $("fxLibWin").checked=!!FXEDIT.libWin;
@@ -34966,6 +35102,8 @@ function openFxEditor(key){
     stNoHandes:cur?!!cur.stNoHandes:false,
     shieldHandOnly:cur?!!cur.shieldHandOnly:false,
     faceUpShieldActive:cur?!!cur.faceUpShieldActive:false,
+    spellCounter:cur?(cur.spellCounter||""):"",
+    manaSummon:cur?!!cur.manaSummon:false,
     foeAtkFlipCast:cur?(+cur.foeAtkFlipCast||0):0,
     flipCastBoth:cur?!!cur.flipCastBoth:false,
     libWin:cur?!!cur.libWin:false,
@@ -35616,6 +35754,8 @@ $("fxSave").addEventListener("click",async ()=>{
     stNoHandes:$("fxStNoHandes").checked,
     shieldHandOnly:$("fxShieldHandOnly")?$("fxShieldHandOnly").checked:false,
     faceUpShieldActive:$("fxFaceUpShieldActive")?$("fxFaceUpShieldActive").checked:false,
+    spellCounter:$("fxSpellCounter")?$("fxSpellCounter").value.trim():"",
+    manaSummon:$("fxManaSummon")?$("fxManaSummon").checked:false,
     foeAtkFlipCast:$("fxFoeAtkFlipCast")?(+$("fxFoeAtkFlipCast").value||0):0,
     flipCastBoth:$("fxFlipCastBoth")?$("fxFlipCastBoth").checked:false,
     libWin:$("fxLibWin").checked,
@@ -38562,6 +38702,17 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
     if(rGS&&isCreatureReg(rGS)&&rGS.cost!=null){
       MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(async()=>{
         const y=await ask(`💰 ${faceNameOf(c)} を墓地から「召喚」しますか？\nはい＝コストを支払う（シンパシー等の軽減適用・マナ自動タップ）\nいいえ＝支払わずに出す（蘇生・踏み倒し）`);
+        if(y)await autoTapCost(pTo,c);
+      }).catch(()=>{});
+    }
+  }
+  /* 🌱 v16.144 マナゾーンからの「召喚」（メッサー・シュミット型）。
+     登録に「マナから召喚できる」が付いたカードをマナからバトルゾーンへ出した時、コストを払うか聞く。 */
+  if(S.expert&&S.autoTap&&!S.freePlay&&fromZone==="mana"&&toZone==="battle"){
+    const rMS=getReg(c);
+    if(rMS&&rMS.manaSummon&&isCreatureReg(rMS)&&rMS.cost!=null){
+      MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(async()=>{
+        const y=await ask(`🌱 ${faceNameOf(c)} をマナゾーンから「召喚」しますか？\nはい＝コストを支払う（軽減も適用・マナ自動タップ）\nいいえ＝支払わずに出す（踏み倒し）`,c);
         if(y)await autoTapCost(pTo,c);
       }).catch(()=>{});
     }
