@@ -5943,7 +5943,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.127";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.128";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -10125,8 +10125,10 @@ function nextTurn(){
     if(Z.resolve.length){
       const olds=Z.resolve.splice(0);
       const chg=[],grv=[];
-      olds.forEach(o=>{(resolveOut(Z,o)?chg:grv).push(`《${faceNameOf(o)}》`);});
+      const mon=[];   // 🏵 v16.128 裁きの紋章で盾の上へ置いたものは分けて知らせる
+      olds.forEach(o=>{const t=resolveOut(Z,o);((o._monshoDone||o._monshoAsking)?mon:(t?chg:grv)).push(`《${faceNameOf(o)}》`);});
       if(grv.length)toast(`🪦 解決中のカードを墓地へ：${grv.join("")}`);
+      if(mon.length)toast(`🏵 裁きの紋章：${mon.join("")} はシールドの上へ`);
       if(chg.length)toast(`⚡チャージャー：${chg.join("")} はマナゾーンへ`);
       sfx("grave");
     }
@@ -26989,7 +26991,14 @@ async function scheduleAutoResolve(pi,c){
       const toMana=resolveOut(Z,c);       // 墓地へ（チャージャーはマナ）＋虚無月誘発はresolveOut内
       const toGrandZero=!!c._resolvedToGrandZero;delete c._resolvedToGrandZero;
       sfx("grave");
-      toast(toBottom?`${faceNameOf(c)} の解決が終了（山札の下へ）`:toGrandZero?`🌌 ${faceNameOf(c)} は《卍 新世壊 卍》の下へ`:toMana?`⚡チャージャー：${faceNameOf(c)} はマナゾーンへ`:`${faceNameOf(c)} の解決が終了（墓地へ）`);
+      /* 🏵 v16.128 resolveOut は「墓地以外へ行った」だけを返すので、裁きの紋章で盾の上に置いた時まで
+         「チャージャー：マナゾーンへ」と出ていた。置き先で文言を分ける。 */
+      const _monshoNow=!!(c._monshoDone||c._monshoAsking);
+      toast(toBottom?`${faceNameOf(c)} の解決が終了（山札の下へ）`
+        :toGrandZero?`🌌 ${faceNameOf(c)} は《卍 新世壊 卍》の下へ`
+        :_monshoNow?`🏵 裁きの紋章：${faceNameOf(c)} はシールドの上へ`
+        :toMana?`⚡チャージャー：${faceNameOf(c)} はマナゾーンへ`
+        :`${faceNameOf(c)} の解決が終了（墓地へ）`);
       renderAll();
       return;
     }
@@ -38061,9 +38070,11 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       if(Z.resolve.length){
         const olds=Z.resolve.splice(0);
         const chg=[],grv=[];
-        olds.forEach(o=>{(resolveOut(Z,o)?chg:grv).push(faceNameOf(o));});
+        const mon2=[];   // 🏵 v16.128
+        olds.forEach(o=>{const t=resolveOut(Z,o);((o._monshoDone||o._monshoAsking)?mon2:(t?chg:grv)).push(faceNameOf(o));});
         sfx("grave");
         if(grv.length)toast(`解決済みの ${grv.join("、")} を墓地へ`);
+        if(mon2.length)toast(`🏵 裁きの紋章：${mon2.join("、")} はシールドの上へ`);
         if(chg.length)toast(`⚡チャージャー：${chg.join("、")} はマナゾーンへ`);
       }
       Z.resolve.push(c);
