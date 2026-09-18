@@ -5213,6 +5213,7 @@ async function offerFoeAtkFlipCast(dp,who){
 }
 /* 🛡 v16.109 裁きの紋章で置いたカードを、別のシールドの上へ置き直す（EXモードの選択） */
 /* 🏵 v16.113 解決中ゾーンにある裁きの紋章を、選んだシールドの上へ置く */
+let MONSHO_BUSY=Promise.resolve();   // 🏵 v16.130 裁きの紋章の置き場所を聞いている間の待ち合わせ
 async function monshoPlaceAsk(pi,o){
   try{
     const Z=zonesOf(pi);
@@ -5224,6 +5225,7 @@ async function monshoPlaceAsk(pi,o){
     const ri=Z.resolve.findIndex(x=>x.id===o.id);
     if(ri>=0)Z.resolve.splice(ri,1);
     delete o._monshoAsking;o._monshoDone=true;
+    try{if(o._monshoRelease){o._monshoRelease();delete o._monshoRelease;}}catch(e){}
     if(!Z.shield.length){o.faceup=true;Z.grave.push(o);renderAll();toast(`🏵 シールドが無いため ${faceNameOf(o)} は墓地へ`);return;}
     const old0=Z.shield[idx];
     o.faceup=true;o.tapped=false;o.sideways=false;o.rot=0;o.mark=false;
@@ -5349,6 +5351,18 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       renderAll();
       /* 🚑 v16.118 効果の処理の中から呼ばれた時は、ここで待たない（待つと処理が止まったままになる） */
       if(!inFx)await waitFxIdle();
+      /* 🏵 v16.131 呪文なら、効果が終わった時点で解決中ゾーンから片づける（裁きの紋章なら盾の上へ）。
+         これをしないと、解決中ゾーンに残ったままになる。 */
+      if(rsc&&rsc.ctype==="spell"){
+        try{
+          await waitFxIdle();
+          const ri2=Z.resolve.findIndex(x=>x.id===card.id);
+          if(ri2>=0){const done=Z.resolve.splice(ri2,1)[0];resolveOut(Z,done);renderAll();}
+        }catch(e){}
+      }
+      /* 🏵 v16.130 この1枚が「どの盾の上に置くか」を選び終えてから、次のサバキZへ進む */
+      await new Promise(r=>setTimeout(r,0));
+      try{await MONSHO_BUSY;}catch(e){}
       setTimeout(()=>{try{SABAKI_BUSY.delete(sc.id);}catch(e){}},1500);
     }
   }catch(e){console.warn("offerSabakiZAdded",e);}
@@ -5952,7 +5966,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.129";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.131";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -26901,6 +26915,7 @@ function resolveOut(Z,o){
          聞いている間は解決中ゾーンに置いたままにして、選んでから動かす（先に置いてから動かすのをやめた）。 */
       if(S.expert&&Z.shield.length>1&&pi9>=0&&!o._monshoAsking){
         o._monshoAsking=true;
+        {let _rel;MONSHO_BUSY=new Promise(r=>{_rel=r;});o._monshoRelease=_rel;}
         o.faceup=true;o.tapped=false;o.sideways=false;o.rot=0;o.mark=false;
         Z.resolve.push(o);
         renderAll();
@@ -27635,7 +27650,8 @@ function pickShieldIdxs(op,count){
       g.innerHTML="";
       OZ.shield.forEach((x,j)=>{
         const nm=x.faceup?x.name:"（裏向きの盾）";
-        const el=vCardEl(nm+(x.under&&x.under.length?` ＋${x.under.length}`:""),{idx:j+1});
+        /* 🖼 v16.131 名前に「＋2」を足すと絵が引けなくなるので、枚数は番号の側に出す */
+        const el=vCardEl(nm,{idx:`${j+1}${x.under&&x.under.length?`／計${1+x.under.length}`:""}`});
         if(!x.faceup){
           const th=el.querySelector(".thumb");th.innerHTML="";
           const b=backURL(op);
@@ -28124,46 +28140,11 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
       sfx("ok");renderAll();await waitFxIdle();
     }
   }
-  // ⚔ サバキZ：手札にあるサバキZ持ちを、ブレイクで手札に加わったカードを1枚捨てて使う。
-  //    盾から本体が加わった時も、他に捨てる対象があれば使える。
+  /* ⚔ v16.131 ブレイクで手札に加わった時のサバキZも、共通処理（宣言→宣言した順に解決）に一本化する。
+     解決中ゾーンのカードは候補にしない・捨て札は加わった裁きの紋章だけ、も共通。 */
   if(S.expert){
-    const brokenInHand2=()=>OZ.hand.filter(x=>stackIds.has(x.id));
-    const szCards=OZ.hand.filter(x=>{const r2=getReg(x);return r2&&r2.sabaki;});
-    for(const sc of szCards){
-      if(!OZ.hand.some(h=>h.id===sc.id))continue;
-      const rsc=getReg(sc);
-      const cands=brokenInHand2().filter(x=>x.id!==sc.id);
-      if(!cands.length)continue;
-      const rIsSp=rsc&&rsc.ctype==="spell";
-      const szMsg=`⚔ サバキZ（${faceNameOf(sc)}）\nブレイクで手札に加わったカードを1枚捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rIsSp?"唱え":"召喚し"}ますか？`;
-      const yes=await olAskYN(op,szMsg,"⚔ サバキZ",[sc.name],szMsg);
-      if(!yes)continue;
-      const di=cands.length===1?0:await olPickRemote(op,"⚔ サバキZのコストに捨てるカードを選択（ブレイクで手札に加わったカード）",cands,"⚔ サバキZ");
-      if(di===null)continue;
-      const disc=cands[di];
-      const hi=OZ.hand.findIndex(h=>h.id===disc.id);
-      if(hi<0)continue;
-      snap();
-      OZ.hand.splice(hi,1);disc.faceup=true;OZ.grave.push(disc);
-      toast(`⚔ サバキZ：${faceNameOf(disc)} を捨てた`);
-      fxKeyword(op,"サバキZ！",sc.name,"手札から反撃");
-      const si=OZ.hand.findIndex(h=>h.id===sc.id);
-      if(si<0){renderAll();continue;}
-      OZ.hand.splice(si,1);
-      sc.faceup=true;sc.tapped=false;
-      if(rIsSp){
-        if(OZ.resolve.length){const olds=OZ.resolve.splice(0);olds.forEach(o=>resolveOut(OZ,o));}
-        OZ.resolve.push(sc);emitEvent(op,"spell",sc);enqueueFx(op,sc);
-        toast(`⚔ サバキZ！ ${faceNameOf(sc)} をコストを支払わず唱えた（解決中へ）`);
-      }else{
-        if(cheatEnterBattle(op,sc)){
-          emitEvent(op,"summon");enqueueFx(op,sc);
-          toast(`⚔ サバキZ！ ${faceNameOf(sc)} をコストを支払わず召喚した`);
-        }
-      }
-      logOnly(`⚔ サバキZ：${S.players[op].label} が《${faceNameOf(disc)}》を捨てて《${faceNameOf(sc)}》を使用`);
-      sfx("ok");renderAll();await waitFxIdle();
-    }
+    const brokenCards=OZ.hand.filter(x=>stackIds.has(x.id));
+    if(brokenCards.length)await offerSabakiZAdded(op,brokenCards,false,true);
   }
   await notifyShieldLeave(op);
   // ⚡ ブレイクの流れで墓地に落ちたカードの「墓地に置かれた時」（ゾルザーク／キューブリック型）をここで解決
@@ -36753,6 +36734,9 @@ function shieldCapOk(Z,faceup){
 }
 /* ✋ デュエプレモード：手札上限10枚。11枚目以降が加わる時は代わりに墓地へ（TCGモードは無制限） */
 function toHand(Z,c){
+  /* 🃏 v16.130 手札に戻ったカードは、前に選んだ「支払う面」の記録を消す
+     （残っていると、次に手札から使う時に面の確認が出ないことがあった） */
+  try{c._twinPaid=null;c._altPay=null;c._altChosen=false;}catch(e){}
   if(S.gameMode!=="tcg"&&Z.hand.length>=10){
     c.faceup=true;c.tapped=false;Z.grave.push(c);
     const pi=S.players.findIndex(P=>P.zones===Z);
@@ -39688,7 +39672,7 @@ function cardEl(pi,zone,c){
      これまでは札をタップ→メニューの「下のカード／メテオバーン」まで行く必要があり、
      進化クリーチャーの進化元や、無月フィールドの下を見るのに手数がかかっていた。 */
   /* 👁 v16.109 シールドの束（裁きの紋章など）も、札から中身を見られるようにした */
-  if(c.under&&c.under.length&&(zone==="battle"||(zone==="shield"&&c.faceup))&&!hidden&&showBBtn&&(!S.vs||pi===(S.seat|0))){
+  if(c.under&&c.under.length&&(zone==="battle"||zone==="shield")&&!hidden&&showBBtn&&((zone==="shield")||!S.vs||pi===(S.seat|0))){   // 👁 v16.131 相手の盾の重なりも見られる（中身は裏向きのまま）
     const ub2=document.createElement("button");
     ub2.textContent="👁"+(1+c.under.length);   // 🔢 v16.121 一番上を含めた合計枚数
     ub2.title=`重なっているカード全${1+c.under.length}枚を見る（一番上を含む・メテオバーン・退化もここから）`;
@@ -46446,7 +46430,7 @@ function renderStackPanel(){
       if(b){
         const im=document.createElement("img");
         im.src=b;im.draggable=false;
-        im.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:6px";
+        im.style.cssText="width:100%;height:100%;object-fit:contain;background:#0d1119;border-radius:6px";   // 🎴 v16.131 スリーブは切り取らずに全体を出す
         try{applySleevePosition(im,stCtx.p);}catch(e){}
         th.innerHTML="";th.appendChild(im);
       }
