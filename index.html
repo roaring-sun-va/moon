@@ -5286,8 +5286,19 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
     for(const sc of szs){
       if(!inHand(sc)&&!Z.hand.some(h=>h.id===sc.id))continue;
       const rsc0=getReg(sc);
-      const rest=pool().filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
-      if(rest.length<=_decl.length)continue;   // 捨てる裁きの紋章が足りない（宣言できる枚数の上限）
+      /* ⚔ v16.129 宣言したサバキZは捨て札にできない（自分自身も捨てられない）。
+         そのため「宣言した枚数ぶんの捨て札」が、宣言していない裁きの紋章から確保できる時だけ宣言できる。
+         例：盾から3枚加わり、その3枚がどれもサバキZなら、使えるのは1枚だけ（1枚使う＋1枚捨てる）。 */
+      const all=pool();
+      const declIn=_decl.filter(d=>all.some(x=>x.id===d.id)).length;
+      const scIn=all.some(x=>x.id===sc.id)?1:0;
+      const restAfter=all.length-(declIn+scIn);   // 宣言していない＝捨て札にできる枚数
+      const rest=all.filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
+      if(restAfter<(_decl.length+1)){
+        if(!_decl.length)continue;
+        toast(`⚔ サバキZ（${faceNameOf(sc)}）：捨てられる裁きの紋章が足りないので、これ以上は宣言できません`);
+        continue;
+      }
       const yes=await ask(`⚔ サバキZ：《${faceNameOf(sc)}》を使いますか？${_decl.length?`\n（宣言済み：${_decl.map(faceNameOf).join("→")}）`:""}\n捨てる候補（加わる裁きの紋章）：${rest.length}枚（あと${rest.length-_decl.length}枚まで宣言できます）\nそのうち1枚を捨てて、《${faceNameOf(sc)}》をコストを支払わずに${rsc0&&rsc0.ctype==="spell"?"唱え":"召喚し"}ますか？\n（使うものをすべて宣言してから、宣言した順に解決します）`,
         [{card:sc,cap:"⚔ 使うサバキZ"},...rest.slice(0,12).map(x=>({card:x,cap:"🗑 捨てる候補"}))]);
       if(yes)_decl.push(sc);
@@ -5306,9 +5317,8 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
     }
     for(const sc of _decl){
       if(!inHand(sc)&&!Z.hand.some(h=>h.id===sc.id))continue;
-      /* 🗑 v16.127 捨てる候補は「加わった裁きの紋章」すべて（自分自身を除く）。
-         ほかに宣言したサバキZのカードも捨てられ、その場合その宣言は取り消す。 */
-      const cands=pool().filter(x=>x.id!==sc.id);
+      /* 🗑 v16.129 捨てる候補は「加わった裁きの紋章」のうち、自分自身と、ほかに宣言したサバキZを除いたもの。 */
+      const cands=pool().filter(x=>x.id!==sc.id&&!_decl.some(d=>d.id===x.id));
       if(!cands.length){toast(`⚔ サバキZ（${faceNameOf(sc)}）：捨てられる裁きの紋章が残っていません`);continue;}
       const rsc=getReg(sc);
       const jd=await pickCard(`🗑 サバキZ《${faceNameOf(sc)}》で捨てる裁きの紋章を選択（${cands.length}枚から）`,cands,
@@ -5320,7 +5330,6 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
       if(pending){const ai=added.findIndex(x=>x.id===dc.id);if(ai<0)continue;gone=added.splice(ai,1)[0];ids.delete(gone.id);}
       else{const di=Z.hand.findIndex(x=>x.id===dc.id);if(di<0)continue;gone=Z.hand.splice(di,1)[0];}
       gone.faceup=true;Z.grave.push(gone);
-      {const di2=_decl.findIndex(d=>d.id===gone.id);if(di2>=0){_decl.splice(di2,1);toast(`⚔ 《${faceNameOf(gone)}》を捨てたので、その宣言は取り消しました`);}}
       afterHandDiscard(pi,gone,pi);
       SABAKI_BUSY.add(sc.id);
       let card;
@@ -5943,7 +5952,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.128";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.129";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
