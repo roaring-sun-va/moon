@@ -3136,6 +3136,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このカードが自分のシールドゾーンに表向きである間も、常在のコスト軽減と誘発が働きます（超煌ノ裁キ ダイヤモン将型）"><input type="checkbox" id="fxFaceUpShieldActive"> 🛡👁 シールドゾーンに表向きの間も、常在のコスト軽減・誘発が働く</label>
         <label title="このクリーチャーを自分のマナゾーンから召喚してもよい（メッサー・シュミット型）。マナの札をバトルゾーンへドラッグすると、コストを払うか聞きます"><input type="checkbox" id="fxManaSummon"> 🌱 このクリーチャー自身をマナゾーンから召喚してもよい</label>
         <label title="場にいる間、自分の他のクリーチャーをマナゾーンから召喚してよい回数（各ターン・グレイトフル・ベン型／大横綱型）。0＝なし" style="display:inline-flex;align-items:center;gap:4px">🌱 他のクリーチャーをマナから召喚させる：各ターン<input type="number" id="fxManaSummonGrant" min="0" max="9" style="width:52px" placeholder="0">回</label>
+        <label title="マナから召喚させる対象（空欄＝クリーチャーなら何でも・例：ドラゴン）">🌱 対象<input type="text" id="fxManaSummonFilt" placeholder="例：ドラゴン" style="width:110px"></label>
         <label title="場にいる間、自分のターン中に、自分の墓地から条件に合うクリーチャーを召喚してよい回数（各ターン・堕魔 ヴォーミラ／ダーク・ルピア型）。0＝なし" style="display:inline-flex;align-items:center;gap:4px">⚰ 墓地から召喚させる：各ターン<input type="number" id="fxGraveSummonGrant" min="0" max="9" style="width:52px" placeholder="0">回</label>
         <input type="text" id="fxGraveSummonFilt" list="raceList" placeholder="↑墓地から召喚できる条件（例：魔導具／ドラゴン）" style="flex:0 1 200px">
         <input type="text" id="fxManaSummonFree" list="raceList" placeholder="↑コストを支払わない対象（例：ディスタス・空欄＝支払う）" title="マナから召喚させる時、この条件に合うクリーチャーはコストを支払わない（グレイトフル・ベン型）" style="flex:0 1 220px">
@@ -6153,7 +6154,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.178";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.180";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7986,6 +7987,8 @@ function noAtkPowBlock(pi,c){
       for(const b of ZS.battle){
         if(b.id===c.id)continue;
         const rb=getReg(b);
+        /* 🚫 v16.179 相手のパワーn以下のクリーチャーは攻撃できない（ハイパー・マスティン型・stNoAtkPowLE・相手側だけ） */
+        if(rb&&+rb.stNoAtkPowLE>0&&sd!==pi&&!isSealed(b)&&!isIgnored(b,sd)&&p<=(+rb.stNoAtkPowLE))return true;
         if(!rb||!(+rb.stNoAtkPow>0))continue;
         if(isSealed(b)||isIgnored(b,sd))continue;
         if(rb.stNoAtkPowFilt&&!lockFilterOk(rb.stNoAtkPowFilt,r,c))continue;
@@ -25360,7 +25363,7 @@ function stLockerOf(pi,key,filtKey,r,c,route){
     if(rb[key]&&!sumOnly(rb)&&lockFilterOk(rb[filtKey],r,c,op2))return b;
     if(b.hyper&&rb[hmKey]&&!sumOnly(rb)&&lockFilterOk(rb[hmFiltKey],r,c))return b;
     // ✨ 条件付き常在「相手は呪文を唱えられない」（マキア型：条件式を満たす間のみ）
-    if(key==="stLockSpell"&&rb.cstCond&&rb.cstFx==="noSpell"&&zoneCondOk(rb.cstCond,op2,b))return b;
+    if(key==="stLockSpell"&&rb.cstCond&&rb.cstFx==="noSpell"&&zoneCondOk(rb.cstCond,op2,b)&&(!String(rb.cstFxFilt||"").trim()||lockFilterOk(String(rb.cstFxFilt).trim(),r,c,op2)))return b;   // v16.179 cstFxFilt＝対象の絞り込み（オーリリア「コスト5以下の呪文」）
   }
   // 🔒 マクスウェル Z 型：各プレイヤーは、自身の墓地にある呪文と同じ文明を持つ呪文を唱えられない。
   //    ロック持ちがどちらの場にいても、唱えようとしている本人の墓地を見て判定する。
@@ -30068,6 +30071,12 @@ async function runSelfAtkEnd(pi,c){
    他を召喚させる方は manaSummonGrant（各ターンの回数）に分けた。
    v16.157 までの登録は、どちらも manaSummon に入っていて、他を召喚させる方は数（1など）、
    自分が出せる方は true だった。数で入っている古い登録は、他を召喚させる方として読む。 */
+/* 🌱 v16.179 マナから召喚させる対象の絞り込み（manaSummonFilt・例：ドラゴン／「覇道」の頂 シュラ・ベートーベン型） */
+function manaGrantFiltOk(rx,card){
+  const ff=String(rx&&rx.manaSummonFilt||"").trim();
+  if(!ff||!card)return true;
+  try{return lockFilterOk(ff,getReg(card),card);}catch(e){return true;}
+}
 function manaSummonGrantN(rx){
   if(!rx)return 0;
   if(+rx.manaSummonGrant>0)return +rx.manaSummonGrant;
@@ -33591,6 +33600,7 @@ function renderFxEditor(){
   {const e=$("fxSpellCounter");if(e)e.value=FXEDIT.spellCounter||"";}
   {const e=$("fxManaSummon");if(e)e.checked=manaSummonSelf(FXEDIT);}
   {const e=$("fxManaSummonGrant");if(e)e.value=manaSummonGrantN(FXEDIT)||"";}
+  {const e=$("fxManaSummonFilt");if(e)e.value=FXEDIT.manaSummonFilt||"";}
   {const e=$("fxManaSummonFree");if(e)e.value=FXEDIT.manaSummonFree||"";}
   {const e=$("fxGraveSummonGrant");if(e)e.value=(+FXEDIT.graveSummonGrant||"")||"";}
   {const e=$("fxGraveSummonFilt");if(e)e.value=FXEDIT.graveSummonFilt||"";}
@@ -35758,6 +35768,9 @@ function openFxEditor(key){
     /* ⚠ v15.66：登録パネルに入力欄が無い項目も、ここと収集の両方に書かないと
        「開いて保存」しただけで消える。v15.46〜v15.65 で足した6項目が抜けていた。 */
     stNoAtkPow:cur&&+cur.stNoAtkPow||0,
+    stNoAtkPowLE:cur&&+cur.stNoAtkPowLE||0,
+    cstFxFilt:cur&&cur.cstFxFilt||"",
+    manaSummonFilt:cur&&cur.manaSummonFilt||"",
     stNoAtkPowFilt:cur&&cur.stNoAtkPowFilt||"",
     castlePowFoe:cur&&+cur.castlePowFoe||0,
     castlePowMine:cur&&+cur.castlePowMine||0,
@@ -36432,6 +36445,8 @@ $("fxSave").addEventListener("click",async ()=>{
     /* ⚠ v15.66：入力欄が無い項目は FXEDIT の値をそのまま書き戻して保持する。
        ここに書かないと、登録パネルを開いて保存した瞬間に消える。 */
     stNoAtkPow:+FXEDIT.stNoAtkPow||0,
+    stNoAtkPowLE:+FXEDIT.stNoAtkPowLE||0,
+    cstFxFilt:FXEDIT.cstFxFilt||"",
     stNoAtkPowFilt:FXEDIT.stNoAtkPowFilt||"",
     castlePowFoe:+FXEDIT.castlePowFoe||0,
     castlePowMine:+FXEDIT.castlePowMine||0,
@@ -36641,6 +36656,7 @@ $("fxSave").addEventListener("click",async ()=>{
     spellCounter:$("fxSpellCounter")?$("fxSpellCounter").value.trim():"",
     manaSummon:$("fxManaSummon")?$("fxManaSummon").checked:false,
     manaSummonGrant:$("fxManaSummonGrant")?Math.max(0,+$("fxManaSummonGrant").value||0):0,
+    manaSummonFilt:$("fxManaSummonFilt")?$("fxManaSummonFilt").value.trim():"",
     manaSummonFree:$("fxManaSummonFree")?$("fxManaSummonFree").value.trim():"",
     graveSummonGrant:$("fxGraveSummonGrant")?Math.max(0,+$("fxGraveSummonGrant").value||0):0,
     graveSummonFilt:$("fxGraveSummonFilt")?$("fxGraveSummonFilt").value.trim():"",
@@ -37319,6 +37335,8 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.altCost!=null)attrs.push(`代替コスト[${v.altCost}]${v.altCiv?`（文明：${v.altCiv}）`:""}${v.altCond?`（${v.altCond}）`:""}`);
     if(v.stLockSpell)attrs.push(`常在：相手は${v.stLockSpellF?v.stLockSpellF+"の":""}呪文を唱えられない`);
     if(v.stLockField)attrs.push("常在：相手はフィールドを実行できない");
+    if(+v.stNoAtkPowLE>0)attrs.push(`⛔ 常在：相手のパワー${v.stNoAtkPowLE}以下のクリーチャーは攻撃できない`);
+    if(v.manaSummonFilt)attrs.push(`🌱 マナから召喚させる対象：${v.manaSummonFilt}`);
     if(+v.stNoAtkPow>0)attrs.push(`⛔ 常在：パワー${v.stNoAtkPow}以上のクリーチャーは攻撃できない${v.stNoAtkPowFilt?`（${v.stNoAtkPowFilt}）`:""}`);
     if(+v.castlePowFoe)attrs.push(`🏯 城：相手のクリーチャー全体のパワー${+v.castlePowFoe>0?"+":""}${v.castlePowFoe}`);
     if(+v.castlePowMine)attrs.push(`🏯 城：自分のクリーチャー全体のパワー${+v.castlePowMine>0?"+":""}${v.castlePowMine}`);
@@ -39400,7 +39418,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
             const rx=getReg(x);
             if(x.id===c.id)return false;
             if(fromZone==="grave"&&!(rx&&rx.manaSummonGrave))return false;
-            return rx&&manaSummonGrantN(rx)>0&&!isSealed(x)&&!isIgnored(x,pTo);   // v16.158 旧：+rx.manaSummon>0
+            return rx&&manaSummonGrantN(rx)>0&&manaGrantFiltOk(rx,c)&&!isSealed(x)&&!isIgnored(x,pTo);   // v16.158 旧：+rx.manaSummon>0
           });
           if(src){
             const rS=getReg(src);
@@ -48808,9 +48826,9 @@ function summonGrantSrc(pi,kind,card){
     if(!rx||isSealed(x)||isIgnored(x,pi))return false;
     if(kind==="grave"){
       if(+rx.graveSummonGrant>0){const ff=String(rx.graveSummonFilt||"").trim();return !card||!ff||lockFilterOk(ff,rC,card);}
-      return !!(rx.manaSummonGrave&&manaSummonGrantN(rx)>0);
+      return !!(rx.manaSummonGrave&&manaSummonGrantN(rx)>0&&manaGrantFiltOk(rx,card));
     }
-    return manaSummonGrantN(rx)>0;
+    return manaSummonGrantN(rx)>0&&manaGrantFiltOk(rx,card);
   })||null;
 }
 /* ⚰🌱 v16.171 回数は「与えているカード1体につき」。同じ種類の元が2体いれば2回（ダピコ型）。card を渡すと、そのカードを出せる元だけ数える */
@@ -48829,6 +48847,7 @@ function summonGrantLimit(pi,kind,viaGrave,card){
     }else{
       const m=manaSummonGrantN(rx);if(!(m>0))continue;
       if(kind==="grave"&&!rx.manaSummonGrave)continue;
+      if(!manaGrantFiltOk(rx,card))continue;
       sum+=m;
     }
   }
@@ -48977,6 +48996,13 @@ async function repairArt(rp){
   if(did.length){await persistArt();logOnly(`🩹 ${dispName.get(key)||key}：${did.join("・")}`);return "ok";}
   return "none";
 }
+/* 🩹 v16.180 画像の中身の目印（FNV-1a 32bit の16進＋":"＋バイト数）。パックの artFixBase で使う */
+async function blobHashFnv(b){
+  const u=new Uint8Array(await b.arrayBuffer());
+  let h=0x811c9dc5;
+  for(let i=0;i<u.length;i++){h^=u[i];h=Math.imul(h,0x01000193)>>>0;}
+  return h.toString(16).padStart(8,"0")+":"+u.length;
+}
 /* 🎨 v16.176 絵のバージョンの括り（名前の候補）。「その他」を選ぶと自由に入力できる。 */
 const ART_LABELS=["通常版","シークレット版","コラボ版","プロモ版","UGC","PCC"];   // v16.177 金の飾り枠＝UGC（「金枠版」はやめた）
 async function askArtLabel(cur){
@@ -49050,6 +49076,19 @@ async function importArtVersionPack(data,noAsk){
   let swN=0;
   for(const sw of (Array.isArray(data.artSwapBase)?data.artSwapBase:[])){if(await swapArtBase(sw)==="ok")swN++;}
   if(swN)toast(`🎨 元の画像を${swN}件入れ替えました`);
+  /* 🩹 v16.180 元の画像がシークレット版などに差し代わっていたら、通常版と入れ替える（artFixBase:[{key,ifBaseHash,id,label}]）。
+     元の画像の中身（fnv1a＋バイト数）が ifBaseHash と同じ時だけ入れ替えるので、自分で入れた絵は動かさない。 */
+  let fbN=0;
+  for(const fb of (Array.isArray(data.artFixBase)?data.artFixBase:[])){
+    try{
+      const key=String(fb&&fb.key||""),id=String(fb&&fb.id||"");if(!key||!id)continue;
+      if(!(ART_VERS.get(key)||[]).some(x=>x.id===id))continue;
+      const b=db?await idbGet("images",key):memImages.get(key);if(!b)continue;
+      if(await blobHashFnv(b)!==String(fb.ifBaseHash||""))continue;
+      if(await swapArtBase({key,id,label:String(fb.label||"シークレット版")})==="ok")fbN++;
+    }catch(e){}
+  }
+  if(fbN)toast(`🩹 元の画像を通常版に戻しました：${fbN}件`);
   // 🩹 v16.168 元の画像が無くなったカードの直し
   let rpN=0;
   for(const rp of (Array.isArray(data.repairArt)?data.repairArt:[])){if(await repairArt(rp)==="ok")rpN++;}
@@ -51916,6 +51955,18 @@ async function exportFxPack(){
     if(dispName.has(k))nameMap[k]=dispName.get(k);
   }
   const data={v:1,type:"fxPack",exported:new Date().toISOString(),from:S.players[0].label||"共有",cardFx,faceLinks,nameMap};
+  /* 🎨 v16.180 絵のバージョン（名前・ふだん出す絵）はいつも入れる。絵そのもの（元の画像＋全バージョン）は選んだ時だけ */
+  data.artVersions=artVersionsFor(keys);
+  {const sel={};for(const k of keys){if(ART_SEL.has(k))sel[k]=ART_SEL.get(k);}data.artSel=sel;}
+  {const jImg=await askChoice(`📦 カード登録の書き出し（${keys.length}件）\n絵も入れますか？`,["登録だけ（軽い）","絵も入れる（元の画像と全バージョン）"]);
+   if(jImg===null)return;
+   if(jImg===1){
+     data.images={};toast("🖼 絵をまとめています…");
+     for(const k of keys){
+       const b=db?await idbGet("images",k):memImages.get(k);if(b)data.images[k]=await blobToDataURL(b);
+       for(const x of (data.artVersions[k]||[])){const vk=artVerKey(k,x.id);const vb=db?await idbGet("images",vk):memImages.get(vk);if(vb)data.images[vk]=await blobToDataURL(vb);}
+     }
+   }}
   const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
@@ -52363,6 +52414,17 @@ $("importInput").addEventListener("change",async e=>{
           await loadAllImages();
         }
       }
+      /* 🎨 v16.180 絵のバージョンの一覧とふだん出す絵（絵がこの端末にあるものだけ） */
+      if(data.artVersions&&typeof data.artVersions==="object"){
+        try{
+          mergeArtVersions(data.artVersions);
+          for(const [k,id] of Object.entries(data.artSel||{})){
+            const vk=artVerKey(k,String(id));const vb=db?await idbGet("images",vk):memImages.get(vk);
+            if(vb)ART_SEL.set(k,String(id));
+          }
+          await persistArt();
+        }catch(e){console.warn("artVersions",e);}
+      }
       renderAll();sfx("ok");
       toast(`📦 ${res.applied}件を取り込みました${Object.keys(data.images||{}).length?`／画像${Object.keys(data.images).length}枚`:""}${res.held?`／${res.held}件は保留（差分画面で選べます）`:""}`);
       return;
@@ -52448,7 +52510,7 @@ $("importInput").addEventListener("change",async e=>{
       const _avN=Object.values(data.artVersions||{}).reduce((a,l)=>a+(Array.isArray(l)?l.length:0),0);
       const _verOnly=_avN>0&&!Object.keys(data.cardFx||{}).length;
       /* 🏷 v16.165 名前の付け直し（renames）だけのパックも同じ取り込みへ */
-      const _rnOnly=((Array.isArray(data.renames)&&data.renames.length>0)||(Array.isArray(data.merges)&&data.merges.length>0)||(Array.isArray(data.repairArt)&&data.repairArt.length>0))&&!Object.keys(data.cardFx||{}).length;
+      const _rnOnly=((Array.isArray(data.renames)&&data.renames.length>0)||(Array.isArray(data.merges)&&data.merges.length>0)||(Array.isArray(data.repairArt)&&data.repairArt.length>0)||(Array.isArray(data.artSwapBase)&&data.artSwapBase.length>0)||(Array.isArray(data.artRelabel)&&data.artRelabel.length>0)||(Array.isArray(data.artFixBase)&&data.artFixBase.length>0))&&!Object.keys(data.cardFx||{}).length;
       if(_rnOnly&&!_verOnly){await importArtVersionPack(data);return;}
       if(_verOnly){await importArtVersionPack(data);
         return;
@@ -52473,7 +52535,7 @@ $("importInput").addEventListener("change",async e=>{
       }
       await loadAllImages();
       /* 🎨 v16.168 効果登録と一緒に、絵のバージョン・名前の付け直し・まとめ・直しも入っていれば続けて行う（確認は済んでいるので聞かない） */
-      if((data.artVersions&&Object.keys(data.artVersions).length)||(Array.isArray(data.renames)&&data.renames.length)||(Array.isArray(data.merges)&&data.merges.length)||(Array.isArray(data.repairArt)&&data.repairArt.length)||(Array.isArray(data.artSwapBase)&&data.artSwapBase.length)||(Array.isArray(data.artRelabel)&&data.artRelabel.length)){
+      if((data.artVersions&&Object.keys(data.artVersions).length)||(Array.isArray(data.renames)&&data.renames.length)||(Array.isArray(data.merges)&&data.merges.length)||(Array.isArray(data.repairArt)&&data.repairArt.length)||(Array.isArray(data.artSwapBase)&&data.artSwapBase.length)||(Array.isArray(data.artRelabel)&&data.artRelabel.length)||(Array.isArray(data.artFixBase)&&data.artFixBase.length)){
         await importArtVersionPack(data,true);
       }
       renderAll();sfx("ok");
@@ -53695,6 +53757,10 @@ function zoneCondOk(expr,pi,selfCard){
        G・G・G はカードごとに専用の欄（gggSA／gggPA／gggCantAtk／stAuraGggOnly／masterGgg）で
        持たせてきたが、それ以外の書き方をしたい時に毎回ちがう書き方になっていた。
        これで cnd（効果の行・誘発）でも「G・G・G」と書けば同じ判定になる。 */
+    /* 🌀 v16.179 「ラビリンス」＝自分のシールドの数が相手より多い（正義の煌き オーリリア型） */
+    {const _lb=String(expr||"").trim();
+     if(_lb==="ラビリンス")return zonesOf(pi).shield.length>zonesOf(pi===0?1:0).shield.length;
+     if(_lb==="ラビリンス未達")return !(zonesOf(pi).shield.length>zonesOf(pi===0?1:0).shield.length);}
     {const _g=String(expr||"").replace(/[\s　・]/g,"").toUpperCase();
      if(_g==="GGG"||_g==="GGGちゅう")return gggOn(pi);
      if(_g==="GGG未達"||_g==="GGGみたつ")return !gggOn(pi);}
