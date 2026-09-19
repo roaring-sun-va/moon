@@ -6059,7 +6059,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.159";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.160";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9011,7 +9011,8 @@ function snap(){
   }
 }
 function restoreState(st){
-  SHIELD_SEEN=null;   // 🛡 v16.156 戻した盤面で数え直す（戻したことで盾が減って見えても誘発させない）
+  SHIELD_SEEN=null;
+  try{LIBWIN_BY_DRAW=[false,false];LIBWIN_ASKED=[false,false];}catch(e){}   // 🌊 v16.160   // 🛡 v16.156 戻した盤面で数え直す（戻したことで盾が減って見えても誘発させない）
   S.turn=st.t;S.who=st.w;
   if(st.ec!=null)ENTERED_CNT=st.ec|0;
   if(st.pt!=null)S.pturn=st.pt|0;
@@ -41079,6 +41080,7 @@ function renderPlayer(pi){
   if(peekBtn)peekBtn.textContent=S.hideOpp?"👁 見る":"🙈 隠す";
 }
 let LIBWIN_ASKED=[false,false];
+let LIBWIN_BY_DRAW=[false,false];   // 🌊 v16.160 山札の最後の1枚を「引いて」0枚になった
 let MUGETSU_ASKED={};
 let MUGETSU_BUSY=false;
 let MUGETSU_TE_DONE=false;      // 絶ゲート：このターン終了処理で確認済みか
@@ -41250,17 +41252,27 @@ async function checkMugetsu(atTurnEnd){
   }
 }
 function checkLibWin(){
+  /* 🌊 v16.160 シャコガイル型（libWin）は「山札の最後の1枚を引く時」だけ勝つ（TCG・デュエプレとも）。
+     公式Q&A：引く以外の方法（マナ・シールド・墓地へ、引く以外で手札へ等）で山札がなくなった時は、ゲームに負ける。
+     これまでは理由を問わず0枚で勝ちにしていた。引いたかどうかは bumpEv("draws") で記録（LIBWIN_BY_DRAW）。
+     効果の途中で描き直しが挟まっても取り違えないよう、少し待ってから決める。 */
   if(!S.expert||REPLAY.on)return;
   for(const pi of (S.vs?[0,1]:[0])){
     const Z=zonesOf(pi);
-    if(Z.deck.length>0){LIBWIN_ASKED[pi]=false;continue;}
+    if(Z.deck.length>0){LIBWIN_ASKED[pi]=false;LIBWIN_BY_DRAW[pi]=false;continue;}
     if(LIBWIN_ASKED[pi])continue;
     const holder=Z.battle.find(x=>{const r=getReg(x);return r&&r.libWin&&!isSealed(x)&&!isIgnored(x,pi);});
     if(!holder)continue;
     LIBWIN_ASKED[pi]=true;
     setTimeout(async()=>{
-      fxAnim(holder.id,"an-gold",800);
-      await declareWin(pi,`🌊 ${faceNameOf(holder)}：山札が0枚になったので、負けるかわりに勝利！（エクストラウィン）`);
+      const Z2=zonesOf(pi);
+      if(Z2.deck.length>0){LIBWIN_ASKED[pi]=false;LIBWIN_BY_DRAW[pi]=false;return;}
+      if(LIBWIN_BY_DRAW[pi]){
+        fxAnim(holder.id,"an-gold",800);
+        await declareWin(pi,`🌊 ${faceNameOf(holder)}：山札の最後の1枚を引いたので、負けるかわりに勝利！（エクストラウィン）`);
+      }else if(S.vs&&(S.turn|0)>0){
+        await declareWin(pi?0:1,`山札切れ：${S.players[pi].label} の山札が引く以外の方法で0枚になった（${faceNameOf(holder)} は「最後の1枚を引く時」だけ勝つ）`);
+      }
     },250);
   }
 }
@@ -42315,6 +42327,9 @@ function newMatchEv(){
   return {draws:[0,0],summons:[0,0],spells:[0,0],stTrig:[0,0],breaks:[0,0],destroys:[0,0],manaAccel:[0,0],handes:[0,0],peakBoard:[0,0],shieldsEnd:[0,0]};
 }
 function bumpEv(key,pi,d=1){
+  /* 🌊 v16.160 シャコガイル型（libWin）：山札が「引いたことで」0枚になったかを覚える。
+     ドローの入口はいくつもあるが、どれも引いた枚数を bumpEv("draws") で数えるので、ここで見る。 */
+  try{if(key==="draws"&&pi!=null&&(+d||0)>0&&!zonesOf(pi).deck.length)LIBWIN_BY_DRAW[pi]=true;}catch(e){}
   // 🔄 マナが置かれた時・シールドをブレイクした時の覚醒（ABYFLHA・カイザー／オンセン・ガロウズ型）。
   //    数え上げの入口が1か所にまとまっているので、ここから覚醒を見に行く。
   try{
