@@ -6153,7 +6153,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.175";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.176";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -48596,7 +48596,7 @@ function openArtVersionPanel(key,name,onClose){
       const btn=(t,fn,title)=>{const b=document.createElement("button");b.type="button";b.className="btn small ghost";b.textContent=t;if(title)b.title=title;b.addEventListener("click",async e=>{e.stopPropagation();await fn();draw();});bar.appendChild(b);};
       if(r.id!==cur)btn("ふだん出す",async()=>{await setArtDefault(key,r.id);toast(`🎨 ふだんは「${r.label}」を出します`);});
       if(r.id){
-        btn("名前",async()=>{const nn=prompt("このバージョンの名前（例：コラボ版・通常版・プロモ）",r.label);if(nn==null)return;const list=ART_VERS.get(key)||[];const x=list.find(y=>y.id===r.id);if(x){x.label=String(nn).trim()||x.label;await persistArt();}});
+        btn("名前",async()=>{const nn=await askArtLabel(r.label);if(nn==null)return;const list=ART_VERS.get(key)||[];const x=list.find(y=>y.id===r.id);if(x){x.label=String(nn).trim()||x.label;await persistArt();}});
         btn("絵を差し替え",async()=>{const f=await pickOneImageFile();if(!f)return;const vk=artVerKey(key,r.id);if(db)await idbPut("images",vk,f);else memImages.set(vk,f);imgURL.setBlob(vk,f);toast("🎨 絵を差し替えました");});
         btn("削除",async()=>{if(!await ask(`バージョン「${r.label}」を削除しますか？`))return;await deleteArtVersion(key,r.id);toast(`🎨「${r.label}」を削除しました`);});
       }
@@ -48608,7 +48608,7 @@ function openArtVersionPanel(key,name,onClose){
       const f=await pickOneImageFile();if(!f)return;
       const okType=(f.type&&f.type.startsWith("image/"))||/\.(png|jpe?g|gif|webp|heic|heif|bmp|avif)$/i.test(f.name||"");
       if(!okType){toast("画像ファイルを認識できませんでした");return;}
-      const lab=prompt("このバージョンの名前（例：コラボ版・通常版・プロモ）","");
+      const lab=await askArtLabel("");
       const id=await addArtVersion(key,lab||"",f);
       toast("🎨 バージョンを追加しました");
       if(await ask("追加した絵を、ふだん出す絵にしますか？"))await setArtDefault(key,id);
@@ -48951,6 +48951,16 @@ async function repairArt(rp){
   }
   if(did.length){await persistArt();logOnly(`🩹 ${dispName.get(key)||key}：${did.join("・")}`);return "ok";}
   return "none";
+}
+/* 🎨 v16.176 絵のバージョンの括り（名前の候補）。「その他」を選ぶと自由に入力できる。 */
+const ART_LABELS=["通常版","シークレット版","コラボ版","プロモ版","金枠版","UGC"];
+async function askArtLabel(cur){
+  const opts=[...ART_LABELS.map(x=>x===cur?`${x}（いまの名前）`:x),"その他（名前を入力）"];
+  const j=await askChoice(`🎨 このバージョンの括りを選んでください${cur?`\nいまの名前：${cur}`:""}`,opts);
+  if(j===null||j===undefined)return null;
+  if(j<ART_LABELS.length)return ART_LABELS[j];
+  const nn=prompt("このバージョンの名前（例：コラボ版・通常版・UGC）",cur||"");
+  return nn==null?null:String(nn).trim();
 }
 /* 🎨 v16.166 元の画像と、あるバージョンの絵を入れ替える（元の画像がコラボ版だった時に、通常版を元の画像にする等）。
    sw = {key, id:入れ替えるバージョン, label:入れ替えたあとのそのバージョンの名前（＝前の元の画像の名前）}
