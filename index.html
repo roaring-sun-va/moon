@@ -3129,8 +3129,10 @@ body.shake{animation:bodyShake .4s ease-out}
         <label><input type="checkbox" id="fxStNoHandes"> 常在：自分の手札は相手のカードの効果によって捨てられない</label>
         <label title="相手のカードの効果で、自分のシールドを墓地・マナ・山札などに置くことを止めます（ブレイクで手札に加えるのは止めません・緑知銀 ジェンバン型）"><input type="checkbox" id="fxShieldHandOnly"> 🛡 常在：相手の効果によって、自分のシールドは手札以外のゾーンに置かれない</label>
         <label title="このカードが自分のシールドゾーンに表向きである間も、常在のコスト軽減と誘発が働きます（超煌ノ裁キ ダイヤモン将型）"><input type="checkbox" id="fxFaceUpShieldActive"> 🛡👁 シールドゾーンに表向きの間も、常在のコスト軽減・誘発が働く</label>
-        <label title="このクリーチャーを自分のマナゾーンから召喚してもよい（メッサー・シュミット型）。マナの札をバトルゾーンへドラッグすると、コストを払うか聞きます"><input type="checkbox" id="fxManaSummon"> 🌱 マナゾーンから召喚してもよい</label>
-        <label title="マナからの召喚を他のクリーチャーに許すカード（グレイトフル・ベン型・大横綱型）で、墓地からの召喚も同じ回数に含めます（大感動！ディス・イズ・大横綱「マナゾーンまたは墓地から」）"><input type="checkbox" id="fxManaSummonGrave"> 🌱🪦 墓地からの召喚も同じ回数で数える</label>
+        <label title="このクリーチャーを自分のマナゾーンから召喚してもよい（メッサー・シュミット型）。マナの札をバトルゾーンへドラッグすると、コストを払うか聞きます"><input type="checkbox" id="fxManaSummon"> 🌱 このクリーチャー自身をマナゾーンから召喚してもよい</label>
+        <label title="場にいる間、自分の他のクリーチャーをマナゾーンから召喚してよい回数（各ターン・グレイトフル・ベン型／大横綱型）。0＝なし" style="display:inline-flex;align-items:center;gap:4px">🌱 他のクリーチャーをマナから召喚させる：各ターン<input type="number" id="fxManaSummonGrant" min="0" max="9" style="width:52px" placeholder="0">回</label>
+        <input type="text" id="fxManaSummonFree" list="raceList" placeholder="↑コストを支払わない対象（例：ディスタス・空欄＝支払う）" title="マナから召喚させる時、この条件に合うクリーチャーはコストを支払わない（グレイトフル・ベン型）" style="flex:0 1 220px">
+        <label title="上の「他のクリーチャーをマナから召喚させる」で、墓地からの召喚も同じ回数に含めます（大感動！ディス・イズ・大横綱「マナゾーンまたは墓地から」）"><input type="checkbox" id="fxManaSummonGrave"> 🌱🪦 ↑墓地からの召喚も同じ回数で数える</label>
         <label title="極限ファイナル革命：このゲーム中に自分が他の「ファイナル革命」を使っていなければ使える（烈しき切札 ドギラゴン逆型）"><input type="checkbox" id="fxFinalRevGame"> ⚡ 極限ファイナル革命（ゲーム中に1回だけ・他のファイナル革命を使っていなければ）</label>
         <label title="相手が呪文を唱える時、その呪文以上のコストを持つ〔ここに書いた条件〕のカード1枚を手札から捨てて、その呪文を墓地に置いてもよい（オラマッハ・ザ・ジョニー型・空欄＝なし）">🃏 相手の呪文を止める：手札から捨てるカードの条件<input type="text" id="fxSpellCounter" placeholder="例：ジョーカーズ" style="width:150px"></label>
         <label title="どちらのクリーチャーが攻撃する時でも使える（煌世主 サッヴァーク∞型）。オフなら相手の攻撃時だけ"><input type="checkbox" id="fxFlipCastBoth"> ⚖ 上の「表向きのシールドを裏向きにして手札から」を、自分の攻撃時にも使える</label>
@@ -6057,7 +6059,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.157";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.158";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -29586,6 +29588,21 @@ async function runSelfAtkEnd(pi,c){
 /* ⚔ v16.152 攻撃する時の効果（③）に、解決するものがあるか。TCG で②③の順番を聞くかどうかの判定に使う。
    execAttack の③と同じ所を見る：クロスギア／自身の攻撃時／スマッシュ・バースト／超魂X／どちらの攻撃でも／味方全体付与。
    迷う時は「ある」と答える（聞かずに進むより、聞いた方が安全）。 */
+/* 🌱 v16.158 「他のクリーチャーをマナ（墓地）から召喚させる」回数（グレイトフル・ベン／大横綱型）。
+   manaSummon は「このクリーチャー自身をマナから召喚できる」（メッサー・シュミット型）専用にし、
+   他を召喚させる方は manaSummonGrant（各ターンの回数）に分けた。
+   v16.157 までの登録は、どちらも manaSummon に入っていて、他を召喚させる方は数（1など）、
+   自分が出せる方は true だった。数で入っている古い登録は、他を召喚させる方として読む。 */
+function manaSummonGrantN(rx){
+  if(!rx)return 0;
+  if(+rx.manaSummonGrant>0)return +rx.manaSummonGrant;
+  if(typeof rx.manaSummon==="number"&&+rx.manaSummon>0)return +rx.manaSummon;   // 旧登録
+  return 0;
+}
+/* 🌱 v16.158 「このクリーチャー自身をマナから召喚してよい」（メッサー・シュミット型）。数で入った旧登録は含めない */
+function manaSummonSelf(r){
+  return !!(r&&r.manaSummon&&typeof r.manaSummon!=="number");
+}
 function atkTrigPending(pi,c,tg){
   if(!S.expert||!c)return false;
   const atkEvs=["selfAtk",(tg&&tg.kind==="creature")?"selfAtkC":"selfAtkP"];
@@ -33070,7 +33087,9 @@ function renderFxEditor(){
   {const e=$("fxShieldHandOnly");if(e)e.checked=!!FXEDIT.shieldHandOnly;}
   {const e=$("fxFaceUpShieldActive");if(e)e.checked=!!FXEDIT.faceUpShieldActive;}
   {const e=$("fxSpellCounter");if(e)e.value=FXEDIT.spellCounter||"";}
-  {const e=$("fxManaSummon");if(e)e.checked=!!FXEDIT.manaSummon;}
+  {const e=$("fxManaSummon");if(e)e.checked=manaSummonSelf(FXEDIT);}
+  {const e=$("fxManaSummonGrant");if(e)e.value=manaSummonGrantN(FXEDIT)||"";}
+  {const e=$("fxManaSummonFree");if(e)e.value=FXEDIT.manaSummonFree||"";}
   {const e=$("fxManaSummonGrave");if(e)e.checked=!!FXEDIT.manaSummonGrave;}
   {const e=$("fxFinalRevGame");if(e)e.checked=!!FXEDIT.finalRevGame;}
   {const e=$("fxFoeAtkFlipCast");if(e)e.value=+FXEDIT.foeAtkFlipCast||0;}
@@ -35438,7 +35457,9 @@ function openFxEditor(key){
     shieldHandOnly:cur?!!cur.shieldHandOnly:false,
     faceUpShieldActive:cur?!!cur.faceUpShieldActive:false,
     spellCounter:cur?(cur.spellCounter||""):"",
-    manaSummon:cur?!!cur.manaSummon:false,
+    manaSummon:cur?manaSummonSelf(cur):false,          // v16.158 数の旧登録は下の manaSummonGrant へ移す
+    manaSummonGrant:cur?manaSummonGrantN(cur):0,
+    manaSummonFree:cur&&cur.manaSummonFree||"",
     manaSummonGrave:cur?!!cur.manaSummonGrave:false,
     finalRevGame:cur?!!cur.finalRevGame:false,
     foeAtkFlipCast:cur?(+cur.foeAtkFlipCast||0):0,
@@ -36094,6 +36115,8 @@ $("fxSave").addEventListener("click",async ()=>{
     faceUpShieldActive:$("fxFaceUpShieldActive")?$("fxFaceUpShieldActive").checked:false,
     spellCounter:$("fxSpellCounter")?$("fxSpellCounter").value.trim():"",
     manaSummon:$("fxManaSummon")?$("fxManaSummon").checked:false,
+    manaSummonGrant:$("fxManaSummonGrant")?Math.max(0,+$("fxManaSummonGrant").value||0):0,
+    manaSummonFree:$("fxManaSummonFree")?$("fxManaSummonFree").value.trim():"",
     manaSummonGrave:$("fxManaSummonGrave")?$("fxManaSummonGrave").checked:false,
     finalRevGame:$("fxFinalRevGame")?$("fxFinalRevGame").checked:false,
     foeAtkFlipCast:$("fxFoeAtkFlipCast")?(+$("fxFoeAtkFlipCast").value||0):0,
@@ -38833,7 +38856,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if(toZone==="battle"){
     /* 🌱 v16.34 「各ターンに1度、クリーチャーを自分のマナゾーンから召喚してもよい。
        それがディスタスならコストを支払わずに召喚する」（砕慄接続 グレイトフル・ベン型）。
-       登録の manaSummon（各ターンの回数）と manaSummonFree（タダになる対象）を見て、
+       登録の manaSummonGrant（各ターンの回数・v16.158で manaSummon から分けた）と manaSummonFree（タダになる対象）を見て、
        マナ→バトルの移動のたびに、使った回数と「タダかどうか」を知らせる。
        この盤面はもともと手で動かす作りなので止めはしない。回数を超えたら注意を出す。 */
     /* 🌱 v16.154 manaSummonGrave＝墓地からの召喚も同じ回数で数える（大感動！ディス・イズ・大横綱型「マナゾーンまたは墓地から」）。 */
@@ -38845,11 +38868,11 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
             const rx=getReg(x);
             if(x.id===c.id)return false;
             if(fromZone==="grave"&&!(rx&&rx.manaSummonGrave))return false;
-            return rx&&(+rx.manaSummon>0)&&!isSealed(x)&&!isIgnored(x,pTo);
+            return rx&&manaSummonGrantN(rx)>0&&!isSealed(x)&&!isIgnored(x,pTo);   // v16.158 旧：+rx.manaSummon>0
           });
           if(src){
             const rS=getReg(src);
-            const lim=+rS.manaSummon||1;
+            const lim=manaSummonGrantN(rS)||1;
             S._manaSummonUsed=S._manaSummonUsed||{};
             const key=`${S.turn}:${pTo}`;
             if(S._manaSummonUsed.key!==key)S._manaSummonUsed={key,n:0};
@@ -39059,7 +39082,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
      登録に「マナから召喚できる」が付いたカードをマナからバトルゾーンへ出した時、コストを払うか聞く。 */
   if(S.expert&&S.autoTap&&!S.freePlay&&fromZone==="mana"&&toZone==="battle"){
     const rMS=getReg(c);
-    if(rMS&&rMS.manaSummon&&isCreatureReg(rMS)&&rMS.cost!=null){
+    if(rMS&&manaSummonSelf(rMS)&&isCreatureReg(rMS)&&rMS.cost!=null){   // v16.158 自分自身をマナから出せるカードだけ
       MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(async()=>{
         const y=await ask(`🌱 ${faceNameOf(c)} をマナゾーンから「召喚」しますか？\nはい＝コストを支払う（軽減も適用・マナ自動タップ）\nいいえ＝支払わずに出す（踏み倒し）`,c);
         if(y)await autoTapCost(pTo,c);
