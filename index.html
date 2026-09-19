@@ -6188,7 +6188,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.203";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.205";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6613,6 +6613,10 @@ function noteAttackThisTurn(side,c){
     S._turnAtk.list.push({pi:side,id:c.id,name:faceNameOf(c),reg:getReg(c)});
   }catch(e){}
 }
+/* 🚫 v16.205 「各ターンに1度しか攻撃もブロックもできない」（六奇怪の四型）がかかっているか／そのターンのブロック回数 */
+function oneAtkBlkOn(side){try{return !!(S.expert&&S.oneAtkBlk&&S.oneAtkBlk[side]);}catch(e){return false;}}
+function noteBlockThisTurn(side){try{const tk=`${S.turn}:${S.who}`;if(!S._turnBlk||S._turnBlk.key!==tk)S._turnBlk={key:tk,n:[0,0]};S._turnBlk.n[side]=(S._turnBlk.n[side]|0)+1;}catch(e){}}
+function turnBlkCount(side){try{const tk=`${S.turn}:${S.who}`;return (S._turnBlk&&S._turnBlk.key===tk)?(S._turnBlk.n[side]|0):0;}catch(e){return 0;}}
 function turnAtkCount(side){
   try{
     const tk=`${S.turn}:${S.who}`;
@@ -11299,6 +11303,7 @@ async function finishNextTurn(cur){
       }
     }
     S._turnBreaks=[0,0];                     // 💥 このターンのブレイク数をリセット
+    try{if(S.oneAtkBlk)for(const k of Object.keys(S.oneAtkBlk))if(S.oneAtkBlk[k]&&S.oneAtkBlk[k].by===pi)delete S.oneAtkBlk[k];}catch(e){}   // 🚫 v16.205 六奇怪の四型は唱えた人の次のターン開始時まで
     await checkAwaken(pi,"turnStartMine");   // 🔄 覚醒（ターン開始時）
     // 🪦 ドレッド・ブラッド型：自分のターン開始時、墓地にあるこのカードは、自分のクリーチャーn体を破壊して墓地から出せる（任意）
     const gRev=Z.grave.filter(c=>{const r=getReg(c);return r&&(+r.graveReviveN>0);});
@@ -12360,6 +12365,7 @@ function emitEvent(actor,type,card){
       }
     }catch(e){}
     // 🔄 「自分のクリーチャーが出た時」に裏返るサイキック（マティーニ型／ループ覚醒のヤヌス型）
+    try{const _rrI=eventCard&&getReg(eventCard);if(S.expert&&_rrI&&_rrI.rinneInf&&S.who===actor)enqueueWatchJob(async()=>{await offerRinneInf(actor,`《${faceNameOf(eventCard)}》が出た`);});}catch(e){}   // ♾ v16.205
     if(eventCard){const _faceAt=new Map(((zonesOf(actor)||{}).battle||[]).map(x=>[x.id,x.face|0]));enqueueWatchJob(async()=>{await checkAwaken(actor,"allyEnter",eventCard,{faceAt:_faceAt});try{await checkPsyLink(actor);}catch(e){}});}
     // 🌌 出たのがサイキックなら、超次元ゾーンから呼べるカードを確認する（超時空ストームG・XX 型）
     try{
@@ -13734,6 +13740,8 @@ const FX_TYPES=[
   ["shieldBreakRand","💥 相手のランダムなシールドをn枚ブレイクする（S・トリガーは通常どおり使える）"],
   ["shieldBreakPerAlly","💥 自分の〔対象〕1体につき、相手のシールドをn枚ブレイクする（自身も数える・条件欄＝対象・例：ジョーカーズ／超Z級 ゲキシンオー型）"],
   ["millToN","🪦 自分の山札がn枚になるまで、山札の上からカードを墓地に置く（黒神龍エンド・オブ・ザ・ワールド型）"],
+  ["castDiscardedSpell","🗑🔮 捨てたカードが条件に合う呪文なら、コストを支払わずに唱えてもよい（龍装艦 チェンジザ型・誘発「自分の手札を1枚捨てた時」と組み合わせる／条件欄＝例：コスト5以下／各ターン、このクリーチャー1体につき1回）"],
+  ["foeOneAtkBlkNext","🚫 次の自分のターン開始時まで、相手は各ターンに1度しか、クリーチャーで攻撃もブロックもできない（六奇怪の四 ～土を割る逆瀧～型）"],
   ["drawThenDiscard","✋🗑 カードをn枚引き、その後、手札を〔条件欄の枚数・既定1〕枚捨てる（「引いてもよい。そうした場合」は任意（opt）で・超合金 ロビー型）"],
   ["shieldBreakN","💥 相手のシールドをn枚ブレイクする（通常のブレイク処理・どのシールドを割るかは選択／S・トリガーも通常どおり・シューヴェルト型）"],
   ["shieldBreakTo","💥 相手のシールドが n枚になるようにブレイクする（アイアン・マンハッタン型・すでにn枚以下なら何もしない）"],
@@ -16016,7 +16024,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["graveCastAnyFree","anyManaPick","graveRecruitFromUnder","revealTopWinOrPlay","graveCastToHand","foeNoSpellTurn","selfKillHandRecruitUpTo","manaFieldOut","bounceElemOrSealAny","deckPlayNonCreSpell","graveRecruitAnyBoth","topLookTakeN","shieldPickTuck","nextSpellCostDown","graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["castDiscardedSpell","graveCastAnyFree","anyManaPick","graveRecruitFromUnder","revealTopWinOrPlay","graveCastToHand","foeNoSpellTurn","selfKillHandRecruitUpTo","manaFieldOut","bounceElemOrSealAny","deckPlayNonCreSpell","graveRecruitAnyBoth","topLookTakeN","shieldPickTuck","nextSpellCostDown","graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -16226,6 +16234,45 @@ function twinBattleCastCount(pi){
 /* ♾ v16.190 輪廻∞（天地命動 バラギアラ型）：このカードの呪文側を、バトルゾーンに置いたまま唱えてもよい（コストは支払う）。
    そうした時、自分の《天地命動 バラギアラ》（名前に rinneInfName を含むクリーチャー）1体につき、山札の上から1枚をマナへ。
    コスト＝呪文側のコスト−シンパシー（呪文側だけのもの）＋相手の常在のコスト増加（最低1）。マナは自動でタップする。 */
+/* ♾ v16.205 輪廻∞の呪文側のコスト（シンパシー・相手の常在の増加を含む・最低1）と名前 */
+function rinneCostOf(pi,c){
+  const r=getReg(c);if(!r)return 99;
+  let cost=+r.cost2||0;
+  if(r.sympathy&&String(r.symFace||"")!=="0"){
+    try{const sc=sympathyCount(pi,c,r.sympathy);cost-=sc.cnt*(+r.symX||1);}catch(e){}
+  }
+  try{cost+=oppCostUp(r,c,pi,"spell")||0;}catch(e){}
+  return Math.max(1,cost);
+}
+function rinneSpName(c){
+  try{const r=getReg(c);const kSp=(LINKS.get(normName(c.name))||[])[1];return (kSp&&dispName.get(kSp))||String(r&&r.name||"").split("／")[1]||"呪文側";}catch(e){return "呪文側";}
+}
+let RINNE_BUSY=false;
+/* ♾ v16.205 輪廻∞を使えるタイミングで「使いますか？」を聞く。
+   ・自分のターンに《天地命動 バラギアラ》が出た時（出た時の効果＝マナのアンタップが済んでから）
+   ・自分のターンに手札からマナに置いた時（場に輪廻∞を持つクリーチャーがいる時）
+   ・輪廻∞で唱えたあと（マナが増えるので、続けて唱えられるなら続けて聞く）
+   支払えるものだけを並べる。「使わない」で終わり。 */
+async function offerRinneInf(pi,why){
+  try{
+    if(!S.expert||RINNE_BUSY)return;
+    if(S.vs&&S.who!==pi)return;
+    if(typeof isGhostSeat==="function"&&isGhostSeat(pi))return;
+    if(typeof olActive==="function"&&olActive()&&pi!==(S.seat|0))return;
+    for(let g=0;g<30;g++){
+      const Z=zonesOf(pi);
+      const un=Z.mana.filter(m=>!m.tapped).length;
+      const cands=Z.battle.filter(x=>{const r=getReg(x);if(!r||!r.rinneInf||!(r.twin||r.ctype==="twinpact")||isSealed(x)||isIgnored(x,pi))return false;return rinneCostOf(pi,x)<=un;});
+      if(!cands.length)return;
+      const j=await askChoice(`♾ 輪廻∞を使いますか？（${why}）\nアンタップのマナ：${un}枚`,[...cands.map(x=>`♾ 《${rinneSpName(x)}》を唱える（コスト${rinneCostOf(pi,x)}）`),"使わない"]);
+      if(j===null||j<0||j>=cands.length)return;
+      const ok=await castRinneInf(pi,cands[j],{noAsk:true});
+      if(!ok)return;
+      try{await waitFxIdle();}catch(e){}
+      why="唱えたあと";
+    }
+  }catch(e){console.warn("offerRinneInf",e);}
+}
 async function castRinneInf(pi,c,opts){
   opts=opts||{};
   const r=getReg(c);
@@ -16242,19 +16289,17 @@ async function castRinneInf(pi,c,opts){
     const cap=(lk||tl)?null:perTurnCapHit(pi,"spell",rS);
     if(lk||tl||cap){toast(`⛔ いまは呪文を唱えられません（${lk?faceNameOf(lk):tl?"このターンの制限":"回数の制限"}）`);return false;}
   }catch(e){}
-  let cost=+r.cost2||0;
-  if(r.sympathy&&String(r.symFace||"")!=="0"){
-    try{const sc=sympathyCount(pi,c,r.sympathy);cost-=sc.cnt*(+r.symX||1);}catch(e){}
-  }
-  try{cost+=oppCostUp(r,c,pi,"spell")||0;}catch(e){}
-  cost=Math.max(1,cost);
+  const cost=rinneCostOf(pi,c);
   const civs=(Array.isArray(r.civs2)&&r.civs2.length)?r.civs2:(r.civs||[]);
+  if(RINNE_BUSY){toast("♾ 輪廻∞を処理中です");return false;}   // ♾ v16.205 2回押しで2回唱えない
   const un=Z.mana.filter(m=>!m.tapped).length;
   if(un<cost){toast(`♾ マナが足りません（コスト${cost}・アンタップのマナ${un}枚）`);return false;}
   /* ♾ v16.201 唱えるかどうかは任意なので、コストを見せて確認する（唱えた後のマナ置きは強制で聞かない） */
   if(!opts.noAsk&&!await ask(`♾ 輪廻∞（${faceNameOf(c)}）\n呪文側「${spName}」をコスト${cost}を支払って唱えますか？\n（このクリーチャーはバトルゾーンに残ります。唱えたあと、自分の《${r.rinneInfName||"バラギアラ"}》1体につき山札の上から1枚をマナへ）`))return false;
   snap();
   if(!ghostPayManaN(Z,cost,civs)){toast(`♾ 必要な文明のマナがそろっていません（${civs.join("・")}）`);return false;}
+  RINNE_BUSY=true;
+  try{
   toast(`♾ 輪廻∞：${spName} を唱える（マナ${cost}枚をタップ・場に残る）`);
   logPush(`♾ ${S.players[pi].label}：${faceNameOf(c)} の輪廻∞で《${spName}》を唱えた（コスト${cost}）`);
   fxKeyword(pi,"輪廻∞！",c.name,spName);
@@ -16267,7 +16312,9 @@ async function castRinneInf(pi,c,opts){
   }finally{c.face=_f0;}
   // そうした時：自分の バラギアラ 1体につき「山札の上から1枚をマナへ」を1回
   const nm=String(r.rinneInfName||"バラギアラ");
-  const cnt=Z.battle.filter(x=>faceNameOf(x).includes(nm)||String(x.name||"").includes(nm)).length;
+  /* ♾ v16.205 数えるのは輪廻∞を持つ《天地命動 バラギアラ》だけ（暴命天などの名前違いや、封印中は数えない）。1回の輪廻∞でバラギアラの数だけ */
+  const _rn=Z.battle.filter(x=>{if(isSealed(x))return false;const rx=getReg(x);return !!(rx&&rx.rinneInf)&&(faceNameOf(x).includes(nm)||String(x.name||"").includes(nm));});
+  const cnt=_rn.length;
   if(cnt>0){
     /* ⚖ v16.192 1枚ずつ置き、途中で山札が0枚になったら、その時点で負けの判定をする。
        無敵虹帝などで負けが置き換えられて山札が戻っても、残りの「山札の上から1枚をマナへ」は行わない（新しい裁定）。 */
@@ -16293,8 +16340,10 @@ async function castRinneInf(pi,c,opts){
       }
     }
     toast(`♾ 輪廻∞：自分の《${nm}》${cnt}体 → 山札の上から${done}枚をマナへ（強制）`);
+    logPush(`♾ 輪廻∞のマナ置き：《${nm}》${cnt}体（${_rn.map(x=>faceNameOf(x)).join("・")}）→ ${done}枚`);
   }
   renderAll();
+  }finally{RINNE_BUSY=false;}
   return true;
 }
 /* 🃏 v16.189 カードの「出た時」の能力（faces[0] の行）。noJBig なら「Jビッグ」を含む能力を除く */
@@ -17004,11 +17053,16 @@ async function runFxList(pi,list,srcCard,inPump){
       // 🌱 自分のマナゾーンから条件に合うクリーチャーを選んでバトルゾーンに出す（獰猛なる大地型）
       const filt=String(f.cond||"").trim();
       const put=[];
+      /* 🧬 v16.204 進化クリーチャーは進化元（もともとバトルゾーンにいる自分のクリーチャー）の上に重ねて出す（覇道の決闘型）。
+         同じ効果で一緒に出したクリーチャーの上には重ねない（同時に出るため）。NEOは重ねるか選べる。 */
+      const _mrPureEvo=r=>!!(r&&isEvoReg(r)&&!isNeoReg(r)&&!isNoBaseEvoReg(r));
+      const _mrBases=(r,self)=>Z.battle.filter(x=>x.id!==self.id&&!put.some(y=>y.id===x.id)&&(()=>{const rr=getReg(x);return rr&&(isCreatureReg(rr)||rr.shinkalize)&&!isSealed(x)&&evoSrcOk(r,x);})());
       for(let i=0;i<n;i++){
         const pool=Z.mana.filter(x=>{
           const rx=getReg(x);
           if(!rx||!(isCreatureReg(rx)||(f.incAura&&/aura/i.test(String(rx.ctype||"")))))return false;   // 🔮 v15.71 行の欄「オーラも対象」
           if(put.some(y=>y.id===x.id))return false;
+          if(_mrPureEvo(rx)&&!_mrBases(rx,x).length)return false;   // 🧬 v16.204 進化元がいない進化クリーチャーは選べない
           return !filt||lockFilterOk(filt,rx,x);
         });
         if(!pool.length){if(!put.length)toast(`🌱 自分のマナゾーンに該当クリーチャーがいません${filt?`（${filt}）`:""}`);break;}
@@ -17017,6 +17071,40 @@ async function runFxList(pi,list,srcCard,inPump){
         const tgt=pool[j];
         const mi=Z.mana.findIndex(x=>x.id===tgt.id);
         if(mi<0)continue;
+        {
+          const rt=getReg(tgt);
+          const _pure=_mrPureEvo(rt);
+          const _neo=!!(rt&&isNeoReg(rt)&&!isNoBaseEvoReg(rt));
+          const bases=(_pure||_neo)?_mrBases(rt,tgt):[];
+          let host=null;
+          if(_pure||(_neo&&bases.length)){
+            let stack=_pure;
+            if(_neo){const m=await askChoice(`《${faceNameOf(tgt)}》はNEOクリーチャー。出し方を選択`,["NEOクリーチャーとして出す（進化元なし）","NEO進化として出す（自分のクリーチャーに重ねる）"],tgt);if(m===null){i--;continue;}stack=(m===1);}
+            if(stack){
+              const k=bases.length===1?0:await pickCard(`⤴ 《${faceNameOf(tgt)}》を重ねる進化元を選択（自分のクリーチャー）`,bases,{sub:x=>x.tapped?"タップ":""});
+              if(k===null){i--;continue;}
+              host=bases[k];
+            }
+          }
+          if(host){
+            if(!battleEntryOk(pi,tgt)){toast(`⛔ ${faceNameOf(tgt)} は出せないためマナゾーンに残しました`);continue;}
+            const bi=Z.battle.findIndex(x=>x.id===host.id);if(bi<0)continue;
+            if(!put.length)snap();
+            const cc=Z.mana.splice(mi,1)[0];
+            cc.faceup=true;cc.sideways=false;cc.rot=0;cc.buff=null;
+            cc.tapped=host.tapped;cc.sick=false;
+            if(_neo)cc.neoEvo=true;
+            cc.under=[host,...(host.under?host.under.splice(0):[]),...(cc.under||[])];
+            notifyBecameEvoSource(pi,host);
+            if(host.gear&&host.gear.length)cc.gear=[...(cc.gear||[]),...host.gear.splice(0)];
+            Z.battle[bi]=cc;transferAtkState([host.id],cc);cc._viaCheat=true;markArrive(cc);
+            put.push(cc);
+            sfx("move");renderAll();
+            toast(`⤴ ${faceNameOf(host)} の上に ${faceNameOf(cc)} をマナゾーンから進化して出した`);
+            logOnly(`⤴ ${S.players[pi].label}：《${faceNameOf(cc)}》をマナゾーンから《${faceNameOf(host)}》の上に進化して出した`);
+            continue;
+          }
+        }
         if(!put.length)snap();
         const cc=Z.mana.splice(mi,1)[0];
         cc.faceup=true;cc.tapped=false;cc.sideways=false;cc.rot=0;cc.buff=null;
@@ -25421,6 +25509,43 @@ async function runFxList(pi,list,srcCard,inPump){
         top.face=0;OZ.grave.push(top);
       }else{top.faceup=false;OZ.deck.push(top);toast(`🐉 ${faceNameOf(top)} を山札の一番下へ`);}
       renderAll();
+    }else if(f.t==="castDiscardedSpell"){
+      /* 🗑🔮 v16.205 捨てたカードが条件に合う呪文なら、コストを支払わずに唱えてもよい（龍装艦 チェンジザ型）。
+         誘発「自分の手札を1枚捨てた時」と組み合わせる。条件欄＝例：コスト5以下。
+         各ターン、このクリーチャー1体につき1回（条件に合う呪文を捨てた時だけ数える・唱えなくても使ったことになる＝公式FAQ）。 */
+      const dc=FX_TRIG;if(!dc||!srcCard)continue;
+      const rx=getReg(dc);
+      const isSp=!!(rx&&(rx.ctype==="spell"||((rx.twin||rx.ctype==="twinpact")&&faceFx(rx,1).length)));
+      if(!isSp)continue;
+      const cond=String(f.cond||"").trim();
+      if(cond&&!lockFilterOk(cond,payFaceReg(rx,"spell")||rx,dc,null,"spell"))continue;
+      S._watchOnce=S._watchOnce||{};
+      const _ok=`${srcCard.id}:discCast`,_tk=`${S.turn}:${S.who}`;
+      if(S._watchOnce[_ok]===_tk){toast(`🗑 ${faceNameOf(srcCard)}：このターンはもう使いました`);continue;}
+      S._watchOnce[_ok]=_tk;
+      const gi=Z.grave.findIndex(x=>x.id===dc.id);
+      if(gi<0){toast(`🗑 ${faceNameOf(dc)} は墓地にないため唱えられません`);continue;}
+      const _spNm=(()=>{try{if(rx.ctype==="spell")return faceNameOf(dc);const k=(LINKS.get(normName(dc.name))||[])[1];return (k&&dispName.get(k))||String(rx.name||"").split("／")[1]||faceNameOf(dc);}catch(e){return faceNameOf(dc);}})();
+      if(!await ask(`🔮 ${faceNameOf(srcCard)}：捨てた《${_spNm}》をコストを支払わずに唱えますか？`,dc))continue;
+      snap();
+      const gi2=Z.grave.findIndex(x=>x.id===dc.id);if(gi2<0)continue;
+      Z.grave.splice(gi2,1);
+      const list=rx.ctype==="spell"?faceFx(rx,0):faceFx(rx,1);
+      const _f0=dc.face|0;if(rx.ctype!=="spell")dc.face=1;
+      toast(`🔮 ${faceNameOf(srcCard)}：《${_spNm}》を唱える`);
+      logOnly(`🔮 ${S.players[pi].label}：${faceNameOf(srcCard)} の能力で、捨てた《${_spNm}》をコストを支払わずに唱えた`);
+      try{emitEvent(pi,"spell",dc);await runFxList(pi,list,dc);}finally{dc.face=_f0;}
+      dc.face=0;
+      if(![...Z.grave,...Z.hand,...Z.mana,...Z.battle,...Z.shield,...Z.deck].some(x=>x.id===dc.id))Z.grave.push(dc);
+      renderAll();
+    }else if(f.t==="foeOneAtkBlkNext"){
+      /* 🚫 v16.205 次の自分のターン開始時まで、相手は各ターンに1度しか、クリーチャーで攻撃もブロックもできない（六奇怪の四 ～土を割る逆瀧～型） */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      S.oneAtkBlk=S.oneAtkBlk||{};
+      S.oneAtkBlk[op]={by:pi};
+      toast(`🚫 次の自分のターン開始時まで、${S.players[op].label} は各ターン1度しか攻撃もブロックもできない`);
+      logOnly(`🚫 ${S.players[pi].label}：次の自分のターン開始時まで、${S.players[op].label} は各ターン1度しかクリーチャーで攻撃もブロックもできない`);
+      renderAll();
     }else if(f.t==="graveCastAnyFree"){
       /* 🐉 v16.198 いずれかのプレイヤーの墓地から呪文を1枚、コストを支払わずに唱えてもよい（亜空艦 ダイスーシドラ型）。唱えたら持ち主の墓地へ戻る */
       const pool=[];for(const pp of (S.vs?[pi,op]:[pi]))for(const x of zonesOf(pp).grave){const rx=getReg(x);if(rx&&(rx.ctype==="spell"||(rx.twin&&faceFx(rx,1).length))&&(!f.cond||lockFilterOk(String(f.cond),rx,x,null,"spell")))pool.push({x,pp});}
@@ -26671,7 +26796,9 @@ function afterHandDiscard(owner,c,byPi){
       enqueueWatchJob(async()=>{
         if(!zonesOf(owner).battle.some(x=>x.id===bid))return;
         toast(`🗑 ${faceNameOf(b)}：手札を1枚捨てた時`);
-        await runFxList(owner,list,b);
+        /* 🗑 v16.205 捨てたカードを「誘発のきっかけ」として渡す（castDiscardedSpell＝チェンジザ型で使う） */
+        const _pt=FX_TRIG;FX_TRIG=c;
+        try{await runFxList(owner,list,b);}finally{FX_TRIG=_pt;}
         renderAll();
       });
     }
@@ -30478,6 +30605,7 @@ async function startAttack(pi,id){
       }
     }
     if(noAtkBlkOf(c)){toast(`🚫 ${faceNameOf(c)} は攻撃もブロックもできない`);return;}
+    if(oneAtkBlkOn(pi)&&turnAtkCount(pi)>=1){toast(`🚫 このターン、${S.players[pi].label} はもうクリーチャーで攻撃できません（各ターン1度まで）`);return;}
     if(rA&&rA.civil){
       const cc=civilCount(rA,pi);
       toast(cc.ok?`🎨 シビルカウント${cc.need}達成（${cc.cnt}体）：攻撃時の能力が使えます`:`🎨 シビルカウント${cc.need}未達（現在${cc.cnt}体）：攻撃時の能力は使えません`);
@@ -30560,7 +30688,7 @@ async function startAttack(pi,id){
   c._mbDone=false;
   /* ⚔ v16.202 攻撃を宣言するたびに「侵略・革命チェンジの宣言済み」「スマッシュ・バースト使用済み」を戻す。
      これまで一度も戻していなかったので、侵略したクリーチャーは次のターン以降、侵略も革命チェンジも宣言できなかった。 */
-  c._invDeclDone=false;c._smashDone=false;
+  c._invDeclDone=false;c._smashDone=false;c._atkEarly=false;
   const wnames=watchNames(pi,tg.kind==="creature"?"atkC":"atkP");
   if(wnames.length){
     const q=await askChoice(`⚡誘発確認（${tg.kind==="creature"?"クリーチャーへの攻撃":"プレイヤーへの攻撃"}時）\n${wnames.join("、")}\n\n効果を処理しますか？`,
@@ -31349,6 +31477,9 @@ async function execAttack(pi,id,tg){
   const _origAtk=c;     // ⚔ v16.104 攻撃を宣言したクリーチャー（攻撃する時の効果の持ち主）
   const _invSkip=!!c._invDeclDone;   // ⚔ v16.103 攻撃時効果の保留から再開した時は、宣言をやり直さない
   c._invDeclDone=true;
+  const _resumeEarly=!!c._atkEarly;c._atkEarly=false;   // ⚔ v16.204 攻撃する時の効果を先にして保留→再開：順番は聞き直さない
+  let _atkTrigEarly=false;
+  const _declLoop=async(_late)=>{
   if(S.expert&&!_invSkip)while(true){
     if(changedOnce)break;   // ♻ v16.94 革命チェンジは1回の攻撃に1枚。行った後はさらに宣言できない
     const sZones=v=>{
@@ -31444,6 +31575,17 @@ async function execAttack(pi,id,tg){
       cands.sort((a,b)=>(isChangeCand(a)?1:0)-(isChangeCand(b)?1:0));
     }
     if(!cands.length)break;
+    /* ⚔ v16.204 「攻撃する時」の効果と、侵略・革命チェンジのどちらを先に処理するかを選ぶ。
+       攻撃する時の効果を先にしたら、ここでは宣言せずに抜け、③のあとで宣言する（_declLoop(true)）。 */
+    if(!_late&&!invadedOnce&&!_resumeEarly&&atkTrigPending(pi,c,tg)){
+      const _jo=await askChoice(`⚔ 攻撃する時の処理の順番\n・侵略／革命チェンジ：${cands.map(({h})=>`《${faceNameOf(h)}》`).join("")}\n・攻撃する時の効果：《${faceNameOf(c)}》など\nどちらを先に処理しますか？`,
+        ["⚡ 侵略・革命チェンジから（宣言 → 出た時 → 攻撃する時の効果）","⚔ 攻撃する時の効果から（攻撃する時の効果 → 侵略・革命チェンジ）"]);
+      if(_jo===1){
+        _atkTrigEarly=true;
+        logOnly(`⚔ ${S.players[pi].label}：攻撃する時の効果を先に処理してから、侵略／革命チェンジを宣言`);
+        break;
+      }
+    }
     {
       const j=await askChoice(`⚔ ${invadedOnce?"さらに":"攻撃時："}侵略／革命チェンジしますか？\n（侵略は何枚でも順に重ねられます。革命チェンジは1枚だけで、行うと宣言は終わりです。効果は重ねた順に解決）`,
         [...cands.map(({h,zn,jchange,sKakumei})=>{const r=getReg(h);return (sKakumei?"🐉S革命チェンジ：":jchange?"🃏J・チェンジ：":(zn==="hyper"&&!r.sInvade)?(r.pInvade?"🌌P侵略：":"🌌P革命チェンジ："):r.sInvade?sInvadeLabel(r.sInvade):r.invade?"⚡侵略：":"♻革命チェンジ：")+faceNameOf(h)+`（${zLb[zn]}）`;}),"しない"]);
@@ -31520,6 +31662,8 @@ async function execAttack(pi,id,tg){
     }
     break;
   }
+  };
+  if(S.expert&&!_invSkip)await _declLoop(false);
   /* ⚔ v16.114 順番：①侵略・革命チェンジをすべて宣言 → ②宣言したカードの「出た時」を重ねた順に解決 →
      ③攻撃する時の効果（クロスギア・自身・スマッシュ・バースト・超魂X・どちらの攻撃でも・味方全体付与）。
      太陽アイドル→ドギラゴールデンの革命チェンジなら、ゴールデンの出た時 → 太陽アイドルの攻撃時 の順になる。
@@ -32070,8 +32214,25 @@ async function execAttack(pi,id,tg){
        await _resolveDeclared(true);
      }
    }
+   /* ⚔ v16.204 攻撃する時の効果を先にしていて③で保留した時は、▶再開の時に侵略・革命チェンジを宣言できるようにしておく */
+   if(_atkTrigRes==="abort"&&_atkTrigEarly&&S.pendingAtk&&S.pendingAtk.id===id){c._invDeclDone=false;c._atkEarly=true;}
    if(_atkTrigRes==="abort")return;
    if(_trigFirst){const _r2=await _resolveDeclared(false);if(_r2==="abort")return;}}
+  /* ⚔ v16.204 攻撃する時の効果を先にした時：ここで侵略・革命チェンジを宣言して、出た時を解決する。
+     侵略・革命チェンジで出たクリーチャーは、この攻撃の「攻撃する時」には誘発しない（③はやり直さない）。 */
+  if(S.expert&&_atkTrigEarly&&stillAtk()){
+    const _n0=_declared.length;
+    await _declLoop(true);
+    if(_declared.length>_n0){
+      for(const d of _declared.slice(_n0)){d.hcard._atkFxDone=true;d.hcard._invDeclDone=true;}
+      const _r3=await _resolveDeclared(false);if(_r3==="abort")return;
+      const atkNow2=Z.battle.find(x=>x.id===id)||c;
+      const rMB2=getReg(atkNow2);
+      if(rMB2&&rMB2.magib&&(+rMB2.magibN>0)&&!isSealed(atkNow2)&&!isIgnored(atkNow2,pi)&&!atkNow2._mbDone){
+        atkNow2._mbDone=true;await doMagibomber(pi,atkNow2,rMB2);renderAll();
+      }
+    }
+  }
   if(S._gsStop){S._gsStop=false;toast("⚡ G・ストライク：この攻撃は止まりました");logOnly(`⚡ ${S.players[pi].label}：G・ストライクにより攻撃が止まった`);renderAll();return;}   // ⚡ v16.146
   if(!stillAtk()){renderAll();return;}   // 🔏 v16.106 攻撃が止まっていれば革命0トリガーは聞かない
   await offerRev0();
@@ -32329,7 +32490,8 @@ async function execAttack(pi,id,tg){
     if(gearProtectsFrom(c,b))return false;              // 攻撃側がクロスギアで守られている
     return true;
   };
-  const blockers=unblockInfo.ok?[]:OZ.battle.filter(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b)&&_blkOk(b));
+  let blockers=unblockInfo.ok?[]:OZ.battle.filter(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b)&&_blkOk(b));
+  if(blockers.length&&oneAtkBlkOn(op)&&turnBlkCount(op)>=1){toast(`🚫 このターン、${S.players[op].label} はもうブロックできません（各ターン1度まで）`);blockers=[];}
   if(unblockInfo.ok&&OZ.battle.some(b=>!b.tapped&&!noAtkBlkOf(b)&&isBlk(b))){
     toast(`🛡✋ ${unblockInfo.why}（ブロックの確認は出ません）`);
     logOnly(`🛡✋ ${unblockInfo.why}`);
@@ -32361,6 +32523,7 @@ async function execAttack(pi,id,tg){
     if(bl<blockers.length){
       defender=blockers[bl];
       defender.tapped=true;
+      noteBlockThisTurn(op);   // 🚫 v16.205 各ターン1度しかブロックできない（六奇怪の四型）の数え上げ
       c._wasBlocked=true;   // 🛡 ブロックされた（「ブロックされなかった時」の覚醒は起こさない）
       if(typeof mdEv==="function")mdEv("block",op,faceNameOf(defender),{vs:faceNameOf(c)}); // 📊 ブロックの判断を記録
       toast(`⚔ ブロック：《${faceNameOf(defender)}》が《${faceNameOf(c)}》の攻撃をブロック`);
@@ -40944,6 +41107,8 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if(S.expert&&toZone==="mana"){
     runWatchFx(pTo,"manaCharge");
     applyManaTapIn(pTo,c);
+    /* ♾ v16.205 自分のターンに手札からマナに置いた時、輪廻∞を使えるなら聞く */
+    try{if(fromZone==="hand"&&pFrom===pTo&&S.who===pTo&&zonesOf(pTo).battle.some(x=>{const rx=getReg(x);return rx&&rx.rinneInf;}))enqueueWatchJob(async()=>{await offerRinneInf(pTo,"マナに置いた");});}catch(e){}
   }
   /* 🌱 v16.156 「このカードを自分の手札からマナゾーンに置いた時」（覇道の決闘型）。
      タップして置く処理（多色）が済んでから動かすので、アンタップの効果が後勝ちになる。 */
@@ -55456,7 +55621,8 @@ function zoneCondOk(expr,pi,selfCard){
       if(mFace)return mFace[2]==="表向き"?faceUpShieldCards(ZZ).length:zoneCards(ZZ,"shield").filter(x=>!x.faceup).length;   // 🛡 v16.115 重なりの中の表向きも数える
       if(key==="シールド")key="盾";
       /* 🐉 v16.202 「クリーチャー」「バトルクリーチャー」＝バトルゾーンのクリーチャーだけ（禁断・フォートレス・フィールドなどは数えない・カツドン型） */
-      if(key==="クリーチャー"||key==="バトルクリーチャー")return (ZZ.battle||[]).filter(x=>{const rx=getReg(x);return !rx||isCreatureReg(rx);}).length;
+      /* 🔏 v16.204 封印されたカード（封印中の禁断クリーチャー＝禁断の鼓動など）は「ないもの」として数えない */
+      if(key==="クリーチャー"||key==="バトルクリーチャー")return (ZZ.battle||[]).filter(x=>{if(isSealed(x))return false;const rx=getReg(x);return !rx||isCreatureReg(rx);}).length;
       const map={"盾":"shield","墓地":"grave","手札":"hand","バトル":"battle","マナ":"mana","山札":"deck"};
       return map[key]!=null?zoneCards(ZZ,map[key]).length:null; // ⚙ バトルはクロス中のギアも含む
     };
@@ -55578,7 +55744,7 @@ function zoneCondOk(expr,pi,selfCard){
       "相手盾表向き":faceUpShieldCards(OZ).map(o=>o.card),"相手盾裏向き":OZ.shield.filter(x=>!x.faceup),"盾合計":[...Z.shield,...OZ.shield],"盾最少":(Z.shield.length<=OZ.shield.length?Z.shield:OZ.shield),"バトル":Z.battle,"バトル他":Z.battle.filter(x=>!(selfCard&&x.id===selfCard.id)),"バトル合計":[...Z.battle,...OZ.battle],"バトルマナ":[...Z.battle,...Z.mana],"相手バトル":OZ.battle,"手札":Z.hand,"相手手札":OZ.hand,"相手山札":OZ.deck,"山札":Z.deck,"相手マナ":OZ.mana}[zn];
       if(!arrs)return false;
       /* 🐉 v16.202 「バトルクリーチャー」「バトル:クリーチャー」＝クリーチャーだけ（禁断・フォートレス・フィールド等は数えない） */
-      const cnt=(filt==="クリーチャー")?arrs.filter(x=>{const rx=getReg(x);return !rx||isCreatureReg(rx);}).length:((!filt)?arrs.length:zoneFiltCount(arrs,filt));
+      const cnt=(filt==="クリーチャー")?arrs.filter(x=>{if(isSealed(x))return false;const rx=getReg(x);return !rx||isCreatureReg(rx);}).length:((!filt)?arrs.length:zoneFiltCount(arrs,filt));
       if(opr==="<="||opr==="≦")return cnt<=n;
       if(opr==="="||opr==="＝")return cnt===n;
       return cnt>=n;
