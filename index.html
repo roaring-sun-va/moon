@@ -2685,6 +2685,7 @@ body.shake{animation:bodyShake .4s ease-out}
       </div>
       <div class="row" style="gap:12px">
         <label title="バトルゾーンにある相手のエレメントの持つ文明1つにつき、召喚コストがn少なくなる（ウェディング・イノセンス型・0＝無効）"><span style="font-size:12px;font-weight:700">💒 相手の文明1つにつき召喚コスト−</span><input type="number" id="fxCostRedOppCiv" min="0" max="9" value="0" style="width:52px"></label>
+        <label title="相手のクリーチャー1体につき、召喚コストがn少なくなる（メガ・マグマ・ドラゴン型・下限1・0＝無効）"><span style="font-size:12px;font-weight:700">🌋 相手のクリーチャー1体につき召喚コスト−</span><input type="number" id="fxCostRedOppCre" min="0" max="9" value="0" style="width:52px"></label>
       </div>
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <label><input type="checkbox" id="fxNoBlock"> ブロックされない</label>
@@ -2712,6 +2713,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="text" id="fxGrandZeroFilt" placeholder="└ 下に置ける呪文の絞り込み（空欄＝魔導具・「呪文」＝全部・不夜城艦 クランヴィア型）" style="flex:1;min-width:220px">
         <label title="無月の門99（下に4枚以上でゲーム中1回・水のコスト99以下の呪文をタダ唱え）を持たせる。絞り込みが空欄の登録（新世壊型）は書かなくても付きます"><input type="checkbox" id="fxGate99"> └ 無月の門99を持つ</label>
         <label title="自分のシールドが1つもない間だけ、このクリーチャーはブロッカーを得ます"><input type="checkbox" id="fxShieldZeroBlocker"> 🛡 自分の盾が0ならブロッカー</label>
+        <label title="バトルゾーンに出たターンでも、相手プレイヤー（シールド・ダイレクトアタック）は攻撃できる。クリーチャーへの攻撃は召喚酔いのまま（ザンジェットW7型）"><input type="checkbox" id="fxSaP"> ⚡ 出たターン、相手プレイヤーを攻撃できる</label>
+        <label title="自分の〔対象〕のクリーチャーは、バトルに負けた時以外バトルゾーンを離れない（龍装者 ジスタジオ型・空欄＝なし・例「パワー12000以上」）"><span style="font-size:12px;font-weight:700">⚓ バトルに負けた時以外離れない：自分の</span><input type="text" id="fxStAuraNoLeaveF" placeholder="対象（例：パワー12000以上）" style="width:170px"></label>
         <label><input type="checkbox" id="fxCastle"> 城/要塞（盾に重ねて要塞化・表向き）</label>
         <label title="相手のクリーチャーがシールドを1つ以上ブレイクする時、かわりにこのシールドをブレイクさせてもよい（セイント・キャッスル）"><input type="checkbox" id="fxCastleBreakRep"> 🏰 要塞化した盾のブレイクを、シールド1枚を手札に加えて肩代わりする（ハッスル・キャッスル型）</label>
         <label title="このカードを自分の超次元ゾーンからコストを支払って召喚できます（頂上龍素 サイクリタ型）。超次元ゾーンからバトルゾーンへ動かした時に、支払うかどうかを確認します"><input type="checkbox" id="fxHyperSummon"> 🌌 超次元ゾーンからコストを払って召喚できる</label>
@@ -6149,7 +6152,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.172";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.174";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6276,6 +6279,26 @@ function sforceAllSrc(pi,kind){
   }catch(e){}
   return null;
 }
+/* ⚓ v16.174 常在：自分の〔対象〕のクリーチャーは、バトルに負けた時以外バトルゾーンを離れない（龍装者 ジスタジオ型）。
+   付与元の stAuraNoLeaveF（対象の絞り込み・例「パワー12000以上」）を見る。
+   バトルに負けて破壊される時は doBattle が BATTLE_LOSS_IDS に入れるので、その時だけは働かない。
+   （S に Set を置くと保存・巻き戻しの JSON で壊れるので、S の外に持つ） */
+var BATTLE_LOSS_IDS=new Set();
+function auraNoLeaveSrc(pi,c){
+  try{
+    if(!S.expert||!c)return null;
+    if(BATTLE_LOSS_IDS.has(c.id))return null;
+    const rc=getReg(c);
+    if(!rc||!isCreatureReg(rc)||isIgnored(c,pi))return null;
+    for(const b of zonesOf(pi).battle){
+      const rb=getReg(b);
+      if(!rb||!String(rb.stAuraNoLeaveF||"").trim())continue;
+      if(isSealed(b)||isIgnored(b,pi))continue;
+      if(lockFilterOk(String(rb.stAuraNoLeaveF).trim(),rc,c))return b;
+    }
+  }catch(e){}
+  return null;
+}
 function askShieldForcePlus(pTo,c,reg){
   if(reg.sforce&&!c.sfActive){
     (async()=>{
@@ -6337,6 +6360,7 @@ function cantLeaveBattle(pi,c,quiet){
   if(!IGN&&c.sfActive&&r&&r.sforceFx==="noLeave"){if(!quiet)toast(`⚓✨ シールド・フォース有効中：${faceNameOf(c)} は離れない！`);return true;}
   // 🛡✨ シールド・フォースの効果を「自分のクリーチャー全体」に配る型（叡智のW インビンシブル・ギャラクシー）
   if(!IGN){const src=sforceAllSrc(pi,"noLeave");if(src){if(!quiet)toast(`⚓✨ シールド・フォース（${faceNameOf(src)}）：${faceNameOf(c)} は離れない！`);return true;}}
+  {const _an=auraNoLeaveSrc(pi,c);if(_an){if(!quiet)toast(`⚓ ${faceNameOf(_an)}：${faceNameOf(c)} はバトルに負けた時以外は離れない！`);return true;}}
   if(!IGN&&r&&r.gimmick==="complex"&&(c.under?c.under.length:0)<(r.complexArc?7:8)){if(!quiet)toast(`⬛ ${faceNameOf(c)} は離れない！（下が${r.complexArc?6:7}枚以下）`);return true;}
   const _stayBuff=!!(c.buff&&c.buff.stayIfPow);
   const _stayReg=!!(!IGN&&r&&r.cstFx==="stayPow"&&(!r.cstCond||zoneCondOk(r.cstCond,pi,c)));
@@ -13332,6 +13356,8 @@ const FX_TYPES=[
   ["charge","n枚マナ加速（山上→マナ）"],
   ["zoneMove","↔ 自分の〔元〕から条件に合うカードをn枚〔先〕へ移動（条件欄に「墓地→マナ:スノーフェアリー」のように元→先:対象を指定・墓地→マナもこれで）"],
   ["chargeTap","n枚マナ加速（山上→タップしてマナに置く）"],
+  ["myShieldsToHandRefill","🛡 自分のシールドをすべて手札に加える（S・トリガーは使えない）。その後、自分の山札の上からn枚をシールド化する（煌メク聖壁 灰幢型）"],
+  ["foeCantAtkFiltNext","⛔ 次の自分のターンのはじめまで、条件に合う相手のクリーチャーは攻撃できない（ミラクル・ミラダンテ型／条件欄＝例：コマンド・いま場にいるものが対象）"],
   ["destroySumCostN","💥 相手のクリーチャーを、コストの合計がn以下になるように好きな数選び、破壊する（爆殺!! 覇悪怒楽苦型／条件欄で対象を絞れる）"],
   ["allBattleToManaBoth","🌏 各プレイヤーは、バトルゾーンにある自身のカードをすべてマナゾーンに置く（ギガタック・ハイパー・トラップ型）"],
   ["killPowLtSelfAll","💥 このクリーチャーよりパワーが小さい相手のクリーチャーをすべて破壊する（激竜王ガイアール・オウドラゴン型）"],
@@ -13806,7 +13832,11 @@ function shieldZeroBlockerOn(c){
     const own=[0,1].find(pp=>zonesOf(pp)&&zonesOf(pp).battle&&zonesOf(pp).battle.includes(c));
     if(own==null)return false;
     const r=getReg(c);
-    return !!(r&&r.shieldZeroBlocker&&zonesOf(own).shield.length===0&&!isSealed(c)&&!isIgnored(c,own));
+    if(r&&r.shieldZeroBlocker&&zonesOf(own).shield.length===0&&!isSealed(c)&&!isIgnored(c,own))return true;
+    /* 🛡 v16.174 条件常在（cstFx=blocker）も、ブロッカーの判定・表示のすべてでここを通す。
+       以前はブロックする時（31131）だけ見ていて、アイコンや「ブロッカー」の絞り込みに出なかった。
+       ガロウズ・セブ・カイザー「自分の手札が5枚以上なら、ブロッカー」用。 */
+    return !!(r&&r.cstCond&&r.cstFx==="blocker"&&!isSealed(c)&&!isIgnored(c,own)&&zoneCondOk(r.cstCond,own,c));
   }catch(e){return false;}
 }
 function noAtkedGrant(owner,t,rt){
@@ -14307,6 +14337,12 @@ async function autoTapCost(pi,c){
       for(const b of zonesOf(pi===0?1:0).battle){addCivs(b);(b.gear||[]).forEach(addCivs);} // クロス中のギアもエレメント
       const dec=Math.min(civSet.size*(+r.costRedOppCiv||2),Math.max(0,cost-1)); // 0以下にならない（下限1）
       if(dec>0){cost=Math.max(0,cost-dec);toast(`💒 相手エレメントの文明${civSet.size}種 → 召喚コスト−${dec}（残り${cost}）`);}
+    }
+    // 🌋 v16.174 相手のクリーチャー1体につき召喚コスト−n（メガ・マグマ・ドラゴン型・下限1）
+    if(paySide==="creature"&&(+r.costRedOppCre)>0){
+      const nC=zonesOf(pi===0?1:0).battle.filter(b=>{const rb=getReg(b);return rb&&isCreatureReg(rb);}).length;
+      const dec=Math.min(nC*(+r.costRedOppCre),Math.max(0,cost-1));
+      if(dec>0){cost=Math.max(0,cost-dec);toast(`🌋 相手のクリーチャー${nC}体 → 召喚コスト−${dec}（残り${cost}）`);}
     }
     // ⚙ 常在：自分の〔対象〕の実行コスト−n（一番隊/ギア型・場のカード＋クロス中ギアが対象・最低1で止まる）
     {
@@ -15143,6 +15179,7 @@ async function destroyCreature(pi,c,opts){
       toast(`⚓✨ シールド・フォース（${faceNameOf(_src)}）：${faceNameOf(c)} は離れない！`);
       return true;
     }
+    {const _an=auraNoLeaveSrc(pi,c);if(_an){toast(`⚓ ${faceNameOf(_an)}：${faceNameOf(c)} はバトルに負けた時以外は離れない！`);return true;}}
     if(!IGN&&!byZeroPow&&!c.sfActive&&sforceAllSrc(pi,"noDestroy")){
       const _src=sforceAllSrc(pi,"noDestroy");
       toast(`🪨✨ シールド・フォース（${faceNameOf(_src)}）：${faceNameOf(c)} は破壊されない！`);
@@ -23565,6 +23602,20 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!fieldG.length){toast("⚙ クロスできる自分のクロスギアがありません");continue;}
       const k=await pickCard(`⚙ 《${faceNameOf(srcCard)}》に無料でクロスするギアを選択（キャンセルでクロスしない）`,fieldG,{hint:"任意：コストは支払いません"});
       if(k!==null)await crossGearTo(pi,fieldG[k].id,{free:true,hostId:srcCard.id});
+    }else if(f.t==="myShieldsToHandRefill"){
+      /* 🛡 v16.173 灰幢型：盾をすべて手札へ（S・トリガーなし）→山札の上からn枚をシールド化 */
+      snap();
+      const got=Z.shield.splice(0);got.forEach(c=>{c.faceup=true;toHand(Z,c);markArrive(c);});
+      const _ns=[];for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=false;Z.shield.push(c);markArrive(c);_ns.push(c);}
+      if(_ns.length){try{await notifyShieldPlaced(pi,_ns);}catch(e){}}
+      sfx("move");renderAll();
+      toast(`🛡 シールド${got.length}枚を手札へ（S・トリガーは使えない）→ 山札の上から${_ns.length}枚をシールド化`);
+    }else if(f.t==="foeCantAtkFiltNext"){
+      if(!S.vs)continue;
+      const filt=String(f.cond||"").trim();
+      const tg=zonesOf(op).battle.filter(x=>{const rx=getReg(x);return isCreatureReg(rx)&&(!filt||lockFilterOk(filt,rx,x));});
+      for(const c2 of tg){c2.buff=c2.buff||{};c2.buff.cantAtk=true;try{markBuffNext(c2,["cantAtk"],pi);}catch(e){}}
+      renderAll();toast(`⛔ 次の自分のターンのはじめまで、相手の${filt||"クリーチャー"}${tg.length}体は攻撃できない`);
     }else if(f.t==="destroySumCostN"){
       /* 💥 v16.171 コストの合計が n 以下になるように好きな数（覇悪怒楽苦型）。キャンセルでそこまでを確定 */
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
@@ -26479,6 +26530,11 @@ function dispCost(c,pi){
       for(const b of zonesOf(pi===0?1:0).battle){addCivs(b);(b.gear||[]).forEach(addCivs);}
       if(civSet.size>0)cost-=Math.min(civSet.size*(+r.costRedOppCiv||2),Math.max(0,cost-1));
     }
+    // 🌋 v16.174 相手のクリーチャー1体につき−n（表示に反映・召喚コストなのでクリーチャー面のみ・下限1）
+    if((+r.costRedOppCre)>0&&r.ctype!=="spell"){
+      const nC=zonesOf(pi===0?1:0).battle.filter(b=>{const rb=getReg(b);return rb&&isCreatureReg(rb);}).length;
+      if(nC>0)cost-=Math.min(nC*(+r.costRedOppCre),Math.max(0,cost-1));
+    }
     // 💠 常時のコスト軽減を表示にも反映（v14.59）
     if(r.ctype!=="spell"){
       const evoB=(c.under&&c.under.length)?[c.under[0]]:[];
@@ -27878,11 +27934,16 @@ async function doBattle(pa,a,pd,d){
   };
   const aWin=winsAll(pa,a), dWin=winsAll(pd,d);
   if(aWin&&dWin){toast("🏆 両者「バトルに勝つ」：どちらも破壊されない");}
-  else if(aWin){toast(`🏆 ${faceNameOf(a)} はバトルに勝つ`);await destroyWithReplace(pd,d);}
-  else if(dWin){toast(`🏆 ${faceNameOf(d)} はバトルに勝つ`);await destroyWithReplace(pa,a);}
-  else if(Pa>Pd)await destroyWithReplace(pd,d);
-  else if(Pd>Pa)await destroyWithReplace(pa,a);
-  else{await destroyWithReplace(pa,a);await destroyWithReplace(pd,d);}
+  /* ⚓ v16.174 バトルに負けて破壊されるカードに印を付ける（ジスタジオ型「バトルに負けた時以外離れない」を外すため） */
+  else{
+   const _bl=BATTLE_LOSS_IDS;
+   const _lose=async(pp,x)=>{_bl.add(x.id);try{await destroyWithReplace(pp,x);}finally{_bl.delete(x.id);}};
+   if(aWin){toast(`🏆 ${faceNameOf(a)} はバトルに勝つ`);await _lose(pd,d);}
+   else if(dWin){toast(`🏆 ${faceNameOf(d)} はバトルに勝つ`);await _lose(pa,a);}
+   else if(Pa>Pd)await _lose(pd,d);
+   else if(Pd>Pa)await _lose(pa,a);
+   else{await _lose(pa,a);await _lose(pd,d);}
+  }
   if(hasSlayer(d)&&zonesOf(pa).battle.some(x=>x.id===a.id)){
     toast(`💀 スレイヤー！ ${faceNameOf(a)} を破壊`);
     await destroyWithReplace(pa,a);
@@ -30097,7 +30158,10 @@ async function execAttack(pi,id,tg){
     const rA=getReg(c);
     const saOk=rA&&(rA.sa||(rA.gggSA&&gggOn(pi)));
     const machOk=(hasMachF(rA)||(rA&&c.hyper&&rA.hmMach)||allyGrant(pi,"agMach"))&&tg.kind==="creature";
-    if(saOk||machOk){
+    /* ⚡ v16.174 出たターン、相手プレイヤーを攻撃できる（ザンジェットW7型）。クリーチャーへの攻撃は召喚酔いのまま。 */
+    const saPOk=!!(rA&&rA.saP&&!isSealed(c)&&!isIgnored(c,pi)&&!(tg&&tg.kind==="creature"));
+    if(saPOk&&!saOk&&!machOk)toast(`⚡ ${faceNameOf(c)} は出たターンでも相手プレイヤーを攻撃できる`);
+    if(saOk||machOk||saPOk){
       c.sick=false;
     }else{
       const rSelf=getReg(c);
@@ -33123,6 +33187,9 @@ function renderFxEditor(){
   {const e=$("fxGrandZeroFilt");if(e)e.value=FXEDIT.grandZeroFilt||"";}
   {const e=$("fxGate99");if(e)e.checked=!!FXEDIT.gate99;}
   {const e=$("fxShieldZeroBlocker");if(e)e.checked=!!FXEDIT.shieldZeroBlocker;}
+  {const e=$("fxSaP");if(e)e.checked=!!FXEDIT.saP;}
+  {const e=$("fxStAuraNoLeaveF");if(e)e.value=String(FXEDIT.stAuraNoLeaveF||"");}
+  {const e=$("fxCostRedOppCre");if(e)e.value=String(FXEDIT.costRedOppCre||0);}
   $("fxCastle").checked=!!FXEDIT.castle;
   $("fxGcRedirect").checked=!!FXEDIT.gcRedirect;
   {const e=$("fxCastleBreakRep");if(e)e.checked=!!FXEDIT.castleBreakRep;}
@@ -34129,6 +34196,14 @@ function parseCardText(txt,mode){
   if(/(?:この)?クリーチャーがシールドをブレイクする時[、,]?相手はそのシールドを手札に加えるかわりに墓地に置く/.test(t))out.set.shieldBurn=true;
   {const mSB=t.match(/バトルゾーンまたはマナゾーンに自分の(.+?)が(\d+)枚以上あれば/);
    if(out.set.shieldBurn&&mSB)out.set.shieldBurnCond=`バトルマナ:${mSB[1].trim()}${mSB[2]}以上`;}
+  // 🌋 v16.174 召喚コスト：相手のクリーチャー1体につきn少なく（メガ・マグマ・ドラゴン型）
+  {const mCC=t.match(/召喚コストは[、,]?(?:バトルゾーンにある)?相手のクリーチャー1体につき(\d+)少なくなる/);
+   if(mCC){out.set.costRedOppCre=+mCC[1];out.notes.push({msg:`🌋 相手のクリーチャー1体につき召喚コスト−${mCC[1]}を設定しました`,q:"コスト"});}}
+  // ⚡ v16.174 出たターン、相手プレイヤーを攻撃できる（ザンジェットW7型）
+  if(/(?:バトルゾーンに)?出たターン[、,]?相手プレイヤーを攻撃できる/.test(t))out.set.saP=true;
+  // ⚓ v16.174 自分の〔パワーn以上〕のクリーチャーは、バトルに負けた時以外バトルゾーンを離れない（ジスタジオ型）
+  {const mNL=t.match(/自分の(?:、)?(パワー\d+以上の)?クリーチャーは[、,]?バトルに負けた時以外[、,]?バトルゾーンを離れない/);
+   if(mNL)out.set.stAuraNoLeaveF=mNL[1]?mNL[1].replace(/の$/,""):"クリーチャー";}
   // 💒 召喚コスト：相手のエレメントの持つ文明1つにつきn少なく（ウェディング・イノセンス型）
   {const mCR=t.match(/召喚コストは[、,]?バトルゾーンにある相手のエレメントの持つ文明1つにつき(\d+)少なくなる/);
    if(mCR){out.set.costRedOppCiv=+mCR[1];out.notes.push({msg:`💒 相手エレメントの文明1つにつき召喚コスト−${mCR[1]}を設定しました`,q:"コスト"});}}
@@ -35490,6 +35565,9 @@ function openFxEditor(key){
     grandZeroFilt:cur&&cur.grandZeroFilt||"",
     gate99:cur?!!cur.gate99:false,
     shieldZeroBlocker:cur?!!cur.shieldZeroBlocker:false,
+    saP:cur?!!cur.saP:false,
+    stAuraNoLeaveF:cur&&cur.stAuraNoLeaveF||"",
+    costRedOppCre:cur&&cur.costRedOppCre||0,
     castle:cur?!!cur.castle:false,
     gcRedirect:cur?!!cur.gcRedirect:false,
     castleBreakRep:cur?!!cur.castleBreakRep:false,
@@ -36153,6 +36231,9 @@ $("fxSave").addEventListener("click",async ()=>{
     grandZeroFilt:$("fxGrandZeroFilt")?$("fxGrandZeroFilt").value.trim():"",
     gate99:$("fxGate99")?$("fxGate99").checked:false,
     shieldZeroBlocker:$("fxShieldZeroBlocker")?$("fxShieldZeroBlocker").checked:false,
+    saP:$("fxSaP")?$("fxSaP").checked:false,
+    stAuraNoLeaveF:$("fxStAuraNoLeaveF")?$("fxStAuraNoLeaveF").value.trim():"",
+    costRedOppCre:$("fxCostRedOppCre")?(parseInt($("fxCostRedOppCre").value,10)||0):0,
     castle:$("fxCastle").checked,
     gcRedirect:$("fxGcRedirect").checked,
     castleBreakRep:$("fxCastleBreakRep")?$("fxCastleBreakRep").checked:false,
@@ -37099,6 +37180,9 @@ $("btnRegList").addEventListener("click",()=>{
       attrs.push(_gf?`🌌解決後に下へ置く（対象：${_gf}）`:"🌌無月フィールド《卍 新世壊 卍》");
     }
     if(v.shieldZeroBlocker)attrs.push("🛡自分の盾が0ならブロッカー");
+    if(v.saP)attrs.push("⚡出たターン、相手プレイヤーを攻撃できる");
+    if(v.stAuraNoLeaveF)attrs.push(`⚓常在：自分の${v.stAuraNoLeaveF}のクリーチャーはバトルに負けた時以外離れない`);
+    if(v.costRedOppCre)attrs.push(`🌋 相手のクリーチャー1体につき召喚コスト−${v.costRedOppCre}（下限1）`);
     if(v.castle)attrs.push("城/要塞");
     if(v.gcRedirect)attrs.push("🏰ブレイク肩代わり");
     if(v.invade)attrs.push("侵略");
@@ -39168,6 +39252,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
         const _sfa=sforceAllSrc(pFrom,"noLeave");
         if(_sfa){_putBack();toast(`⚓✨ シールド・フォース（${faceNameOf(_sfa)}）：${faceNameOf(c)} は離れない！`);return true;}
       }
+      {const _an=auraNoLeaveSrc(pFrom,c);if(_an){_putBack();toast(`⚓ ${faceNameOf(_an)}：${faceNameOf(c)} はバトルに負けた時以外は離れない！`);return true;}}
       const _stayReg=!!(rCX2&&rCX2.cstFx==="stayPow"&&!isIgnored(c,pFrom)&&(!rCX2.cstCond||zoneCondOk(rCX2.cstCond,pFrom,c)));
       if(S.expert&&(_stayBuff||_stayReg)){
         const pw=(typeof powNow==="function")?powNow(c):null;
@@ -39620,6 +39705,17 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
       renderAll();
       return;
     }
+    {const _an=auraNoLeaveSrc(pFrom,c);
+     if(_an){
+      const ZT4=zonesOf(pTo);
+      const key4=(toZone==="deckTop"||toZone==="deckBottom")?"deck":(toZone==="shieldUp"?"shield":toZone);
+      const arr4=ZT4[key4];
+      if(arr4){const ix4=arr4.findIndex(x=>x.id===c.id);if(ix4>=0)arr4.splice(ix4,1);}
+      zonesOf(pFrom).battle.push(c);
+      toast(`⚓ ${faceNameOf(_an)}：${faceNameOf(c)} はバトルに負けた時以外は離れない！`);
+      renderAll();
+      return;
+     }}
     if(rCX&&rCX.gimmick==="complex"&&(c.under?c.under.length:0)<(rCX.complexArc?7:8)){
       const ZT=zonesOf(pTo);
       const key=(toZone==="deckTop"||toZone==="deckBottom")?"deck":(toZone==="shieldUp"?"shield":toZone);
