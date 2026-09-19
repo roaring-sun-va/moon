@@ -6147,7 +6147,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.164";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.165";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -48272,6 +48272,80 @@ async function openDeckLookPanel(deckName,onDone){
   foot.appendChild(cancel);foot.appendChild(ok);box.appendChild(foot);
   document.body.appendChild(ol);
 }
+/* 🏷 v16.165 カードのキーと名前を、関係するものごと付け直す（「_sec」付きの古い登録を正式名称にする等）。
+   動かすもの：効果登録（name・aliases）・元の画像・絵のバージョン（画像・一覧・ふだん出す）・表示名・登録順・多面リンク・
+   保存したデッキ（カード名・表紙・絵の選択・見た目）・いま席に付いているデッキ・盤面のカード。
+   古い表示名とキーは効果登録の aliases に残すので、古い名前のままのデッキや共有データも新しい登録に寄る。
+   rn = {from:古いキー, key:新しいキー（省略時は name から）, name:新しい表示名, deckName:デッキに書く名前（省略時は name）}
+   返り値："ok"／"same"（同じ）／"missing"（古いキーが無い）／"exists"（新しいキーが既にある） */
+async function renameCardKeyFull(rn){
+  const from=String(rn&&rn.from||"");
+  const to=String(rn&&rn.key||normName(rn&&rn.name||""));
+  if(!from||!to||from===to)return "same";
+  if(!(FXDB.has(from)||imgURL.has(from)||dispName.has(from)))return "missing";
+  if(FXDB.has(to)||imgURL.has(to))return "exists";
+  const oldDisp=dispName.get(from)||from;
+  const newDisp=String(rn.name||oldDisp);
+  const deckNm=String(rn.deckName||rn.name||newDisp);
+  const matchName=nm=>{try{const b=normName(nm);return b===from||canonicalCardKey(b)===from;}catch(e){return false;}};
+  // 先にデッキ・席・盤面で古いキーに当たる名前を集める（キーを動かす前に判定する）
+  const deckHits=[];
+  try{
+    for(const dn of await deckNames()){
+      const d=await getDeck(dn);if(!d)continue;
+      const secHits=[];
+      for(const sec of ["main","gr","hy","sp","ex"])for(const e of (d[sec]||[]))if(e&&e.name&&matchName(e.name))secHits.push(e);
+      deckHits.push({dn,d,secHits});
+    }
+  }catch(e){}
+  const seatHits=[];
+  for(const P of (S.players||[])){for(const L of [P.mainList,P.grList,P.hyList,P.spList,P.exList])for(const e of (L||[]))if(e&&e.name&&matchName(e.name))seatHits.push(e);}
+  const cardHits=[];
+  for(const pi of [0,1]){const Z=zonesOf(pi)||{};const each=c=>{if(!c||typeof c!=="object")return;if(c.name&&matchName(c.name))cardHits.push(c);for(const u of (c.under||[]))each(u);for(const u of (c.seals||[]))each(u);for(const u of (c.gear||[]))each(u);};for(const zn of Object.keys(Z)){const a=Z[zn];if(Array.isArray(a))a.forEach(each);}}
+  // 画像（元の画像と絵のバージョン）
+  const mv=async(a,b)=>{
+    let bl=db?await idbGet("images",a):memImages.get(a);
+    if(!bl){try{bl=imgURL.getBlob(a);}catch(e){}}   // メモリにだけ載っている時
+    if(!bl)return;
+    if(db){await idbPut("images",b,bl);await idbDel("images",a);}else{memImages.set(b,bl);memImages.delete(a);}
+    try{imgURL.delete(a);imgURL.setBlob(b,bl);}catch(e){}
+  };
+  await mv(from,to);
+  for(const x of (ART_VERS.get(from)||[]))await mv(artVerKey(from,x.id),artVerKey(to,x.id));
+  if(ART_VERS.has(from)){ART_VERS.set(to,ART_VERS.get(from));ART_VERS.delete(from);}
+  if(ART_SEL.has(from)){ART_SEL.set(to,ART_SEL.get(from));ART_SEL.delete(from);}
+  // 効果登録（古い名前は aliases に残す）
+  if(FXDB.has(from)){
+    const r=FXDB.get(from);
+    if(r&&typeof r==="object"){
+      if(r.name&&rn.name)r.name=newDisp;
+      const al=new Set(Array.isArray(r.aliases)?r.aliases:[]);al.add(oldDisp);al.add(from);
+      r.aliases=[...al];
+    }
+    FXDB.set(to,r);FXDB.delete(from);
+  }
+  dispName.delete(from);dispName.set(to,newDisp);
+  if(imgOrder.has(from)){imgOrder.set(to,imgOrder.get(from));imgOrder.delete(from);}
+  for(const [bk,faces] of Array.from(LINKS.entries())){
+    const nb=bk===from?to:bk;const nf=faces.map(f2=>f2===from?to:f2);
+    if(nb!==bk||nf.join("|")!==faces.join("|")){LINKS.delete(bk);LINKS.set(nb,nf);}
+  }
+  // デッキ
+  for(const {dn,d,secHits} of deckHits){
+    let ch=secHits.length>0;
+    for(const e of secHits)e.name=deckNm;
+    if(d.cover===from){d.cover=to;ch=true;}
+    if(d.artSel&&Object.prototype.hasOwnProperty.call(d.artSel,from)){d.artSel[to]=d.artSel[from];delete d.artSel[from];ch=true;}
+    if(d.look)for(const f of ["sleeve","matKey","icon"])if(d.look[f]===from){d.look[f]=to;ch=true;}
+    if(ch){if(db)await idbPut("decks",dn,d);else memDecks.set(dn,d);}
+  }
+  for(const e of seatHits)e.name=deckNm;
+  for(const P of (S.players||[]))if(P.artSel&&Object.prototype.hasOwnProperty.call(P.artSel,from)){P.artSel[to]=P.artSel[from];delete P.artSel[from];}
+  for(const c of cardHits){c.name=deckNm;if(c.art&&Object.prototype.hasOwnProperty.call(c.art,from)){c.art[to]=c.art[from];delete c.art[from];}}
+  await persistFx();await persistNames();await persistLinks();await persistImgOrder();await persistArt();
+  logOnly(`🏷 カード名を付け直した：${oldDisp} → ${newDisp}（キー ${from} → ${to}）`);
+  return "ok";
+}
 /* 🎨 v16.163 絵のバージョンだけのカードパックを取り込む（登録済みのカードに別の絵を足す）。
    効果登録と元の画像には触れない。返り値：足した絵の枚数（やめた時は -1） */
 async function importArtVersionPack(data){
@@ -48281,7 +48355,12 @@ async function importArtVersionPack(data){
   let withImg=0,nameOnly=0;
   for(const [k,l] of Object.entries(av))for(const x of (Array.isArray(l)?l:[])){if(x&&x.id&&imgs[artVerKey(k,x.id)])withImg++;else nameOnly++;}
   const names=Object.keys(av).filter(k=>(av[k]||[]).some(x=>x&&x.id&&imgs[artVerKey(k,x.id)])).map(k=>(data.nameMap&&data.nameMap[k])||dispName.get(k)||k);
-  if(!await ask(`🎨 絵のバージョンのパックです。\n・絵を足す／差し替える：${withImg}件（${names.length}枚のカード）${names.length?"\n　"+names.slice(0,8).join("、")+(names.length>8?" ほか":""):""}${nameOnly?`\n・名前だけ付け直す：${nameOnly}件`:""}\n効果登録と元の画像はそのままです。よろしいですか？`))return -1;
+  const rns=(Array.isArray(data.renames)?data.renames:[]).filter(r=>r&&r.from&&(r.key||r.name));
+  const rnTxt=rns.length?`\n・カード名を正式名称に直す：${rns.length}件\n　${rns.slice(0,6).map(r=>`${dispName.get(r.from)||r.from} → ${r.name||r.key}`).join("\n　")}${rns.length>6?"\n　ほか":""}`:"";
+  if(!await ask(`🎨 絵のバージョンのパックです。${rnTxt}\n・絵を足す／差し替える：${withImg}件（${names.length}枚のカード）${names.length?"\n　"+names.slice(0,8).join("、")+(names.length>8?" ほか":""):""}${nameOnly?`\n・名前だけ付け直す：${nameOnly}件`:""}\n効果登録の中身と元の画像はそのままです。よろしいですか？`))return -1;
+  // 🏷 v16.165 カード名の付け直しを先に（このあとのバージョンは新しいキーで届く）
+  let rnOk=0;const rnNg=[];
+  for(const r of rns){const res=await renameCardKeyFull(r);if(res==="ok")rnOk++;else if(res!=="same")rnNg.push(`${dispName.get(r.from)||r.from}（${res==="missing"?"登録なし":"新しい名前が既にある"}）`);}
   let renamed=0;
   for(const [k,l] of Object.entries(av))for(const x of (Array.isArray(l)?l:[])){
     const cur=(ART_VERS.get(k)||[]).find(y=>y.id===String(x&&x.id||""));
@@ -48296,7 +48375,8 @@ async function importArtVersionPack(data){
   if(data.nameMap)for(const [k,v] of Object.entries(data.nameMap)){if(!dispName.has(k)&&typeof v==="string")dispName.set(k,v);}
   await persistArt();await persistNames();
   renderAll();sfx("ok");
-  toast(`🎨 絵のバージョン：絵を${put}件入れました${renamed?`・名前を${renamed}件付け直しました`:""}。効果登録の画面の「🎨 絵のバージョン」や、デッキの「🎨 見た目」で選べます`);
+  toast(`🎨 絵のバージョン：${rnOk?`カード名を${rnOk}件直しました・`:""}絵を${put}件入れました${renamed?`・名前を${renamed}件付け直しました`:""}。効果登録の画面の「🎨 絵のバージョン」や、デッキの「🎨 見た目」で選べます`);
+  if(rnNg.length)toast(`⚠ 直せなかったカード名：${rnNg.join("、")}`);
   return put;
 }
 /* 🎨 v16.163 スリーブ・プレマ・アイコン用の絵を、並べて選ぶ。
@@ -51654,6 +51734,9 @@ $("importInput").addEventListener("change",async e=>{
          効果登録と元の画像には触れず、バージョンとして足す。同じIDが既にあれば名前と絵を新しくする。 */
       const _avN=Object.values(data.artVersions||{}).reduce((a,l)=>a+(Array.isArray(l)?l.length:0),0);
       const _verOnly=_avN>0&&!Object.keys(data.cardFx||{}).length;
+      /* 🏷 v16.165 名前の付け直し（renames）だけのパックも同じ取り込みへ */
+      const _rnOnly=Array.isArray(data.renames)&&data.renames.length>0&&!Object.keys(data.cardFx||{}).length;
+      if(_rnOnly&&!_verOnly){await importArtVersionPack(data);return;}
       if(_verOnly){await importArtVersionPack(data);
         return;
       }
