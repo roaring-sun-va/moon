@@ -6059,7 +6059,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.158";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.159";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -11767,6 +11767,25 @@ async function offerSealPeel(actor){
   if(!S.expert)return;
   const AZ=zonesOf(actor);
   let cmds=AZ.battle.filter(x=>(arrived.has(x.id)||x._sealPeelPending)&&!x._sealPeelDone&&(()=>{const r=getReg(x);return r&&raceMatch(r,"コマンド");})());
+  /* 🔓 v16.159 TCG：封印を外すのは禁断の側の誘発（コマンドが出た時）。出たコマンド自身の「出た時」と同時に誘発するので、
+     持ち主が好きな順で解決できる。コマンドに「出た時」があり、外せそうな封印もある時は、封印を外す処理を
+     誘発の待機列（TRIG_PENDING）に入れる。すると「同時に誘発した能力」の選択に、出た時と並んで出る。
+     デュエプレモード・設定「同時に誘発した効果の順番を選ぶ」がオフの時は、今までどおり 出た時 → 封印。 */
+  if(S.gameMode==="tcg"&&S.fxOrderPick!==false&&cmds.length){
+    const rest=[];
+    for(const cmd of cmds){
+      const rc=getReg(cmd);
+      let hasCip=false;try{hasCip=!!(rc&&hasCipFx(rc,cmd))&&!isSealed(cmd);}catch(e){}
+      const sc0=hasCip?sealPeelTargetQuick(actor,cmd):null;
+      if(sc0){
+        cmd._sealPeelDone=true;cmd._sealPeelPending=false;
+        TRIG_PENDING.push({pi:actor,fx:[],c:sc0,job:async()=>{await sealPeelFor(actor,cmd);},onceKeys:[],ev:"sealPeel",pos:0,trigCard:cmd});
+        logOnly(`🔓 ${S.players[actor].label}：《${faceNameOf(cmd)}》が出た → 封印を外す誘発が待機（出た時と順番を選べます）`);
+      }else rest.push(cmd);
+    }
+    cmds=rest;
+    if(!cmds.length)return;
+  }
   /* 🔧 v16.93 召喚コストの支払い（手札を捨てて軽減＝ドゴンギヨス型など）が終わってから封印を扱う。
      支払いはカードが場に出た後に別の流れで進むため、以前は「捨てる確認」と「封印を外す確認・
      ドルマゲドンの効果選択」が交互に出ていた。候補だけ先に控えて、支払いと効果の解決を待つ。 */
@@ -11781,8 +11800,23 @@ async function offerSealPeel(actor){
   }
   for(const cmd of cmds){
     cmd._sealPeelDone=true;cmd._sealPeelPending=false;
+    await sealPeelFor(actor,cmd);
+  }
+}
+/* 🔓 v16.159 外せる封印がありそうか（文明が合う封印を持つ、自分のクリーチャー）。あれば最初の1体を返す */
+function sealPeelTargetQuick(actor,cmd){
+  const cmdCivs=cardCivsOf(cmd);
+  if(!cmdCivs.length)return null;
+  for(const sc of zonesOf(actor).battle){
+    if(sc.id===cmd.id||!sc.seals||!sc.seals.length)continue;
+    if(sc.seals.some(sl=>{let cv=cardCivsOf(sl);if(!cv.length)cv=cardCivsOf(sc);return cv.some(x=>cmdCivs.includes(x));}))return sc;
+  }
+  return null;
+}
+/* 🔓 v16.159 コマンド1体ぶんの「封印を外す」（v16.158 までは offerSealPeel の中にあった処理そのまま） */
+async function sealPeelFor(actor,cmd){
     const cmdCivs=cardCivsOf(cmd);
-    if(!cmdCivs.length)continue;
+    if(!cmdCivs.length)return;
     const match=(sealCard,sealedCre)=>{let sc=cardCivsOf(sealCard);if(!sc.length)sc=cardCivsOf(sealedCre);return sc.some(cv=>cmdCivs.includes(cv));};
     let sealed=[];
     // 反応対象は、そのコマンドを出したプレイヤー自身の封印クリーチャーのみ
@@ -11795,7 +11829,7 @@ async function offerSealPeel(actor){
         sealed.push({owner:pp,sc,sealIdx,summonOnly:!!(rsc&&rsc.sealSummonOnly)});
       }
     }
-    if(!sealed.length)continue;
+    if(!sealed.length)return;
     let methodOk=true;
     // 🔒 封印を外せるコマンドの条件（sealPeelF・例「コマンド／闇｜火／コスト5以上」）。
     {
@@ -11807,7 +11841,7 @@ async function offerSealPeel(actor){
         toast(`🔒 ${faceNameOf(o.sc)} の封印は「${rr.sealPeelF}」でしか外せません（${faceNameOf(cmd)} は対象外）`);
         return false;
       });
-      if(!sealed.length)continue;
+      if(!sealed.length)return;
     }
     if(sealed.some(o=>o.summonOnly)){
       const mj=await askChoice(`🔓 コマンド《${faceNameOf(cmd)}》が出ました。\nこのコマンドは「召喚（通常召喚／S・トリガー）」または「侵略ZERO」で出ましたか？\n（ドルマゲドンX型の封印はこの場合のみ外せます）`,["はい（召喚／侵略ZERO）","いいえ（踏み倒し等）"]);
@@ -11826,11 +11860,11 @@ async function offerSealPeel(actor){
       }
       return true;
     });
-    if(!cand.length)continue;
+    if(!cand.length)return;
     const civLbl=cmdCivs.map(c=>CIV_JP_SEAL[c]||c).join("・");
     const labels=cand.map(o=>`《${faceNameOf(o.sc)}》の封印を1つ外す（${S.players[o.owner].label}・残${o.sc.seals.length}）`);
     const j=await askChoice(`🔓 コマンド《${faceNameOf(cmd)}》（文明：${civLbl}）が出ました。\n文明が一致する封印を1つ外せます（1体につき1枚）。`,[...labels,"外さない"]);
-    if(j===null||j>=cand.length)continue;
+    if(j===null||j>=cand.length)return;
     const pick=cand[j];
     snap();
     {const rr=getReg(pick.sc);
@@ -11849,7 +11883,6 @@ async function offerSealPeel(actor){
       try{fxShare("seal","封印を1つ外した",`${S.players[pick.owner].label}　${faceNameOf(pick.sc)}（残り${pick.sc.seals.length}）`,false,pick.sc.name,pick.owner);}catch(e){}
     }
     renderAll();
-  }
 }
 function emitEvent(actor,type,card){
   // 到着カードをイベント開始時に固定する。踏み倒しパネルから複数体を出す途中で
@@ -15359,7 +15392,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
     {
       const isNeoLike=rCC&&(["neoevo","gneo","neodream","gneodream"].includes(rCC.ctype)||((rCC.twin||rCC.ctype==="twinpact")&&rCC.twinTop==="neoevo"));
       if(isNeoLike){
-        const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
+        const basePool=Z.battle.filter(x=>x.id!==cc.id&&(isCreatureReg(getReg(x))||!!(getReg(x)||{}).shinkalize));
         let asEvo=false;
         if(basePool.length){
           const ev=await askChoice(`《${faceNameOf(cc)}》はNEOクリーチャーです。どう出しますか？`,["進化元に重ねて出す（NEO進化）","そのまま出す（非進化）"],cc);   // 🖼 v16.93 出すカードの絵（渡さないと、効果を出したNEXの絵になっていた）
@@ -15389,7 +15422,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
         Z.battle.forEach(host=>{(host.gear||[]).forEach(g=>{const rg=getReg(g);if(rg&&(rg.ctype==="crossgear"||rg.ctype==="evocrossgear"))bases.push({card:g,where:"gear",host});});});
       }else{
         // ⤴ 「進化－自分のドラゴン1体の上に置く」等の進化元の条件も、踏み倒しの経路で通す
-        Z.battle.forEach(x=>{if(x.id!==cc.id&&isCreatureReg(getReg(x))&&evoSrcOk(rCC,x))bases.push({card:x,where:"battle"});});
+        Z.battle.forEach(x=>{if(x.id!==cc.id&&(isCreatureReg(getReg(x))||!!(getReg(x)||{}).shinkalize)&&evoSrcOk(rCC,x))bases.push({card:x,where:"battle"});});   // v16.159 シンカライズも
         // 🪦 墓地進化・マナ進化・手札進化・ルナティック進化。登録の evoZone で置き場を決める。
         //    未設定でもバトルゾーンに進化元がいなければ、他のゾーンから探す（HADESドラゲリオン型）。
         const _ez=String(rCC.evoZone||"").trim();
@@ -19964,7 +19997,7 @@ async function runFxList(pi,list,srcCard,inPump){
           let stacked=false, cancelled=false;
           const rc2=getReg(cc);
           if(rc2&&isEvoReg(rc2)&&!isNoBaseEvoReg(rc2)){
-            const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
+            const basePool=Z.battle.filter(x=>x.id!==cc.id&&(isCreatureReg(getReg(x))||!!(getReg(x)||{}).shinkalize));
             if(basePool.length){
               const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rc2)?"NEOクリーチャー":evoKindLabel(evoKindOf(rc2))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rc2)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"],cc);   // 🖼 v16.105 出すカードの絵
               if(ev===null){
@@ -20399,7 +20432,7 @@ async function runFxList(pi,list,srcCard,inPump){
           {
             const rc2=getReg(cc);
             if(rc2&&isEvoReg(rc2)&&!isNoBaseEvoReg(rc2)){
-              const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
+              const basePool=Z.battle.filter(x=>x.id!==cc.id&&(isCreatureReg(getReg(x))||!!(getReg(x)||{}).shinkalize));
               if(basePool.length){
                 const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rc2)?"NEOクリーチャー":evoKindLabel(evoKindOf(rc2))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rc2)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"],cc);   // 🖼 v16.105 出すカードの絵
                 if(ev===0){
@@ -20970,7 +21003,7 @@ async function runFxList(pi,list,srcCard,inPump){
         cc.faceup=true;cc.tapped=false;cc.sideways=false;
         let sumStacked=false;
         if(rx&&isEvoReg(rx)&&!isNoBaseEvoReg(rx)){
-          const basePool=Z.battle.filter(x=>x.id!==cc.id&&isCreatureReg(getReg(x)));
+          const basePool=Z.battle.filter(x=>x.id!==cc.id&&(isCreatureReg(getReg(x))||!!(getReg(x)||{}).shinkalize));
           if(basePool.length){
             const ev=await askChoice(`《${faceNameOf(cc)}》は${isNeoReg(rx)?"NEOクリーチャー":evoKindLabel(evoKindOf(rx))+"クリーチャー"}です。どう出しますか？`,["進化元に重ねて出す（進化）",isNeoReg(rx)?"そのまま出す（非進化として）":"そのまま出す（進化元なし・非進化として）"],cc);   // 🖼 v16.105 出すカードの絵
             if(ev===0){
@@ -29074,7 +29107,7 @@ function trigQueuePreview(){
 }
 /* ⚡ v16.43 誘発の種類を日本語で短く出す（解決順の選択肢に添える）。 */
 function trigEvLabel(ev){
-  const M={jdiver:"ジャストダイバーの適用",selfAtk:"攻撃する時",selfAtkC:"クリーチャーを攻撃する時",selfAtkP:"プレイヤーを攻撃する時",
+  const M={sealPeel:"封印を外す（コマンドが出た時）",jdiver:"ジャストダイバーの適用",selfAtk:"攻撃する時",selfAtkC:"クリーチャーを攻撃する時",selfAtkP:"プレイヤーを攻撃する時",
     atkP:"プレイヤーが攻撃された時",anyAtk:"誰かが攻撃した時",allyAtk:"味方が攻撃する時",
     toGrave:"墓地に置かれた時",toGraveBattle:"場から墓地に置かれた時",selfLeave:"場を離れた時",
     selfDestroy:"破壊された時",allyEnter:"味方が出た時",allyEvo:"味方が進化した時",
