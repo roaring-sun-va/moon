@@ -6149,7 +6149,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.168";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.169";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -40422,6 +40422,22 @@ function cardEl(pi,zone,c){
     el.appendChild(tg);
   }
   const showBLab=!(zone==="battle"&&S.battleLabels===false); // バトルのラベル/タグ表示
+  /* ⚰🌱 v16.169 「墓地／マナから召喚してもよい」を与えているカードに、このターンの使用回数を出す */
+  if(zone==="battle"&&S.expert&&c.faceup&&showBLab){
+    try{
+      const rG=getReg(c);
+      const tags=[];
+      if(rG&&+rG.graveSummonGrant>0){const u=summonGrantUse(pi,"grave",c);tags.push({t:`⚰${u.used}/${u.lim}`,left:u.left,tip:`墓地から召喚：このターン ${u.used}/${u.lim}（墓地のカードを押すと「墓地から召喚」のボタン）`});}
+      if(rG&&manaSummonGrantN(rG)>0){const u=summonGrantUse(pi,"mana",c);tags.push({t:`${rG.manaSummonGrave?"🌱⚰":"🌱"}${u.used}/${u.lim}`,left:u.left,tip:`${rG.manaSummonGrave?"マナ・墓地":"マナ"}から召喚：このターン ${u.used}/${u.lim}（マナ${rG.manaSummonGrave?"・墓地":""}のカードを押すと召喚のボタン）`});}
+      tags.forEach((x,i)=>{
+        const tg=document.createElement("span");
+        tg.className="sumGrantTag";
+        tg.style.cssText=`position:absolute;left:1px;bottom:${1+i*14}px;background:${x.left?"#14532d":"#3f3f46"};color:${x.left?"#bbf7d0":"#a1a1aa"};font-size:9px;font-weight:900;padding:0 4px;border-radius:5px;z-index:7;border:1px solid ${x.left?"#22c55e":"#52525b"};pointer-events:none`;
+        tg.textContent=x.t;tg.title=x.tip;
+        el.appendChild(tg);
+      });
+    }catch(e){}
+  }
   const showBBtn=!(zone==="battle"&&S.battleBtns===false);    // バトルの操作ボタン表示
   let hidden=(S.vs&&S.hideOpp&&pi!==(S.seat|0)&&zone==="hand");
   // 👁 このゾーンが「全公開」に指定されていれば、相手のものでも隠さない（表示専用）
@@ -45902,6 +45918,25 @@ function openCardSheet(ctx){
       },okc?"primary":"",true));
     }
   }
+  /* ⚰🌱 v16.169 「墓地から召喚してもよい」「マナから召喚してもよい」を与えているカードが場にいれば、
+     墓地・マナのカードに召喚のボタンを出す（ヴォーミラ・ダーク・ルピア・ベン・大横綱型）。回数も出す。 */
+  if(S.expert&&(ctx.zone==="grave"||ctx.zone==="mana")&&!(S.vs&&ctx.p!==(S.seat|0)&&S.hideOpp)){
+    const src=summonGrantSrc(ctx.p,ctx.zone,c);
+    if(src){
+      const u=summonGrantUse(ctx.p,ctx.zone,src);
+      const zl=ctx.zone==="grave"?"墓地":"マナ";
+      box.appendChild(actBtn(`${u.icon} ${zl}から召喚（${faceNameOf(src)}・このターン ${u.used}/${u.lim}${u.left?"":"・使い切り"}）`,async ()=>{
+        if(!u.left&&!await ask(`${u.icon} ${faceNameOf(src)} の「${zl}から召喚」は、このターン使い切っています。それでも出しますか？`,c))return;
+        if(S.vs&&S.who!==ctx.p&&!await ask(`${u.icon} いまは${S.players[ctx.p].label}のターンではありません。それでも出しますか？`,c))return;
+        closeSheet();closeSel();closeViewer();
+        const f2=findCard(ctx.p,ctx.zone,ctx.id);if(!f2)return;
+        const cc=f2.card;
+        moveCardX(ctx.p,ctx.zone,ctx.id,ctx.p,"battle");   // 手で出した時と同じ流れ（回数の数え上げ・出た時など）
+        if(S.expert&&S.autoTap&&!S.freePlay)MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(ctx.p,cc)).catch(()=>{});
+        sfx("ok");renderAll();
+      },u.left?"primary":"",true));
+    }
+  }
   {
     const rAB=getReg(c);
     if(rAB&&rAB.abyss&&ctx.zone==="grave"){
@@ -48450,6 +48485,30 @@ async function renameCardKeyFull(rn){
   await persistFx();await persistNames();await persistLinks();await persistImgOrder();await persistArt();
   logOnly(`🏷 カード名を付け直した：${oldDisp} → ${newDisp}（キー ${from} → ${to}）`);
   return "ok";
+}
+/* ⚰🌱 v16.169 「墓地／マナから召喚してもよい」を与えているカード（付与型）を探し、このターンの使用回数を返す。
+   kind＝"grave"／"mana"。card を渡すと、そのカードを召喚できる元だけを探す（条件つき）。 */
+function summonGrantSrc(pi,kind,card){
+  const rC=card?getReg(card):null;
+  if(card&&!(rC&&isCreatureReg(rC)))return null;
+  return (zonesOf(pi).battle||[]).find(x=>{
+    if(card&&x.id===card.id)return false;
+    const rx=getReg(x);
+    if(!rx||isSealed(x)||isIgnored(x,pi))return false;
+    if(kind==="grave"){
+      if(+rx.graveSummonGrant>0){const ff=String(rx.graveSummonFilt||"").trim();return !card||!ff||lockFilterOk(ff,rC,card);}
+      return !!(rx.manaSummonGrave&&manaSummonGrantN(rx)>0);
+    }
+    return manaSummonGrantN(rx)>0;
+  })||null;
+}
+function summonGrantUse(pi,kind,src){
+  const rx=src?getReg(src):null;
+  const viaGrave=kind==="grave"&&rx&&+rx.graveSummonGrant>0;
+  const lim=viaGrave?(+rx.graveSummonGrant||1):(manaSummonGrantN(rx)||1);
+  const box=viaGrave?S._graveSummonUsed:S._manaSummonUsed;
+  const used=(box&&box.key===`${S.turn}:${pi}`)?(box.n|0):0;
+  return {used,lim,left:Math.max(0,lim-used),icon:viaGrave?"⚰":"🌱"};
 }
 /* ⚡ v16.167 「タップ状態で破壊された時」だけの行（tappedOnly）を、アンタップで破壊された時に外す */
 function pigRowTapOk(w,c){return !(w&&w.ev==="pig"&&w.tappedOnly&&!(c&&c.tapped));}
