@@ -2811,7 +2811,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <input type="text" id="fxDDDCivTxt" placeholder="文明複数指定（例：光／火＝両方必要）" style="flex:1;min-width:150px">
         <select id="fxDDDPay" style="width:auto;flex:0 0 190px">
           <option value="0">支払いなし（踏み倒し/軽減型）</option>
-          <option value="5">攻撃時支払い：基本[5]</option><option value="6">攻撃時支払い：基本[6]</option><option value="7">攻撃時支払い：基本[7]</option><option value="8">攻撃時支払い：基本[8]</option><option value="9">攻撃時支払い：基本[9]</option><option value="10">攻撃時支払い：基本[10]</option>
+          <option value="1">攻撃時支払い：基本[1]</option><option value="2">攻撃時支払い：基本[2]</option><option value="3">攻撃時支払い：基本[3]</option><option value="4">攻撃時支払い：基本[4]</option><option value="5">攻撃時支払い：基本[5]</option><option value="6">攻撃時支払い：基本[6]</option><option value="7">攻撃時支払い：基本[7]</option><option value="8">攻撃時支払い：基本[8]</option><option value="9">攻撃時支払い：基本[9]</option><option value="10">攻撃時支払い：基本[10]</option>
         </select>
         <label><input type="checkbox" id="fxDDDMinus"> 攻撃中クリーチャーのコスト分軽減（ドギラゴン王道型）</label>
         <label title="右のセレクトで数え方を選びます。場のクリーチャー数（5000VT）／自分の墓地の枚数（5000GT）／ターン数（禁断機関 ViVy-R・世紀末ヘヴィ・デス・メタル）。いずれもコストは1より下がりません"><input type="checkbox" id="fxVtCost"> 召喚コストの自己軽減（数え方は右で選択・最低1）</label>
@@ -6153,7 +6153,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.177";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.178";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13556,6 +13556,9 @@ const FX_TYPES=[
   ["slotReveal","🎰 自分の山札の上からn枚を表向きにし、その中からクリーチャー・呪文・クロスギア・城を1枚ずつ手札に加えてもよい。残りはランダムな順番で山札の一番下へ（フォーチュン・スロット型）"],
   ["chargeBuffIfCre","🌱 自分の山札の上から1枚目をマナゾーンに置く。そのカードがクリーチャーなら、このターン、自分のクリーチャーすべてのパワーが+n（鼓動する石版型）"],
   ["shieldBreakRand","💥 相手のランダムなシールドをn枚ブレイクする（S・トリガーは通常どおり使える）"],
+  ["shieldBreakPerAlly","💥 自分の〔対象〕1体につき、相手のシールドをn枚ブレイクする（自身も数える・条件欄＝対象・例：ジョーカーズ／超Z級 ゲキシンオー型）"],
+  ["millToN","🪦 自分の山札がn枚になるまで、山札の上からカードを墓地に置く（黒神龍エンド・オブ・ザ・ワールド型）"],
+  ["drawThenDiscard","✋🗑 カードをn枚引き、その後、手札を〔条件欄の枚数・既定1〕枚捨てる（「引いてもよい。そうした場合」は任意（opt）で・超合金 ロビー型）"],
   ["shieldBreakN","💥 相手のシールドをn枚ブレイクする（通常のブレイク処理・どのシールドを割るかは選択／S・トリガーも通常どおり・シューヴェルト型）"],
   ["shieldBreakTo","💥 相手のシールドが n枚になるようにブレイクする（アイアン・マンハッタン型・すでにn枚以下なら何もしない）"],
   ["foeSelfToDeckBottom","⬇ 相手は自身のクリーチャー1体または手札1枚を、自分の山札の一番下に置く（時空の封殺ディアス Z 型／n回ぶん繰り返す）"],
@@ -16804,6 +16807,28 @@ async function runFxList(pi,list,srcCard,inPump){
       logOnly(`💥 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[op].label} のシールドを${cnt2}枚ブレイク`);
       await breakShields(op,cnt2,srcCard||null);
       renderAll();
+    }else if(f.t==="shieldBreakPerAlly"){
+      // 💥 v16.178 自分の〔対象〕1体につき、相手のシールドをn枚ブレイク（超Z級 ゲキシンオー型・自身も数える）
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _cf=String(f.cond||"").trim();
+      const _cnt=Z.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&(!_cf||lockFilterOk(_cf,rx,x));}).length*Math.max(1,n);
+      if(!_cnt){toast(`💥 ${_cf||"クリーチャー"}がいないのでブレイクしない`);continue;}
+      if(!OZ.shield.length){toast("💥 相手のシールドがありません");renderAll();continue;}
+      snap();
+      const cnt3=Math.min(_cnt,OZ.shield.length);
+      toast(`💥 ${srcCard?`${faceNameOf(srcCard)}：`:""}${_cf||"クリーチャー"}${_cnt/Math.max(1,n)}体 → 相手のシールドを${cnt3}枚ブレイク`);
+      logOnly(`💥 ${srcCard?`《${faceNameOf(srcCard)}》：`:""}${S.players[op].label} のシールドを${cnt3}枚ブレイク（${_cf||"クリーチャー"}の数）`);
+      await breakShields(op,cnt3,srcCard||null);
+      renderAll();
+    }else if(f.t==="millToN"){
+      // 🪦 v16.178 自分の山札がn枚になるまで、山札の上から墓地に置く（黒神龍エンド・オブ・ザ・ワールド型）
+      const k=Math.max(0,Z.deck.length-Math.max(0,n));
+      if(!k){toast(`🪦 山札はもう${Z.deck.length}枚です`);continue;}
+      await runFxList(pi,[{t:"mill",n:k}],srcCard);
+    }else if(f.t==="drawThenDiscard"){
+      // ✋🗑 v16.178 カードをn枚引く。そうした場合、手札を〔条件欄の枚数・既定1〕枚捨てる（超合金 ロビー型・「引いてもよい」は opt で）
+      const m2=Math.max(1,parseInt(String(f.cond||"1"),10)||1);
+      await runFxList(pi,[{t:"draw",n:Math.max(1,n)},{t:"selfDiscard",n:m2}],srcCard);
     }else if(f.t==="shieldBreakRand"){
       // 💥 相手のランダムなシールドをn枚ブレイク（S・トリガーは通常どおり）
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
@@ -48953,7 +48978,7 @@ async function repairArt(rp){
   return "none";
 }
 /* 🎨 v16.176 絵のバージョンの括り（名前の候補）。「その他」を選ぶと自由に入力できる。 */
-const ART_LABELS=["通常版","シークレット版","コラボ版","プロモ版","UGC"];   // v16.177 金の飾り枠＝UGC（「金枠版」はやめた）
+const ART_LABELS=["通常版","シークレット版","コラボ版","プロモ版","UGC","PCC"];   // v16.177 金の飾り枠＝UGC（「金枠版」はやめた）
 async function askArtLabel(cur){
   const opts=[...ART_LABELS.map(x=>x===cur?`${x}（いまの名前）`:x),"その他（名前を入力）"];
   const j=await askChoice(`🎨 このバージョンの括りを選んでください${cur?`\nいまの名前：${cur}`:""}`,opts);
@@ -49033,6 +49058,12 @@ async function importArtVersionPack(data,noAsk){
      例：金枠版 → UGC。元の画像に上げたものは一覧に無いので、触らない（絵の無い名前だけの行を作らない）。 */
   let rlN=0;
   for(const rl of (Array.isArray(data.artRelabel)?data.artRelabel:[])){
+    /* v16.178 {key,id,label} で1件だけ付け直すこともできる（コラボ版→UGC／PCC の見直し用） */
+    if(rl&&rl.key&&rl.id&&rl.label){
+      const x=(ART_VERS.get(String(rl.key))||[]).find(y=>y&&y.id===String(rl.id));
+      if(x&&x.label!==String(rl.label)){x.label=String(rl.label);rlN++;}
+      continue;
+    }
     const fr=String(rl&&rl.from||"").trim(),to=String(rl&&rl.to||"").trim();
     if(!fr||!to||fr===to)continue;
     for(const [k,l] of ART_VERS){for(const x of l){if(x&&x.label===fr){x.label=to;rlN++;}}}
