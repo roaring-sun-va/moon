@@ -6188,7 +6188,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.202";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.203";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7599,7 +7599,7 @@ function checkGraveAwaken(){
 /* 🔄 覚醒の自動判定。
    awakenEv＝判定するタイミング（turnStartMine／turnStartAny／turnEndMine／turnEndOpp／turnEndAny／selfAtkEnd 等）
    awakenCond＝条件式（空欄なら無条件で裏返る）。表の面（face=0）でだけ判定する。 */
-async function checkAwaken(pi,ev,trigCard){
+async function checkAwaken(pi,ev,trigCard,opt){
   try{
     if(!S.expert)return;
     const want=[ev];
@@ -7612,7 +7612,17 @@ async function checkAwaken(pi,ev,trigCard){
       const Zs=zonesOf(side);
       if(!Zs||!Zs.battle)continue;
       for(const c of [...Zs.battle]){
-        const r=getReg(c);
+        let r=getReg(c);
+        /* 🔄 v16.203 覚醒の引き継ぎ（公式FAQ：カツドン＋カモン・ピッピー）。
+           誘発した時の面（opt.faceAt）で判定し、その後に別の誘発で先に裏返っていても、残りの誘発で次の面へ進める。
+           例：カツドンの覚醒が2回誘発 → 1回目でカツキング、2回目でカツマスター。 */
+        if(opt&&opt.faceAt&&opt.faceAt.has(c.id)){
+          const _f0=opt.faceAt.get(c.id)|0;
+          if(_f0<(c.face|0)){
+            const _cf=c.face;c.face=_f0;const _r0=getReg(c);c.face=_cf;
+            if(_r0&&_r0.awakenEv&&!_r0.awakenLoop)r=_r0;
+          }
+        }
         if(!r||!r.awakenEv)continue;
         // 「自分のターン開始時」は持ち主のターンだけ、「各ターンの開始時」は誰のターンでも
         if(r.awakenEv==="turnStartMine"&&side!==pi)continue;
@@ -12350,7 +12360,7 @@ function emitEvent(actor,type,card){
       }
     }catch(e){}
     // 🔄 「自分のクリーチャーが出た時」に裏返るサイキック（マティーニ型／ループ覚醒のヤヌス型）
-    if(eventCard)enqueueWatchJob(async()=>{await checkAwaken(actor,"allyEnter",eventCard);try{await checkPsyLink(actor);}catch(e){}});
+    if(eventCard){const _faceAt=new Map(((zonesOf(actor)||{}).battle||[]).map(x=>[x.id,x.face|0]));enqueueWatchJob(async()=>{await checkAwaken(actor,"allyEnter",eventCard,{faceAt:_faceAt});try{await checkPsyLink(actor);}catch(e){}});}
     // 🌌 出たのがサイキックなら、超次元ゾーンから呼べるカードを確認する（超時空ストームG・XX 型）
     try{
       const _rp=eventCard&&getReg(eventCard);
