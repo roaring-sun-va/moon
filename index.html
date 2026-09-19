@@ -3083,6 +3083,7 @@ body.shake{animation:bodyShake .4s ease-out}
             <option value="allyAtkEnd">自分のクリーチャーの攻撃の終わりに（攻撃の**後**に裏返す・無敵王剣 ギガハート型）</option>
             <option value="atkPlayerThrough">相手プレイヤーへの攻撃がブロックされずに通った後</option>
             <option value="allyEnter">自分のクリーチャーがバトルゾーンに出た時</option>
+            <option value="allySummonHand">自分のクリーチャーを手札から召喚した時（踏み倒しは含まない・条件欄に「コスト6以上」等・千両力士 多禍の泥粋型）</option>
             <option value="manaAddMine">自分のマナゾーンにカードが置かれた時（条件欄に「マナ&gt;=6」等）</option>
             <option value="shieldBrokeMine">自分のクリーチャーが相手のシールドをブレイクした時（条件欄に「ブレイク数&gt;=2」等）</option>
           </select>
@@ -3129,6 +3130,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="相手のカードの効果で、自分のシールドを墓地・マナ・山札などに置くことを止めます（ブレイクで手札に加えるのは止めません・緑知銀 ジェンバン型）"><input type="checkbox" id="fxShieldHandOnly"> 🛡 常在：相手の効果によって、自分のシールドは手札以外のゾーンに置かれない</label>
         <label title="このカードが自分のシールドゾーンに表向きである間も、常在のコスト軽減と誘発が働きます（超煌ノ裁キ ダイヤモン将型）"><input type="checkbox" id="fxFaceUpShieldActive"> 🛡👁 シールドゾーンに表向きの間も、常在のコスト軽減・誘発が働く</label>
         <label title="このクリーチャーを自分のマナゾーンから召喚してもよい（メッサー・シュミット型）。マナの札をバトルゾーンへドラッグすると、コストを払うか聞きます"><input type="checkbox" id="fxManaSummon"> 🌱 マナゾーンから召喚してもよい</label>
+        <label title="マナからの召喚を他のクリーチャーに許すカード（グレイトフル・ベン型・大横綱型）で、墓地からの召喚も同じ回数に含めます（大感動！ディス・イズ・大横綱「マナゾーンまたは墓地から」）"><input type="checkbox" id="fxManaSummonGrave"> 🌱🪦 墓地からの召喚も同じ回数で数える</label>
         <label title="極限ファイナル革命：このゲーム中に自分が他の「ファイナル革命」を使っていなければ使える（烈しき切札 ドギラゴン逆型）"><input type="checkbox" id="fxFinalRevGame"> ⚡ 極限ファイナル革命（ゲーム中に1回だけ・他のファイナル革命を使っていなければ）</label>
         <label title="相手が呪文を唱える時、その呪文以上のコストを持つ〔ここに書いた条件〕のカード1枚を手札から捨てて、その呪文を墓地に置いてもよい（オラマッハ・ザ・ジョニー型・空欄＝なし）">🃏 相手の呪文を止める：手札から捨てるカードの条件<input type="text" id="fxSpellCounter" placeholder="例：ジョーカーズ" style="width:150px"></label>
         <label title="どちらのクリーチャーが攻撃する時でも使える（煌世主 サッヴァーク∞型）。オフなら相手の攻撃時だけ"><input type="checkbox" id="fxFlipCastBoth"> ⚖ 上の「表向きのシールドを裏向きにして手札から」を、自分の攻撃時にも使える</label>
@@ -3267,6 +3269,7 @@ body.shake{animation:bodyShake .4s ease-out}
           <label><input type="checkbox" id="fxRepInLockerTurn"> ロック元の持ち主のターン中のみ置換（単騎連射マグナム型）</label>
           <label><input type="checkbox" id="fxRepInOnce"> 各ターン1回のみ置換</label>
           <label style="display:flex;align-items:center;gap:5px" title="相手がそのターン中に、すでにこの数の他のクリーチャーをバトルゾーンに出していたら、次からは召喚・踏み倒しを問わずマナへ置換（リツイーギョ型）">相手がそのターン他のクリーチャーを<input type="number" id="fxRepInAfterN" min="0" max="99" value="0" style="width:54px">体以上出していれば次から置換（0=無効）</label>
+          <input type="text" id="fxRepInNeedAlly" list="raceList" placeholder="前提：自分の他の〔〕がいれば（例：火／コマンド＝火のコマンド・空欄＝なし）" title="ロック元の持ち主の場に、ロック元以外で条件に合うクリーチャーがいる時だけ置換します（熱き邪道 レッドゾーンZ型）" style="flex:0 1 230px">
           <input type="text" id="fxRepInF" list="raceList" placeholder="対象条件（単色/多色/文明/種族/名前・「／」区切り・空欄＝全て）" style="flex:1;min-width:170px">
         </div>
         <div style="flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -6054,7 +6057,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.149";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.157";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6760,6 +6763,10 @@ function queueCheatWatchers(pTo,c){
 }
 function markArrive(c,opt){
   opt=opt||{};
+  /* ⚡ v16.154 手札から召喚して出たか（覚醒「手札から召喚した時」用）。入場のたびに決め直す。
+     手札から出した経路（ドラッグ・進化・NEO）が _pendFromHand を付ける。踏み倒し（_viaCheat）は召喚ではない。
+     裏返り（覚醒・変形）は入場ではないので触らない。 */
+  if(c&&!opt.flip){c._summonHand=!!c._pendFromHand&&!c._viaCheat;c._pendFromHand=false;}
   /* ⚡ v16.33 「そのクリーチャーが出た時、このターン、スピードアタッカーを与える」（T・T・T型）。
      コスト軽減を使って召喚したカードに印が付いているので、出た瞬間に付与する。 */
   if(c&&c._grantSAOnEnter&&!opt.flip){
@@ -7321,6 +7328,57 @@ function deckPeekLocked(){
 let AWAKE_GRAVE_N=[0,0];
 let AWAKE_GRAVE_BUSY=false;
 function awakeGraveSync(){try{for(const pi of [0,1])AWAKE_GRAVE_N[pi]=zonesOf(pi).grave.length;}catch(e){}}
+/* 🛡 v16.156 相手のシールドが離れた時（熱き邪道 レッドゾーンZ型）。
+   シールドが離れる経路はブレイク・墓地送り・手札へ・山札へ・手で動かす等と多く、1か所ずつ差し込むと漏れる。
+   そこで墓地の覚醒（checkGraveAwaken）と同じく、描き直しのたびにシールドの顔ぶれを前回と比べ、
+   消えた枚数だけ「相手のシールドが離れた時」を誘発させる（公式Q&A：離れた数と同じ数まで引く）。
+   効果の処理中は待ち、落ち着いてからまとめて数える。1手戻す・読み込み・新しい対戦では数え直す。 */
+let SHIELD_SEEN=null;
+function shieldSeenNow(){
+  return [0,1].map(pi=>{const Zp=zonesOf(pi);return new Set(((Zp&&Zp.shield)||[]).map(x=>x.id));});
+}
+function checkShieldLeave(force){
+  try{
+    if(!S.expert||(typeof REPLAY!=="undefined"&&REPLAY.on))return;
+    if(!force){
+      if(typeof fxRunning!=="undefined"&&fxRunning)return;
+      if(typeof fxQueue!=="undefined"&&fxQueue&&fxQueue.length)return;
+      if(typeof WATCH_BUSY!=="undefined"&&WATCH_BUSY)return;
+      if(typeof GAME_PAUSE!=="undefined"&&GAME_PAUSE)return;
+      if(document.querySelector("#askOlay.open,#viewerOlay.open,#breakOlay.open"))return;
+    }
+    const now=shieldSeenNow();
+    const prev=SHIELD_SEEN;
+    SHIELD_SEEN=now;
+    if(!prev||(S.turn|0)<=0)return;
+    for(const sp of [0,1]){
+      let left=0;
+      for(const id of prev[sp])if(!now[sp].has(id))left++;
+      if(!left)continue;
+      const owner=sp===0?1:0;   // 誘発するのは、シールドが離れた側の相手
+      if(typeof olActive==="function"&&olActive()&&owner!==(S.seat|0))continue;   // 🌐 自分の席の分だけ
+      if(!S.vs&&owner!==0)continue;
+      const srcs=zonesOf(owner).battle.filter(x=>{const rx=getReg(x);
+        return rx&&(rx.watchFx||[]).some(w=>w&&w.ev==="foeShieldLeave")&&!isSealed(x)&&!isIgnored(x,owner);});
+      for(const b of srcs){
+        const rb=getReg(b);
+        const list=(rb.watchFx||[]).filter(w=>w&&w.ev==="foeShieldLeave");
+        const bid=b.id,nLeft=left;
+        enqueueWatchJob(async()=>{
+          if(!zonesOf(owner).battle.some(x=>x.id===bid))return;
+          toast(`🛡 ${faceNameOf(b)}：相手のシールドが${nLeft}つ離れた時の効果`);
+          logOnly(`🛡 ${S.players[owner].label}：《${faceNameOf(b)}》相手のシールドが${nLeft}つ離れた`);
+          for(let i=0;i<nLeft;i++){
+            const lf=onceFilter(b,list);
+            if(!lf.length)break;
+            await runFxList(owner,lf,b,false);
+          }
+          renderAll();
+        });
+      }
+    }
+  }catch(e){}
+}
 function checkGraveAwaken(){
   try{
     if(!S.expert||AWAKE_GRAVE_BUSY||(typeof REPLAY!=="undefined"&&REPLAY.on))return;
@@ -7359,6 +7417,7 @@ async function checkAwaken(pi,ev,trigCard){
     if(ev==="turnStartMine")want.push("turnStartAny");
     if(ev==="turnEndMine"||ev==="turnEndOpp")want.push("turnEndAny");
     if(ev==="atkDeclare")want.push("selfAtk","allyAtk");   // 🔄 v15.69 攻撃する時の覚醒
+    if(ev==="allyEnter"&&trigCard&&trigCard._summonHand)want.push("allySummonHand");   // 🔄 v16.154 手札から召喚した時（多禍の泥粋型）
     const sides=(ev==="turnStartMine")?[pi,(pi===0?1:0)]:[pi];
     for(const side of sides){
       const Zs=zonesOf(side);
@@ -7391,6 +7450,7 @@ async function checkAwaken(pi,ev,trigCard){
         let filt=String(r.awakenFilt||"").trim();
         if(/^他の/.test(filt)){
           if((r.awakenEv==="allyEnter"||r.awakenEv==="allyEvo")&&trigCard&&trigCard.id===c.id)continue;
+          if(r.awakenEv==="allySummonHand"&&trigCard&&trigCard.id===c.id)continue;   // 🔄 v16.157 行を分けた（add230 が上の行の形を見ている）
           filt=filt.replace(/^他の/,"").trim();
         }
         if(filt){
@@ -7925,7 +7985,7 @@ async function playEvoCreature(p,zone,id){
       evc.tapped=false;Z.battle.push(evc);
     }
     evc.faceup=true;evc.sick=false;evc.sideways=false;evc.under=[...unders,...(evc.under||[])];
-    markArrive(evc);emitEvent(p,"summon");
+    evc._pendFromHand=(zone==="hand");markArrive(evc);emitEvent(p,"summon");
     if(S.expert&&S.autoTap&&!S.freePlay)MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(p,evc)).catch(()=>{});
     enqueueFx(p,evc);closeSel();sfx("ok");renderAll();
     toast(`⤴ ${srcLabel}進化${_needBase>1?"GV":""}！ ${picked.map(x=>faceNameOf(x)).join("＋")} の上に ${faceNameOf(evc)}`);
@@ -7954,7 +8014,7 @@ async function playEvoCreature(p,zone,id){
     evc1.under=[...(evc1.under||[]),host1,...srcs.slice(1).map(x=>{x.tapped=false;return x;})];
     evc1.faceup=true;evc1.tapped=host1.tapped;evc1.sick=false;evc1.sideways=false;
     Z.battle.splice(Math.max(0,hi),0,evc1);
-    evc1._viaCheat=false;markArrive(evc1);
+    evc1._viaCheat=false;evc1._pendFromHand=(zone==="hand");markArrive(evc1);
     closeSel();sfx("move");renderAll();
     toast(`⤴ 超無限進化：${srcs.map(x=>faceNameOf(x)).join("＋")} の上に ${faceNameOf(evc1)}（合計コスト ${srcs.reduce((a,x)=>{const r=getReg(x);return a+((r&&+r.cost)||0);},0)}）`);
     try{
@@ -7991,7 +8051,7 @@ async function playEvoCreature(p,zone,id){
   const bi=Z.battle.findIndex(x=>x.id===host.id);
   Z.battle[bi]=evc;
   transferAtkState([host.id],evc); // ⚔ 攻撃中の進化元の攻撃を引き継ぐ
-  markArrive(evc);
+  evc._pendFromHand=(zone==="hand");markArrive(evc);
   emitEvent(p,"summon");
   if(S.expert&&S.autoTap&&!S.freePlay){
     MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(p,evc)).catch(()=>{});
@@ -8043,7 +8103,7 @@ async function playNeoCreature(p,zone,id){
   if(host.gear&&host.gear.length){evc.gear=host.gear.splice(0);}
   const bi=Z.battle.findIndex(x=>x.id===host.id);
   Z.battle[bi]=evc;
-  markArrive(evc);
+  evc._pendFromHand=(zone==="hand");markArrive(evc);
   emitEvent(p,"summon");
   if(S.expert&&S.autoTap&&!S.freePlay){
     MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(p,evc)).catch(()=>{});
@@ -8949,6 +9009,7 @@ function snap(){
   }
 }
 function restoreState(st){
+  SHIELD_SEEN=null;   // 🛡 v16.156 戻した盤面で数え直す（戻したことで盾が減って見えても誘発させない）
   S.turn=st.t;S.who=st.w;
   if(st.ec!=null)ENTERED_CNT=st.ec|0;
   if(st.pt!=null)S.pturn=st.pt|0;
@@ -9771,6 +9832,7 @@ function dealPlayer(pi,pick){
   }
 }
 function startGame(picks){
+  SHIELD_SEEN=null;   // 🛡 v16.156
   GAMELOG.length=0;
   if(typeof renderLogDock==="function")renderLogDock();
   // 🔄 処理系の状態を完全リセット（再試合で「処理中」やターン終了保留が引き継がれるのを防止）
@@ -13096,6 +13158,8 @@ const FX_TYPES=[
   ["charge","n枚マナ加速（山上→マナ）"],
   ["zoneMove","↔ 自分の〔元〕から条件に合うカードをn枚〔先〕へ移動（条件欄に「墓地→マナ:スノーフェアリー」のように元→先:対象を指定・墓地→マナもこれで）"],
   ["chargeTap","n枚マナ加速（山上→タップしてマナに置く）"],
+  ["revealHandUntapSelf","👁🔄 自分の手札から条件に合うカードを1枚表向きにしてもよい。そうしたら、このカードをアンタップする（覇道の決闘型・条件欄＝例：ソニック・コマンド）"],
+  ["chargeTapThenManaGrave","🌱🪦 山札の上からn枚をタップしてマナゾーンに置く。そうしたら、自分のマナゾーンのカードをn枚選んで墓地に置く（大感動！ディス・イズ・大横綱型／「〜してもよい」は行の任意にチェック）"],
   ["mill","山上n枚を墓地へ"],
   ["millOpp","相手の山札の上からn枚を墓地へ"],
   ["reveal","山上n枚を公開"],
@@ -17145,6 +17209,49 @@ async function runFxList(pi,list,srcCard,inPump){
       bumpEv("manaAccel",pi,cn);
       sfx("move");
       if(cn>0){const nm=Z.mana.slice(-cn).map(faceNameOf).join("、");toast(`💠 マナ加速（タップイン）：${nm} をタップしてマナゾーンへ`);}
+    }else if(f.t==="revealHandUntapSelf"){
+      /* 👁🔄 v16.156 覇道の決闘型。見せたカードは手札に残る。見せなければアンタップしない（そうしたら）。 */
+      if(!srcCard){toast("（対象のカードがありません）");continue;}
+      const filt=String(f.cond||"").trim();
+      const pool=Z.hand.filter(h=>!filt||lockFilterOk(filt,getReg(h),h));
+      if(!pool.length){toast(`👁 手札に${filt||"対象"}のカードが無いため、アンタップしません`);continue;}
+      const opts=[...pool.map(h=>({text:`${faceNameOf(h)} を表向きにする`,card:h.name})),"表向きにしない"];
+      const j=await askChoice(`👁 ${faceNameOf(srcCard)}：手札の${filt||"カード"}を1枚表向きにしてもよい。\nそうしたら、このカードをアンタップします`,opts);
+      if(j===null||j>=pool.length){toast("（表向きにしなかったので、アンタップしません）");continue;}
+      const shown=pool[j];
+      logOnly(`👁 ${S.players[pi].label}：手札の《${faceNameOf(shown)}》を表向きにした（${faceNameOf(srcCard)}）`);
+      try{fxShare("reveal","公開！",`${S.players[pi].label}　${faceNameOf(shown)}`,false,shown.name,pi);}catch(e){}
+      srcCard.tapped=false;
+      sfx("ok");renderAll();
+      toast(`🔄 ${faceNameOf(shown)} を見せた → ${faceNameOf(srcCard)} をアンタップ`);
+    }else if(f.t==="chargeTapThenManaGrave"){
+      /* 🌱🪦 v16.154 大横綱型。「そうしたら」なので、1枚もマナに置けなかった時は墓地に置く処理もしない。
+         墓地に置く枚数は n 枚（マナが足りなければあるだけ）。選ぶのは自分で、取り消しはできない。 */
+      if(!Z.deck.length){toast("🌱 山札がないため、マナに置けません（墓地に置く処理もしません）");continue;}
+      snap();
+      let cn=0;
+      for(let i=0;i<n&&Z.deck.length;i++){const c=Z.deck.shift();c.faceup=true;c.sideways=false;c.tapped=true;Z.mana.push(c);markArrive(c);cn++;}
+      bumpEv("manaAccel",pi,cn);
+      sfx("move");renderAll();
+      toast(`🌱 山札の上から${cn}枚をタップしてマナゾーンへ：${Z.mana.slice(-cn).map(faceNameOf).join("、")}`);
+      logOnly(`🌱 ${S.players[pi].label}：山札の上から${cn}枚をタップしてマナへ`);
+      const want=Math.min(n,Z.mana.length);
+      for(let i=0;i<want;i++){
+        if(!Z.mana.length)break;
+        const pool=Z.mana.slice();
+        let j=pool.length===1?0:await pickCard(`🪦 墓地に置く自分のマナを選択（${i+1}/${want}枚目・必ず置きます）`,pool,{sub:x=>x.tapped?"タップ":""});
+        if(j===null||j===undefined||!pool[j])j=0;   // 取り消しは不可：先頭を置く
+        const idx=Z.mana.findIndex(x=>x.id===pool[j].id);
+        if(idx<0)continue;
+        const rm=Z.mana.splice(idx,1)[0];
+        rm.faceup=true;rm.tapped=false;rm.sideways=false;
+        Z.grave.push(rm);
+        sfx("grave");renderAll();
+        toast(`🪦 ${faceNameOf(rm)} をマナゾーンから墓地へ`);
+        await fireToGrave(pi,rm,"mana");
+      }
+      logOnly(`🪦 ${S.players[pi].label}：マナゾーンから${want}枚を墓地へ`);
+      renderAll();
     }else if(f.t==="chargeTapManaCount"){
       // 🌱 解決時の自分のマナ枚数と同じ枚数を、山札からタップしてマナへ（ドルツヴァイ型）。
       const want=Z.mana.length;
@@ -24942,8 +25049,12 @@ function afterHandDiscard(owner,c,byPi){
         enqueueWatchJob(async()=>{
           b._foeHandDiscQ=false;
           if(!zonesOf(foe).battle.some(x=>x.id===bid))return;
+          /* ⚡ v16.154 各ターン1回（「はじめて」）と条件式（「自分のターン」等）をここでも効かせる。
+             条件で落ちた時は回数を使わないので、相手のターンに捨てても「はじめて」は残る。 */
+          const _lf=onceFilter(b,list);
+          if(!_lf.length)return;
           toast(`🗑 ${faceNameOf(b)}：相手が手札を捨てた時の効果`);
-          await runFxList(foe,list,b,false);
+          await runFxList(foe,_lf,b,false);
         });
       }
     }
@@ -27922,6 +28033,7 @@ async function processBroken(op,stack,label){
             bG.className="btn small";bG.textContent="G・ストライク：手札に加えて攻撃を止める";
             bG.addEventListener("click",()=>{
               try{S._gsStop=true;}catch(e){}
+              cG._gsUsed=true;   // ⚡ v16.153 このボタンで使った。ブレイク後のG・ストライク確認でもう一度聞かない
               toast(`⚡ G・ストライク：${faceNameOf(cG)} を手札に加え、この攻撃を止めます（出た時の効果は使いません）`);
               logOnly(`⚡ ${S.players[op].label}：G・ストライクで攻撃を止めた（${faceNameOf(cG)}）`);
               putMany("hand");
@@ -28376,7 +28488,11 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   }
   // G・ストライク：手札に加わったGS持ちを確認（複数枚それぞれ発動可・登録した追加効果も処理）
   if(S.expert){
-    const gsCards=noGSNow()?[]:OZ.hand.filter(x=>stackIds.has(x.id)&&(()=>{const r2=getReg(x);return (r2&&r2.gs)||shieldGSGrantOk(op,x);})());
+    /* ⚡ v16.153 ブレイクの画面で「G・ストライク：手札に加えて攻撃を止める」を押した札は、ここで聞き直さない
+       （押したあとにもう一度「公開しますか」が出て、はいで出た時の効果まで動いていた）。 */
+    const _gsUsedNow=OZ.hand.filter(x=>stackIds.has(x.id)&&x._gsUsed);
+    _gsUsedNow.forEach(x=>{x._gsUsed=false;});
+    const gsCards=noGSNow()?[]:OZ.hand.filter(x=>stackIds.has(x.id)&&!_gsUsedNow.includes(x)&&(()=>{const r2=getReg(x);return (r2&&r2.gs)||shieldGSGrantOk(op,x);})());
     const atkSide=op===0?1:0; // 攻撃していた側（＝ブレイクした側の相手）
     let idxG=0;
     for(const gc of gsCards){
@@ -28388,7 +28504,7 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
         toast(`🚯 ${faceNameOf(gc)} は呪文のG・ストライク → ゲンム等で無視される（クリーチャーのG・ストライクは無視されません）`);
         continue;
       }
-      const yes=await ask(`🖐 G・ストライク！（${idxG}/${gsCards.length}枚目）\n《${faceNameOf(gc)}》を公開しますか？\n（攻撃を止める＋このカードに登録した追加効果を処理。複数ある場合は続けて確認します）`);
+      const yes=await ask(`🖐 G・ストライク！（${idxG}/${gsCards.length}枚目）\n《${faceNameOf(gc)}》を公開しますか？\n（攻撃を止めます。出た時などの効果は使いません。複数ある場合は続けて確認します）`);
       if(!yes)continue;
       toast(`🖐 G・ストライク！ ${faceNameOf(gc)} を公開 → 攻撃を止めた`);
       // 攻撃を止める対象を選択（既定＝攻撃中のクリーチャー・他のクリーチャーにも付与可）
@@ -28405,8 +28521,9 @@ async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
         attacker.buff=attacker.buff||{};attacker.buff.noAtkBlock=true;
       }
       sfx("flip");renderAll();
-      enqueueFx(op,gc);      // GSカードの登録効果（追加能力）を処理
-      await waitFxIdle();
+      /* ⚡ v16.153 G・ストライクは「手札に加えて攻撃を止める」だけ。以前はここで札の登録効果（faces[0]）を流していたが、
+         登録されているG・ストライク持ち8枚の faces[0] はすべて「出た時」の効果で、
+         公開しただけで出た時（ドローなど）が動いていた。ここでは何も流さない。 */
     }
   }
   // ↩ S・バック：手札にあるS・バック持ちを、ブレイクで手札に加わった「指定のカード」を捨てて、コストを支払わずに使う
@@ -28840,6 +28957,7 @@ async function startAttack(pi,id){
   }
   OZ.battle.forEach(t=>{
     const tr=getReg(t);
+    if(isSealed(t))return;   // 🔏 v16.150 封印されたクリーチャーは「いない」ものとして扱う（攻撃先に出さない）
     if(tr&&tr.noAtked)return;
     if(!isCreatureReg(tr))return; // クリーチャー以外（D2フィールド/タマシード/クロスギア等）は攻撃対象外
     if(noAtkedGrant(op,t,tr))return;      // 🛡 常在付与の「攻撃されない」（アクア・アタック型）
@@ -28867,6 +28985,7 @@ async function startAttack(pi,id){
   c._atkPDone=false;c._atkPEarly=false; // ⚡ v16.24 プレイヤーへの攻撃時の誘発も、宣言のたびに1回だけ流す
   c._acAsked=false;   // ✨ アタック・チャンスの確認も、新規宣言のたびに1回だけ出す
   c._allyAtkDone=false;c._anyAtkDone=false;c._gearAtkDone=false; // 攻撃するたびに誘発し直せるよう毎回リセット
+  c._atkTrigByOrig=false;c._pendDecl=null;c._pendInv=false;   // ⚔ v16.152 前の攻撃の持ち越しを消す
   noteAttackThisTurn(pi,c);   // 🕐 「そのターン◯体目の攻撃」を数える
   // 🐉 龍装者 バルチュリス型：このターンn度目の攻撃なら、手札から公開して攻撃の後に出す（宣言だけここで行う）
   try{await offerAtkJoin(pi);}catch(e){console.warn("offerAtkJoin",e);}
@@ -29464,6 +29583,30 @@ async function runSelfAtkEnd(pi,c){
   }
   renderAll();
 }
+/* ⚔ v16.152 攻撃する時の効果（③）に、解決するものがあるか。TCG で②③の順番を聞くかどうかの判定に使う。
+   execAttack の③と同じ所を見る：クロスギア／自身の攻撃時／スマッシュ・バースト／超魂X／どちらの攻撃でも／味方全体付与。
+   迷う時は「ある」と答える（聞かずに進むより、聞いた方が安全）。 */
+function atkTrigPending(pi,c,tg){
+  if(!S.expert||!c)return false;
+  const atkEvs=["selfAtk",(tg&&tg.kind==="creature")?"selfAtkC":"selfAtkP"];
+  const hasEv=(r,evs)=>!!(r&&Array.isArray(r.watchFx)&&r.watchFx.some(w=>w&&evs.includes(w.ev)));
+  if(c.gear&&c.gear.some(g=>hasEv(getReg(g),["selfAtk","selfAtkC","selfAtkP"])))return true;
+  const r=getReg(c);
+  if(!c._atkFxDone&&hasEv(r,atkEvs))return true;
+  // 💥 スマッシュ・バースト：使用済みかどうかは見ない（迷う時は「ある」でよい。v16.157 add19 が execAttack の目印を探すため、ここに同じ名前を書かない）
+  if(r&&r.smashBurst&&(r.twin||r.ctype==="twinpact")&&faceFx(r,1).length)return true;
+  try{if(!c._sxAtkDone&&soulXUnder(c).length)return true;}catch(e){}
+  for(const p of [0,1]){
+    const Zp=zonesOf(p);
+    for(const x of [...Zp.battle,...Zp.shield]){
+      if(Zp.shield.includes(x)&&!x.faceup)continue;
+      const rx=getReg(x);
+      if(hasEv(rx,["anyAtk"]))return true;
+      if(p===pi&&hasEv(rx,["allyAtk"]))return true;
+    }
+  }
+  return false;
+}
 async function execAttack(pi,id,tg){
   const Z=zonesOf(pi);
   let c=Z.battle.find(x=>x.id===id);
@@ -29496,6 +29639,7 @@ async function execAttack(pi,id,tg){
     _atkEndRan=true;
     atkSpellLockOff(c);   // 🚫 攻撃中だけの呪文ロックを外す（v14.76）
     c._attacking=false;   // 🛡 v15.80 攻撃中の印を外す
+    c._atkTrigByOrig=false;   // ⚔ v16.152 この攻撃だけの印
     /* ⚡ v16.30 「このターン、最初の攻撃の終わりにアンタップする」の付与（瞬閃と疾駆と双撃の決断型）。
        付けたターンの1回だけ。場を離れていたら何もしない。 */
     if(S.expert&&c.buff&&c.buff.untapAfterAtk&&!c._untapAfterAtkUsed&&zonesOf(pi).battle.some(x=>x.id===c.id)){
@@ -29719,6 +29863,17 @@ async function execAttack(pi,id,tg){
         const arr0=Z[srcZone];
         const hi=arr0.findIndex(x=>x.id===hcard.id);
         arr0.splice(hi,1);
+        /* ⚔ v16.156 バトルゾーンから侵略で重ねる時（SSS級侵略［天災］など）、動くのは一番上のカードだけ。
+           下のカードはバトルゾーンに残り、その一番上がクリーチャーとして同じ場所に残る（出直しではない）。 */
+        if(srcZone==="battle"&&hcard.under&&hcard.under.length){
+          const rest=hcard.under.splice(0);
+          const nt=rest[0];
+          nt.under=rest.slice(1);
+          nt.tapped=!!hcard.tapped;nt.faceup=true;
+          if(hcard.sick!=null)nt.sick=hcard.sick;
+          arr0.splice(hi,0,nt);
+          logOnly(`⚔ ${S.players[pi].label}：《${faceNameOf(hcard)}》をバトルゾーンから重ねた（下の《${faceNameOf(nt)}》${rest.length>1?`ほか${rest.length-1}枚`:""}は残る）`);
+        }
         if(srcZone==="battle"&&hcard.gear&&hcard.gear.length){
           const gs=hcard.gear.splice(0);
           gs.forEach(g=>gearOut(Z,g));
@@ -29782,6 +29937,29 @@ async function execAttack(pi,id,tg){
   /* ⚡ v16.94 宣言した順（重ねた順）に出た時の効果を解決する */
   /* 侵略したカードを革命チェンジで手札に戻した場合も、侵略したカードの効果は重ねた順にすべて解決し、
      最後に革命チェンジで出たカードを解決する（宣言した順＝この並び）。 */
+  /* ⚔ v16.152 TCG で③（攻撃する時の効果）を先に解決している途中で保留した時は、
+     宣言したカードの「出た時」がまだ残っている。保留の時に覚えておいた分を、再開のここで戻す。 */
+  if(_invSkip&&c._pendDecl){
+    const _findAny=cid=>{
+      const Zp=zonesOf(pi);
+      for(const zn of ["battle","hand","grave","mana","shield"]){
+        for(const x of (Zp[zn]||[])){
+          if(x.id===cid)return x;
+          if(zn==="battle"&&x.under){const u=x.under.find(y=>y.id===cid);if(u)return u;}
+        }
+      }
+      return null;
+    };
+    for(const d of c._pendDecl){const h=_findAny(d.id);if(h)_declared.push({hcard:h,isRevCh:!!d.isRevCh});}
+    if(c._pendInv)invadedOnce=true;
+    c._pendDecl=null;c._pendInv=false;
+    logOnly(`⚔ ${S.players[pi].label}：保留していた侵略／革命チェンジの「出た時」を解決`);
+  }
+  /* 🔧 v16.151 ②（宣言したカードの「出た時」を重ねた順に解決）を関数に切り出した。
+     execAttack の中に置いているので c・id・_declared などはそのまま共有する（外に同名の関数は作らない）。
+     戻り値："ok"＝攻撃を続ける／"abort"＝ここで止める（保留・中止）。
+     _fxOnly＝攻撃が止まったあとに「出た時」だけ解決する時（格納待ち・続行の確認を出さない）。 */
+  const _resolveDeclared=async(_fxOnly)=>{
   INV_RESOLVING=_declared.length>0;
   try{
   for(const {hcard,isRevCh} of _declared){
@@ -29826,24 +30004,38 @@ async function execAttack(pi,id,tg){
   }
   /* ⚔ v16.97 出たクリーチャーの格納確認（パトス）が残っていれば、それが終わるまで待つ。
      攻撃しているクリーチャーを格納したら、その攻撃は中止。 */
-  if(S.expert){
+  if(S.expert&&!_fxOnly){
     await new Promise(r=>setTimeout(r,0));
     try{await PF_BUSY;}catch(e){}
-    if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return;}
+    if(!stillAtk()){toast("攻撃クリーチャーが場を離れたため中止");renderAll();return "abort";}
   }
-  if(invadedOnce&&S.vs){
+  if(!_fxOnly&&invadedOnce&&S.vs){
     await offerInvadeZeroPrompt(op);
   }
-  if(invadedOnce){
+  if(!_fxOnly&&invadedOnce){
     const j9=await askChoice(`♻ 侵略/革命チェンジの処理が終わったら選択`,["⚔ そのまま攻撃を続ける","⏸ 処理中にする（攻撃を保留→▶再開）"]);
     if(j9===1){
       c._atkFxDone=true;
       S.pendingAtk={pi,id,tg:JSON.parse(JSON.stringify(tg))};
       showResumeBtn();
       renderAll();
-      return;
+      return "abort";
     }
   }
+  return "ok";
+  };
+  /* ⚔ v16.152 TCG：②と③の両方に解決するものがある時は、どちらから解決するかを選ぶ。
+     デュエプレは今までどおり ②→③ の固定。ゴーストは既定（②から）で進む。
+     ③を先にした時の並び：攻撃する時の効果（COMPLEX・D・D・D・マジボンバー → ③）→ ②。 */
+  let _trigFirst=false;
+  if(S.expert&&S.gameMode==="tcg"&&_declared.length>0&&_origAtk.id!==c.id&&atkTrigPending(pi,_origAtk,tg)){
+    const _dn=_declared.map(d=>`《${faceNameOf(d.hcard)}》`).join("→");
+    const jo=await askChoice(`⚔ 解決の順番（TCG）\n先に解決する方を選んでください。\n・宣言したカードの出た時：${_dn}\n・攻撃する時の効果：《${faceNameOf(_origAtk)}》`,
+      ["✨ 出た時から（出た時 → 攻撃する時）","⚡ 攻撃する時から（攻撃する時 → 出た時）"]);
+    _trigFirst=jo===1;
+    logOnly(`⚔ ${S.players[pi].label}：解決の順番＝${_trigFirst?"攻撃する時の効果 → 出た時":"出た時 → 攻撃する時の効果"}`);
+  }
+  if(!_trigFirst){const _r2=await _resolveDeclared(false);if(_r2==="abort")return;}
   // COMPLEX：攻撃時
   if(S.expert){
     const rCX=getReg(c);
@@ -30098,10 +30290,18 @@ async function execAttack(pi,id,tg){
   }
   const _newTop=c,_newId=id;
   const _trigOrig=_declared.length>0&&_origAtk.id!==_newId;
-  if(_trigOrig){_newTop._invDeclDone=true;c=_origAtk;id=_origAtk.id;}
   const _stillAtkT=()=>_trigOrig?true:stillAtk();
+  /* 🔧 v16.151 ③（攻撃する時の効果）を関数に切り出した。②と同じく execAttack の中に置く。
+     攻撃者の入れ替え（攻撃を宣言したクリーチャーに戻す→終わったら新しい最上段に戻す）もこの中で行う。 */
+  const _runAtkTrig=async()=>{
+  if(_trigOrig){_newTop._invDeclDone=true;_newTop._atkTrigByOrig=true;c=_origAtk;id=_origAtk.id;}
   c._invDeclDone=true;
-  {const _atkTrigRes=await (async()=>{
+  /* ⚔ v16.152 入れ替わった攻撃で保留→再開した時、新しい最上段で③をやり直さない
+     （③は攻撃を宣言したクリーチャーのもので、保留の前に済んでいる）。 */
+  if(!_trigOrig&&c._atkTrigByOrig){c._atkTrigByOrig=false;return "ok";}
+  let _trigRes="abort";
+  try{
+  const _atkTrigRes=await (async()=>{
   // ⚙ クロス中のクロスギアが持つ「これをクロスしたクリーチャーが攻撃する時」の能力
   if(S.expert&&!c._gearAtkDone&&c.gear&&c.gear.length){
     c._gearAtkDone=true;
@@ -30263,8 +30463,23 @@ async function execAttack(pi,id,tg){
     c._allyAtkDone=true;
   }
   return "ok";})();
-   if(_trigOrig){c=_newTop;id=_newId;}
-   if(_atkTrigRes==="abort")return;}
+  _trigRes=_atkTrigRes;
+  }finally{ if(_trigOrig){c=_newTop;id=_newId;} }
+  return _trigRes;
+  };
+  {const _atkTrigRes=await _runAtkTrig();
+   /* ⚔ v16.152 ③を先にしていて③で止まった時：保留なら②を再開まで持ち越し、中止なら②（出た時）だけ解決する */
+   if(_atkTrigRes==="abort"&&_trigFirst){
+     if(S.pendingAtk&&S.pendingAtk.id===_newId){
+       _newTop._pendDecl=_declared.map(d=>({id:d.hcard.id,isRevCh:!!d.isRevCh}));
+       _newTop._pendInv=invadedOnce;
+       toast("⏸ 宣言したカードの「出た時」は、▶再開の時に解決します");
+     }else{
+       await _resolveDeclared(true);
+     }
+   }
+   if(_atkTrigRes==="abort")return;
+   if(_trigFirst){const _r2=await _resolveDeclared(false);if(_r2==="abort")return;}}
   if(S._gsStop){S._gsStop=false;toast("⚡ G・ストライク：この攻撃は止まりました");logOnly(`⚡ ${S.players[pi].label}：G・ストライクにより攻撃が止まった`);renderAll();return;}   // ⚡ v16.146
   if(!stillAtk()){renderAll();return;}   // 🔏 v16.106 攻撃が止まっていれば革命0トリガーは聞かない
   await offerRev0();
@@ -31453,6 +31668,8 @@ const TRIG_EVS=[
   ["foeHyperPlaced","🌌 相手の超次元ゾーンにカードが置かれた時（いまは「超次元ゾーンに置く」効果でだけ鳴ります）"],
   ["selfDiscardedByFoe","🗑 このカード自身が相手の効果で手札から捨てられた時（貝獣パウアー型／墓地にいるまま効果だけ働く・自分で捨てた時は働かない）"],
   ["onAwake","🔄 このクリーチャーに覚醒した時（裏返ってこの面になった時だけ。超次元から直接出した時は発動しない）"],
+  ["foeShieldLeave","🛡 相手のシールドが離れた時（離れた1枚ごとに誘発・ブレイク／墓地へ／手札へなど経路を問わない・熱き邪道 レッドゾーンZ型）"],
+  ["selfHandToMana","🌱 このカードを自分の手札からマナゾーンに置いた時（チャージ・効果を問わない・覇道の決闘型）"],
   ["foeHandDiscarded","🗑 相手が自身の手札を捨てた時（ジェニー・ジェーン型・自分の効果で捨てさせた時も含む）"],
   ["myHandDiscardedAny","🗑 自分の手札を1枚捨てた時（原因を問わず・捨てた枚数ぶん誘発する／MEGATOON・ドッカンデイヤー型。上の「相手の効果で〜」とは別物）"],
   ["turnStartAny","🔄 各ターンの開始時（自分・相手のどちらのターンでも・水上第九院シャコガイル型）"],
@@ -32854,6 +33071,7 @@ function renderFxEditor(){
   {const e=$("fxFaceUpShieldActive");if(e)e.checked=!!FXEDIT.faceUpShieldActive;}
   {const e=$("fxSpellCounter");if(e)e.value=FXEDIT.spellCounter||"";}
   {const e=$("fxManaSummon");if(e)e.checked=!!FXEDIT.manaSummon;}
+  {const e=$("fxManaSummonGrave");if(e)e.checked=!!FXEDIT.manaSummonGrave;}
   {const e=$("fxFinalRevGame");if(e)e.checked=!!FXEDIT.finalRevGame;}
   {const e=$("fxFoeAtkFlipCast");if(e)e.value=+FXEDIT.foeAtkFlipCast||0;}
   {const e=$("fxFlipCastBoth");if(e)e.checked=!!FXEDIT.flipCastBoth;}
@@ -32863,6 +33081,7 @@ function renderFxEditor(){
   $("fxPetensyCond").value=FXEDIT.petensyCond||"";
   $("fxRepIn").value=FXEDIT.repIn||"";
   $("fxRepInF").value=FXEDIT.repInF||"";
+  {const e=$("fxRepInNeedAlly");if(e)e.value=FXEDIT.repInNeedAlly||"";}
   $("fxRepInNC").checked=!!FXEDIT.repInNC;
   {const e=$("fxRepInOppTurn");if(e)e.checked=!!FXEDIT.repInOppTurn;}
   {const e=$("fxRepInLockerTurn");if(e)e.checked=!!FXEDIT.repInLockerTurn;}
@@ -35220,6 +35439,7 @@ function openFxEditor(key){
     faceUpShieldActive:cur?!!cur.faceUpShieldActive:false,
     spellCounter:cur?(cur.spellCounter||""):"",
     manaSummon:cur?!!cur.manaSummon:false,
+    manaSummonGrave:cur?!!cur.manaSummonGrave:false,
     finalRevGame:cur?!!cur.finalRevGame:false,
     foeAtkFlipCast:cur?(+cur.foeAtkFlipCast||0):0,
     flipCastBoth:cur?!!cur.flipCastBoth:false,
@@ -35229,6 +35449,7 @@ function openFxEditor(key){
     petensyCond:cur&&cur.petensyCond||"",
     repIn:cur&&cur.repIn||"",
     repInF:cur&&cur.repInF||"",
+    repInNeedAlly:cur&&cur.repInNeedAlly||"",
     repInNC:cur?!!cur.repInNC:false,
     repInOppTurn:cur?!!cur.repInOppTurn:false,
     repInLockerTurn:cur?!!cur.repInLockerTurn:false,
@@ -35873,6 +36094,7 @@ $("fxSave").addEventListener("click",async ()=>{
     faceUpShieldActive:$("fxFaceUpShieldActive")?$("fxFaceUpShieldActive").checked:false,
     spellCounter:$("fxSpellCounter")?$("fxSpellCounter").value.trim():"",
     manaSummon:$("fxManaSummon")?$("fxManaSummon").checked:false,
+    manaSummonGrave:$("fxManaSummonGrave")?$("fxManaSummonGrave").checked:false,
     finalRevGame:$("fxFinalRevGame")?$("fxFinalRevGame").checked:false,
     foeAtkFlipCast:$("fxFoeAtkFlipCast")?(+$("fxFoeAtkFlipCast").value||0):0,
     flipCastBoth:$("fxFlipCastBoth")?$("fxFlipCastBoth").checked:false,
@@ -35882,6 +36104,7 @@ $("fxSave").addEventListener("click",async ()=>{
     petensyCond:$("fxPetensyCond").value.trim(),
     repIn:$("fxRepIn").value||"",
     repInF:$("fxRepInF").value.trim(),
+    repInNeedAlly:$("fxRepInNeedAlly")?$("fxRepInNeedAlly").value.trim():"",
     repInNC:$("fxRepInNC").checked,
     repInOppTurn:$("fxRepInOppTurn")?$("fxRepInOppTurn").checked:false,
     repInLockerTurn:$("fxRepInLockerTurn")?$("fxRepInLockerTurn").checked:false,
@@ -37829,7 +38052,11 @@ function applyEnterReplacement(pTo,c,mode){
     return !!(rx&&rx.repIn&&!isSealed(x)&&!isIgnored(x,ownerP)&&matchR(rx.repInF)
       &&(!rx.repInOppTurn||(S.vs&&S.who===pTo))
       &&(!rx.repInLockerTurn||(S.vs&&S.who===ownerP))
-      &&(!rx.repInOnce||x._repInUsedPturn!==(S.pturn|0)));
+      &&(!rx.repInOnce||x._repInUsedPturn!==(S.pturn|0))
+      /* 🔒 v16.156 「自分の他の火のコマンドがあれば」（熱き邪道 レッドゾーンZ型・登録は「火／コマンド」）：ロック元の持ち主の場に、
+         ロック元以外で条件に合うクリーチャーがいる時だけ置換する */
+      &&(!String(rx.repInNeedAlly||"").trim()||zonesOf(ownerP).battle.some(y=>y.id!==x.id&&!isSealed(y)
+          &&(()=>{try{return lockFilterOk(String(rx.repInNeedAlly).trim(),getReg(y),y);}catch(e){return false;}})())));
   };
   const lockers=[
     ...zonesOf(foeR).battle.filter(x=>_lockOk(x,foeR)),
@@ -38458,6 +38685,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
        これまでは sideways で寝かせていたため、視点を切り替えると向きが合わなかった。 */
     {const _pr=getReg(c);if(toZone==="battle"&&_pr&&isWideReg(_pr)){c.sideways=false;c.tapped=false;applyD2Rot(pTo,c);}}
   }
+  if(!_reorder&&toZone==="battle")c._pendFromHand=(fromZone==="hand");   // ⚡ v16.154 手札から出した（召喚）か
   if(!_reorder){c._mvxRep=true;try{markArrive(c);}finally{delete c._mvxRep;}} // 🔧 配置後に呼ぶ（並べ替えでは出直し扱いにしない・置換ロックは本体側で判定するためフラグで除外）
   // 🛡 表向きでシールドに置く操作は誤操作しやすいので確認（城/Gキャッスルは除く）
   if(toZone==="shieldUp"&&S.expert&&!S.freePlay){
@@ -38608,12 +38836,15 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
        登録の manaSummon（各ターンの回数）と manaSummonFree（タダになる対象）を見て、
        マナ→バトルの移動のたびに、使った回数と「タダかどうか」を知らせる。
        この盤面はもともと手で動かす作りなので止めはしない。回数を超えたら注意を出す。 */
-    if(S.expert&&fromZone==="mana"&&pFrom===pTo){
+    /* 🌱 v16.154 manaSummonGrave＝墓地からの召喚も同じ回数で数える（大感動！ディス・イズ・大横綱型「マナゾーンまたは墓地から」）。 */
+    if(S.expert&&(fromZone==="mana"||fromZone==="grave")&&pFrom===pTo){
       try{
         const rC=getReg(c);
         if(rC&&isCreatureReg(rC)){
           const src=zonesOf(pTo).battle.find(x=>{
             const rx=getReg(x);
+            if(x.id===c.id)return false;
+            if(fromZone==="grave"&&!(rx&&rx.manaSummonGrave))return false;
             return rx&&(+rx.manaSummon>0)&&!isSealed(x)&&!isIgnored(x,pTo);
           });
           if(src){
@@ -38627,8 +38858,8 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
             const freeF=String(rS.manaSummonFree||"").trim();
             const isFree=!!freeF&&lockFilterOk(freeF,rC,c);
             if(used<=lim){
-              toast(`🌱 ${faceNameOf(src)}：マナからの召喚（このターン ${used}/${lim} 回目）\n${isFree?`${freeF}なのでコストを支払いません`:"コストは支払ってください"}`);
-              logPush(`🌱 ${S.players[pTo].label}：《${faceNameOf(c)}》をマナから召喚（${used}/${lim}・${isFree?"タダ":"コスト支払い"}）`);
+              toast(`🌱 ${faceNameOf(src)}：${fromZone==="grave"?"墓地":"マナ"}からの召喚（このターン ${used}/${lim} 回目）\n${isFree?`${freeF}なのでコストを支払いません`:"コストは支払ってください"}`);
+              logPush(`🌱 ${S.players[pTo].label}：《${faceNameOf(c)}》を${fromZone==="grave"?"墓地":"マナ"}から召喚（${used}/${lim}・${isFree?"タダ":"コスト支払い"}）`);
             }else{
               toast(`⚠ ${faceNameOf(src)} の「各ターンに${lim}度」は使い切っています（このターン${used}回目）。\n通常の召喚として扱う場合はそのままで大丈夫です`);
             }
@@ -38979,6 +39210,24 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
   if(S.expert&&toZone==="mana"){
     runWatchFx(pTo,"manaCharge");
     applyManaTapIn(pTo,c);
+  }
+  /* 🌱 v16.156 「このカードを自分の手札からマナゾーンに置いた時」（覇道の決闘型）。
+     タップして置く処理（多色）が済んでから動かすので、アンタップの効果が後勝ちになる。 */
+  if(S.expert&&fromZone==="hand"&&toZone==="mana"&&pFrom===pTo){
+    try{
+      const _rH=getReg(c);
+      const _wl=((_rH&&_rH.watchFx)||[]).filter(w=>w&&w.ev==="selfHandToMana");
+      if(_wl.length&&!isIgnored(c,pTo)){
+        enqueueWatchJob(async()=>{
+          if(!zonesOf(pTo).mana.some(x=>x.id===c.id))return;
+          const _lf=onceFilter(c,_wl);
+          if(!_lf.length)return;
+          toast(`🌱 ${faceNameOf(c)}：手札からマナゾーンに置いた時の効果`);
+          await runFxList(pTo,_lf,c,false);
+          renderAll();
+        });
+      }
+    }catch(e){}
   }
   // 📊 対戦データ：手札からのマナチャージを記録（v10.46・効果による移動もここを通るが人間の判断として近似）
   if(fromZone==="hand"&&toZone==="mana"&&pFrom===pTo&&typeof mdEv==="function")mdEv("charge",pTo,faceNameOf(c),{m:zonesOf(pTo).mana.length});
@@ -41017,6 +41266,7 @@ function renderAllNow(){
   checkMugetsu(false);
   flushMugetsuOut();    // 🌙 無月の門の確認がぜんぶ済んでから、ムーゲッツの宣言を出す
   checkGraveAwaken();   // 🔄 自分の墓地にカードが置かれた時の覚醒／進化
+  checkShieldLeave();   // 🛡 v16.156 相手のシールドが離れた時
   flushUnderToGrave();  // 🧬 v16.25 進化元が墓地に置かれた時の誘発（ゾルザーク型）
   fixPsyStray();        // 🌌 サイキック／ドラグハートが超次元ゾーン以外に紛れていたら戻す
   fixStrayBuff();       // 🧹 バトルゾーンの外に残った一時的な付与を消す
@@ -43194,27 +43444,54 @@ function fxRecentThreshold(days){
   d0.setHours(0,0,0,0);
   return d0.getTime()-(Math.max(1,days|0)-1)*86400000;
 }
-/* 🔗 v16.63 ツインパクトや覚醒リンクの相方を足す（デッキ指定では前からやっていた処理を、日数指定にも効かせる） */
+/* 🔗 v16.155 多面カードの「まとまり」を集める。
+   LINKS は表の面をキーにしたものが多いが、裏の面がキーになっているもの・3面以上のものもある。
+   これまでは「キー → 面」の向きしか見ていなかったので、裏の面だけを選ぶと表の面とリンクが付いてこなかった。
+   どちらの向きからでも、つながっている面をすべて（何段でも）拾う。 */
+function fxLinkGroup(keys){
+  const out=new Set(keys||[]);
+  let grew=true;
+  while(grew){
+    grew=false;
+    for(const [base,faces] of LINKS){
+      if(!Array.isArray(faces))continue;
+      if(!(out.has(base)||faces.some(f=>out.has(f))))continue;
+      for(const f of [base,...faces])if(f&&!out.has(f)){out.add(f);grew=true;}
+    }
+  }
+  return out;
+}
+/* 🔗 v16.155 渡す面にかかわるリンクをすべて取り出す（キーが裏の面のリンクも含める） */
+function fxLinksFor(keys){
+  const set=(keys instanceof Set)?keys:new Set(keys||[]);
+  const o={};
+  for(const [base,faces] of LINKS){
+    if(!Array.isArray(faces))continue;
+    if(set.has(base)||faces.some(f=>set.has(f)))o[base]=faces.slice();
+  }
+  return o;
+}
+/* 🔗 v16.155 リンクに出てくる面の表示名（登録の無い面の名前も渡す） */
+function fxLinkNames(links){
+  const o={};
+  for(const [base,faces] of Object.entries(links||{}))for(const f of [base,...(faces||[])])if(dispName.has(f))o[f]=dispName.get(f);
+  return o;
+}
+/* 🔗 v16.63 ツインパクトや覚醒リンクの相方を足す（v16.155 どちらの向きからでも拾う） */
 function fxAddLinked(keys){
   const set=new Set(keys);
-  for(const k of keys){
-    const l=LINKS.get(k);
-    if(l)for(const f of l)if(FXDB.has(f))set.add(f);
-  }
+  for(const f of fxLinkGroup(keys))if(FXDB.has(f))set.add(f);
   return [...set];
 }
 /* 送る対象のキーを集める。scope＝"all"／"deck"（デッキで使うカードだけ）／"recent"（最近更新した分だけ） */
 function fxShareKeys(scope,deckNames){
   const all=[...FXDB.keys()];
   if(scope==="deck"){
-    const set=new Set();
-    for(const nm of (deckNames||[])){
-      const k=normName(nm);set.add(k);
-      const l=LINKS.get(k);if(l)for(const f of l)set.add(f);
-    }
+    const set=fxLinkGroup((deckNames||[]).map(nm=>normName(nm)));   // 🔗 v16.155 どちらの向きからでも
     return all.filter(k=>set.has(k));
   }
-  if(scope==="self")return all.filter(k=>((FXDB.get(k)||{})._src)==="self");
+  // 🔗 v16.155 自分で登録した面だけでなく、その相方の面も一緒に渡す
+  if(scope==="self")return fxAddLinked(all.filter(k=>((FXDB.get(k)||{})._src)==="self"));
   if(scope==="recent"){
     /* 🗓 days＝何日ぶんの登録を送るか（省略時は7日・v14.84で日数指定に対応）
        v16.63：①境目を「きょうの0時」基準にした ②時刻として読めない _v は対象に含める
@@ -43240,13 +43517,15 @@ async function olSendFx(keys,label){
   const me=S.players[S.seat|0].label;
   for(let i=0;i<total;i++){
     const part=keys.slice(i*CH,(i+1)*CH);
-    const items={},names={},links={};
+    const items={},names={};
     for(const k of part){
       const r=FXDB.get(k);if(!r)continue;
       items[k]=r;
       if(dispName.has(k))names[k]=dispName.get(k);
-      if(LINKS.has(k))links[k]=LINKS.get(k);
     }
+    // 🔗 v16.155 この分にかかわるリンクは、キーが裏の面でも送る。登録の無い面の名前も付ける
+    const links=fxLinksFor(part);
+    Object.assign(names,fxLinkNames(links));
     try{ONLINE.conn.send({t:"fx",from:me,chunk:i,total,items,names,links});}
     catch(e){toast("送信に失敗しました");return;}
     if(total>4&&i%4===3)toast(`📤 カード登録を送信中… ${Math.min((i+1)*CH,keys.length)}/${keys.length}`);
@@ -43289,6 +43568,16 @@ function showFxDiffPanel(){
     if(c==="new")pick.add(k);
     else if(c==="newer"&&!(cur&&cur._src==="self"))pick.add(k);
   }
+  /* 🔗 v16.155 多面カードは面をまとめて選ぶ。片方だけ取り込むと、表と裏で登録の版がずれる */
+  const _lkAll=[...Object.entries(FX_INBOX.links||{}),...LINKS];
+  const groupOf=k=>{
+    const g=new Set([k]);let grew=true;
+    while(grew){grew=false;
+      for(const [b,fs] of _lkAll){if(!Array.isArray(fs))continue;
+        if(!(g.has(b)||fs.some(f=>g.has(f))))continue;
+        for(const f of [b,...fs])if(!g.has(f)){g.add(f);grew=true;}}}
+    return [...g].filter(x=>items[x]);
+  };
   const order={new:0,newer:1,unknown:2,old:3,same:4};
   keys.sort((a,b)=>(order[clsOf(a)]-order[clsOf(b)])||String(dispName.get(a)||a).localeCompare(String(dispName.get(b)||b),"ja"));
   const ol=document.createElement("div");
@@ -43346,7 +43635,10 @@ function showFxDiffPanel(){
     l2.textContent=`相手：${sumOf(items[k])}　／　自分：${sumOf(FXDB.get(k))}`;
     txt.appendChild(l1);txt.appendChild(l2);
     row.appendChild(chk);row.appendChild(txt);
-    row.onclick=()=>{if(pick.has(k))pick.delete(k);else pick.add(k);refresh();};
+    {const _g=groupOf(k);
+     if(_g.length>1){const l3=document.createElement("div");l3.style.cssText="color:#fcd34d;font-size:12px";
+       l3.textContent=`🔗 多面カード：${_g.map(x=>FX_INBOX.names[x]||dispName.get(x)||x).join("／")}（まとめて選びます）`;txt.appendChild(l3);}}
+    row.onclick=()=>{const on=!pick.has(k);for(const x of groupOf(k)){if(on)pick.add(x);else pick.delete(x);}refresh();};
     list.appendChild(row);
   }
   ol.appendChild(list);
@@ -43369,8 +43661,16 @@ function showFxDiffPanel(){
       fxAliasReg(reg);   // v15.1 mach/machf・jd/jdiver・eternalOmega をそろえる
       FXDB.set(k,reg);
       if(!dispName.has(k))dispName.set(k,FX_INBOX.names[k]||k); // 名前を入れないとカード一覧に出ない
-      if(!LINKS.has(k)&&Array.isArray(FX_INBOX.links[k]))LINKS.set(k,FX_INBOX.links[k]);
       n++;
+    }
+    /* 🔗 v16.155 リンク：手元に無いものは入れる。違うものは、そのまとまりを取り込んだ時だけ差し替える */
+    for(const [b,fs] of Object.entries(FX_INBOX.links||{})){
+      if(!Array.isArray(fs)||!fs.length)continue;
+      const cur=LINKS.get(b);
+      if(cur&&JSON.stringify(cur)===JSON.stringify(fs))continue;
+      if(cur&&![b,...fs].some(f=>pick.has(f)))continue;
+      LINKS.set(b,fs.slice());
+      for(const f of [b,...fs])if(!dispName.has(f)&&FX_INBOX.names[f])dispName.set(f,FX_INBOX.names[f]);
     }
     await persistFx();await persistNames();await persistLinks();
     ol.remove();
@@ -43491,9 +43791,8 @@ function pickFxKeysPanel(){
     bOk.addEventListener("click",()=>{
       if(!pick.size){toast("1枚も選ばれていません");return;}
       // 🔗 多面登録は相方も一緒に送らないと、相手の端末で裏面が引けなくなる
-      const out=new Set(pick);
-      for(const k of pick){const l=LINKS.get(k);if(l)for(const f of l)if(FXDB.has(f))out.add(f);}
-      ol.remove();res([...out]);
+      const out=fxAddLinked([...pick]);   // 🔗 v16.155 裏の面を選んでも表の面が付く
+      ol.remove();res(out);
     });
     foot.appendChild(bCancel);foot.appendChild(bOk);
     ol.appendChild(inner(foot));
@@ -43552,10 +43851,7 @@ $("olFxShare").addEventListener("click",async ()=>{
   // 🖼 画像も一緒に送れるようにする（画像は容量が大きいので、枚数を見せてから確認する）
   if(ONLINE.conn&&ONLINE.conn.open){
     const imgKeys=[];
-    for(const k of keys){
-      if(imgURL.has(k))imgKeys.push(k);
-      const l=LINKS.get(k);if(l)for(const f of l)if(imgURL.has(f))imgKeys.push(f);
-    }
+    for(const k of fxLinkGroup(keys))if(imgURL.has(k))imgKeys.push(k);   // 🔗 v16.155 全部の面の画像
     // 🖼 表紙のカードに効果登録が無いと keys に入らないので、ここで足す
     if(_sendDeckObj&&_sendDeckObj.deck&&_sendDeckObj.deck.cover&&imgURL.has(_sendDeckObj.deck.cover))imgKeys.push(_sendDeckObj.deck.cover);
     const nImg=new Set(imgKeys).size;
@@ -43577,6 +43873,7 @@ async function fxMergeIncoming(pack,from,opts={}){
   const srcTag=opts.src||(from?("shared:"+from):"shared");
   let applied=0;
   const held={};
+  const _appliedKeys=new Set();   // 🔗 v16.155 リンクの差し替えに使う
   for(const [k,v] of Object.entries(cardFx)){
     if(typeof k!=="string"||!k||!v||typeof v!=="object"||Array.isArray(v))continue; // もらったデータは形を確認してから入れる
     const cur=FXDB.get(k);
@@ -43603,17 +43900,37 @@ async function fxMergeIncoming(pack,from,opts={}){
     fxAliasReg(reg);   // v15.1 mach/machf・jd/jdiver・eternalOmega をそろえる
     FXDB.set(k,reg);
     if(!dispName.has(k))dispName.set(k,names[k]||k); // 名前を入れないとカード一覧に出ない
-    if(!LINKS.has(k)&&Array.isArray(links[k]))LINKS.set(k,links[k]);
+    _appliedKeys.add(k);
     applied++;
+  }
+  /* 🔗 v16.155 多面のリンクは登録とは別に取り込む。
+     これまでは「取り込んだ登録のキー」についてだけ見ていたので、表の面の登録が同じ内容で
+     取り込まれなかった時や、リンクのキーが裏の面の時に、リンクが入らず裏返せなかった。
+     ・手元に無いリンク → 入れる
+     ・手元と違うリンク → そのまとまりの登録を今回取り込んだ時、または相手の方が面を多く持つ時だけ差し替える
+       （自分の手が入った登録は差分画面で選んだ時に差し替える） */
+  let linkN=0;
+  for(const [k,v] of Object.entries(links)){
+    if(typeof k!=="string"||!k||!Array.isArray(v))continue;
+    const arr=v.filter(x=>typeof x==="string"&&x).slice(0,8);
+    if(!arr.length)continue;
+    const cur=LINKS.get(k);
+    if(cur&&JSON.stringify(cur)===JSON.stringify(arr))continue;
+    const touched=[k,...arr].some(f=>_appliedKeys.has(f));
+    const covers=!!cur&&cur.every(f=>arr.includes(f));
+    if(cur&&!touched&&!covers)continue;
+    LINKS.set(k,arr);linkN++;
+    for(const f of [k,...arr])if(!dispName.has(f)&&typeof names[f]==="string")dispName.set(f,names[f]);
   }
   const heldKeys=Object.keys(held);
   if(heldKeys.length&&!opts.noInbox){
     FX_INBOX.from=from||"共有データ";
     FX_INBOX.items=held;
     FX_INBOX.names=Object.fromEntries(heldKeys.map(k=>[k,names[k]||dispName.get(k)||k]));
-    FX_INBOX.links=Object.fromEntries(heldKeys.filter(k=>Array.isArray(links[k])).map(k=>[k,links[k]]));
+    // 🔗 v16.155 保留した面にかかわるリンクは、キーが裏の面でも差分画面へ持っていく
+    FX_INBOX.links=Object.fromEntries(Object.entries(links).filter(([k,v])=>Array.isArray(v)&&(held[k]||v.some(f=>held[f]))));
   }
-  if(applied&&!opts.noPersist){await persistFx();await persistNames();await persistLinks();}
+  if((applied||linkN)&&!opts.noPersist){await persistFx();await persistNames();await persistLinks();}
   // 保留が出たら、呼び出し元の処理が終わってから差分画面を開く
   if(heldKeys.length&&!opts.noInbox&&opts.autoPanel!==false)setTimeout(()=>{try{showFxDiffPanel();}catch(e){}},600);
   return {applied,held:heldKeys.length,heldItems:held};
@@ -50247,16 +50564,12 @@ $("btnClearImages").addEventListener("click",async ()=>{
 
 /* ================= データ書き出し/読み込み ================= */
 async function exportCardPack(keys){
-  const all=new Set(keys);
-  for(const k of keys){
-    const l=LINKS.get(k);
-    if(l)for(const f of l)all.add(f);
-  }
+  const all=fxLinkGroup(keys);   // 🔗 v16.155 どちらの向きからでも全部の面
   const data={v:5,type:"cards",exported:new Date().toISOString(),cardFx:{},faceLinks:{},nameMap:{},images:{}};
   toast(`📤 ${all.size}枚を書き出し中…`);
+  Object.assign(data.faceLinks,fxLinksFor(all));   // 🔗 v16.155 キーが裏の面のリンクも
   for(const k of all){
     if(FXDB.has(k))data.cardFx[k]=FXDB.get(k);
-    if(LINKS.has(k))data.faceLinks[k]=LINKS.get(k);
     if(dispName.has(k))data.nameMap[k]=dispName.get(k);
     const b=db?await idbGet("images",k):memImages.get(k);
     if(b)data.images[k]=await blobToDataURL(b);
@@ -50284,22 +50597,17 @@ async function exportDeckShare(deckNames,withImg){
   const multi=decks.length>1;
   // 全デッキに含まれる全カード名 → キー集合（多面リンクの全面も含める）
   const keys=new Set();
-  const addName=nm=>{
-    const k=normName(nm);
-    keys.add(k);
-    const l=LINKS.get(k);
-    if(l)for(const f of l)keys.add(f);
-  };
+  const addName=nm=>{keys.add(normName(nm));};
   for(const {deck:d} of decks){
     for(const sec of [d.main,d.gr,d.hy,d.sp,d.ex]){for(const e of (sec||[]))addName(e.name);}
     if(d.cover)keys.add(d.cover);
   }
+  for(const f of fxLinkGroup([...keys]))keys.add(f);   // 🔗 v16.155 どちらの向きからでも全部の面
   const shortName=n=>n.includes("/")?n.slice(n.indexOf("/")+1):n;
   toast(`📤 ${multi?`${decks.length}個のデッキ`:`「${shortName(decks[0].name)}」`}を書き出し中…（カード${keys.size}種）`);
-  const cardFx={},faceLinks={},nameMap={},images={};
+  const cardFx={},faceLinks=fxLinksFor(keys),nameMap={},images={};
   for(const k of keys){
     if(FXDB.has(k))cardFx[k]=FXDB.get(k);
-    if(LINKS.has(k))faceLinks[k]=LINKS.get(k);
     if(dispName.has(k))nameMap[k]=dispName.get(k);
     if(withImg){
       const b=db?await idbGet("images",k):memImages.get(k);
@@ -50354,10 +50662,9 @@ async function exportFxPack(){
     keys=fxShareKeys(["all","self"][j]);
   }
   if(!keys.length){toast("対象のカード登録がありません");return;}
-  const cardFx={},faceLinks={},nameMap={};
+  const cardFx={},faceLinks=fxLinksFor(keys),nameMap=fxLinkNames(fxLinksFor(keys));   // 🔗 v16.155
   for(const k of keys){
     cardFx[k]=FXDB.get(k);
-    if(LINKS.has(k))faceLinks[k]=LINKS.get(k);
     if(dispName.has(k))nameMap[k]=dispName.get(k);
   }
   const data={v:1,type:"fxPack",exported:new Date().toISOString(),from:S.players[0].label||"共有",cardFx,faceLinks,nameMap};
@@ -50376,10 +50683,9 @@ async function exportBuiltinSnippet(){
   if(j===null)return;
   const keys=fxShareKeys(j===0?"all":"self");
   if(!keys.length){toast("対象のカード登録がありません");return;}
-  const cardFx={},faceLinks={},nameMap={};
+  const cardFx={},faceLinks=fxLinksFor(keys),nameMap=fxLinkNames(fxLinksFor(keys));   // 🔗 v16.155
   for(const k of keys){
     cardFx[k]=FXDB.get(k);
-    if(LINKS.has(k))faceLinks[k]=LINKS.get(k);
     if(dispName.has(k))nameMap[k]=dispName.get(k);
   }
   // HTMLの中に貼るので、万一の「<」でタグが切れないようにエスケープしておく
