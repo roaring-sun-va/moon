@@ -6149,7 +6149,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.171";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.172";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -30240,7 +30240,7 @@ async function execAttack(pi,id,tg){
     if(!cands.length)break;
     {
       const j=await askChoice(`⚔ ${invadedOnce?"さらに":"攻撃時："}侵略／革命チェンジしますか？\n（侵略は何枚でも順に重ねられます。革命チェンジは1枚だけで、行うと宣言は終わりです。効果は重ねた順に解決）`,
-        [...cands.map(({h,zn,jchange,sKakumei})=>{const r=getReg(h);return (sKakumei?"🐉S革命チェンジ：":jchange?"🃏J・チェンジ：":zn==="hyper"?(r.pInvade?"🌌P侵略：":"🌌P革命チェンジ："):r.sInvade?(r.sInvade==="sss"||r.sInvade==="tensai"?"🌠SSS級侵略：":"🌟S級侵略："):r.invade?"⚡侵略：":"♻革命チェンジ：")+faceNameOf(h)+`（${zLb[zn]}）`;}),"しない"]);
+        [...cands.map(({h,zn,jchange,sKakumei})=>{const r=getReg(h);return (sKakumei?"🐉S革命チェンジ：":jchange?"🃏J・チェンジ：":(zn==="hyper"&&!r.sInvade)?(r.pInvade?"🌌P侵略：":"🌌P革命チェンジ："):r.sInvade?sInvadeLabel(r.sInvade):r.invade?"⚡侵略：":"♻革命チェンジ：")+faceNameOf(h)+`（${zLb[zn]}）`;}),"しない"]);
       if(j!==null&&j<cands.length){
         const {h:hcard,zn:srcZone,jchange:isJ}=cands[j];
         const r=getReg(hcard);
@@ -30266,7 +30266,7 @@ async function execAttack(pi,id,tg){
         const bi=Z.battle.findIndex(x=>x.id===c.id);
         hcard.faceup=true;
         hcard.tapped=c.tapped;
-        if(srcZone==="hyper")hcard.isPsy=true; // 🌌 超次元から出たP侵略/P革命チェンジ体は離れると超次元へ戻る
+        if(srcZone==="hyper"&&!((getReg(hcard)||{}).sInvade))hcard.isPsy=true; // 🌌 超次元から出たP侵略/P革命チェンジ体は離れると超次元へ戻る（v16.172 S級侵略［超轟速］はサイキックではないので戻さない）
         const inv2=r.invade||r.sInvade||r.pInvade;
         const isRevCh=!inv2; // 革命チェンジ／P革命チェンジ／J・チェンジ系（侵略以外）
         if(isRevCh)changedOnce=true; // 🃏 dmps：これ以降は侵略を宣言できない
@@ -48673,6 +48673,12 @@ function summonGrantUse(pi,kind,src,card){
   const box=viaGrave?S._graveSummonUsed:S._manaSummonUsed;
   const used=(box&&box.key===`${S.turn}:${pi}`)?(box.n|0):0;
   return {used,lim,left:Math.max(0,lim-used),icon:viaGrave?"⚰":"🌱"};
+}
+/* 🌟 v16.172 S級侵略の宣言の名前（種類つき）。超次元から出す超轟速を「P侵略」と出していたのを直す */
+function sInvadeLabel(v){
+  const M={primal:"原始",undead:"不死",cosmos:"宇宙",gousoku:"轟速",chougousoku:"超轟速",sss:"天災",tensai:"天災"};
+  if(v==="sss"||v==="tensai")return "🌠SSS級侵略［天災］：";
+  return `🌟S級侵略${M[v]?`［${M[v]}］`:""}：`;
 }
 /* ⚡ v16.167 「タップ状態で破壊された時」だけの行（tappedOnly）を、アンタップで破壊された時に外す */
 function pigRowTapOk(w,c){return !(w&&w.ev==="pig"&&w.tappedOnly&&!(c&&c.tapped));}
