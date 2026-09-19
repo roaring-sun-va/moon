@@ -2719,6 +2719,10 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="自分の〔対象〕のクリーチャーは、バトルに負けた時以外バトルゾーンを離れない（龍装者 ジスタジオ型・空欄＝なし・例「パワー12000以上」）"><span style="font-size:12px;font-weight:700">⚓ バトルに負けた時以外離れない：自分の</span><input type="text" id="fxStAuraNoLeaveF" placeholder="対象（例：パワー12000以上）" style="width:170px"></label>
         <label title="自分の〔対象〕のクリーチャーが、破壊または革命チェンジ以外の方法で離れる時、パワーが0より大きいならかわりにとどまる（Dの妖艶 マッド・デッド・ウッド型・例「コスト5以上／多色」）"><span style="font-size:12px;font-weight:700">⚓ パワー0超ならとどまる：自分の</span><input type="text" id="fxStAuraStayPowF" placeholder="対象（例：コスト5以上／多色）" style="width:170px"></label>
         <label title="自分のエレメントとマナゾーンのカードをすべての文明として扱う（覇王類虹色目 イメン＝ボアロ型）"><input type="checkbox" id="fxStAllCiv"> 🌈 自分のエレメントとマナをすべての文明として扱う</label>
+        <label title="このクリーチャーがシールドをブレイクする時、かわりに相手の山札の上からn枚を墓地に置く（ブレイク1回ごと・S級宇宙 アダムスキー型）"><span style="font-size:12px;font-weight:700">🪦 ブレイクのかわりに相手の山札を</span><input type="number" id="fxBrkMillN" style="width:60px" min="0" placeholder="0"><span style="font-size:12px;font-weight:700">枚墓地へ</span></label>
+        <label title="「アンタップしない」に条件を付ける（例：マナ:自然<=6・界王類七動目 ジュランネル型）。空欄＝いつもアンタップしない"><span style="font-size:12px;font-weight:700">⤵ アンタップしない条件</span><input type="text" id="fxNoUntapCnd" placeholder="例：マナ:自然<=6" style="width:140px"></label>
+        <label title="相手のクリーチャーが出て出た時がトリガーする時（cip）／相手が呪文を唱える時（spell）、このクリーチャーの下のカード1枚を墓地に置いて止めてもよい"><span style="font-size:12px;font-weight:700">☄ メテオバーン1で止める</span><select id="fxMeteorNegate" style="width:auto"><option value="">なし</option><option value="cip">相手の出た時の能力（ヴァルカン型）</option><option value="spell">相手の呪文（マーキュリー型）</option></select></label>
+        <label title="覚醒の条件：手札から進化でない〔対象〕1枚をバトルゾーンに出したら裏返る（コンボイ・トレーラー型）"><span style="font-size:12px;font-weight:700">🔄 覚醒：手札から出す</span><input type="text" id="fxAwakenPlayHandF" placeholder="例：グレートメカオー" style="width:130px"></label>
         <label><input type="checkbox" id="fxCastle"> 城/要塞（盾に重ねて要塞化・表向き）</label>
         <label title="相手のクリーチャーがシールドを1つ以上ブレイクする時、かわりにこのシールドをブレイクさせてもよい（セイント・キャッスル）"><input type="checkbox" id="fxCastleBreakRep"> 🏰 要塞化した盾のブレイクを、シールド1枚を手札に加えて肩代わりする（ハッスル・キャッスル型）</label>
         <label title="このカードを自分の超次元ゾーンからコストを支払って召喚できます（頂上龍素 サイクリタ型）。超次元ゾーンからバトルゾーンへ動かした時に、支払うかどうかを確認します"><input type="checkbox" id="fxHyperSummon"> 🌌 超次元ゾーンからコストを払って召喚できる</label>
@@ -5435,6 +5439,30 @@ async function offerSabakiZAdded(pi,added,pending,inFx){
 }
 /* 🃏 v16.144 オラマッハ・ザ・ジョニー型：相手が呪文を唱える時、かわりに手札から
    「その呪文以上のコストを持つ〔条件欄の種族〕」1枚を捨てて、その呪文を墓地に置く（唱えたことにならない）。 */
+/* ☄ v16.186 メテオバーン1で相手の能力・呪文を止める（超神星ヴァルカン・アンチャンス型＝cip／マーキュリー・ギガブリザード型＝spell）。
+   相手のクリーチャーが出て「出た時」がトリガーする時／相手が呪文を唱える時に、このクリーチャーの下のカード1枚を墓地に置いてもよい。
+   そうした場合、その能力はトリガーしない（呪文は効果を失う）。 */
+async function offerMeteorNegate(pi,c,kind){
+  try{
+    if(!S.expert||!S.vs||!c)return false;
+    const dp=(pi===0?1:0);
+    const src=zonesOf(dp).battle.find(x=>{const r=getReg(x);return r&&r.meteorNegate===kind&&x.under&&x.under.length&&!isSealed(x)&&!isIgnored(x,dp);});
+    if(!src)return false;
+    const what=kind==="spell"?`呪文《${faceNameOf(c)}》の効果`:`《${faceNameOf(c)}》の出た時の能力`;
+    if(!await ask(`☄ メテオバーン1（${faceNameOf(src)}）：下のカード1枚を墓地に置いて、${what}を止めますか？\n（いま下に${src.under.length}枚）`,src))return false;
+    snap();
+    const u=src.under.pop();u.faceup=true;u.tapped=false;zonesOf(dp).grave.push(u);
+    if(kind==="spell"){
+      const SZ=zonesOf(pi);const ri=SZ.resolve.findIndex(x=>x.id===c.id);
+      if(ri>=0)SZ.resolve.splice(ri,1);
+      c.faceup=true;c.tapped=false;SZ.grave.push(c);
+    }
+    sfx("grave");
+    toast(`☄ メテオバーン1：${faceNameOf(u)} を墓地に置き、${what}を止めた`);
+    logOnly(`☄ ${S.players[dp].label}：${faceNameOf(src)} のメテオバーン1で${what}を止めた`);
+    return true;
+  }catch(e){console.warn("offerMeteorNegate",e);return false;}
+}
 async function offerSpellCounter(spPi,sp){
   try{
     if(!S.expert||!S.vs||!sp)return false;
@@ -6160,7 +6188,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.185";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.186";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7361,7 +7389,17 @@ function isCreatureReg(r){
 /* ✨ 次の自分のターン開始まで持続する付与を記録（ターン境界のc.buff=nullを乗り越えて残す）。
    owner=付与先クリーチャーの持ち主。owner の次のターン開始時に解除される。 */
 /* プリン（攻撃もブロックもできない）：旧c.noAtkBlockと付与c.buff.noAtkBlockの両対応 */
-function noAtkBlkOf(c){return !!(c&&(c.noAtkBlock||(c.buff&&c.buff.noAtkBlock)));}
+function noAtkBlkOf(c){
+  if(c&&(c.noAtkBlock||(c.buff&&c.buff.noAtkBlock)))return true;
+  /* 🔢 v16.186 奇天烈 シャッフ（デュエプレ版）：宣言した数字と同じコストの相手のクリーチャーは攻撃もブロックもできない */
+  try{
+    if(c&&typeof S!=="undefined"&&S&&S.numDecl&&typeof numDeclBlocked==="function"){
+      const own=[0,1].find(p=>zonesOf(p)&&zonesOf(p).battle&&zonesOf(p).battle.some(x=>x.id===c.id));
+      if(own!=null&&numDeclBlocked(c,own,"atkblk"))return true;
+    }
+  }catch(e){}
+  return false;
+}
 /* 🎯 「〜であれば、○○を得る」条件付き常在（爆竜 GENJI・XX 型）。条件式を満たしていれば true */
 function condGrantOn(c,r){
   try{
@@ -7604,6 +7642,19 @@ async function checkAwaken(pi,ev,trigCard){
         if(cond&&!zoneCondOk(cond,side,c))continue;
         if(!Zs.battle.some(x=>x.id===c.id))continue;
         // 💠 覚醒の支払い：「〜してもよい。そうした場合、裏返す」型（時空の支配者ディアボロス Z 型）
+        /* 🔄 v16.186 覚醒の条件：手札から進化でない〔対象〕1枚をバトルゾーンに出してもよい。そうした場合、裏返る（コンボイ・トレーラー型） */
+        if(String(r.awakenPlayHandF||"").trim()){
+          const _f=String(r.awakenPlayHandF).trim();
+          const _hc=Zs.hand.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx)&&!isEvoReg(rx)&&lockFilterOk(_f,rx,x,side);});
+          if(!_hc.length)continue;
+          if(!await ask(`🔄 ${faceNameOf(c)} の覚醒：手札から進化でない${_f}1枚をバトルゾーンに出しますか？\n（出した場合だけ覚醒します）`,c))continue;
+          const _j=_hc.length===1?0:await pickCard(`🔄 手札から出す${_f}を選択`,_hc,{hint:"タップで選択"});
+          if(_j===null)continue;
+          const _x=_hc[_j];const _hi=Zs.hand.findIndex(y=>y.id===_x.id);if(_hi<0)continue;
+          Zs.hand.splice(_hi,1);_x.faceup=true;_x.tapped=false;
+          if(cheatEnterBattle(side,_x)){emitEvent(side,"summon",_x);enqueueFx(side,_x);}
+          toast(`🔄 ${faceNameOf(_x)} を手札から出した`);
+        }
         const payN=+r.awakenPayN||0;
         let payPicked=null;
         if(payN>0){
@@ -11018,7 +11069,7 @@ async function finishNextTurn(cur){
       const rc=getReg(c);
       if(rc&&rc.gimmick==="complex"&&(c.under?c.under.length:0)<8){/* COMPLEX：下7枚以下はアンタップしない */}
       else if(S.expert&&isSealed(c)&&c.tapped){toast(`🔏 ${faceNameOf(c)} は封印されているためアンタップしない（封印を外すまでタップのまま）`);}
-      else if(S.expert&&rc&&rc.noUntap&&c.tapped){toast(`⤵ ${faceNameOf(c)} はアンタップしない（常在）`);}
+      else if(S.expert&&rc&&rc.noUntap&&c.tapped&&(!String(rc.noUntapCnd||"").trim()||zoneCondOk(String(rc.noUntapCnd).trim(),pi,c))){/* v16.186 noUntapCnd（ジュランネル型） */toast(`⤵ ${faceNameOf(c)} はアンタップしない（常在）`);}
       else c.tapped=false;
     }
   });
@@ -13724,6 +13775,11 @@ const FX_TYPES=[
   ["deckPlayNonCreSpell","🔎 自分の山札から、条件に合う「クリーチャーでも呪文でもないカード」を超探索し、1枚をコストを支払わずに実行してもよい→シャッフル（クイーン・アマテラス型／条件欄＝例：コスト6以下）"],
   ["allCreToDeckBottomBoth","⬇ 各プレイヤーは、自身のクリーチャーをすべて山札の一番下に置く（Dの妖艶 マッド・デッド・ウッド型）"],
   ["graveRecruitAnyBoth","⚰ 各プレイヤーは、自身の墓地から進化ではないクリーチャーを好きな数バトルゾーンに出す（自分→相手の順・Dの妖艶 マッド・デッド・ウッド型／条件欄でさらに絞れる）"],
+  ["graveRecruitFromUnder","⚰ 破壊された時：このクリーチャーの進化元であったクリーチャー1枚を、墓地からバトルゾーンに出してもよい（超轟速 レッド・エンド型）"],
+  ["selfShieldGraveRand","🛡→🪦 自分のランダムなシールドをn枚、墓地に置く（紫電ボルメテウス・武者・ドラゴン型）"],
+  ["foeManaGraveRand","💎 相手のマナゾーンからランダムなカードをn枚、墓地に置く（羅月デス・フェニックス型）"],
+  ["anyManaPick","🌱 このクリーチャー以外のクリーチャーをn体選び、持ち主のマナゾーンに置く（自分・相手どちらでも・S級原始 サンマッド型／条件欄で絞れる）"],
+  ["meteorXWinPhoenix","☄🏆 メテオバーンX：このクリーチャーの下のカードを好きな枚数墓地に置いてもよい。置いたカードの最後の1枚が下の最後のカードでフェニックスなら、ゲームに勝つ（究極銀河ユニバース型）"],
   ["foeChoiceKillElseBounceAll","🫵 相手のクリーチャーを1体選ぶ。相手はそれを破壊してもよい。破壊しなかったら、相手のクリーチャーをすべて手札に戻す（秘革の求答士 クエスチョン型）"],
   ["foeAllCreToDeckWinIf","🌀🏆 相手は自身のクリーチャーをすべて山札に加えてシャッフルする。こうしてn体以上加えたら、自分はゲームに勝つ（伝説の正体 ギュウジン丸型・n＝6）"],
   ["revealTopWinOrPlay","🏰 山札の上からn枚を表向きにする。すべて条件に合えばゲームに勝つ。そうでなければ、その中から条件に合うカードを好きな数、コストを支払わずに実行し、残りを墓地へ（夢の変形 デュエランド型／条件欄＝例：水／コスト7以下）"],
@@ -13998,9 +14054,10 @@ function allCivOwnerOf(c){
     if(typeof S==="undefined"||!S||!S.expert||!S.players||!c)return -1;
     for(const p of [0,1]){
       const Z=zonesOf(p);if(!Z)continue;
-      const inZ=(Z.battle||[]).some(x=>x&&x.id===c.id)||(Z.mana||[]).some(x=>x&&x.id===c.id);
-      if(!inZ)continue;
-      const on=(Z.battle||[]).some(b=>{const rb=getReg(b);return rb&&rb.stAllCiv&&!isSealed(b);});
+      const inB=(Z.battle||[]).some(x=>x&&x.id===c.id),inM=!inB&&(Z.mana||[]).some(x=>x&&x.id===c.id);
+      if(!inB&&!inM)continue;
+      /* v16.186 stAllCiv:"battle" ＝バトルゾーンのエレメントだけ（革命類侵略目 パラスキング型・マナは元の文明のまま） */
+      const on=(Z.battle||[]).some(b=>{const rb=getReg(b);return rb&&rb.stAllCiv&&!isSealed(b)&&(inB||rb.stAllCiv!=="battle");});
       return on?p:-1;
     }
   }catch(e){}
@@ -15421,7 +15478,7 @@ async function destroyCreature(pi,c,opts){
     const r0=getReg(c);
     const d0=(r0&&r0.dest)||"grave";
     const kids=c.under.splice(0);
-    if(r0&&r0.underRecycleOnDestroy)c._destroyUnderIds=kids.map(x=>x.id);
+    c._destroyUnderIds=kids.map(x=>x.id);   // v16.186 破壊された時に「進化元であったクリーチャー」を選べるよう、いつも覚えておく（レッド・エンド型）
     kids.forEach(u=>{u.tapped=false;u.faceup=true;(Z[d0]||Z.grave).push(u);});
     noteUnderToGrave(pi,kids,(Z[d0]?d0:"grave"));   // 🧬 v16.25 下敷きの「墓地に置かれた時」
   }
@@ -15878,7 +15935,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["revealTopWinOrPlay","graveCastToHand","foeNoSpellTurn","selfKillHandRecruitUpTo","manaFieldOut","bounceElemOrSealAny","deckPlayNonCreSpell","graveRecruitAnyBoth","topLookTakeN","shieldPickTuck","nextSpellCostDown","graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["anyManaPick","graveRecruitFromUnder","revealTopWinOrPlay","graveCastToHand","foeNoSpellTurn","selfKillHandRecruitUpTo","manaFieldOut","bounceElemOrSealAny","deckPlayNonCreSpell","graveRecruitAnyBoth","topLookTakeN","shieldPickTuck","nextSpellCostDown","graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -21574,9 +21631,13 @@ async function runFxList(pi,list,srcCard,inPump){
          出したのがドラグハート・ウエポンなら、このクリーチャーに装備する（モルトVERSUS 型）。
          上限が0（数えるカードが1枚も無い）なら何も出せない。 */
       const _cf=String(f.cond||"").trim();
-      const _cap=_cf?zoneFiltCount(Z.mana,_cf):Z.mana.length;
+      /* 🌌 v16.186 条件欄「文明数」＝自分のマナゾーンにある文明の数を上限にする（神聖青 ニューゲイズ型）。
+         「同名なし」を足すと、バトルゾーンにある自分のカードと同じ名前のカードは出せない */
+      const _civN=/文明数/.test(_cf), _noSame=/同名なし|同名不可/.test(_cf);
+      const _cf2=_cf.replace(/文明数|同名なし|同名不可/g,"").replace(/^[／\/\s]+|[／\/\s]+$/g,"");
+      const _cap=_civN?new Set(Z.mana.flatMap(m=>manaCivsOf(m)).filter(cv=>cv&&cv!=="zero")).size:(_cf2?zoneFiltCount(Z.mana,_cf2):Z.mana.length);
       if(_cap<=0){toast(`🌌 マナゾーンに${_cf||"カード"}がないので出せません`);continue;}
-      const _pool=Z.hyper.filter(x=>{const rx=getReg(x);return rx&&rx.cost!=null&&rx.cost!==""&&(+rx.cost)<=_cap;});
+      const _pool=Z.hyper.filter(x=>{const rx=getReg(x);return rx&&rx.cost!=null&&rx.cost!==""&&(+rx.cost)<=_cap&&!(_noSame&&Z.battle.some(b=>normName(faceNameOf(b))===normName(faceNameOf(x))));});
       if(!_pool.length){toast(`🌌 超次元ゾーンにコスト${_cap}以下のエレメントがありません`);continue;}
       const _j=await pickCard(`🌌 超次元ゾーンから出すエレメントを選択（コスト${_cap}以下・キャンセルで出さない）`,_pool,{hint:"任意"});
       if(_j===null)continue;
@@ -21829,6 +21890,61 @@ async function runFxList(pi,list,srcCard,inPump){
         await deckRecruitCore(side,_flt,99,0,`${S.players[side].label}の墓地から`,"grave",inPump);
       }
       renderAll();
+    }else if(f.t==="graveRecruitFromUnder"){
+      const _ids=new Set((srcCard&&srcCard._destroyUnderIds)||[]);
+      const _pool=Z.grave.filter(x=>_ids.has(x.id)&&(()=>{const rx=getReg(x);return rx&&isCreatureReg(rx);})());
+      if(!_pool.length){toast("⚰ 墓地に、このクリーチャーの進化元だったクリーチャーがありません");continue;}
+      const _j=await pickCard("⚰ 墓地から出す進化元を選択（キャンセルで出さない）",_pool,{hint:"任意"});
+      if(_j===null)continue;
+      snap();
+      const _c=_pool[_j];const _gi=Z.grave.findIndex(x=>x.id===_c.id);if(_gi<0)continue;
+      Z.grave.splice(_gi,1);_c.faceup=true;_c.tapped=false;
+      if(cheatEnterBattle(pi,_c)){emitEvent(pi,"summon",_c);enqueueFx(pi,_c);toast(`⚰ ${faceNameOf(_c)} を墓地から出した`);}
+      sfx("ok");renderAll();await waitFxIdle(inPump);
+    }else if(f.t==="selfShieldGraveRand"){
+      let _k=0;snap();
+      for(let i=0;i<n&&Z.shield.length;i++){const sc=Z.shield.splice(randInt(Z.shield.length),1)[0];const kids=(sc.under||[]).splice(0);[sc,...kids].forEach(x=>{x.faceup=true;x.mark=false;Z.grave.push(x);});_k++;}
+      sfx("grave");renderAll();toast(_k?`🛡→🪦 自分のランダムなシールド${_k}つを墓地に置いた`:"🛡 シールドがありません");
+    }else if(f.t==="foeManaGraveRand"){
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      let _k=0;snap();
+      for(let i=0;i<n&&OZ.mana.length;i++){const m=OZ.mana.splice(randInt(OZ.mana.length),1)[0];m.faceup=true;m.tapped=false;OZ.grave.push(m);_k++;}
+      sfx("grave");renderAll();toast(_k?`💎 相手のマナからランダムに${_k}枚を墓地に置いた`:"💎 相手のマナゾーンにカードがありません");
+    }else if(f.t==="anyManaPick"){
+      const _filt=String(f.cond||"").trim();let _done=0;
+      for(let i=0;i<n;i++){
+        const _c=[];
+        for(const _p of (S.vs?[pi,op]:[pi]))for(const x of zonesOf(_p).battle){
+          if(srcCard&&x.id===srcCard.id)continue;const rx=getReg(x);if(!rx||!isCreatureReg(rx))continue;
+          if(_filt&&!lockFilterOk(_filt,rx,x))continue;_c.push({p:_p,c:x});}
+        if(!_c.length){if(!i)toast("🌱 対象にできるクリーチャーがいません");break;}
+        const _j=await pickCard(`🌱 マナゾーンに置くクリーチャーを選択（${i+1}/${n}・自分と相手のどちらでも）`,_c.map(x=>x.c),{hint:"タップで選択",sub:x=>{const o=_c.find(y=>y.c.id===x.id);return o?S.players[o.p].label:"";}});
+        if(_j===null)break;
+        if(i===0)snap();
+        const o=_c[_j];
+        if(cantLeaveBattle(o.p,o.c))continue;
+        const ZO=zonesOf(o.p);const bi=ZO.battle.findIndex(x=>x.id===o.c.id);if(bi<0)continue;
+        ZO.battle.splice(bi,1);const kids=(o.c.under||[]).splice(0);
+        [o.c,...kids].forEach(x=>{x.faceup=true;x.tapped=false;x.buff=null;x.seals=[];ZO.mana.push(x);});
+        toast(`🌱 ${faceNameOf(o.c)} を${S.players[o.p].label}のマナゾーンに置いた`);_done++;
+      }
+      if(_done){sfx("move");renderAll();}
+    }else if(f.t==="meteorXWinPhoenix"){
+      if(!srcCard||!srcCard.under||!srcCard.under.length){toast("☄ 下にカードがありません");continue;}
+      const _max=srcCard.under.length;
+      const _opts=[];for(let k=0;k<=_max;k++)_opts.push(k===0?"置かない":`${k}枚${k===_max?"（全部・最後の1枚まで）":""}`);
+      const _k=await askChoice(`☄ メテオバーンX（${faceNameOf(srcCard)}）：下のカード${_max}枚のうち何枚を墓地に置く？\n（最後に置いた1枚が下の最後のカードでフェニックスなら勝ち）`,_opts);
+      if(!_k)continue;
+      snap();
+      let _last=null;
+      for(let i=0;i<_k&&srcCard.under.length;i++){const u=srcCard.under.pop();u.faceup=true;u.tapped=false;Z.grave.push(u);_last=u;}
+      sfx("grave");renderAll();
+      toast(`☄ メテオバーンX：${_k}枚を墓地に置いた`);
+      const _rl=_last?getReg(_last):null;
+      if(_last&&!srcCard.under.length&&_rl&&raceMatch(_rl,"フェニックス")){
+        toast(`🏆 最後の1枚《${faceNameOf(_last)}》はフェニックス → ゲームに勝つ！`);
+        try{declareWin(pi,`${faceNameOf(srcCard)}：メテオバーンXで最後の1枚にフェニックスを置いた`);}catch(e){}
+      }
     }else if(f.t==="foeChoiceKillElseBounceAll"){
       /* 🫵 v16.184 クエスチョン型：相手のクリーチャーを1体選ぶ→相手はそれを破壊してもよい→しなければ相手のクリーチャーをすべて手札へ */
       if(!S.vs){toast("（ソロのためスキップ）");continue;}
@@ -24505,10 +24621,12 @@ async function runFxList(pi,list,srcCard,inPump){
       /* 🔢 v16.55 条件欄に「呪文だけ」と書くと、止めるのを呪文だけにする（奇天烈 シャッフ型）。
          numDeclBlocked の "shuff" と同じ扱いで、クリーチャーの召喚は止めない。 */
       const _spOnly=/呪文だけ|呪文のみ|シャッフ/.test(String(f.cond||""));
+      /* 🔢 v16.186 条件欄に「攻撃ブロック」と書くと、同じコストの相手のクリーチャーは攻撃もブロックもできない（デュエプレ版 シャッフ） */
+      const _ab=/攻撃|ブロック/.test(String(f.cond||""));
       const num=await declareNumber(pi,_spOnly
         ?"🔢 数字を1つ選んでください（次の自分のターンのはじめまで、相手はそのコストの呪文を唱えられません）"
         :"🔢 数字を1つ選んでください（次の自分のターンのはじめまで、相手はそのコストのクリーチャーを召喚できず、呪文も唱えられません）",
-        _spOnly?"shuff":"lucky");
+         _ab?"shuffAB":(_spOnly?"shuff":"lucky"));
       if(num==null)continue;
       toast(_spOnly
         ?`🔢 ${num} を宣言！\n次の${S.players[pi].label}のターンのはじめまで、${S.players[op].label} はコスト${num}の呪文を唱えられない`
@@ -26336,7 +26454,9 @@ async function pumpFx(){
       const _rSp=getReg(c);
       const _isSp=!!(_rSp&&(_rSp.ctype==="spell"||((_rSp.twin||_rSp.ctype==="twinpact")&&(c.face|0)===1)));
       if(_isSp&&await offerSpellCounter(pi,c)){renderAll();continue;}
+      if(_isSp&&await offerMeteorNegate(pi,c,"spell")){renderAll();continue;}
     }
+    if(zonesOf(pi).battle.some(x=>x.id===c.id)&&await offerMeteorNegate(pi,c,"cip")){renderAll();continue;}
     HILITE_ID=c.id;renderAll(); // 🔶 処理中のカードを黄色ハイライト
     // ⚡ どのカードの効果を処理中か常時表示（同時に複数体出た時に取り違えないように・残り待機数も出す）
     {const _bi=zonesOf(pi).battle.findIndex(x=>x.id===c.id);
@@ -29127,6 +29247,23 @@ async function offerCastleBreakRep(op,idxs,OZ){
 async function _breakShieldsInner(op,count,attacker,forceIdx,OZ){
   const total=count==="all"?OZ.shield.length:Math.min(count,OZ.shield.length);
   if(!total){toast("シールドがありません");return;}
+  /* 💥➡🪦 v16.186 「このクリーチャーがシールドをブレイクする時、かわりに相手の山札の上からn枚を墓地に置く」
+     （S級宇宙 アダムスキー型・brkMillN）。ブレイク1回ごとにn枚。シールドはそのまま残る。 */
+  if(S.expert&&attacker){
+    const _ra=getReg(attacker);
+    const _own=[0,1].find(p=>zonesOf(p).battle.some(x=>x.id===attacker.id));
+    if(_ra&&+_ra.brkMillN>0&&!isSealed(attacker)&&!(_own!=null&&isIgnored(attacker,_own))){
+      const _n=total*(+_ra.brkMillN);
+      snap();
+      const _ml=OZ.deck.splice(0,Math.min(_n,OZ.deck.length));
+      _ml.forEach(x=>{x.faceup=true;x.tapped=false;x.sideways=false;OZ.grave.push(x);queueToGrave(op,x,"deck");});
+      sfx("grave");renderAll();
+      toast(`🪦 ${faceNameOf(attacker)}：シールドをブレイクするかわりに、${S.players[op].label}の山札の上から${_ml.length}枚を墓地に置いた`);
+      logOnly(`🪦 ${faceNameOf(attacker)}：ブレイク${total}回ぶん → ${S.players[op].label}の山札${_ml.length}枚を墓地へ`);
+      try{await drainToGrave();}catch(e){}
+      return;
+    }
+  }
   let idxs=null;
   // 🏰 セイント・キャッスル型（G城）：相手のクリーチャーがシールドを1つ以上ブレイクする時、
   // かわりにこのシールドをブレイクさせてもよい（W・T等の複数ブレイクもこの1枚に置換）
@@ -33708,6 +33845,10 @@ function renderFxEditor(){
   {const e=$("fxStAuraNoLeaveF");if(e)e.value=String(FXEDIT.stAuraNoLeaveF||"");}
   {const e=$("fxStAuraStayPowF");if(e)e.value=String(FXEDIT.stAuraStayPowF||"");}
   {const e=$("fxStAllCiv");if(e)e.checked=!!FXEDIT.stAllCiv;}
+  {const e=$("fxBrkMillN");if(e)e.value=+FXEDIT.brkMillN>0?String(+FXEDIT.brkMillN):"";}
+  {const e=$("fxNoUntapCnd");if(e)e.value=String(FXEDIT.noUntapCnd||"");}
+  {const e=$("fxMeteorNegate");if(e)e.value=String(FXEDIT.meteorNegate||"");}
+  {const e=$("fxAwakenPlayHandF");if(e)e.value=String(FXEDIT.awakenPlayHandF||"");}
   {const e=$("fxCostRedOppCre");if(e)e.value=String(FXEDIT.costRedOppCre||0);}
   $("fxCastle").checked=!!FXEDIT.castle;
   $("fxGcRedirect").checked=!!FXEDIT.gcRedirect;
@@ -36093,6 +36234,10 @@ function openFxEditor(key){
     stAuraNoLeaveF:cur&&cur.stAuraNoLeaveF||"",
     stAuraStayPowF:cur&&cur.stAuraStayPowF||"",
     stAllCiv:cur?!!cur.stAllCiv:false,
+    brkMillN:cur&&+cur.brkMillN||0,
+    noUntapCnd:cur&&cur.noUntapCnd||"",
+    meteorNegate:cur&&cur.meteorNegate||"",
+    awakenPlayHandF:cur&&cur.awakenPlayHandF||"",
     modeEachOnce:cur?!!cur.modeEachOnce:false,
     modeOnceName:cur?!!cur.modeOnceName:false,
     costRedOppCre:cur&&cur.costRedOppCre||0,
@@ -36767,6 +36912,10 @@ $("fxSave").addEventListener("click",async ()=>{
     stAuraNoLeaveF:$("fxStAuraNoLeaveF")?$("fxStAuraNoLeaveF").value.trim():"",
     stAuraStayPowF:$("fxStAuraStayPowF")?$("fxStAuraStayPowF").value.trim():"",
     stAllCiv:$("fxStAllCiv")?$("fxStAllCiv").checked:false,
+    brkMillN:$("fxBrkMillN")?(+$("fxBrkMillN").value||0):0,
+    noUntapCnd:$("fxNoUntapCnd")?$("fxNoUntapCnd").value.trim():"",
+    meteorNegate:$("fxMeteorNegate")?$("fxMeteorNegate").value:"",
+    awakenPlayHandF:$("fxAwakenPlayHandF")?$("fxAwakenPlayHandF").value.trim():"",
     costRedOppCre:$("fxCostRedOppCre")?(parseInt($("fxCostRedOppCre").value,10)||0):0,
     castle:$("fxCastle").checked,
     gcRedirect:$("fxGcRedirect").checked,
@@ -37852,7 +38001,7 @@ $("btnRegList").addEventListener("click",()=>{
     if(v.soulshift)attrs.push("ソウルシフト");
     if(v.gaiash)attrs.push("相手ターン終了時に出せる");
     if(v.sforce)attrs.push("シールド・フォース"+(v.sforceFx||v.sforceBlocker?`（${[v.sforceFx?({noLeave:"離れない",noDestroy:"破壊されない",pw:"パワー修正",break:"ブレイク数修正",noBlockSmaller:"小さいクリーチャーにブロックされない"}[v.sforceFx]):"",v.sforceBlocker?"ブロッカー":""].filter(Boolean).join("・")}）`:""));
-    if(v.cstCond)attrs.push(`条件常在：${v.cstCond}→${{noLeave:"離れない",noDestroy:"破壊されない",stayPow:"パワー0超でとどまる",sa:"SA",unblock:"ブロックされない",blocker:"ブロッカー",slayer:"スレイヤー"}[v.cstFx]||"表示"}`);
+    if(v.cstCond)attrs.push(`条件常在：${v.cstCond}→${{noLeave:"離れない",noDestroy:"破壊されない",stayPow:"パワー0超でとどまる",sa:"SA",unblock:"ブロックされない",blocker:"ブロッカー",slayer:"スレイヤー",noSpell:`相手は${v.cstFxFilt?v.cstFxFilt+"の":""}呪文を唱えられない`}[v.cstFx]||"表示"}`);
     else if(v.cstFx==="stayPow")attrs.push("⚓常在：離れる時パワー0超ならとどまる");
     if(v.splus)attrs.push(["","シールド・プラス","スーパー・S・プラス","ウルトラ・S・プラス"][v.splus]||`S・プラス${v.splus}`);
     if(v.jbig1)attrs.push("ジョラゴン・ビッグ1");
@@ -39002,6 +39151,8 @@ function numDeclBlocked(card,pTo,kind){
   const blocks=(mode)=>{
     if(mode==="ooparts"||!mode)return true;           // 全実行（旧データはoopartsとして扱う）
     if(mode==="lucky")return kind==="creature"||kind==="spell";
+    if(kind==="atkblk")return mode==="shuffAB";   // 🔢 v16.186 攻撃・ブロックを止めるのはシャッフ（デュエプレ版）だけ
+    if(mode==="shuffAB")return kind==="spell";
     if(mode==="shuff"||mode==="tenshi")return kind==="spell";
     return true;
   };
@@ -39017,7 +39168,7 @@ function numDeclBlocked(card,pTo,kind){
   }
   return null;
 }
-const NUMDECL_LABEL={lucky:"ラッキーナンバー",shuff:"シャッフ",ooparts:"オーパーツ",tenshi:"立ち上がれ"};
+const NUMDECL_LABEL={lucky:"ラッキーナンバー",shuff:"シャッフ",shuffAB:"シャッフ（攻撃・ブロックも）",ooparts:"オーパーツ",tenshi:"立ち上がれ"};
 /* 🔢 v16.26 「数字を1つ選ぶ」の共通処理。盤面の道具の「🔢 数字を宣言」と同じ形にそろえる。
    mode を渡すと宣言として登録し（画面上部に出て、宣言者の次のターン開始で自動的に失効）、
    null なら選ぶだけ（その場で使い切る型・機術士ディールの上面など）。
@@ -49459,7 +49610,7 @@ const ART_KNOWN_NONNORMAL={};   // v16.182 見た目の目印（ART_KNOWN_PH）�
    バックアップや端末間の受け渡しで画像が WebP／JPEG に作り直されると、中身の目印（blobHashFnv）は変わってしまう。
    そこで、縁（6%）を除いた部分を16×16に区切った明るさの平均で、見た目が同じかを比べる。
    同じ絵なら0〜数ビット、通常版とシークレット版は90ビット前後ちがう。20ビット以内を「同じ絵」とみなす。 */
-const ART_KNOWN_PH={/* v16.185 追加 */"f4008003c004526656ffedfffefff9ff9b7fefeffbf8b278e000000080008819": ["神聖青ニューゲイズ", "シークレット版"], "bbf8bfff8fff1fbf14be7f397e12fe87fe07020702b007700140803000f8089c": ["紫電ボルメテウス・武者・ドラゴン", "シークレット版"], "bc7f7fdfffdffb07fcfdefaf88a08000400505ee01ed011f00fe81f88011a830": ["超神星ヴァルカン・アンチャンス", "シークレット版"], "ffff3dff01ffc0ff03b720e2f0a7043b1e090180fc01fe007e0263277e0c7099": ["暗黒神羅凰ゼロ・フェニックス", "シークレット版"], /* v16.184 追加 */"7fff83f4807e803f00d603c440bf273d313c780ec183c1ea43c26142dfe6cffb": ["伝説の正体ギュウジン丸", "シークレット版"], "ffff1bf0fce0efc0afe1c3c12384049e8479c001c00190233c032f87ffea97fb": ["ミラクル・ミラダンテ", "シークレット版"], "3fdfffefd3e4ebc7ed87fe9fffa97e349dde70044000c600e7007f8018000000": ["ボルシャック・ドギラゴン", "シークレット版"], /* v16.183 追加 */"8fe39fe07bc1f900ff2ce02d882fe0b0e02078607d00cd8ffbcff3cf366500e8": ["禁断機関vv-8", "シークレット版（禁断文字）"], "cffbc0fb80d1879c8905a10fdc05900200613031fc3cd808fffff7ded5f0c9db": ["禁断機関vv-8", "シークレット版（白黒）"], "b305920fc7cfcac3fee7f7ccfffebffc47830000c00040000487cd0f0e1f1f7e": ["時の法皇ミラダンテxii", "シークレット版"], "dff43ff0319f7443cc13b33172307e0601e24060403e803b81c57e83dfa37fff": ["超天星ライゾウ「灼」", "シークレット版"], "fff16030ef1c7f58117808609177e1c1c1e0fa0cff806bb8f670fc1cf39e6980": ["永久龍程式q.e.d.=x", "シークレット版"], "bf803f07f206703881fef03e2cc6ffd2f8148f18fb9c41e16143fc01fe00ff11": ["龍波弩級戦艦エビデックス", "シークレット版"], "9fe01fd03ff81ff8dbdb2ffe7df9ffbc0ffc003cbee79e00c0000020026003c0": ["「誣」の頂ウェディング・イノセンス", "シークレット版"], "9fffb1ffeda2023230ceb107b0077b6ff3011f02d042061717d7224f20df01fe": ["百族の長プチョヘンザ", "シークレット版"], "df133800f82cfcf0fef87ef5bfe37fee203a981b464f05ed19f608730818c000": ["蒼き団長ドギラゴン剣", "シークレット版"], "3f02ffe0b9f43cf8e4d1404661f15f9d38302e7c1fe00bff0b3f461bc00b902b": ["蒼き団長ドギラゴン剣", "シークレット版（白黒）"], "de3d5e2c0e1d6fff77f9dffefffeff88fa40f304fd50ac98003000000300a001": ["煌世主サッヴァーク†", "シークレット版（青）"], "feff7cffe078c070f810e000d400e800e8007c02fe20ff30c7dbc1fff0fcf87e": ["煌世主サッヴァーク†", "シークレット版（赤）"], "821f000e000707c40f631df362002400b081f009e02fa1f3de7f7fff7ffeffff": ["ニコル・ボーラス", "UGC"], "fe003e009e00cac4f0fcf1b7f4b91ef00fceffc6fffe3ff77fc441e000040000": ["ドラゴンズ・サイン", "UGC"], "bfdc7cfefc56c29c474c4f10610090270401003e0e7c9e7ed87cca7e4b7efa63": ["轟轟轟ブランド", "シークレット版"], "c7f841e01fe007a02fc07f9c37be37ce1c322f10fc10fb1ec79ed97f8003f003": ["煌メク聖戦絶十", "シークレット版"], "bf3f083678e3c8d54500ff01c7010f31ff81f0179e07fee7f077f81ff09e0000": ["龍装艦チェンジザ", "シークレット版"], "ffc0fffcfffeffe73f03ffe13360616018780078e80168010c1342fc003f810f": ["蒼神龍バイケン", "UGC"], "fffcfbbcfd71fd2189008203800380010000f001f9c347871f9f9fbf0fff7f8e": ["ジョット・ガン・ジョラゴン", "シークレット版"], "cffe010c122c05f11fbaf1f8fff6ffffffe320c10fc00000f000fffd0000f183": ["龍装鬼オブザ08号", "シークレット版"], "efb9e7e103f1c9f28f57601e40003080e020402080c7cfa3f3ca5fdcde7dfffd": ["百万超邪クロスファイア", "UGC"], "bfdc3fb81fe70ffc7ffe3ffefff8dffc0fefb9ffd85100000001000000000000": ["ヘブンズ・ゲート", "UGC"], "fffffdbff1aff9e1e744e007f00fec1ff00ff80ff8078983408200880180fc01": ["終末の時計ザ・クロック", "UGC"], "ce9e3fb8764e09cf20ff7e7ef733fcc0e7800597200cfe8527c602048b0cfb80": ["卍デ・スザーク卍", "シークレット版①"], "c0c20001e206f3fffdca7fef3fdf0ffb01f07ef0f834e1c1a844ca478264f100": ["卍デ・スザーク卍", "シークレット版②"], "dddf200962054a410a411ac8ffc05e430ffc8e02f800f000fffcfbe3ffeff389": ["龍装艦ゴクガ・ロイザー", "シークレット版"], "fffcbffdb7edb30dbe0d8009e007000000803000e803f087e5f7c003fffffff4": ["ジョット・ガン・ジョラゴンjoe", "シークレット版"], "c60116001bc03ff2707ef31f7febfd22fd801f91ffc91fe48ff08f780018c00c": ["煌龍サッヴァーク", "シークレット版"], "8ced0bff9d7ff83fc0ff8fff83fd82078139c209878981845937f0012d1101e2": ["天風のゲイル・ヴェスパー", "シークレット版"], "9dffe08f4f61c7e18f8389ffe603d00dd2074e000e49100d9006de289fff0bff": ["水上第九院シャコガイル", "シークレット版"], "bfff7807ff1ff83ff07ff677e7f0c6183c0c70002003001f400f1c001b823fee": ["伝説のレジェンドドギラゴン", "UGC"], "fffe7ff83ff83ffcc80ec03fb417200bd80fd807f81f879fdc6c000000064f40": ["音感の精霊龍エメラルーダ", "UGC"], "ff80000001030182008301c303ff401b0003e01ffc7fb0ffbe7fee7fffff7ffe": ["閃光の守護者ホーリー", "UGC"], "3e764fd2944310e1c049c03981f802ce7c8eff8bc61f005dc00d0aee7ffe3ffc": ["フェアリー・シャワー", "UGC"], "fffcff8ffffffd0fed17f64e7f098a0884000346f878cb1e8200c0005800f986": ["サッヴァークdg", "シークレット版"], "ce0e080842e012f38d3ff42ff9f19de1c8473b07fa0f0dff0b7f13cf0007013f": ["赤攻銀マルハヴァン", "シークレット版"], "ffe4cbe0ea00c201e01fe1ff71fef983713f207df401c000b9dcdde690dbf001": ["第九魔導執行官コーラレヒト", "シークレット版"], "fefc1fe30f221f37df977d987db07dc01fc026e0786039f07d787fb06c000000": ["刻解人形ジェニー・ジェーン", "シークレット版"], "e042e112f002f6c0f54020007860fc001c7f3fc13fff3f7f1ff9dd389377d178": ["q.q.qx.", "シークレット版"], "98fe3cacbc2cbc7c3ec07700ffd727f7efc100610fe01fa1f420937034b8f880": ["卍月ガ・リュザーク卍", "シークレット版"], "ffff6014e20ee4c201e017e88220c07bfefb0ffbfc17e03f090f01050cc39ff9": ["超機動罠デンジャデオン", "シークレット版"], "9db16440478c0f8002fe03fffbfefff8e2013025cff018fb00e6eff4fa207801": ["ゴリガン砕車ゴルドーザ", "シークレット版"], "ffadfffdffefffbebffc070e103625700fa00cb000634143520e4edc0000b803": ["絶叫の悪魔龍イーヴィル・ヒート", "UGC"], "bff1fff98fb307f713e3a7ff3f7ff43f40e9203ff6210642838001c00001400e": ["アルカディア・スパーク", "UGC"], "df7007f007fd03ff3fff5fef7ff30fff0ff806018870707041fb413209000000": ["大獄の封殺ディアスz", "シークレット版"], "ff1cd984a80434004401e0c2f400e000f08065f07f78ffff5ff5661ffc3fff8f": ["破獄の殲滅者ディアボロスz", "シークレット版"], "3ffdfffffffbfdfbfe1ffc3ffe5ff03ff003ee61d88000000000000004008200": ["オリオティス・ジャッジ", "PCC"], "fe7cff3ffd3ffedf7e171e03040f003900110001fe0bff87ff873f8031800180": ["ジョリー・ザ・ジョニー", "シークレット版"], "bbed0eff3fff4f7f6fc7ef8f060f185c1c780256005088988a03fb830026f803": ["“罰怒”ブランド", "シークレット版"], "a738ef08bf0200008050f875f9f7fa1ffe477f621fc119fd436f507f00f07860": ["偽りの王ヴィルヘルム", "UGC"], "f7e1f101fbe0ff20ffa40fd8abc0aef007800200d85f00035efff35e4f8ec01f": ["ドンドン吸い込むナウ", "UGC"]};
+const ART_KNOWN_PH={/* v16.186 追加 */"31273f7c3324000681fba07f839cc9cfc1df49db087703f76037302f337a27f1": ["ドルマゲドン", "シークレット版"], "fcbffa1ffa1fb42102010420200408108810f81ff81ffa1ff81ff83ff83ffc7f": ["ドルマゲドン禁断爆発後", "シークレット版"], /* v16.185 追加 */"f4008003c004526656ffedfffefff9ff9b7fefeffbf8b278e000000080008819": ["神聖青ニューゲイズ", "シークレット版"], "bbf8bfff8fff1fbf14be7f397e12fe87fe07020702b007700140803000f8089c": ["紫電ボルメテウス・武者・ドラゴン", "シークレット版"], "bc7f7fdfffdffb07fcfdefaf88a08000400505ee01ed011f00fe81f88011a830": ["超神星ヴァルカン・アンチャンス", "シークレット版"], "ffff3dff01ffc0ff03b720e2f0a7043b1e090180fc01fe007e0263277e0c7099": ["暗黒神羅凰ゼロ・フェニックス", "シークレット版"], /* v16.184 追加 */"7fff83f4807e803f00d603c440bf273d313c780ec183c1ea43c26142dfe6cffb": ["伝説の正体ギュウジン丸", "シークレット版"], "ffff1bf0fce0efc0afe1c3c12384049e8479c001c00190233c032f87ffea97fb": ["ミラクル・ミラダンテ", "シークレット版"], "3fdfffefd3e4ebc7ed87fe9fffa97e349dde70044000c600e7007f8018000000": ["ボルシャック・ドギラゴン", "シークレット版"], /* v16.183 追加 */"8fe39fe07bc1f900ff2ce02d882fe0b0e02078607d00cd8ffbcff3cf366500e8": ["禁断機関vv-8", "シークレット版（禁断文字）"], "cffbc0fb80d1879c8905a10fdc05900200613031fc3cd808fffff7ded5f0c9db": ["禁断機関vv-8", "シークレット版（白黒）"], "b305920fc7cfcac3fee7f7ccfffebffc47830000c00040000487cd0f0e1f1f7e": ["時の法皇ミラダンテxii", "シークレット版"], "dff43ff0319f7443cc13b33172307e0601e24060403e803b81c57e83dfa37fff": ["超天星ライゾウ「灼」", "シークレット版"], "fff16030ef1c7f58117808609177e1c1c1e0fa0cff806bb8f670fc1cf39e6980": ["永久龍程式q.e.d.=x", "シークレット版"], "bf803f07f206703881fef03e2cc6ffd2f8148f18fb9c41e16143fc01fe00ff11": ["龍波弩級戦艦エビデックス", "シークレット版"], "9fe01fd03ff81ff8dbdb2ffe7df9ffbc0ffc003cbee79e00c0000020026003c0": ["「誣」の頂ウェディング・イノセンス", "シークレット版"], "9fffb1ffeda2023230ceb107b0077b6ff3011f02d042061717d7224f20df01fe": ["百族の長プチョヘンザ", "シークレット版"], "df133800f82cfcf0fef87ef5bfe37fee203a981b464f05ed19f608730818c000": ["蒼き団長ドギラゴン剣", "シークレット版"], "3f02ffe0b9f43cf8e4d1404661f15f9d38302e7c1fe00bff0b3f461bc00b902b": ["蒼き団長ドギラゴン剣", "シークレット版（白黒）"], "de3d5e2c0e1d6fff77f9dffefffeff88fa40f304fd50ac98003000000300a001": ["煌世主サッヴァーク†", "シークレット版（青）"], "feff7cffe078c070f810e000d400e800e8007c02fe20ff30c7dbc1fff0fcf87e": ["煌世主サッヴァーク†", "シークレット版（赤）"], "821f000e000707c40f631df362002400b081f009e02fa1f3de7f7fff7ffeffff": ["ニコル・ボーラス", "UGC"], "fe003e009e00cac4f0fcf1b7f4b91ef00fceffc6fffe3ff77fc441e000040000": ["ドラゴンズ・サイン", "UGC"], "bfdc7cfefc56c29c474c4f10610090270401003e0e7c9e7ed87cca7e4b7efa63": ["轟轟轟ブランド", "シークレット版"], "c7f841e01fe007a02fc07f9c37be37ce1c322f10fc10fb1ec79ed97f8003f003": ["煌メク聖戦絶十", "シークレット版"], "bf3f083678e3c8d54500ff01c7010f31ff81f0179e07fee7f077f81ff09e0000": ["龍装艦チェンジザ", "シークレット版"], "ffc0fffcfffeffe73f03ffe13360616018780078e80168010c1342fc003f810f": ["蒼神龍バイケン", "UGC"], "fffcfbbcfd71fd2189008203800380010000f001f9c347871f9f9fbf0fff7f8e": ["ジョット・ガン・ジョラゴン", "シークレット版"], "cffe010c122c05f11fbaf1f8fff6ffffffe320c10fc00000f000fffd0000f183": ["龍装鬼オブザ08号", "シークレット版"], "efb9e7e103f1c9f28f57601e40003080e020402080c7cfa3f3ca5fdcde7dfffd": ["百万超邪クロスファイア", "UGC"], "bfdc3fb81fe70ffc7ffe3ffefff8dffc0fefb9ffd85100000001000000000000": ["ヘブンズ・ゲート", "UGC"], "fffffdbff1aff9e1e744e007f00fec1ff00ff80ff8078983408200880180fc01": ["終末の時計ザ・クロック", "UGC"], "ce9e3fb8764e09cf20ff7e7ef733fcc0e7800597200cfe8527c602048b0cfb80": ["卍デ・スザーク卍", "シークレット版①"], "c0c20001e206f3fffdca7fef3fdf0ffb01f07ef0f834e1c1a844ca478264f100": ["卍デ・スザーク卍", "シークレット版②"], "dddf200962054a410a411ac8ffc05e430ffc8e02f800f000fffcfbe3ffeff389": ["龍装艦ゴクガ・ロイザー", "シークレット版"], "fffcbffdb7edb30dbe0d8009e007000000803000e803f087e5f7c003fffffff4": ["ジョット・ガン・ジョラゴンjoe", "シークレット版"], "c60116001bc03ff2707ef31f7febfd22fd801f91ffc91fe48ff08f780018c00c": ["煌龍サッヴァーク", "シークレット版"], "8ced0bff9d7ff83fc0ff8fff83fd82078139c209878981845937f0012d1101e2": ["天風のゲイル・ヴェスパー", "シークレット版"], "9dffe08f4f61c7e18f8389ffe603d00dd2074e000e49100d9006de289fff0bff": ["水上第九院シャコガイル", "シークレット版"], "bfff7807ff1ff83ff07ff677e7f0c6183c0c70002003001f400f1c001b823fee": ["伝説のレジェンドドギラゴン", "UGC"], "fffe7ff83ff83ffcc80ec03fb417200bd80fd807f81f879fdc6c000000064f40": ["音感の精霊龍エメラルーダ", "UGC"], "ff80000001030182008301c303ff401b0003e01ffc7fb0ffbe7fee7fffff7ffe": ["閃光の守護者ホーリー", "UGC"], "3e764fd2944310e1c049c03981f802ce7c8eff8bc61f005dc00d0aee7ffe3ffc": ["フェアリー・シャワー", "UGC"], "fffcff8ffffffd0fed17f64e7f098a0884000346f878cb1e8200c0005800f986": ["サッヴァークdg", "シークレット版"], "ce0e080842e012f38d3ff42ff9f19de1c8473b07fa0f0dff0b7f13cf0007013f": ["赤攻銀マルハヴァン", "シークレット版"], "ffe4cbe0ea00c201e01fe1ff71fef983713f207df401c000b9dcdde690dbf001": ["第九魔導執行官コーラレヒト", "シークレット版"], "fefc1fe30f221f37df977d987db07dc01fc026e0786039f07d787fb06c000000": ["刻解人形ジェニー・ジェーン", "シークレット版"], "e042e112f002f6c0f54020007860fc001c7f3fc13fff3f7f1ff9dd389377d178": ["q.q.qx.", "シークレット版"], "98fe3cacbc2cbc7c3ec07700ffd727f7efc100610fe01fa1f420937034b8f880": ["卍月ガ・リュザーク卍", "シークレット版"], "ffff6014e20ee4c201e017e88220c07bfefb0ffbfc17e03f090f01050cc39ff9": ["超機動罠デンジャデオン", "シークレット版"], "9db16440478c0f8002fe03fffbfefff8e2013025cff018fb00e6eff4fa207801": ["ゴリガン砕車ゴルドーザ", "シークレット版"], "ffadfffdffefffbebffc070e103625700fa00cb000634143520e4edc0000b803": ["絶叫の悪魔龍イーヴィル・ヒート", "UGC"], "bff1fff98fb307f713e3a7ff3f7ff43f40e9203ff6210642838001c00001400e": ["アルカディア・スパーク", "UGC"], "df7007f007fd03ff3fff5fef7ff30fff0ff806018870707041fb413209000000": ["大獄の封殺ディアスz", "シークレット版"], "ff1cd984a80434004401e0c2f400e000f08065f07f78ffff5ff5661ffc3fff8f": ["破獄の殲滅者ディアボロスz", "シークレット版"], "3ffdfffffffbfdfbfe1ffc3ffe5ff03ff003ee61d88000000000000004008200": ["オリオティス・ジャッジ", "PCC"], "fe7cff3ffd3ffedf7e171e03040f003900110001fe0bff87ff873f8031800180": ["ジョリー・ザ・ジョニー", "シークレット版"], "bbed0eff3fff4f7f6fc7ef8f060f185c1c780256005088988a03fb830026f803": ["“罰怒”ブランド", "シークレット版"], "a738ef08bf0200008050f875f9f7fa1ffe477f621fc119fd436f507f00f07860": ["偽りの王ヴィルヘルム", "UGC"], "f7e1f101fbe0ff20ffa40fd8abc0aef007800200d85f00035efff35e4f8ec01f": ["ドンドン吸い込むナウ", "UGC"]};
 function phashFromGray(g,w,h){
   const N=16;
   const x0=Math.floor(w*0.06),x1=w-Math.floor(w*0.06),y0=Math.floor(h*0.06),y1=h-Math.floor(h*0.06);
