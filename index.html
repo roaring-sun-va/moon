@@ -6153,7 +6153,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.176";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.177";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -48953,7 +48953,7 @@ async function repairArt(rp){
   return "none";
 }
 /* 🎨 v16.176 絵のバージョンの括り（名前の候補）。「その他」を選ぶと自由に入力できる。 */
-const ART_LABELS=["通常版","シークレット版","コラボ版","プロモ版","金枠版","UGC"];
+const ART_LABELS=["通常版","シークレット版","コラボ版","プロモ版","UGC"];   // v16.177 金の飾り枠＝UGC（「金枠版」はやめた）
 async function askArtLabel(cur){
   const opts=[...ART_LABELS.map(x=>x===cur?`${x}（いまの名前）`:x),"その他（名前を入力）"];
   const j=await askChoice(`🎨 このバージョンの括りを選んでください${cur?`\nいまの名前：${cur}`:""}`,opts);
@@ -49029,6 +49029,15 @@ async function importArtVersionPack(data,noAsk){
   let rpN=0;
   for(const rp of (Array.isArray(data.repairArt)?data.repairArt:[])){if(await repairArt(rp)==="ok")rpN++;}
   if(rpN)toast(`🩹 元の画像を${rpN}件直しました`);
+  /* 🏷 v16.177 括りの名前をまとめて付け直す（artRelabel:[{from,to}]・全カードのバージョンが対象）。
+     例：金枠版 → UGC。元の画像に上げたものは一覧に無いので、触らない（絵の無い名前だけの行を作らない）。 */
+  let rlN=0;
+  for(const rl of (Array.isArray(data.artRelabel)?data.artRelabel:[])){
+    const fr=String(rl&&rl.from||"").trim(),to=String(rl&&rl.to||"").trim();
+    if(!fr||!to||fr===to)continue;
+    for(const [k,l] of ART_VERS){for(const x of l){if(x&&x.label===fr){x.label=to;rlN++;}}}
+  }
+  if(rlN)toast(`🏷 バージョンの名前を${rlN}件付け直しました`);
   await persistArt();await persistNames();
   renderAll();sfx("ok");
   toast(`🎨 絵のバージョン：${rnOk?`カード名を${rnOk}件直しました・`:""}絵を${put}件入れました${renamed?`・名前を${renamed}件付け直しました`:""}。効果登録の画面の「🎨 絵のバージョン」や、デッキの「🎨 見た目」で選べます`);
@@ -52433,7 +52442,7 @@ $("importInput").addEventListener("change",async e=>{
       }
       await loadAllImages();
       /* 🎨 v16.168 効果登録と一緒に、絵のバージョン・名前の付け直し・まとめ・直しも入っていれば続けて行う（確認は済んでいるので聞かない） */
-      if((data.artVersions&&Object.keys(data.artVersions).length)||(Array.isArray(data.renames)&&data.renames.length)||(Array.isArray(data.merges)&&data.merges.length)||(Array.isArray(data.repairArt)&&data.repairArt.length)||(Array.isArray(data.artSwapBase)&&data.artSwapBase.length)){
+      if((data.artVersions&&Object.keys(data.artVersions).length)||(Array.isArray(data.renames)&&data.renames.length)||(Array.isArray(data.merges)&&data.merges.length)||(Array.isArray(data.repairArt)&&data.repairArt.length)||(Array.isArray(data.artSwapBase)&&data.artSwapBase.length)||(Array.isArray(data.artRelabel)&&data.artRelabel.length)){
         await importArtVersionPack(data,true);
       }
       renderAll();sfx("ok");
