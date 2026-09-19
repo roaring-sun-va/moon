@@ -2714,6 +2714,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="無月の門99（下に4枚以上でゲーム中1回・水のコスト99以下の呪文をタダ唱え）を持たせる。絞り込みが空欄の登録（新世壊型）は書かなくても付きます"><input type="checkbox" id="fxGate99"> └ 無月の門99を持つ</label>
         <label title="自分のシールドが1つもない間だけ、このクリーチャーはブロッカーを得ます"><input type="checkbox" id="fxShieldZeroBlocker"> 🛡 自分の盾が0ならブロッカー</label>
         <label title="バトルゾーンに出たターンでも、相手プレイヤー（シールド・ダイレクトアタック）は攻撃できる。クリーチャーへの攻撃は召喚酔いのまま（ザンジェットW7型）"><input type="checkbox" id="fxSaP"> ⚡ 出たターン、相手プレイヤーを攻撃できる</label>
+        <label title="自分の〔対象〕のクリーチャーは、出たターン相手プレイヤーを攻撃できる（ガンバトラーG7型・空欄＝なし）"><span style="font-size:12px;font-weight:700">⚡ 付与：出たターン相手プレイヤーを攻撃できる：自分の</span><input type="text" id="fxStAuraSaPF" placeholder="対象（例：ジョーカーズ）" style="width:140px"></label>
         <label title="自分の〔対象〕のクリーチャーは、バトルに負けた時以外バトルゾーンを離れない（龍装者 ジスタジオ型・空欄＝なし・例「パワー12000以上」）"><span style="font-size:12px;font-weight:700">⚓ バトルに負けた時以外離れない：自分の</span><input type="text" id="fxStAuraNoLeaveF" placeholder="対象（例：パワー12000以上）" style="width:170px"></label>
         <label><input type="checkbox" id="fxCastle"> 城/要塞（盾に重ねて要塞化・表向き）</label>
         <label title="相手のクリーチャーがシールドを1つ以上ブレイクする時、かわりにこのシールドをブレイクさせてもよい（セイント・キャッスル）"><input type="checkbox" id="fxCastleBreakRep"> 🏰 要塞化した盾のブレイクを、シールド1枚を手札に加えて肩代わりする（ハッスル・キャッスル型）</label>
@@ -6152,7 +6153,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.174";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.175";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -7631,7 +7632,8 @@ async function checkAwaken(pi,ev,trigCard){
           try{fxShare("awake","メテオバーン！",`${S.players[side].label}　下のカード${kids.length}枚`,true,c.name,side);}catch(e){}
           logOnly(`☄ メテオバーン覚醒：${faceNameOf(c)} の下のカード${kids.length}枚を墓地へ`);
         }
-        c.face=_toFace;c.tapped=false;
+        /* 🔄 v16.175 覚醒は裏返るだけなので、タップ／アンタップはそのまま（以前はアンタップしていた） */
+        c.face=_toFace;
         markArrive(c,{flip:true});   // 🔄 覚醒＝裏返っただけ（出たわけではない）
         sfx("flip");renderAll();
         try{offerHyperCall(side,`自分の《${faceNameOf(c)}》が覚醒しました`);}catch(e){}   // 🌌 超時空ストームG・XX 型
@@ -11777,7 +11779,8 @@ function runWatchFx(pi,type,trigCard){
         }
         // 自分のクリーチャーが出た時／呪文を唱えた時：条件欄は「出たカード/唱えた呪文」の対象条件として判定
         // （<=/>=/以上/以下 を含む式はゾーン条件式として従来どおり判定）
-        if((type==="allyEnter"||type==="anyEnter"||type==="allyLeave"||type==="allyNinja"||type==="allySpell"||type==="allyWinBattle"||type==="spell")&&trigCard){
+        /* 💀 v16.175 myDestroyed も条件欄を「破壊されたカード」の対象条件として見る（赤攻銀 マルハヴァン「自分のコスト3以下のクリーチャーが破壊された時」） */
+        if((type==="allyEnter"||type==="anyEnter"||type==="allyLeave"||type==="allyNinja"||type==="allySpell"||type==="myDestroyed"||type==="allyWinBattle"||type==="spell")&&trigCard){
           let cnd=String(w.cond||"").trim();
           // 「他の〜」＝このカード自身が出た時は発動しない（allyEnterのみ意味を持つ）
           if(/^他の/.test(cnd)){
@@ -11816,7 +11819,8 @@ function runWatchFx(pi,type,trigCard){
               for(const h2 of _hases){if(!_hasOk(h2)){_diag(`の「${h2}」にあてはまるカードがありません`);return;}}
               if(_filts.length){const rt=getReg(trigCard);if(!lockFilterOk(_filts.join("／"),rt,trigCard)){_diag(type==="allyEnter"?"に出たカード（自身）が合いません":"に唱えた呪文が合いません");return;}}
             }else{
-              if(/[<>=]|以上|以下/.test(cnd)){if(!zoneCondOk(cnd,pi)){_diag("のゾーン条件を満たしていません");return;}}
+              /* 💀 v16.175 「コスト3以下」「パワー6000以上」だけの条件は、ゾーン条件式ではなく対象の絞り込み */
+              if(/[<>=]/.test(cnd)||(/以上|以下/.test(cnd)&&!/^(?:コスト|パワー)\d+(?:以上|以下)$/.test(cnd))){if(!zoneCondOk(cnd,pi)){_diag("のゾーン条件を満たしていません");return;}}
               else{const rt=getReg(trigCard);if(!lockFilterOk(cnd,rt,trigCard)){_diag(type==="allyEnter"?"に出たカード（自身）が合いません":"に唱えた呪文が合いません");return;}}
             }
           }
@@ -13975,6 +13979,9 @@ function sympathyCount(pi,c,sy){
       if(mPow){const pw=(rb.power!=null&&!isNaN(+rb.power))?+rb.power:null;return pw!=null&&pw>=+mPow[1];}
       const mCost=tk.match(/^コスト(\d+)以上$/);
       if(mCost)return rb.cost!=null&&!isNaN(+rb.cost)&&+rb.cost>=+mCost[1];
+      /* 💞 v16.175 「コスト3以下のクリーチャー」（赤攻銀 マルハヴァン型）。「のクリーチャー」付きはクリーチャーだけ数える */
+      const mCostLE=tk.match(/^コスト(\d+)以下(のクリーチャー)?$/);
+      if(mCostLE)return rb.cost!=null&&!isNaN(+rb.cost)&&+rb.cost<=+mCostLE[1]&&(!mCostLE[2]||isCreatureReg(rb));
       return raceMatch(rb,tk)||faceNameOf(b).includes(tk);
     });
     if(ok)cnt++;
@@ -15156,7 +15163,7 @@ async function destroyCreature(pi,c,opts){
     }
     // 🔄 解除（サイキック）：離れる時、かわりにコストが小さいほう（表の面）へ裏返る
     if(!IGN&&rCX&&rCX.kaijo&&(c.face|0)!==0){
-      c.face=0;c.tapped=false;c.rot=0;c.buff=null;
+      c.face=0;c.rot=0;c.buff=null;   // 🔄 v16.175 解除も裏返るだけ。タップ状態はそのまま
       try{sfx("flip");}catch(e){}
       toast(`🔄 解除：${faceNameOf(c)} は離れるかわりに裏返った`);
       renderAll();
@@ -15337,7 +15344,7 @@ async function destroyCreature(pi,c,opts){
     Z.hyper.push(c);
     sfx("grave");
     toast(`🌌 破壊：サイキック ${c.name} は超次元ゾーンへ戻った`);
-    runWatchFx(pi,"myDestroyed");
+    runWatchFx(pi,"myDestroyed",c);
     if(S.expert&&r&&r.lastburst)toast(`💥 ラストバースト：呪文側を唱えられます（${faceNameOf(c)}）`);
     return;
   }
@@ -15346,7 +15353,7 @@ async function destroyCreature(pi,c,opts){
     Z.gr.push(c);
     sfx("grave");
     toast(`破壊：GRクリーチャーはGRゾーンの下へ戻った`);
-    runWatchFx(pi,"myDestroyed");
+    runWatchFx(pi,"myDestroyed",c);
     if(S.expert&&r&&r.lastburst)toast(`💥 ラストバースト：呪文側を唱えられます（${faceNameOf(c)}）`);
     return;
   }
@@ -15355,13 +15362,13 @@ async function destroyCreature(pi,c,opts){
   if(dest==="mana"&&typeof buffDestMana==="function"&&buffDestMana(c))
     toast(`🍃 ${faceNameOf(c)} は破壊されるかわりにマナゾーンへ`);
   c.tapped=false;c.faceup=true;c.rot=0;
-  if(dest==="grave"&&graveShuffleRepApply(c,pi)){runWatchFx(pi,"myDestroyed");return;}
+  if(dest==="grave"&&graveShuffleRepApply(c,pi)){runWatchFx(pi,"myDestroyed",c);return;}
   Z[dest].push(c);
   if(S.expert&&r&&r.underRecycleOnDestroy&&c._destroyUnderIds&&c._destroyUnderIds.length)
     enqueueWatchJob(()=>recycleDestroyedUnder(pi,c));
   sfx("grave");
   toast(`破壊：${faceNameOf(c)}${dest==="hand"?"（手札へ）":dest==="mana"?"（マナへ）":""}`);
-  runWatchFx(pi,"myDestroyed");
+  runWatchFx(pi,"myDestroyed",c);
   if(S.expert&&r&&r.lastburst)toast(`💥 ラストバースト：呪文側を唱えられます（${faceNameOf(c)}）`);
   if(S.expert&&r&&r.megaLB)toast(`💥 メガ・ラストバースト：呪文側を唱えられます（${faceNameOf(c)}）`);
 }
@@ -17375,13 +17382,17 @@ async function runFxList(pi,list,srcCard,inPump){
       renderAll();
     }else if(f.t==="grantTurnAll"){
       // ✨ そのターン、自分のクリーチャーすべてに能力を与える（キリュー・ジルヴェス型）
-      const toks=String(f.cond||"").split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
+      let toks=String(f.cond||"").split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
+      /* 🎯 v16.175 「対象:ジョーカーズ」で与える相手を絞れる（ガンバトラーG7「自分のジョーカーズすべてのパワーを+7000」） */
+      const _gtaF=(toks.find(t=>/^対象[:：]/.test(t))||"").replace(/^対象[:：]/,"").trim();
+      toks=toks.filter(t=>!/^対象[:：]/.test(t));
       if(!toks.length){toast("✨ 与える能力が指定されていません（条件欄に「スレイヤー／スピードアタッカー」等）");continue;}
       snap();
       let cnt=0;
       for(const x of Z.battle){
         const rx=getReg(x);
         if(!rx||!isCreatureReg(rx))continue;
+        if(_gtaF&&!lockFilterOk(_gtaF,rx,x))continue;
         x.buff=x.buff||{};
         const keys=[];
         for(const t2 of toks){
@@ -27901,6 +27912,16 @@ async function doBattle(pa,a,pd,d){
   // 🥏 バトル肩代わり（両者側で判定：攻撃側→a、防御側→d を差し替え）
   a=await battleSubPick(pa,a);
   d=await battleSubPick(pd,d);
+  /* ⚔ v16.175 誘発「このクリーチャーがバトルする時」（selfBattle）。勝ち負けが決まる前に働く
+     （義府徒の覚醒者 GENJI・XX「バトルする時、カードを1枚引いてもよい」）。 */
+  if(S.expert){
+    for(const [pp,x] of [[pa,a],[pd,d]]){
+      const rx=getReg(x);
+      if(!rx||!Array.isArray(rx.watchFx)||isSealed(x)||isIgnored(x,pp))continue;
+      const fxSB=onceFilter(x,rx.watchFx.filter(w=>w.ev==="selfBattle"));
+      if(fxSB.length){toast(`⚔ ${faceNameOf(x)}：バトルする時`);await runFxList(pp,fxSB,x);}
+    }
+  }
   for(const [pp,x] of [[pa,a],[pd,d]]){
     const rx=getReg(x);
     if(rx&&rx.cstCond&&rx.cstFx==="slayer"&&!isSealed(x)&&zoneCondOk(rx.cstCond,pp,x)){
@@ -30159,7 +30180,9 @@ async function execAttack(pi,id,tg){
     const saOk=rA&&(rA.sa||(rA.gggSA&&gggOn(pi)));
     const machOk=(hasMachF(rA)||(rA&&c.hyper&&rA.hmMach)||allyGrant(pi,"agMach"))&&tg.kind==="creature";
     /* ⚡ v16.174 出たターン、相手プレイヤーを攻撃できる（ザンジェットW7型）。クリーチャーへの攻撃は召喚酔いのまま。 */
-    const saPOk=!!(rA&&rA.saP&&!isSealed(c)&&!isIgnored(c,pi)&&!(tg&&tg.kind==="creature"));
+    /* ⚡ v16.175 付与型：自分の〔対象〕は出たターン相手プレイヤーを攻撃できる（ガンバトラーG7型・stAuraSaPF） */
+    const _saPAura=!!(rA&&Z.battle.some(b=>{const rb=getReg(b);if(!rb||!String(rb.stAuraSaPF||"").trim())return false;if(isSealed(b)||isIgnored(b,pi))return false;return lockFilterOk(String(rb.stAuraSaPF).trim(),rA,c);}));
+    const saPOk=!!(rA&&(rA.saP&&!isSealed(c)&&!isIgnored(c,pi)||_saPAura)&&!(tg&&tg.kind==="creature"));
     if(saPOk&&!saOk&&!machOk)toast(`⚡ ${faceNameOf(c)} は出たターンでも相手プレイヤーを攻撃できる`);
     if(saOk||machOk||saPOk){
       c.sick=false;
@@ -31376,6 +31399,22 @@ async function execAttack(pi,id,tg){
      シールド攻撃とダイレクト→ブレイク変換の両方から呼ぶ（v10.35で関数化） */
   async function finishBreak(n){
     const brokeN=(n==="all")?OZ.shield.length:Math.min(n,OZ.shield.length);
+    /* 💥 v16.175 誘発「各ブレイクの前に」（beforeBreak）。ブレイクする枚数ぶん、ブレイクより先に働く
+       （義府徒の覚醒者 GENJI・XX「各ブレイクの前に、カードを1枚引いてもよい」）。 */
+    if(S.expert&&brokeN>0){
+      const rPB=getReg(c);
+      const fxPB=rPB&&Array.isArray(rPB.watchFx)&&!isSealed(c)&&!isIgnored(c,pi)?rPB.watchFx.filter(w=>w.ev==="beforeBreak"):[];
+      if(fxPB.length){
+        toast(`💥 ブレイクの前に（${brokeN}回）`);
+        for(let i2=0;i2<brokeN;i2++){
+          const f1=onceFilter(c,fxPB);
+          if(!f1.length)break;
+          await runFxList(pi,f1,c);
+          if(!Z.battle.find(x=>x.id===id))break;
+        }
+        renderAll();
+      }
+    }
     await breakShields(op,n,c,undefined,{skipBonus:true});   // 攻撃側は上で加算済み
     if(S.expert&&brokeN>0&&Z.battle.find(x=>x.id===id)){
       const rBB=getReg(c);
@@ -32064,6 +32103,8 @@ const TRIG_EVS=[
   ["turnStartMine","自分のターンのはじめに"],
   ["revFinal","⚡ ファイナル革命（革命チェンジで出た時・各ターン1回・他のファイナル革命が未使用なら）"],
   ["revFinalPS","⚡ 極限ファイナル革命P'S（出た時＝どんな出方でも・このゲーム中に自分は1回だけ・任意／複数登録すればモード選択に）"],
+  ["beforeBreak","このクリーチャーがシールドをブレイクする前に（ブレイク1枚ごとに1回・ブレイクより先）"],
+  ["selfBattle","このクリーチャーがバトルする時（勝ち負けが決まる前）"],
   ["onBreak","このクリーチャーがシールドをブレイクした時（ブレイク1枚ごとに1回・ブレイクボーナス）"],
   ["allyBreak","自分のクリーチャーがシールドをブレイクした時（条件欄に「他の」でこのクリーチャー自身を除く・ターボラッシュ型）"],
   ["pig","このクリーチャーが破壊された時"],
@@ -33188,6 +33229,7 @@ function renderFxEditor(){
   {const e=$("fxGate99");if(e)e.checked=!!FXEDIT.gate99;}
   {const e=$("fxShieldZeroBlocker");if(e)e.checked=!!FXEDIT.shieldZeroBlocker;}
   {const e=$("fxSaP");if(e)e.checked=!!FXEDIT.saP;}
+  {const e=$("fxStAuraSaPF");if(e)e.value=String(FXEDIT.stAuraSaPF||"");}
   {const e=$("fxStAuraNoLeaveF");if(e)e.value=String(FXEDIT.stAuraNoLeaveF||"");}
   {const e=$("fxCostRedOppCre");if(e)e.value=String(FXEDIT.costRedOppCre||0);}
   $("fxCastle").checked=!!FXEDIT.castle;
@@ -34200,7 +34242,9 @@ function parseCardText(txt,mode){
   {const mCC=t.match(/召喚コストは[、,]?(?:バトルゾーンにある)?相手のクリーチャー1体につき(\d+)少なくなる/);
    if(mCC){out.set.costRedOppCre=+mCC[1];out.notes.push({msg:`🌋 相手のクリーチャー1体につき召喚コスト−${mCC[1]}を設定しました`,q:"コスト"});}}
   // ⚡ v16.174 出たターン、相手プレイヤーを攻撃できる（ザンジェットW7型）
-  if(/(?:バトルゾーンに)?出たターン[、,]?相手プレイヤーを攻撃できる/.test(t))out.set.saP=true;
+  {const mSP=t.match(/自分の(.{1,20}?)は[、,]?(?:バトルゾーンに)?出たターン[、,]?相手プレイヤーを攻撃できる/);
+   if(mSP&&!/この/.test(mSP[1]))out.set.stAuraSaPF=mSP[1].trim();
+   else if(/(?:バトルゾーンに)?出たターン[、,]?相手プレイヤーを攻撃できる/.test(t))out.set.saP=true;}
   // ⚓ v16.174 自分の〔パワーn以上〕のクリーチャーは、バトルに負けた時以外バトルゾーンを離れない（ジスタジオ型）
   {const mNL=t.match(/自分の(?:、)?(パワー\d+以上の)?クリーチャーは[、,]?バトルに負けた時以外[、,]?バトルゾーンを離れない/);
    if(mNL)out.set.stAuraNoLeaveF=mNL[1]?mNL[1].replace(/の$/,""):"クリーチャー";}
@@ -35566,6 +35610,7 @@ function openFxEditor(key){
     gate99:cur?!!cur.gate99:false,
     shieldZeroBlocker:cur?!!cur.shieldZeroBlocker:false,
     saP:cur?!!cur.saP:false,
+    stAuraSaPF:cur&&cur.stAuraSaPF||"",
     stAuraNoLeaveF:cur&&cur.stAuraNoLeaveF||"",
     costRedOppCre:cur&&cur.costRedOppCre||0,
     castle:cur?!!cur.castle:false,
@@ -36232,6 +36277,7 @@ $("fxSave").addEventListener("click",async ()=>{
     gate99:$("fxGate99")?$("fxGate99").checked:false,
     shieldZeroBlocker:$("fxShieldZeroBlocker")?$("fxShieldZeroBlocker").checked:false,
     saP:$("fxSaP")?$("fxSaP").checked:false,
+    stAuraSaPF:$("fxStAuraSaPF")?$("fxStAuraSaPF").value.trim():"",
     stAuraNoLeaveF:$("fxStAuraNoLeaveF")?$("fxStAuraNoLeaveF").value.trim():"",
     costRedOppCre:$("fxCostRedOppCre")?(parseInt($("fxCostRedOppCre").value,10)||0):0,
     castle:$("fxCastle").checked,
@@ -37181,6 +37227,7 @@ $("btnRegList").addEventListener("click",()=>{
     }
     if(v.shieldZeroBlocker)attrs.push("🛡自分の盾が0ならブロッカー");
     if(v.saP)attrs.push("⚡出たターン、相手プレイヤーを攻撃できる");
+    if(v.stAuraSaPF)attrs.push(`⚡常在付与：自分の${v.stAuraSaPF}は出たターン相手プレイヤーを攻撃できる`);
     if(v.stAuraNoLeaveF)attrs.push(`⚓常在：自分の${v.stAuraNoLeaveF}のクリーチャーはバトルに負けた時以外離れない`);
     if(v.costRedOppCre)attrs.push(`🌋 相手のクリーチャー1体につき召喚コスト−${v.costRedOppCre}（下限1）`);
     if(v.castle)attrs.push("城/要塞");
