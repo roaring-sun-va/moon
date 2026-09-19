@@ -6149,7 +6149,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.167";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.168";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13332,6 +13332,7 @@ const FX_TYPES=[
   ["charge","n枚マナ加速（山上→マナ）"],
   ["zoneMove","↔ 自分の〔元〕から条件に合うカードをn枚〔先〕へ移動（条件欄に「墓地→マナ:スノーフェアリー」のように元→先:対象を指定・墓地→マナもこれで）"],
   ["chargeTap","n枚マナ加速（山上→タップしてマナに置く）"],
+  ["selfDiscardKillLtCost","🗑💥 自分の手札を1枚捨てる（必ず）。こうして捨てたカード**よりコストが小さい**相手クリーチャーを1体選び、破壊してもよい（芸魔温泉！オンセン・ガロウズ型／条件欄で捨てる対象を絞れる）"],
   ["skipTurnRest","⏭ ターンの残りをとばす（終末の時計 ザ・クロック型・いまの効果を解決し終えたら、そのターンを終える）"],
   ["revealHandUntapSelf","👁🔄 自分の手札から条件に合うカードを1枚表向きにしてもよい。そうしたら、このカードをアンタップする（覇道の決闘型・条件欄＝例：ソニック・コマンド）"],
   ["chargeTapThenManaGrave","🌱🪦 山札の上からn枚をタップしてマナゾーンに置く。そうしたら、自分のマナゾーンのカードをn枚選んで墓地に置く（大感動！ディス・イズ・大横綱型／「〜してもよい」は行の任意にチェック）"],
@@ -23697,6 +23698,40 @@ async function runFxList(pi,list,srcCard,inPump){
         if(!_tg.length){toast(`💥 コスト${_cst}以下の相手クリーチャーがいません`);renderAll();continue;}
         const _j2=_tg.length===1?0:await pickCard(`💥 破壊する相手クリーチャーを選択（コスト${_cst}以下）`,_tg);
         if(_j2===null){renderAll();continue;}
+        await destroyWithReplace(op,_tg[_j2]);
+        sfx("grave");renderAll();
+      }
+    }else if(f.t==="selfDiscardKillLtCost"){
+      /* 🗑💥 v16.168 オンセン・ガロウズ型。捨てるのは必ず（キャンセル不可）、破壊は任意。
+         「捨てたカードよりコストが小さい」＝未満（以下ではない）。 */
+      const _dcF2=String(f.cond||"").trim();
+      for(let i=0;i<n;i++){
+        const _dp=Z.hand.filter(x=>{const rx=getReg(x);return !_dcF2||(rx&&lockFilterOk(_dcF2,rx,x));});
+        if(!_dp.length){toast(`🗑 捨てられる手札がありません${_dcF2?`（${_dcF2}）`:""}`);break;}
+        let _jd=_dp.length===1?0:await pickCard(`🗑 捨てる手札を選択（捨てたカードよりコストが小さい相手クリーチャーを破壊できる）`,_dp,{hint:"必ず1枚捨てます"});
+        if(_jd===null||_jd===undefined||!_dp[_jd])_jd=0;
+        const _cc=_dp[_jd];
+        const _ki=Z.hand.findIndex(x=>x.id===_cc.id);
+        if(_ki<0)break;
+        if(i===0)snap();
+        Z.hand.splice(_ki,1);
+        const _rc=getReg(_cc);
+        const _cst=(_rc&&_rc.cost!=null&&_rc.cost!=="")?(+_rc.cost||0):0;
+        _cc.faceup=true;_cc.tapped=false;Z.grave.push(_cc);
+        toast(`🗑 ${faceNameOf(_cc)} を捨てた（コスト${_cst}）`);
+        logOnly(`${S.players[pi].label}：《${faceNameOf(_cc)}》を捨てた（コスト${_cst}）`);
+        afterHandDiscard(pi,_cc,pi);
+        if(!S.vs){toast("（ソロのため破壊はスキップ）");renderAll();continue;}
+        const _tg=OZ.battle.filter(x=>{
+          const rx=getReg(x);
+          if(!rx||!isCreatureReg(rx))return false;
+          if(rx.cost==null||rx.cost==="")return false;
+          if(!((+rx.cost||0)<_cst))return false;
+          return !((rx.noChoose||momoUntouchable(x))&&!isIgnored(x,op));
+        });
+        if(!_tg.length){toast(`💥 コスト${_cst}より小さい相手クリーチャーがいません`);renderAll();continue;}
+        const _j2=await pickCard(`💥 破壊する相手クリーチャーを選択（コスト${_cst}より小さい・破壊しなくてもよい）`,_tg,{hint:"キャンセルで破壊しない"});
+        if(_j2===null||_j2===undefined){renderAll();continue;}
         await destroyWithReplace(op,_tg[_j2]);
         sfx("grave");renderAll();
       }
@@ -48462,6 +48497,42 @@ async function mergeCardKey(mg){
   logOnly(`🏷 登録をまとめた：${oldDisp} → ${newName}`);
   return "ok";
 }
+/* 🩹 v16.168 名前を付け直したあと元の画像が「？」になったカードを直す。
+   rp = {key, from:古いキー, label:古い画像を残す時のバージョン名, promote:元の画像が無い時に元の画像へ上げるバージョンのID}
+   ・元の画像が無く、promote のバージョンがあれば、その絵（通常版）を元の画像にする（バージョンからは外す）
+   ・古いキーに画像が残っていれば：元の画像がまだ無ければ元の画像へ、あればバージョン（label）として移す */
+async function repairArt(rp){
+  const key=String(rp&&rp.key||""),from=String(rp&&rp.from||"");
+  if(!key)return "none";
+  const getB=async k=>{let b=db?await idbGet("images",k):memImages.get(k);if(!b){try{b=imgURL.getBlob(k);}catch(e){}}return b;};
+  const putB=async(k,b)=>{if(db)await idbPut("images",k,b);else memImages.set(k,b);try{imgURL.setBlob(k,b);}catch(e){}};
+  const delB=async k=>{try{if(db)await idbDel("images",k);else memImages.delete(k);}catch(e){}try{imgURL.delete(k);}catch(e){}};
+  let did=[];
+  if(!(await getB(key))&&rp.promote){
+    const vk=artVerKey(key,rp.promote);const vb=await getB(vk);
+    if(vb){
+      await putB(key,vb);await delB(vk);
+      ART_VERS.set(key,(ART_VERS.get(key)||[]).filter(x=>x.id!==String(rp.promote)));
+      if(!(ART_VERS.get(key)||[]).length)ART_VERS.delete(key);
+      if(ART_SEL.get(key)===String(rp.promote))ART_SEL.delete(key);
+      did.push("バージョンの絵を元の画像へ");
+    }
+  }
+  if(from&&from!==key&&!FXDB.has(from)){
+    const ob=await getB(from);
+    if(ob){
+      if(!(await getB(key))){await putB(key,ob);did.push("古いキーの画像を元の画像へ");}
+      else{
+        const id="r"+Date.now().toString(36);await putB(artVerKey(key,id),ob);
+        const l=(ART_VERS.get(key)||[]).slice();l.push({id,label:String(rp.label||"旧画像")});ART_VERS.set(key,l);
+        did.push(`古いキーの画像を「${rp.label||"旧画像"}」へ`);
+      }
+      await delB(from);
+    }
+  }
+  if(did.length){await persistArt();logOnly(`🩹 ${dispName.get(key)||key}：${did.join("・")}`);return "ok";}
+  return "none";
+}
 /* 🎨 v16.166 元の画像と、あるバージョンの絵を入れ替える（元の画像がコラボ版だった時に、通常版を元の画像にする等）。
    sw = {key, id:入れ替えるバージョン, label:入れ替えたあとのそのバージョンの名前（＝前の元の画像の名前）}
    ふだん出す絵は入れ替えたあとの元の画像になる。デッキで絵を選んでいた時は、同じ絵が出続けるように付け替える。 */
@@ -48493,7 +48564,7 @@ async function swapArtBase(sw){
 }
 /* 🎨 v16.163 絵のバージョンだけのカードパックを取り込む（登録済みのカードに別の絵を足す）。
    効果登録と元の画像には触れない。返り値：足した絵の枚数（やめた時は -1） */
-async function importArtVersionPack(data){
+async function importArtVersionPack(data,noAsk){
   /* 🎨 v16.164 絵の入っているバージョン（追加・差し替え）と、名前だけのもの（付け直し）を分けて知らせる */
   const av=data.artVersions||{};
   const imgs=data.images||{};
@@ -48503,7 +48574,7 @@ async function importArtVersionPack(data){
   const rns=(Array.isArray(data.renames)?data.renames:[]).filter(r=>r&&r.from&&(r.key||r.name));
   const mgs=(Array.isArray(data.merges)?data.merges:[]).filter(m=>m&&m.from&&m.into);
   const rnTxt=(mgs.length?`\n・重複した登録をまとめる：${mgs.length}件（${mgs.map(m=>`${dispName.get(m.from)||m.from} → ${dispName.get(m.into)||m.into}`).join("、")}）`:"")+(rns.length?`\n・カード名を正式名称に直す：${rns.length}件\n　${rns.slice(0,6).map(r=>`${dispName.get(r.from)||r.from} → ${r.name||r.key}`).join("\n　")}${rns.length>6?"\n　ほか":""}`:"");
-  if(!await ask(`🎨 絵のバージョンのパックです。${rnTxt}\n・絵を足す／差し替える：${withImg}件（${names.length}枚のカード）${names.length?"\n　"+names.slice(0,8).join("、")+(names.length>8?" ほか":""):""}${nameOnly?`\n・名前だけ付け直す：${nameOnly}件`:""}\n効果登録の中身と元の画像はそのままです。よろしいですか？`))return -1;
+  if(!noAsk&&!await ask(`🎨 絵のバージョンのパックです。${rnTxt}\n・絵を足す／差し替える：${withImg}件（${names.length}枚のカード）${names.length?"\n　"+names.slice(0,8).join("、")+(names.length>8?" ほか":""):""}${nameOnly?`\n・名前だけ付け直す：${nameOnly}件`:""}\n効果登録の中身と元の画像はそのままです。よろしいですか？`))return -1;
   // 🏷 v16.165 カード名の付け直しを先に（このあとのバージョンは新しいキーで届く）
   let rnOk=0;const rnNg=[];
   // 🏷 v16.167 重複登録のまとめ
@@ -48525,6 +48596,10 @@ async function importArtVersionPack(data){
   let swN=0;
   for(const sw of (Array.isArray(data.artSwapBase)?data.artSwapBase:[])){if(await swapArtBase(sw)==="ok")swN++;}
   if(swN)toast(`🎨 元の画像を${swN}件入れ替えました`);
+  // 🩹 v16.168 元の画像が無くなったカードの直し
+  let rpN=0;
+  for(const rp of (Array.isArray(data.repairArt)?data.repairArt:[])){if(await repairArt(rp)==="ok")rpN++;}
+  if(rpN)toast(`🩹 元の画像を${rpN}件直しました`);
   await persistArt();await persistNames();
   renderAll();sfx("ok");
   toast(`🎨 絵のバージョン：${rnOk?`カード名を${rnOk}件直しました・`:""}絵を${put}件入れました${renamed?`・名前を${renamed}件付け直しました`:""}。効果登録の画面の「🎨 絵のバージョン」や、デッキの「🎨 見た目」で選べます`);
@@ -51887,7 +51962,7 @@ $("importInput").addEventListener("change",async e=>{
       const _avN=Object.values(data.artVersions||{}).reduce((a,l)=>a+(Array.isArray(l)?l.length:0),0);
       const _verOnly=_avN>0&&!Object.keys(data.cardFx||{}).length;
       /* 🏷 v16.165 名前の付け直し（renames）だけのパックも同じ取り込みへ */
-      const _rnOnly=Array.isArray(data.renames)&&data.renames.length>0&&!Object.keys(data.cardFx||{}).length;
+      const _rnOnly=((Array.isArray(data.renames)&&data.renames.length>0)||(Array.isArray(data.merges)&&data.merges.length>0)||(Array.isArray(data.repairArt)&&data.repairArt.length>0))&&!Object.keys(data.cardFx||{}).length;
       if(_rnOnly&&!_verOnly){await importArtVersionPack(data);return;}
       if(_verOnly){await importArtVersionPack(data);
         return;
@@ -51911,6 +51986,10 @@ $("importInput").addEventListener("change",async e=>{
         }
       }
       await loadAllImages();
+      /* 🎨 v16.168 効果登録と一緒に、絵のバージョン・名前の付け直し・まとめ・直しも入っていれば続けて行う（確認は済んでいるので聞かない） */
+      if((data.artVersions&&Object.keys(data.artVersions).length)||(Array.isArray(data.renames)&&data.renames.length)||(Array.isArray(data.merges)&&data.merges.length)||(Array.isArray(data.repairArt)&&data.repairArt.length)||(Array.isArray(data.artSwapBase)&&data.artSwapBase.length)){
+        await importArtVersionPack(data,true);
+      }
       renderAll();sfx("ok");
       toast(`📥 カードパックを読み込みました（${n}枚）`);
       return;
