@@ -6188,7 +6188,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.186";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.187";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -49647,6 +49647,13 @@ async function blobPHash(b){
   cv.width=cv.height=0;
   return phashFromGray(grayFromRGBA(d,w,h),w,h);
 }
+/* ⏱ v16.187 見た目の目印を、読めない時は待たずに null で返す（画像の読み込みが返ってこない環境でも止まらない） */
+async function blobPHashSafe(b,ms){
+  try{
+    if(typeof blobPHash!=="function"||!b)return null;
+    return await Promise.race([blobPHash(b).catch(()=>null),new Promise(r=>setTimeout(()=>r(null),ms||4000))]);
+  }catch(e){return null;}
+}
 function phashDist(a,b){
   if(!a||!b||a.length!==b.length)return 999;
   let n=0;for(let i=0;i<a.length;i++){let x=parseInt(a[i],16)^parseInt(b[i],16);while(x){n+=x&1;x>>=1;}}
@@ -49699,6 +49706,14 @@ async function auditBaseArts(){
       else{
         const byContent=vinfo.find(v=>v.vph&&!v.known&&!v.same&&!ART_NOT_NORMAL_CAND_RE.test(String(v.x.label||"")));
         if(byContent){normalId=byContent.x.id;misnamed=true;}
+        else{
+          /* 🔁 v16.187 同じ括り（例：コラボ版（フリーレン））のバージョンが2つあり、1つは元の画像と同じ絵、
+             もう1つは違う絵（入れ替えの掛け直しで名前だけ残った通常版）なら、違う絵のほうを通常版とみなす。
+             元の画像が既知のシークレット版など（中身で判定）の時は、コラボ版などの名前のバージョンも候補にする。 */
+          const baseKnown=!!knownNonNormalLabel(ph);
+          const twin=vinfo.find(v=>v.vph&&!v.known&&!v.same&&(baseKnown||(String(v.x.label||"")===label&&vinfo.some(w=>w!==v&&w.same&&String(w.x.label||"")===label))));
+          if(twin){normalId=twin.x.id;misnamed=true;}
+        }
       }
       found.push({key:k,name:dispName.get(k)||k,label,normalId,misnamed,misLabel:misnamed?String((vers.find(y=>y.id===normalId)||{}).label||""):"",relabel,dups});
     }else if(relabel.length||dups.length){
@@ -49797,6 +49812,18 @@ async function swapArtBase(sw){
   const get=async k=>{let b=db?await idbGet("images",k):memImages.get(k);if(!b){try{b=imgURL.getBlob(k);}catch(e){}}return b;};
   const bBase=await get(key),bVer=await get(vk);
   if(!bBase||!bVer)return "noimage";
+  /* 🔁 v16.187 入れ替えを中身で確かめる。パックを読み直すと artSwapBase がもう一度かかり、
+     通常版とコラボ版・シークレット版が入れ替わり直していた（フリーレン版が元の画像に戻る等）。
+     ・元の画像とバージョンが同じ絵なら入れ替えない
+     ・バージョンが既知のシークレット版などで、元の画像がそうでないなら入れ替えない（force で強制） */
+  try{
+    if((await blobHashFnv(bBase))===(await blobHashFnv(bVer)))return "same";
+    if(typeof blobPHash==="function"&&typeof phashDist==="function"){
+      const _pa=await blobPHashSafe(bBase),_pb=await blobPHashSafe(bVer);
+      if(_pa&&_pb&&phashDist(_pa,_pb)<=20)return "same";
+      if(_pa&&_pb&&!sw.force&&typeof knownNonNormalLabel==="function"&&knownNonNormalLabel(_pb)&&!knownNonNormalLabel(_pa))return "keep";
+    }
+  }catch(e){}
   if(db){await idbPut("images",key,bVer);await idbPut("images",vk,bBase);}else{memImages.set(key,bVer);memImages.set(vk,bBase);}
   try{imgURL.setBlob(key,bVer);imgURL.setBlob(vk,bBase);}catch(e){}
   if(sw.label)x.label=String(sw.label);
@@ -49853,7 +49880,7 @@ async function importArtVersionPack(data,noAsk){
     if(!bb||!vb)return false;
     if((await blobHashFnv(bb))===(await blobHashFnv(vb)))return true;
     /* 🩺 v16.183 見た目の目印でも比べる（作り直された画像＝WebP／JPEG でも同じ絵なら「同じ」） */
-    try{if(typeof blobPHash==="function"&&typeof phashDist==="function"){const a=await blobPHash(bb),b=await blobPHash(vb);if(a&&b&&phashDist(a,b)<=20)return true;}}catch(e){}
+    try{if(typeof blobPHashSafe==="function"&&typeof phashDist==="function"){const a=await blobPHashSafe(bb),b=await blobPHashSafe(vb);if(a&&b&&phashDist(a,b)<=20)return true;}}catch(e){}
     return false;
   };
   let dvN=0;
