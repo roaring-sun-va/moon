@@ -6160,7 +6160,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.183";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.184";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13724,6 +13724,9 @@ const FX_TYPES=[
   ["deckPlayNonCreSpell","🔎 自分の山札から、条件に合う「クリーチャーでも呪文でもないカード」を超探索し、1枚をコストを支払わずに実行してもよい→シャッフル（クイーン・アマテラス型／条件欄＝例：コスト6以下）"],
   ["allCreToDeckBottomBoth","⬇ 各プレイヤーは、自身のクリーチャーをすべて山札の一番下に置く（Dの妖艶 マッド・デッド・ウッド型）"],
   ["graveRecruitAnyBoth","⚰ 各プレイヤーは、自身の墓地から進化ではないクリーチャーを好きな数バトルゾーンに出す（自分→相手の順・Dの妖艶 マッド・デッド・ウッド型／条件欄でさらに絞れる）"],
+  ["foeChoiceKillElseBounceAll","🫵 相手のクリーチャーを1体選ぶ。相手はそれを破壊してもよい。破壊しなかったら、相手のクリーチャーをすべて手札に戻す（秘革の求答士 クエスチョン型）"],
+  ["foeAllCreToDeckWinIf","🌀🏆 相手は自身のクリーチャーをすべて山札に加えてシャッフルする。こうしてn体以上加えたら、自分はゲームに勝つ（伝説の正体 ギュウジン丸型・n＝6）"],
+  ["revealTopWinOrPlay","🏰 山札の上からn枚を表向きにする。すべて条件に合えばゲームに勝つ。そうでなければ、その中から条件に合うカードを好きな数、コストを支払わずに実行し、残りを墓地へ（夢の変形 デュエランド型／条件欄＝例：水／コスト7以下）"],
   ["graveCastToHand","🔮✋ 自分の墓地から条件に合う呪文を1枚、コストを支払わずに唱えてもよい。唱えた後、墓地に置くかわりに手札に加える（龍素記号Sr スペルサイクリカ型／条件欄＝例：コスト7以下）"],
   ["foeManaLock","🔒 次の相手のターン終了時まで、相手の使用可能マナをn少なくする。相手のマナゾーンにすべての文明があれば、さらに2少なくする（相手のターンのはじめに、その数だけマナをタップして表す・メガ・マナロック・ドラゴン型）"],
   ["foeNoSpellTurn","🚫 そのターン、相手は条件に合う呪文を唱えられない（条件欄＝例：コスト6以下・音精 ラフルル型）"],
@@ -15875,7 +15878,7 @@ async function deckRecruitCore(pi,filt,n,searchN,labelJa,zone,inPump){
 /* 🚦 ここに入れていない効果型の条件欄は「発動条件（ゾーン条件式）」として読まれ、
    満たさないと**行ごと飛ぶ**。条件欄を対象の絞り込みや行き先に使う効果型は必ずここへ足すこと。
    （例：トライガードの条件欄に「手札」と書いてあると、手札の条件式と誤読されて盾選択が出ないまま終わる） */
-const FILT_COND_SET=new Set(["graveCastToHand","foeNoSpellTurn","selfKillHandRecruitUpTo","manaFieldOut","bounceElemOrSealAny","deckPlayNonCreSpell","graveRecruitAnyBoth","topLookTakeN","shieldPickTuck","nextSpellCostDown","graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
+const FILT_COND_SET=new Set(["revealTopWinOrPlay","graveCastToHand","foeNoSpellTurn","selfKillHandRecruitUpTo","manaFieldOut","bounceElemOrSealAny","deckPlayNonCreSpell","graveRecruitAnyBoth","topLookTakeN","shieldPickTuck","nextSpellCostDown","graveToDeckBottomPick","manaPickThenManaRecruit","castFromUnder","destroySumCostDiscard","shieldFaceUpDraw","lockFoeAtkBlockAll","battlePick2","handGraveRecruit","graveRecruitSAEnd","selfDiscardKillLeCost","manaMinPowFoe","jTornado","keepShieldsGrave","revealTopSumPlay","handGraveCastBottom","bounceCardAny","numBounceCost","luckyDarts","foeToDeckTop","destroyAllCondDrawPer","battleWithPick","deckLookPlayRestBottom","killMaxPowFoe","hyperOutByCount","deckTopPlayOrElse","chargeTapPlus","manaToDeckTopOrder","grantTurnSelf","killMinPowFoe","killMinCostFoe","sealMinPowFoe","foePickReviveThenSeal","shieldToHandNoST","selfShieldMove","tapToggle","drawPerAlly","oriJudge",
   /* v15.45〜v15.58 で足した、条件欄を「対象の絞り込み」に使う効果型 */
   "manaAllFilt","foePickDo","pickThenFoeSplit","graveCreToHandThenEvo","destroyThenDeckSameCostPlay","deckAnyToGraveN","deckSearchHand","deckSearchMana","anyBounce","anyDestroy","anyDestroyThenRebirth","graveToMana","destroyAllOthers",
   "topLookAnyBottom","peepDiscardKillSameCost","tauntTapSelfTurn","manaCreToHandBounceLE","revealUntilNamed",
@@ -21826,6 +21829,78 @@ async function runFxList(pi,list,srcCard,inPump){
         await deckRecruitCore(side,_flt,99,0,`${S.players[side].label}の墓地から`,"grave",inPump);
       }
       renderAll();
+    }else if(f.t==="foeChoiceKillElseBounceAll"){
+      /* 🫵 v16.184 クエスチョン型：相手のクリーチャーを1体選ぶ→相手はそれを破壊してもよい→しなければ相手のクリーチャーをすべて手札へ */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const _pool=OZ.battle.filter(x=>{const rx=getReg(x);return rx&&isCreatureReg(rx);});
+      if(!_pool.length){toast("🫵 相手のクリーチャーがいません");continue;}
+      const _j=_pool.length===1?0:await pickCard("🫵 相手のクリーチャーを1体選ぶ",_pool,{hint:"タップで選択"});
+      if(_j===null)continue;
+      const _t=_pool[_j];
+      snap();
+      const _kill=await ask(`🫵 ${S.players[op].label}：《${faceNameOf(_t)}》を破壊しますか？\n（破壊しなければ、${S.players[op].label}のクリーチャーはすべて手札に戻ります）`,_t);
+      if(_kill){
+        await destroyWithReplace(op,_t);
+        toast(`🫵 ${S.players[op].label} は《${faceNameOf(_t)}》を破壊した`);
+      }else{
+        let _b=0;
+        for(const x of OZ.battle.filter(y=>{const ry=getReg(y);return ry&&isCreatureReg(ry);})){if(await bounceOneToHand(op,x))_b++;}
+        toast(`🫵 破壊しなかったので、${S.players[op].label}のクリーチャー${_b}体を手札に戻した`);
+      }
+      renderAll();
+    }else if(f.t==="foeAllCreToDeckWinIf"){
+      /* 🌀🏆 v16.184 ギュウジン丸型 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      snap();
+      let _cnt=0;
+      for(const x of OZ.battle.filter(y=>{const ry=getReg(y);return ry&&isCreatureReg(ry);})){
+        const _i=OZ.battle.findIndex(y=>y.id===x.id);if(_i<0)continue;
+        if(cantLeaveBattle(op,x))continue;
+        OZ.battle.splice(_i,1);
+        const _u=(x.under&&x.under.length)?x.under.splice(0):[];
+        if(x.gear&&x.gear.length)x.gear.splice(0).forEach(gg=>gearOut(OZ,gg));
+        if(x.seals&&x.seals.length)x.seals.splice(0).forEach(sx=>{sx.faceup=true;OZ.grave.push(sx);});
+        x.faceup=false;x.tapped=false;x.sideways=false;x.rot=0;x.buff=null;x.face=0;x.mark=false;x.neoEvo=false;
+        OZ.deck.push(x);_cnt++;
+        _u.forEach(y=>{y.faceup=false;y.tapped=false;y.buff=null;y.seals=[];OZ.deck.push(y);});
+      }
+      shuffle(OZ.deck);sfx("move");renderAll();
+      const _need=Math.max(1,n|0);
+      toast(`🌀 ${S.players[op].label}のクリーチャー${_cnt}体を山札に加えてシャッフルした`);
+      logOnly(`🌀 ${S.players[pi].label}：相手のクリーチャー${_cnt}体を山札へ（${_need}体以上で勝ち）`);
+      if(_cnt>=_need){try{declareWin(pi,`${srcCard?faceNameOf(srcCard):"効果"}：相手のクリーチャーを${_cnt}体山札に加えた`);}catch(e){}}
+    }else if(f.t==="revealTopWinOrPlay"){
+      /* 🏰 v16.184 デュエランド型：山札の上からn枚を表向き。すべて条件に合えば勝ち。
+         そうでなければ条件に合うカードを好きな数、無償で実行し、残りを墓地へ。 */
+      const _filt=String(f.cond||"").trim();
+      const _rev=Z.deck.splice(0,Math.min(n,Z.deck.length));
+      if(!_rev.length){toast("🏰 山札がありません");continue;}
+      snap();_rev.forEach(x=>{x.faceup=true;x.seen=true;});renderAll();
+      const _okOf=x=>{const rx=getReg(x);return !!(rx&&(!_filt||lockFilterOk(_filt,rx,x)));};
+      logOnly(`🏰 ${S.players[pi].label}：山札の上${_rev.length}枚を表向き → ${cnList(_rev)}`);
+      if(_rev.length>=n&&_rev.every(_okOf)){
+        _rev.forEach(x=>{x.faceup=false;Z.deck.unshift(x);});
+        toast(`🏰 ${_rev.length}枚すべてが条件（${_filt||"なし"}）に合う → ゲームに勝つ！`);
+        try{declareWin(pi,`${srcCard?faceNameOf(srcCard):"効果"}：表向きにした${_rev.length}枚がすべて条件に合った`);}catch(e){}
+        continue;
+      }
+      const _play=[];
+      while(true){
+        const _c=_rev.filter(x=>_okOf(x)&&!_play.includes(x));
+        if(!_c.length)break;
+        const _j=await pickCard(`🏰 コストを支払わずに実行するカードを選択（選び終えたらキャンセル）${_play.length?`／選択中：${_play.map(faceNameOf).join("、")}`:""}`,_c,{hint:"好きな数"});
+        if(_j===null)break;
+        _play.push(_c[_j]);
+      }
+      for(const x of _rev.filter(y=>!_play.includes(y))){x.faceup=true;x.seen=false;Z.grave.push(x);}
+      for(const x of _play){
+        const rx=getReg(x);x.seen=false;x.tapped=false;
+        if(rx&&(rx.ctype==="spell")){Z.resolve.push(x);emitEvent(pi,"spell",x);scheduleAutoResolve(pi,x);enqueueFx(pi,x);await waitFxIdle(inPump);}
+        else if(rx&&isCreatureReg(rx)){if(cheatEnterBattle(pi,x)){emitEvent(pi,"summon",x);enqueueFx(pi,x);await waitFxIdle(inPump);}}
+        else{if(isWideReg(rx)){try{applyD2Rot(pi,x);}catch(e){}}Z.battle.push(x);markArrive(x);emitEvent(pi,"summon",x);enqueueFx(pi,x);await waitFxIdle(inPump);}
+      }
+      sfx("ok");renderAll();
+      toast(`🏰 ${_play.length}枚を実行し、残り${_rev.length-_play.length}枚を墓地に置いた`);
     }else if(f.t==="graveCastToHand"){
       /* 🔮✋ v16.183 墓地の呪文を無償で唱え、解決後は手札へ（スペルサイクリカ型） */
       const filt=String(f.cond||"").trim();
@@ -49384,7 +49459,7 @@ const ART_KNOWN_NONNORMAL={};   // v16.182 見た目の目印（ART_KNOWN_PH）�
    バックアップや端末間の受け渡しで画像が WebP／JPEG に作り直されると、中身の目印（blobHashFnv）は変わってしまう。
    そこで、縁（6%）を除いた部分を16×16に区切った明るさの平均で、見た目が同じかを比べる。
    同じ絵なら0〜数ビット、通常版とシークレット版は90ビット前後ちがう。20ビット以内を「同じ絵」とみなす。 */
-const ART_KNOWN_PH={/* v16.183 追加 */"8fe39fe07bc1f900ff2ce02d882fe0b0e02078607d00cd8ffbcff3cf366500e8": ["禁断機関vv-8", "シークレット版（禁断文字）"], "cffbc0fb80d1879c8905a10fdc05900200613031fc3cd808fffff7ded5f0c9db": ["禁断機関vv-8", "シークレット版（白黒）"], "b305920fc7cfcac3fee7f7ccfffebffc47830000c00040000487cd0f0e1f1f7e": ["時の法皇ミラダンテxii", "シークレット版"], "dff43ff0319f7443cc13b33172307e0601e24060403e803b81c57e83dfa37fff": ["超天星ライゾウ「灼」", "シークレット版"], "fff16030ef1c7f58117808609177e1c1c1e0fa0cff806bb8f670fc1cf39e6980": ["永久龍程式q.e.d.=x", "シークレット版"], "bf803f07f206703881fef03e2cc6ffd2f8148f18fb9c41e16143fc01fe00ff11": ["龍波弩級戦艦エビデックス", "シークレット版"], "9fe01fd03ff81ff8dbdb2ffe7df9ffbc0ffc003cbee79e00c0000020026003c0": ["「誣」の頂ウェディング・イノセンス", "シークレット版"], "9fffb1ffeda2023230ceb107b0077b6ff3011f02d042061717d7224f20df01fe": ["百族の長プチョヘンザ", "シークレット版"], "df133800f82cfcf0fef87ef5bfe37fee203a981b464f05ed19f608730818c000": ["蒼き団長ドギラゴン剣", "シークレット版"], "3f02ffe0b9f43cf8e4d1404661f15f9d38302e7c1fe00bff0b3f461bc00b902b": ["蒼き団長ドギラゴン剣", "シークレット版（白黒）"], "de3d5e2c0e1d6fff77f9dffefffeff88fa40f304fd50ac98003000000300a001": ["煌世主サッヴァーク†", "シークレット版（青）"], "feff7cffe078c070f810e000d400e800e8007c02fe20ff30c7dbc1fff0fcf87e": ["煌世主サッヴァーク†", "シークレット版（赤）"], "821f000e000707c40f631df362002400b081f009e02fa1f3de7f7fff7ffeffff": ["ニコル・ボーラス", "UGC"], "fe003e009e00cac4f0fcf1b7f4b91ef00fceffc6fffe3ff77fc441e000040000": ["ドラゴンズ・サイン", "UGC"], "bfdc7cfefc56c29c474c4f10610090270401003e0e7c9e7ed87cca7e4b7efa63": ["轟轟轟ブランド", "シークレット版"], "c7f841e01fe007a02fc07f9c37be37ce1c322f10fc10fb1ec79ed97f8003f003": ["煌メク聖戦絶十", "シークレット版"], "bf3f083678e3c8d54500ff01c7010f31ff81f0179e07fee7f077f81ff09e0000": ["龍装艦チェンジザ", "シークレット版"], "ffc0fffcfffeffe73f03ffe13360616018780078e80168010c1342fc003f810f": ["蒼神龍バイケン", "UGC"], "fffcfbbcfd71fd2189008203800380010000f001f9c347871f9f9fbf0fff7f8e": ["ジョット・ガン・ジョラゴン", "シークレット版"], "cffe010c122c05f11fbaf1f8fff6ffffffe320c10fc00000f000fffd0000f183": ["龍装鬼オブザ08号", "シークレット版"], "efb9e7e103f1c9f28f57601e40003080e020402080c7cfa3f3ca5fdcde7dfffd": ["百万超邪クロスファイア", "UGC"], "bfdc3fb81fe70ffc7ffe3ffefff8dffc0fefb9ffd85100000001000000000000": ["ヘブンズ・ゲート", "UGC"], "fffffdbff1aff9e1e744e007f00fec1ff00ff80ff8078983408200880180fc01": ["終末の時計ザ・クロック", "UGC"], "ce9e3fb8764e09cf20ff7e7ef733fcc0e7800597200cfe8527c602048b0cfb80": ["卍デ・スザーク卍", "シークレット版①"], "c0c20001e206f3fffdca7fef3fdf0ffb01f07ef0f834e1c1a844ca478264f100": ["卍デ・スザーク卍", "シークレット版②"], "dddf200962054a410a411ac8ffc05e430ffc8e02f800f000fffcfbe3ffeff389": ["龍装艦ゴクガ・ロイザー", "シークレット版"], "fffcbffdb7edb30dbe0d8009e007000000803000e803f087e5f7c003fffffff4": ["ジョット・ガン・ジョラゴンjoe", "シークレット版"], "c60116001bc03ff2707ef31f7febfd22fd801f91ffc91fe48ff08f780018c00c": ["煌龍サッヴァーク", "シークレット版"], "8ced0bff9d7ff83fc0ff8fff83fd82078139c209878981845937f0012d1101e2": ["天風のゲイル・ヴェスパー", "シークレット版"], "9dffe08f4f61c7e18f8389ffe603d00dd2074e000e49100d9006de289fff0bff": ["水上第九院シャコガイル", "シークレット版"], "bfff7807ff1ff83ff07ff677e7f0c6183c0c70002003001f400f1c001b823fee": ["伝説のレジェンドドギラゴン", "UGC"], "fffe7ff83ff83ffcc80ec03fb417200bd80fd807f81f879fdc6c000000064f40": ["音感の精霊龍エメラルーダ", "UGC"], "ff80000001030182008301c303ff401b0003e01ffc7fb0ffbe7fee7fffff7ffe": ["閃光の守護者ホーリー", "UGC"], "3e764fd2944310e1c049c03981f802ce7c8eff8bc61f005dc00d0aee7ffe3ffc": ["フェアリー・シャワー", "UGC"], "fffcff8ffffffd0fed17f64e7f098a0884000346f878cb1e8200c0005800f986": ["サッヴァークdg", "シークレット版"], "ce0e080842e012f38d3ff42ff9f19de1c8473b07fa0f0dff0b7f13cf0007013f": ["赤攻銀マルハヴァン", "シークレット版"], "ffe4cbe0ea00c201e01fe1ff71fef983713f207df401c000b9dcdde690dbf001": ["第九魔導執行官コーラレヒト", "シークレット版"], "fefc1fe30f221f37df977d987db07dc01fc026e0786039f07d787fb06c000000": ["刻解人形ジェニー・ジェーン", "シークレット版"], "e042e112f002f6c0f54020007860fc001c7f3fc13fff3f7f1ff9dd389377d178": ["q.q.qx.", "シークレット版"], "98fe3cacbc2cbc7c3ec07700ffd727f7efc100610fe01fa1f420937034b8f880": ["卍月ガ・リュザーク卍", "シークレット版"], "ffff6014e20ee4c201e017e88220c07bfefb0ffbfc17e03f090f01050cc39ff9": ["超機動罠デンジャデオン", "シークレット版"], "9db16440478c0f8002fe03fffbfefff8e2013025cff018fb00e6eff4fa207801": ["ゴリガン砕車ゴルドーザ", "シークレット版"], "ffadfffdffefffbebffc070e103625700fa00cb000634143520e4edc0000b803": ["絶叫の悪魔龍イーヴィル・ヒート", "UGC"], "bff1fff98fb307f713e3a7ff3f7ff43f40e9203ff6210642838001c00001400e": ["アルカディア・スパーク", "UGC"], "df7007f007fd03ff3fff5fef7ff30fff0ff806018870707041fb413209000000": ["大獄の封殺ディアスz", "シークレット版"], "ff1cd984a80434004401e0c2f400e000f08065f07f78ffff5ff5661ffc3fff8f": ["破獄の殲滅者ディアボロスz", "シークレット版"], "3ffdfffffffbfdfbfe1ffc3ffe5ff03ff003ee61d88000000000000004008200": ["オリオティス・ジャッジ", "PCC"], "fe7cff3ffd3ffedf7e171e03040f003900110001fe0bff87ff873f8031800180": ["ジョリー・ザ・ジョニー", "シークレット版"], "bbed0eff3fff4f7f6fc7ef8f060f185c1c780256005088988a03fb830026f803": ["“罰怒”ブランド", "シークレット版"], "a738ef08bf0200008050f875f9f7fa1ffe477f621fc119fd436f507f00f07860": ["偽りの王ヴィルヘルム", "UGC"], "f7e1f101fbe0ff20ffa40fd8abc0aef007800200d85f00035efff35e4f8ec01f": ["ドンドン吸い込むナウ", "UGC"], "d01fe03ff0fffffffffdfff3afc346c3a0dfa1cfd80360015040006410c00001": ["アルカディア・スパーク", "元の画像"], "effe135a3ef01fe1ffe0f963f007f887747f400d60009c010c000e160fe63ffe": ["ミラクル・ミラダンテ", "元の画像"]};
+const ART_KNOWN_PH={/* v16.184 追加 */"7fff83f4807e803f00d603c440bf273d313c780ec183c1ea43c26142dfe6cffb": ["伝説の正体ギュウジン丸", "シークレット版"], "ffff1bf0fce0efc0afe1c3c12384049e8479c001c00190233c032f87ffea97fb": ["ミラクル・ミラダンテ", "シークレット版"], "3fdfffefd3e4ebc7ed87fe9fffa97e349dde70044000c600e7007f8018000000": ["ボルシャック・ドギラゴン", "シークレット版"], /* v16.183 追加 */"8fe39fe07bc1f900ff2ce02d882fe0b0e02078607d00cd8ffbcff3cf366500e8": ["禁断機関vv-8", "シークレット版（禁断文字）"], "cffbc0fb80d1879c8905a10fdc05900200613031fc3cd808fffff7ded5f0c9db": ["禁断機関vv-8", "シークレット版（白黒）"], "b305920fc7cfcac3fee7f7ccfffebffc47830000c00040000487cd0f0e1f1f7e": ["時の法皇ミラダンテxii", "シークレット版"], "dff43ff0319f7443cc13b33172307e0601e24060403e803b81c57e83dfa37fff": ["超天星ライゾウ「灼」", "シークレット版"], "fff16030ef1c7f58117808609177e1c1c1e0fa0cff806bb8f670fc1cf39e6980": ["永久龍程式q.e.d.=x", "シークレット版"], "bf803f07f206703881fef03e2cc6ffd2f8148f18fb9c41e16143fc01fe00ff11": ["龍波弩級戦艦エビデックス", "シークレット版"], "9fe01fd03ff81ff8dbdb2ffe7df9ffbc0ffc003cbee79e00c0000020026003c0": ["「誣」の頂ウェディング・イノセンス", "シークレット版"], "9fffb1ffeda2023230ceb107b0077b6ff3011f02d042061717d7224f20df01fe": ["百族の長プチョヘンザ", "シークレット版"], "df133800f82cfcf0fef87ef5bfe37fee203a981b464f05ed19f608730818c000": ["蒼き団長ドギラゴン剣", "シークレット版"], "3f02ffe0b9f43cf8e4d1404661f15f9d38302e7c1fe00bff0b3f461bc00b902b": ["蒼き団長ドギラゴン剣", "シークレット版（白黒）"], "de3d5e2c0e1d6fff77f9dffefffeff88fa40f304fd50ac98003000000300a001": ["煌世主サッヴァーク†", "シークレット版（青）"], "feff7cffe078c070f810e000d400e800e8007c02fe20ff30c7dbc1fff0fcf87e": ["煌世主サッヴァーク†", "シークレット版（赤）"], "821f000e000707c40f631df362002400b081f009e02fa1f3de7f7fff7ffeffff": ["ニコル・ボーラス", "UGC"], "fe003e009e00cac4f0fcf1b7f4b91ef00fceffc6fffe3ff77fc441e000040000": ["ドラゴンズ・サイン", "UGC"], "bfdc7cfefc56c29c474c4f10610090270401003e0e7c9e7ed87cca7e4b7efa63": ["轟轟轟ブランド", "シークレット版"], "c7f841e01fe007a02fc07f9c37be37ce1c322f10fc10fb1ec79ed97f8003f003": ["煌メク聖戦絶十", "シークレット版"], "bf3f083678e3c8d54500ff01c7010f31ff81f0179e07fee7f077f81ff09e0000": ["龍装艦チェンジザ", "シークレット版"], "ffc0fffcfffeffe73f03ffe13360616018780078e80168010c1342fc003f810f": ["蒼神龍バイケン", "UGC"], "fffcfbbcfd71fd2189008203800380010000f001f9c347871f9f9fbf0fff7f8e": ["ジョット・ガン・ジョラゴン", "シークレット版"], "cffe010c122c05f11fbaf1f8fff6ffffffe320c10fc00000f000fffd0000f183": ["龍装鬼オブザ08号", "シークレット版"], "efb9e7e103f1c9f28f57601e40003080e020402080c7cfa3f3ca5fdcde7dfffd": ["百万超邪クロスファイア", "UGC"], "bfdc3fb81fe70ffc7ffe3ffefff8dffc0fefb9ffd85100000001000000000000": ["ヘブンズ・ゲート", "UGC"], "fffffdbff1aff9e1e744e007f00fec1ff00ff80ff8078983408200880180fc01": ["終末の時計ザ・クロック", "UGC"], "ce9e3fb8764e09cf20ff7e7ef733fcc0e7800597200cfe8527c602048b0cfb80": ["卍デ・スザーク卍", "シークレット版①"], "c0c20001e206f3fffdca7fef3fdf0ffb01f07ef0f834e1c1a844ca478264f100": ["卍デ・スザーク卍", "シークレット版②"], "dddf200962054a410a411ac8ffc05e430ffc8e02f800f000fffcfbe3ffeff389": ["龍装艦ゴクガ・ロイザー", "シークレット版"], "fffcbffdb7edb30dbe0d8009e007000000803000e803f087e5f7c003fffffff4": ["ジョット・ガン・ジョラゴンjoe", "シークレット版"], "c60116001bc03ff2707ef31f7febfd22fd801f91ffc91fe48ff08f780018c00c": ["煌龍サッヴァーク", "シークレット版"], "8ced0bff9d7ff83fc0ff8fff83fd82078139c209878981845937f0012d1101e2": ["天風のゲイル・ヴェスパー", "シークレット版"], "9dffe08f4f61c7e18f8389ffe603d00dd2074e000e49100d9006de289fff0bff": ["水上第九院シャコガイル", "シークレット版"], "bfff7807ff1ff83ff07ff677e7f0c6183c0c70002003001f400f1c001b823fee": ["伝説のレジェンドドギラゴン", "UGC"], "fffe7ff83ff83ffcc80ec03fb417200bd80fd807f81f879fdc6c000000064f40": ["音感の精霊龍エメラルーダ", "UGC"], "ff80000001030182008301c303ff401b0003e01ffc7fb0ffbe7fee7fffff7ffe": ["閃光の守護者ホーリー", "UGC"], "3e764fd2944310e1c049c03981f802ce7c8eff8bc61f005dc00d0aee7ffe3ffc": ["フェアリー・シャワー", "UGC"], "fffcff8ffffffd0fed17f64e7f098a0884000346f878cb1e8200c0005800f986": ["サッヴァークdg", "シークレット版"], "ce0e080842e012f38d3ff42ff9f19de1c8473b07fa0f0dff0b7f13cf0007013f": ["赤攻銀マルハヴァン", "シークレット版"], "ffe4cbe0ea00c201e01fe1ff71fef983713f207df401c000b9dcdde690dbf001": ["第九魔導執行官コーラレヒト", "シークレット版"], "fefc1fe30f221f37df977d987db07dc01fc026e0786039f07d787fb06c000000": ["刻解人形ジェニー・ジェーン", "シークレット版"], "e042e112f002f6c0f54020007860fc001c7f3fc13fff3f7f1ff9dd389377d178": ["q.q.qx.", "シークレット版"], "98fe3cacbc2cbc7c3ec07700ffd727f7efc100610fe01fa1f420937034b8f880": ["卍月ガ・リュザーク卍", "シークレット版"], "ffff6014e20ee4c201e017e88220c07bfefb0ffbfc17e03f090f01050cc39ff9": ["超機動罠デンジャデオン", "シークレット版"], "9db16440478c0f8002fe03fffbfefff8e2013025cff018fb00e6eff4fa207801": ["ゴリガン砕車ゴルドーザ", "シークレット版"], "ffadfffdffefffbebffc070e103625700fa00cb000634143520e4edc0000b803": ["絶叫の悪魔龍イーヴィル・ヒート", "UGC"], "bff1fff98fb307f713e3a7ff3f7ff43f40e9203ff6210642838001c00001400e": ["アルカディア・スパーク", "UGC"], "df7007f007fd03ff3fff5fef7ff30fff0ff806018870707041fb413209000000": ["大獄の封殺ディアスz", "シークレット版"], "ff1cd984a80434004401e0c2f400e000f08065f07f78ffff5ff5661ffc3fff8f": ["破獄の殲滅者ディアボロスz", "シークレット版"], "3ffdfffffffbfdfbfe1ffc3ffe5ff03ff003ee61d88000000000000004008200": ["オリオティス・ジャッジ", "PCC"], "fe7cff3ffd3ffedf7e171e03040f003900110001fe0bff87ff873f8031800180": ["ジョリー・ザ・ジョニー", "シークレット版"], "bbed0eff3fff4f7f6fc7ef8f060f185c1c780256005088988a03fb830026f803": ["“罰怒”ブランド", "シークレット版"], "a738ef08bf0200008050f875f9f7fa1ffe477f621fc119fd436f507f00f07860": ["偽りの王ヴィルヘルム", "UGC"], "f7e1f101fbe0ff20ffa40fd8abc0aef007800200d85f00035efff35e4f8ec01f": ["ドンドン吸い込むナウ", "UGC"], "d01fe03ff0fffffffffdfff3afc346c3a0dfa1cfd80360015040006410c00001": ["アルカディア・スパーク", "元の画像"], "effe135a3ef01fe1ffe0f963f007f887747f400d60009c010c000e160fe63ffe": ["ミラクル・ミラダンテ", "元の画像"]};
 function phashFromGray(g,w,h){
   const N=16;
   const x0=Math.floor(w*0.06),x1=w-Math.floor(w*0.06),y0=Math.floor(h*0.06),y1=h-Math.floor(h*0.06);
