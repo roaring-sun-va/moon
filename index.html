@@ -3132,6 +3132,8 @@ body.shake{animation:bodyShake .4s ease-out}
         <label title="このカードが自分のシールドゾーンに表向きである間も、常在のコスト軽減と誘発が働きます（超煌ノ裁キ ダイヤモン将型）"><input type="checkbox" id="fxFaceUpShieldActive"> 🛡👁 シールドゾーンに表向きの間も、常在のコスト軽減・誘発が働く</label>
         <label title="このクリーチャーを自分のマナゾーンから召喚してもよい（メッサー・シュミット型）。マナの札をバトルゾーンへドラッグすると、コストを払うか聞きます"><input type="checkbox" id="fxManaSummon"> 🌱 このクリーチャー自身をマナゾーンから召喚してもよい</label>
         <label title="場にいる間、自分の他のクリーチャーをマナゾーンから召喚してよい回数（各ターン・グレイトフル・ベン型／大横綱型）。0＝なし" style="display:inline-flex;align-items:center;gap:4px">🌱 他のクリーチャーをマナから召喚させる：各ターン<input type="number" id="fxManaSummonGrant" min="0" max="9" style="width:52px" placeholder="0">回</label>
+        <label title="場にいる間、自分のターン中に、自分の墓地から条件に合うクリーチャーを召喚してよい回数（各ターン・堕魔 ヴォーミラ／ダーク・ルピア型）。0＝なし" style="display:inline-flex;align-items:center;gap:4px">⚰ 墓地から召喚させる：各ターン<input type="number" id="fxGraveSummonGrant" min="0" max="9" style="width:52px" placeholder="0">回</label>
+        <input type="text" id="fxGraveSummonFilt" list="raceList" placeholder="↑墓地から召喚できる条件（例：魔導具／ドラゴン）" style="flex:0 1 200px">
         <input type="text" id="fxManaSummonFree" list="raceList" placeholder="↑コストを支払わない対象（例：ディスタス・空欄＝支払う）" title="マナから召喚させる時、この条件に合うクリーチャーはコストを支払わない（グレイトフル・ベン型）" style="flex:0 1 220px">
         <label title="上の「他のクリーチャーをマナから召喚させる」で、墓地からの召喚も同じ回数に含めます（大感動！ディス・イズ・大横綱「マナゾーンまたは墓地から」）"><input type="checkbox" id="fxManaSummonGrave"> 🌱🪦 ↑墓地からの召喚も同じ回数で数える</label>
         <label title="極限ファイナル革命：このゲーム中に自分が他の「ファイナル革命」を使っていなければ使える（烈しき切札 ドギラゴン逆型）"><input type="checkbox" id="fxFinalRevGame"> ⚡ 極限ファイナル革命（ゲーム中に1回だけ・他のファイナル革命を使っていなければ）</label>
@@ -6147,7 +6149,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.166";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.167";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13330,6 +13332,7 @@ const FX_TYPES=[
   ["charge","n枚マナ加速（山上→マナ）"],
   ["zoneMove","↔ 自分の〔元〕から条件に合うカードをn枚〔先〕へ移動（条件欄に「墓地→マナ:スノーフェアリー」のように元→先:対象を指定・墓地→マナもこれで）"],
   ["chargeTap","n枚マナ加速（山上→タップしてマナに置く）"],
+  ["skipTurnRest","⏭ ターンの残りをとばす（終末の時計 ザ・クロック型・いまの効果を解決し終えたら、そのターンを終える）"],
   ["revealHandUntapSelf","👁🔄 自分の手札から条件に合うカードを1枚表向きにしてもよい。そうしたら、このカードをアンタップする（覇道の決闘型・条件欄＝例：ソニック・コマンド）"],
   ["chargeTapThenManaGrave","🌱🪦 山札の上からn枚をタップしてマナゾーンに置く。そうしたら、自分のマナゾーンのカードをn枚選んで墓地に置く（大感動！ディス・イズ・大横綱型／「〜してもよい」は行の任意にチェック）"],
   ["mill","山上n枚を墓地へ"],
@@ -15221,11 +15224,14 @@ async function destroyCreature(pi,c,opts){
          drainTrig にさばかせます。解決中でなければ今までどおりその場で流します。 */
       const _defer=!!(S.vs&&(fxRunning||FX_GATE>0));
       const _bi0=Z.battle.findIndex(x=>x.id===c.id);
+      // ⚡ v16.167 tappedOnly＝タップ状態で破壊された時だけ（クラッシュ“覇道”型）。アンタップで破壊された時は、その行を外してから数える
+      const _rpPig={...rp,watchFx:rp.watchFx.filter(w=>pigRowTapOk(w,c))};
+      {const rp=_rpPig;
       const fx=onceFilter(c,rp.watchFx.filter(w=>w.ev==="pig"));
       if(fx.length){
         if(_defer)TRIG_PENDING.push({pi,fx,c,onceKeys:[],ev:"pig",pos:_bi0,trigCard:null});
         else{toast(`⚡破壊された時の効果：${faceNameOf(c)}`);runFxList(pi,fx,c);}
-      }
+      }}
       const fxG=onceFilter(c,rp.watchFx.filter(w=>w.ev==="toGrave"||w.ev==="toGraveBattle")); // 破壊＝バトルゾーンから墓地へ
       if(fxG.length){
         if(_defer)TRIG_PENDING.push({pi,fx:fxG,c,onceKeys:[],ev:"toGraveBattle",pos:_bi0,trigCard:null});
@@ -17381,6 +17387,20 @@ async function runFxList(pi,list,srcCard,inPump){
       bumpEv("manaAccel",pi,cn);
       sfx("move");
       if(cn>0){const nm=Z.mana.slice(-cn).map(faceNameOf).join("、");toast(`💠 マナ加速（タップイン）：${nm} をタップしてマナゾーンへ`);}
+    }else if(f.t==="skipTurnRest"){
+      /* ⏭ v16.167 ザ・クロック型。誰のターンでも、いま進んでいるターンの残りをとばす（ViVy-R と同じく、解決が済んでから次のターンへ） */
+      if(!(S.vs&&S.turn>0)){toast("⏭ ターンの残りをとばす（対戦中のみ）");continue;}
+      if(S._turnEndPend){toast("⏭ すでにターンの残りをとばすことが決まっています");continue;}
+      S._turnEndPend=true;
+      const _tw=S.who|0,_nm=srcCard?faceNameOf(srcCard):"効果";
+      logOnly(`⏭ ${_nm}：${S.players[_tw].label} のターンの残りをとばす`);
+      toast(`⏭ ${_nm}：このターンの残りをとばします（効果の解決が済んだら次のターンへ）`);
+      enqueueWatchJob(async()=>{
+        S._turnEndPend=false;
+        if(_tw!==(S.who|0)||S.turn<=0)return;
+        toast(`⏭ ${S.players[_tw].label} のターンの残りをとばしました（${_nm}）`);
+        nextTurn();
+      });
     }else if(f.t==="revealHandUntapSelf"){
       /* 👁🔄 v16.156 覇道の決闘型。見せたカードは手札に残る。見せなければアンタップしない（そうしたら）。 */
       if(!srcCard){toast("（対象のカードがありません）");continue;}
@@ -33260,6 +33280,8 @@ function renderFxEditor(){
   {const e=$("fxManaSummon");if(e)e.checked=manaSummonSelf(FXEDIT);}
   {const e=$("fxManaSummonGrant");if(e)e.value=manaSummonGrantN(FXEDIT)||"";}
   {const e=$("fxManaSummonFree");if(e)e.value=FXEDIT.manaSummonFree||"";}
+  {const e=$("fxGraveSummonGrant");if(e)e.value=(+FXEDIT.graveSummonGrant||"")||"";}
+  {const e=$("fxGraveSummonFilt");if(e)e.value=FXEDIT.graveSummonFilt||"";}
   {const e=$("fxManaSummonGrave");if(e)e.checked=!!FXEDIT.manaSummonGrave;}
   {const e=$("fxFinalRevGame");if(e)e.checked=!!FXEDIT.finalRevGame;}
   {const e=$("fxFoeAtkFlipCast");if(e)e.value=+FXEDIT.foeAtkFlipCast||0;}
@@ -35630,6 +35652,8 @@ function openFxEditor(key){
     manaSummon:cur?manaSummonSelf(cur):false,          // v16.158 数の旧登録は下の manaSummonGrant へ移す
     manaSummonGrant:cur?manaSummonGrantN(cur):0,
     manaSummonFree:cur&&cur.manaSummonFree||"",
+    graveSummonGrant:cur?(+cur.graveSummonGrant||0):0,
+    graveSummonFilt:cur&&cur.graveSummonFilt||"",
     manaSummonGrave:cur?!!cur.manaSummonGrave:false,
     finalRevGame:cur?!!cur.finalRevGame:false,
     foeAtkFlipCast:cur?(+cur.foeAtkFlipCast||0):0,
@@ -36288,6 +36312,8 @@ $("fxSave").addEventListener("click",async ()=>{
     manaSummon:$("fxManaSummon")?$("fxManaSummon").checked:false,
     manaSummonGrant:$("fxManaSummonGrant")?Math.max(0,+$("fxManaSummonGrant").value||0):0,
     manaSummonFree:$("fxManaSummonFree")?$("fxManaSummonFree").value.trim():"",
+    graveSummonGrant:$("fxGraveSummonGrant")?Math.max(0,+$("fxGraveSummonGrant").value||0):0,
+    graveSummonFilt:$("fxGraveSummonFilt")?$("fxGraveSummonFilt").value.trim():"",
     manaSummonGrave:$("fxManaSummonGrave")?$("fxManaSummonGrave").checked:false,
     finalRevGame:$("fxFinalRevGame")?$("fxFinalRevGame").checked:false,
     foeAtkFlipCast:$("fxFoeAtkFlipCast")?(+$("fxFoeAtkFlipCast").value||0):0,
@@ -39056,6 +39082,38 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
               logPush(`🌱 ${S.players[pTo].label}：《${faceNameOf(c)}》を${fromZone==="grave"?"墓地":"マナ"}から召喚（${used}/${lim}・${isFree?"タダ":"コスト支払い"}）`);
             }else{
               toast(`⚠ ${faceNameOf(src)} の「各ターンに${lim}度」は使い切っています（このターン${used}回目）。\n通常の召喚として扱う場合はそのままで大丈夫です`);
+            }
+          }
+        }
+      }catch(e){}
+    }
+    /* ⚰ v16.167 「自分のターン中（ターンに一度）、自分の墓地から〔条件〕を召喚してもよい」（堕魔 ヴォーミラ／ダーク・ルピア型）。
+       graveSummonGrant＝各ターンの回数、graveSummonFilt＝召喚できるクリーチャーの条件。マナ召喚（付与）と同じく、
+       墓地→バトルの移動のたびに回数を知らせる（手で動かす盤面なので止めはしない）。 */
+    if(S.expert&&fromZone==="grave"&&pFrom===pTo){
+      try{
+        const rC=getReg(c);
+        if(rC&&isCreatureReg(rC)){
+          const src=zonesOf(pTo).battle.find(x=>{
+            if(x.id===c.id)return false;
+            const rx=getReg(x);
+            if(!(rx&&(+rx.graveSummonGrant>0))||isSealed(x)||isIgnored(x,pTo))return false;
+            const ff=String(rx.graveSummonFilt||"").trim();
+            return !ff||lockFilterOk(ff,rC,c);
+          });
+          if(src){
+            const rS=getReg(src);
+            const lim=+rS.graveSummonGrant||1;
+            if(S.vs&&S.who!==pTo)toast(`⚠ ${faceNameOf(src)} の墓地からの召喚は自分のターン中だけです`);
+            else{
+              S._graveSummonUsed=S._graveSummonUsed||{};
+              const key=`${S.turn}:${pTo}`;
+              if(S._graveSummonUsed.key!==key)S._graveSummonUsed={key,n:0};
+              const used=S._graveSummonUsed.n=(S._graveSummonUsed.n|0)+1;
+              if(used<=lim){
+                toast(`⚰ ${faceNameOf(src)}：墓地からの召喚（このターン ${used}/${lim} 回目）\nコストは支払ってください`);
+                logPush(`⚰ ${S.players[pTo].label}：《${faceNameOf(c)}》を墓地から召喚（${used}/${lim}）`);
+              }else toast(`⚠ ${faceNameOf(src)} の墓地からの召喚は、このターン使い切っています（${used}回目）`);
             }
           }
         }
@@ -48358,6 +48416,52 @@ async function renameCardKeyFull(rn){
   logOnly(`🏷 カード名を付け直した：${oldDisp} → ${newDisp}（キー ${from} → ${to}）`);
   return "ok";
 }
+/* ⚡ v16.167 「タップ状態で破壊された時」だけの行（tappedOnly）を、アンタップで破壊された時に外す */
+function pigRowTapOk(w,c){return !(w&&w.ev==="pig"&&w.tappedOnly&&!(c&&c.tapped));}
+/* 🏷 v16.167 古い重複登録を、今の登録にまとめる（クラッシュ覇道 → 勝利龍装 クラッシュ“覇道” 等）。
+   mg = {from:古いキー, into:まとめ先のキー, label:古い画像を残す時のバージョン名（省略時は残さない）}
+   ・古い名前は まとめ先の aliases に入れる（古い名前のデッキや共有データも まとめ先の登録で動く）
+   ・保存したデッキ・席・盤面のカード名を まとめ先の名前に付け替える
+   ・古い登録と表示名は消す。古い画像は label があればバージョンとして残し、無ければ消す */
+async function mergeCardKey(mg){
+  const from=String(mg&&mg.from||""),into=String(mg&&mg.into||"");
+  if(!from||!into||from===into)return "same";
+  if(!(FXDB.has(from)||imgURL.has(from)||dispName.has(from)))return "missing";
+  if(!FXDB.has(into))return "noTarget";
+  const oldDisp=dispName.get(from)||from;
+  const newName=dispName.get(into)||into;
+  const matchName=nm=>{try{const b=normName(nm);return b===from||canonicalCardKey(b)===from;}catch(e){return false;}};
+  const deckHits=[];
+  try{for(const dn of await deckNames()){const d=await getDeck(dn);if(!d)continue;const hs=[];for(const sec of ["main","gr","hy","sp","ex"])for(const e of (d[sec]||[]))if(e&&e.name&&matchName(e.name))hs.push(e);deckHits.push({dn,d,hs});}}catch(e){}
+  const seatHits=[];for(const P of (S.players||[]))for(const L of [P.mainList,P.grList,P.hyList,P.spList,P.exList])for(const e of (L||[]))if(e&&e.name&&matchName(e.name))seatHits.push(e);
+  const cardHits=[];for(const pi of [0,1]){const Z=zonesOf(pi)||{};const each=c=>{if(!c||typeof c!=="object")return;if(c.name&&matchName(c.name))cardHits.push(c);for(const u of (c.under||[]))each(u);for(const u of (c.seals||[]))each(u);};for(const zn of Object.keys(Z)){const a=Z[zn];if(Array.isArray(a))a.forEach(each);}}
+  // 古い画像
+  let bl=db?await idbGet("images",from):memImages.get(from);if(!bl){try{bl=imgURL.getBlob(from);}catch(e){}}
+  if(bl&&mg.label){
+    const id="m"+Date.now().toString(36);const vk=artVerKey(into,id);
+    if(db)await idbPut("images",vk,bl);else memImages.set(vk,bl);
+    try{imgURL.setBlob(vk,bl);}catch(e){}
+    const l=(ART_VERS.get(into)||[]).slice();l.push({id,label:String(mg.label)});ART_VERS.set(into,l);
+  }
+  try{if(db)await idbDel("images",from);else memImages.delete(from);}catch(e){}
+  try{imgURL.delete(from);}catch(e){}
+  const r=FXDB.get(into);
+  if(r&&typeof r==="object"){const al=new Set(Array.isArray(r.aliases)?r.aliases:[]);al.add(oldDisp);al.add(from);r.aliases=[...al];}
+  FXDB.delete(from);dispName.delete(from);
+  if(imgOrder.has(from))imgOrder.delete(from);
+  ART_VERS.delete(from);ART_SEL.delete(from);
+  for(const {dn,d,hs} of deckHits){
+    let ch=hs.length>0;for(const e of hs)e.name=newName;
+    if(d.cover===from){d.cover=into;ch=true;}
+    if(d.artSel&&Object.prototype.hasOwnProperty.call(d.artSel,from)){delete d.artSel[from];ch=true;}
+    if(ch){if(db)await idbPut("decks",dn,d);else memDecks.set(dn,d);}
+  }
+  for(const e of seatHits)e.name=newName;
+  for(const c of cardHits)c.name=newName;
+  await persistFx();await persistNames();await persistImgOrder();await persistArt();
+  logOnly(`🏷 登録をまとめた：${oldDisp} → ${newName}`);
+  return "ok";
+}
 /* 🎨 v16.166 元の画像と、あるバージョンの絵を入れ替える（元の画像がコラボ版だった時に、通常版を元の画像にする等）。
    sw = {key, id:入れ替えるバージョン, label:入れ替えたあとのそのバージョンの名前（＝前の元の画像の名前）}
    ふだん出す絵は入れ替えたあとの元の画像になる。デッキで絵を選んでいた時は、同じ絵が出続けるように付け替える。 */
@@ -48397,10 +48501,13 @@ async function importArtVersionPack(data){
   for(const [k,l] of Object.entries(av))for(const x of (Array.isArray(l)?l:[])){if(x&&x.id&&imgs[artVerKey(k,x.id)])withImg++;else nameOnly++;}
   const names=Object.keys(av).filter(k=>(av[k]||[]).some(x=>x&&x.id&&imgs[artVerKey(k,x.id)])).map(k=>(data.nameMap&&data.nameMap[k])||dispName.get(k)||k);
   const rns=(Array.isArray(data.renames)?data.renames:[]).filter(r=>r&&r.from&&(r.key||r.name));
-  const rnTxt=rns.length?`\n・カード名を正式名称に直す：${rns.length}件\n　${rns.slice(0,6).map(r=>`${dispName.get(r.from)||r.from} → ${r.name||r.key}`).join("\n　")}${rns.length>6?"\n　ほか":""}`:"";
+  const mgs=(Array.isArray(data.merges)?data.merges:[]).filter(m=>m&&m.from&&m.into);
+  const rnTxt=(mgs.length?`\n・重複した登録をまとめる：${mgs.length}件（${mgs.map(m=>`${dispName.get(m.from)||m.from} → ${dispName.get(m.into)||m.into}`).join("、")}）`:"")+(rns.length?`\n・カード名を正式名称に直す：${rns.length}件\n　${rns.slice(0,6).map(r=>`${dispName.get(r.from)||r.from} → ${r.name||r.key}`).join("\n　")}${rns.length>6?"\n　ほか":""}`:"");
   if(!await ask(`🎨 絵のバージョンのパックです。${rnTxt}\n・絵を足す／差し替える：${withImg}件（${names.length}枚のカード）${names.length?"\n　"+names.slice(0,8).join("、")+(names.length>8?" ほか":""):""}${nameOnly?`\n・名前だけ付け直す：${nameOnly}件`:""}\n効果登録の中身と元の画像はそのままです。よろしいですか？`))return -1;
   // 🏷 v16.165 カード名の付け直しを先に（このあとのバージョンは新しいキーで届く）
   let rnOk=0;const rnNg=[];
+  // 🏷 v16.167 重複登録のまとめ
+  for(const mg of (Array.isArray(data.merges)?data.merges:[])){const res=await mergeCardKey(mg);if(res==="ok")rnOk++;else if(res!=="same"&&res!=="missing")rnNg.push(`${dispName.get(mg.from)||mg.from}（まとめ先が無い）`);}
   for(const r of rns){const res=await renameCardKeyFull(r);if(res==="ok")rnOk++;else if(res!=="same")rnNg.push(`${dispName.get(r.from)||r.from}（${res==="missing"?"登録なし":"新しい名前が既にある"}）`);}
   let renamed=0;
   for(const [k,l] of Object.entries(av))for(const x of (Array.isArray(l)?l:[])){
