@@ -6147,7 +6147,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.161";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.163";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -48234,11 +48234,25 @@ async function openDeckLookPanel(deckName,onDone){
     se.addEventListener("change",()=>onch(se.value));row.appendChild(se);box.appendChild(row);return se;
   };
   sec("スリーブ・プレマ・アイコン");
-  const artOpts=[["","（席の設定のまま）"]].concat(artKeys.map(k=>[k,dispName.get(k)||k]));
-  const withCur=(opts,v)=>(v&&!opts.some(o=>o[0]===v))?opts.concat([[v,dispName.get(v)||v]]):opts;
-  mkSel("🂠 スリーブ",withCur(artOpts,look.sleeve),look.sleeve||"",v=>{look.sleeve=v||null;});
-  mkSel("🟫 プレマ",withCur(artOpts,look.matKey),look.matKey||"",v=>{look.matKey=v||null;});
-  mkSel("🙂 アイコン",withCur(artOpts,look.icon),look.icon||"",v=>{look.icon=v||null;});
+  /* 🎨 v16.163 対戦席の設定と同じく、絵を並べて選ぶ（名前の一覧からではなく） */
+  const mkPick=(label,field,wide)=>{
+    const row=document.createElement("div");row.style.cssText="display:flex;gap:10px;align-items:center;margin:6px 0;font-size:13px";
+    const sp=document.createElement("span");sp.style.cssText="flex:0 0 90px";sp.textContent=label;row.appendChild(sp);
+    const th=document.createElement("div");th.style.cssText=`flex:0 0 auto;width:${wide?96:54}px;height:${wide?54:76}px;border-radius:8px;background:#1f2937;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:10px;color:#94a3b8;text-align:center`;
+    const nm=document.createElement("div");nm.style.cssText="flex:1;min-width:0;font-size:12px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+    const paint=()=>{
+      th.innerHTML="";const k=look[field];
+      if(k){const im=document.createElement("img");im.dataset.imgKey=k;{const u=imgURL.get(k);if(u)im.src=u;}im.style.cssText="width:100%;height:100%;object-fit:cover";im.draggable=false;th.appendChild(im);}
+      else th.textContent="席の設定";
+      nm.textContent=k?(dispName.get(k)||k):"（席の設定のまま）";
+    };
+    const b=document.createElement("button");b.type="button";b.className="btn small ghost";b.textContent="選ぶ";
+    b.addEventListener("click",async()=>{const k=await pickArtKeyGrid(`${label}を選ぶ（${deckName}）`,look[field]||"",wide);if(k===null)return;look[field]=k||null;paint();});
+    row.appendChild(th);row.appendChild(nm);row.appendChild(b);box.appendChild(row);paint();
+  };
+  mkPick("🂠 スリーブ","sleeve",false);
+  mkPick("🟫 プレマ","matKey",true);
+  mkPick("🙂 アイコン","icon",false);
   sec("カードの絵");
   if(!verKeys.length){const x=document.createElement("div");x.style.cssText="font-size:12px;color:#94a3b8";x.textContent="このデッキには、別バージョンの絵を登録したカードがありません（効果登録の画面の「🎨 絵のバージョン」で追加できます）。";box.appendChild(x);}
   for(const k of verKeys){
@@ -48257,6 +48271,69 @@ async function openDeckLookPanel(deckName,onDone){
   });
   foot.appendChild(cancel);foot.appendChild(ok);box.appendChild(foot);
   document.body.appendChild(ol);
+}
+/* 🎨 v16.163 絵のバージョンだけのカードパックを取り込む（登録済みのカードに別の絵を足す）。
+   効果登録と元の画像には触れない。返り値：足した絵の枚数（やめた時は -1） */
+async function importArtVersionPack(data){
+  const _avN=Object.values(data.artVersions||{}).reduce((a,l)=>a+(Array.isArray(l)?l.length:0),0);
+  const names=Object.keys(data.artVersions).map(k=>(data.nameMap&&data.nameMap[k])||dispName.get(k)||k);
+  if(!await ask(`🎨 絵のバージョンのパックです（${names.length}枚のカードに${_avN}件）。\n${names.slice(0,8).join("、")}${names.length>8?" ほか":""}\n効果登録と元の画像はそのままで、別バージョンとして追加します。よろしいですか？`))return -1;
+  mergeArtVersions(data.artVersions);
+  let put=0;
+  for(const [k,durl] of Object.entries(data.images||{})){
+    if(!isArtVerKey(k))continue;   // バージョンの絵だけ（元の画像は上書きしない）
+    try{const b=await (await fetch(durl)).blob();if(db)await idbPut("images",k,b);else memImages.set(k,b);imgURL.setBlob(k,b);put++;}catch(e){}
+  }
+  if(data.nameMap)for(const [k,v] of Object.entries(data.nameMap)){if(!dispName.has(k)&&typeof v==="string")dispName.set(k,v);}
+  await persistArt();await persistNames();
+  renderAll();sfx("ok");
+  toast(`🎨 絵のバージョンを${put}件追加しました。効果登録の画面の「🎨 絵のバージョン」や、デッキの「🎨 見た目」で選べます`);
+  return put;
+}
+/* 🎨 v16.163 スリーブ・プレマ・アイコン用の絵を、並べて選ぶ。
+   ふだんはスリーブ・プレマとして登録した絵だけを並べ、「カードの画像も」で全部から探せる（名前で絞り込み）。
+   返り値：キー／""（席の設定のまま）／null（やめた） */
+function pickArtKeyGrid(title,cur,wide){
+  return new Promise(res=>{
+    const ol=document.createElement("div");ol.className="artPickOlay";
+    ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:998;display:flex;align-items:center;justify-content:center;padding:10px";
+    const box=document.createElement("div");box.style.cssText="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:14px;max-width:760px;width:100%;max-height:90dvh;display:flex;flex-direction:column;padding:12px;gap:8px";
+    ol.appendChild(box);
+    const done=v=>{ol.remove();res(v);};
+    ol.addEventListener("click",e=>{if(e.target===ol)done(null);});
+    const h=document.createElement("div");h.style.cssText="font-weight:900";h.textContent=title;box.appendChild(h);
+    const bar=document.createElement("div");bar.style.cssText="display:flex;gap:8px;align-items:center;flex-wrap:wrap";
+    const q=document.createElement("input");q.type="search";q.placeholder="名前で絞り込み";q.style.cssText="flex:1;min-width:140px";
+    const allL=document.createElement("label");allL.style.cssText="font-size:12px;display:inline-flex;gap:4px;align-items:center";
+    const all=document.createElement("input");all.type="checkbox";allL.appendChild(all);allL.appendChild(document.createTextNode("カードの画像も"));
+    const none=document.createElement("button");none.type="button";none.className="btn small ghost";none.textContent="席の設定のまま";none.addEventListener("click",()=>done(""));
+    const cancel=document.createElement("button");cancel.type="button";cancel.className="btn small ghost";cancel.textContent="やめる";cancel.addEventListener("click",()=>done(null));
+    bar.appendChild(q);bar.appendChild(allL);bar.appendChild(none);bar.appendChild(cancel);box.appendChild(bar);
+    const grid=document.createElement("div");grid.style.cssText=`display:grid;grid-template-columns:repeat(auto-fill,minmax(${wide?140:84}px,1fr));gap:8px;overflow:auto;padding:2px`;
+    box.appendChild(grid);
+    const draw=()=>{
+      grid.innerHTML="";
+      const t=q.value.trim();
+      let ks=[...imgURL.keys()].filter(k=>k!=="__back__"&&!String(k).startsWith("__mat")&&!isArtVerKey(k));
+      if(!all.checked)ks=ks.filter(k=>isArtKey(k));
+      if(t)ks=ks.filter(k=>String(dispName.get(k)||k).includes(t)||String(k).includes(t));
+      ks.sort((a,b)=>(isArtKey(b)-isArtKey(a))||String(dispName.get(a)||a).localeCompare(String(dispName.get(b)||b),"ja"));
+      const LIM=all.checked&&!t?60:400;   // カードの画像を全部並べると重いので、絞り込むまで60枚まで
+      for(const k of ks.slice(0,LIM)){
+        const cell=document.createElement("button");cell.type="button";
+        cell.style.cssText="display:flex;flex-direction:column;gap:4px;padding:4px;border-radius:10px;background:"+(k===cur?"#1e3a5f":"#111827")+";border:1px solid "+(k===cur?"#60a5fa":"#1f2937")+";color:#e2e8f0;cursor:pointer";
+        const im=document.createElement("img");im.dataset.imgKey=k;im.loading="lazy";{const u=imgURL.get(k);if(u)im.src=u;}im.draggable=false;
+        im.style.cssText=`width:100%;aspect-ratio:${wide?"16/9":"63/88"};object-fit:cover;border-radius:6px;background:#1f2937`;
+        const lb=document.createElement("div");lb.style.cssText="font-size:11px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";lb.textContent=dispName.get(k)||k;
+        cell.appendChild(im);cell.appendChild(lb);cell.addEventListener("click",()=>done(k));grid.appendChild(cell);
+      }
+      if(!grid.children.length){const x=document.createElement("div");x.style.cssText="font-size:12px;color:#94a3b8";x.textContent=all.checked?"見つかりません":"スリーブ・プレマとして登録した絵がありません。「カードの画像も」にチェックすると、カードの画像からも選べます";grid.appendChild(x);}
+      else if(ks.length>LIM){const x=document.createElement("div");x.style.cssText="font-size:11px;color:#94a3b8;grid-column:1/-1";x.textContent=`ほか${ks.length-LIM}枚。名前で絞り込んでください`;grid.appendChild(x);}
+    };
+    q.addEventListener("input",draw);all.addEventListener("change",draw);
+    draw();
+    document.body.appendChild(ol);
+  });
 }
 /* 🎨 v16.161 デッキの見た目を保存し、いまそのデッキを使っている席にもすぐ反映する */
 async function saveDeckLook(deckName,artSel,look){
@@ -51564,6 +51641,13 @@ $("importInput").addEventListener("change",async e=>{
     if(data&&data.type==="cards"){
       const n=Object.keys(data.images||{}).length;
       const forceComplete=!!data.forceComplete;
+      /* 🎨 v16.163 登録済みのカードに別バージョンの絵を足すパック（cardFx が空で artVersions だけ）。
+         効果登録と元の画像には触れず、バージョンとして足す。同じIDが既にあれば名前と絵を新しくする。 */
+      const _avN=Object.values(data.artVersions||{}).reduce((a,l)=>a+(Array.isArray(l)?l.length:0),0);
+      const _verOnly=_avN>0&&!Object.keys(data.cardFx||{}).length;
+      if(_verOnly){await importArtVersionPack(data);
+        return;
+      }
       const cardMsg=forceComplete
         ?`画像付き完全カードパック（画像${n}枚）を読み込みます。\n対象カードの既存登録も、画像・基本情報・効果を含む完全版で上書きします。よろしいですか？`
         :`カードパック（画像${n}枚）を読み込みます。\n既存データに追加され、同名カードは上書きされます。よろしいですか？`;
@@ -52031,7 +52115,10 @@ async function renderDeckList(){
     // 🎛 よく使う3つを上の行に、残りは下の行に分ける（展開した時だけ出るので畳まない）
     const more=document.createElement("div");
     more.className="row dl-more";
+    more.appendChild(actBtn("📋 中身",()=>openDeckListViewer(n),"",true));   // 📋 v16.163 デッキの全体（カード一覧）を見る
     more.appendChild(bCover);
+    // 🎨 v16.162 デッキ一覧からも見た目（カードの絵・スリーブ・プレマ・アイコン）を設定できるように
+    more.appendChild(actBtn("🎨 見た目",()=>openDeckLookPanel(n,()=>renderDeckList()),"",true));
     more.appendChild(actBtn("📁移動",async ()=>{
       const base=n.includes("/")?n.slice(n.indexOf("/")+1):n;
       const allF=[...new Set([...(S.deckFolders||[]),...(await deckNames()).filter(x=>x.includes("/")).map(x=>x.split("/")[0])])].sort((a,b)=>a.localeCompare(b,"ja"));
