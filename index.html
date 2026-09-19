@@ -6149,7 +6149,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.169";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.170";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13332,6 +13332,7 @@ const FX_TYPES=[
   ["charge","n枚マナ加速（山上→マナ）"],
   ["zoneMove","↔ 自分の〔元〕から条件に合うカードをn枚〔先〕へ移動（条件欄に「墓地→マナ:スノーフェアリー」のように元→先:対象を指定・墓地→マナもこれで）"],
   ["chargeTap","n枚マナ加速（山上→タップしてマナに置く）"],
+  ["choosePlayerCharge","🌱 プレイヤー1人を選ぶ。そのプレイヤーは自身の山札の上からn枚をマナゾーンに置く（H.D.2.型）"],
   ["selfDiscardKillLtCost","🗑💥 自分の手札を1枚捨てる（必ず）。こうして捨てたカード**よりコストが小さい**相手クリーチャーを1体選び、破壊してもよい（芸魔温泉！オンセン・ガロウズ型／条件欄で捨てる対象を絞れる）"],
   ["skipTurnRest","⏭ ターンの残りをとばす（終末の時計 ザ・クロック型・いまの効果を解決し終えたら、そのターンを終える）"],
   ["revealHandUntapSelf","👁🔄 自分の手札から条件に合うカードを1枚表向きにしてもよい。そうしたら、このカードをアンタップする（覇道の決闘型・条件欄＝例：ソニック・コマンド）"],
@@ -17388,6 +17389,17 @@ async function runFxList(pi,list,srcCard,inPump){
       bumpEv("manaAccel",pi,cn);
       sfx("move");
       if(cn>0){const nm=Z.mana.slice(-cn).map(faceNameOf).join("、");toast(`💠 マナ加速（タップイン）：${nm} をタップしてマナゾーンへ`);}
+    }else if(f.t==="choosePlayerCharge"){
+      /* 🌱 v16.170 H.D.2.型。選んだプレイヤーが、自身の山札の上から n 枚をマナへ */
+      let tp=pi;
+      if(S.vs){const j=await askChoice(`🌱 山札の上から${n}枚をマナゾーンに置くプレイヤーを選ぶ`,[`自分（${S.players[pi].label}）`,`相手（${S.players[op].label}）`]);tp=(j===1)?op:pi;}
+      const TZ=zonesOf(tp);let cn=0;
+      if(!TZ.deck.length){toast("🌱 山札がありません");continue;}
+      snap();
+      for(let i=0;i<n&&TZ.deck.length;i++){const c=TZ.deck.shift();c.faceup=true;c.tapped=false;TZ.mana.push(c);markArrive(c);cn++;}
+      bumpEv("manaAccel",tp,cn);sfx("move");renderAll();
+      toast(`🌱 ${S.players[tp].label}：山札の上から${cn}枚をマナへ`);
+      logOnly(`🌱 ${S.players[tp].label}：山札の上から${cn}枚をマナへ（${srcCard?faceNameOf(srcCard):"効果"}）`);
     }else if(f.t==="skipTurnRest"){
       /* ⏭ v16.167 ザ・クロック型。誰のターンでも、いま進んでいるターンの残りをとばす（ViVy-R と同じく、解決が済んでから次のターンへ） */
       if(!(S.vs&&S.turn>0)){toast("⏭ ターンの残りをとばす（対戦中のみ）");continue;}
@@ -48556,6 +48568,51 @@ async function mergeCardKey(mg){
   logOnly(`🏷 登録をまとめた：${oldDisp} → ${newName}`);
   return "ok";
 }
+/* 🩺 v16.170 画像として読めるか（壊れた画像は、盤面や一覧で「？」の絵になる）。
+   調べられない環境（読み込みの仕組みが無い等）では「読める」とみなす。 */
+async function blobDecodes(b){
+  if(!b||!(b.size>0))return false;
+  try{
+    if(typeof createImageBitmap==="function"){
+      const bm=await createImageBitmap(b);try{bm.close&&bm.close();}catch(e){}
+      return true;
+    }
+  }catch(e){return false;}
+  return await new Promise(res=>{
+    let done=false;const fin=v=>{if(!done){done=true;res(v);}};
+    try{
+      if(typeof Image!=="function"){fin(true);return;}
+      const u=URL.createObjectURL(b);const im=new Image();
+      im.onload=()=>{try{URL.revokeObjectURL(u);}catch(e){}fin(true);};
+      im.onerror=()=>{try{URL.revokeObjectURL(u);}catch(e){}fin(false);};
+      im.src=u;setTimeout(()=>fin(true),1500);
+    }catch(e){fin(true);}
+  });
+}
+/* 🩺 v16.170 壊れた元の画像を探して直す。通常版などのバージョンがあれば、その絵を元の画像に上げる。
+   バージョンも無ければ壊れた画像を外す（名前札で出る。あとで「🖼 画像を変更」で入れ直せる）。 */
+async function repairBrokenImages(keys){
+  const getB=async k=>{let b=db?await idbGet("images",k):memImages.get(k);if(!b){try{b=imgURL.getBlob(k);}catch(e){}}return b;};
+  const list=(keys||[...new Set([...FXDB.keys(),...dispName.keys()])]).filter(k=>k&&!isArtVerKey(k)&&!isSystemKey(k)&&imgURL.has(k));
+  const fixed=[],cleared=[];
+  for(const k of list){
+    const b=await getB(k);
+    if(b&&await blobDecodes(b))continue;
+    const vers=ART_VERS.get(k)||[];
+    let pick=vers.find(x=>/通常/.test(x.label||""))||vers[0];
+    let ok=false;
+    for(const x of (pick?[pick,...vers.filter(y=>y!==pick)]:[])){
+      const vb=await getB(artVerKey(k,x.id));
+      if(vb&&await blobDecodes(vb)){await repairArt({key:k,promote:x.id,_force:true});ok=true;fixed.push(`${dispName.get(k)||k}（${x.label||"バージョン"}を元の画像に）`);break;}
+    }
+    if(!ok){
+      try{if(db)await idbDel("images",k);else memImages.delete(k);}catch(e){}
+      try{imgURL.delete(k);}catch(e){}
+      cleared.push(dispName.get(k)||k);
+    }
+  }
+  return {checked:list.length,fixed,cleared};
+}
 /* 🩹 v16.168 名前を付け直したあと元の画像が「？」になったカードを直す。
    rp = {key, from:古いキー, label:古い画像を残す時のバージョン名, promote:元の画像が無い時に元の画像へ上げるバージョンのID}
    ・元の画像が無く、promote のバージョンがあれば、その絵（通常版）を元の画像にする（バージョンからは外す）
@@ -48567,7 +48624,9 @@ async function repairArt(rp){
   const putB=async(k,b)=>{if(db)await idbPut("images",k,b);else memImages.set(k,b);try{imgURL.setBlob(k,b);}catch(e){}};
   const delB=async k=>{try{if(db)await idbDel("images",k);else memImages.delete(k);}catch(e){}try{imgURL.delete(k);}catch(e){}};
   let did=[];
-  if(!(await getB(key))&&rp.promote){
+  // 🩺 v16.170 元の画像が壊れている（読めない）時も「無い」とみなす
+  const baseOk=async()=>{const b=await getB(key);return !!b&&await blobDecodes(b);};
+  if(!(await baseOk())&&rp.promote){
     const vk=artVerKey(key,rp.promote);const vb=await getB(vk);
     if(vb){
       await putB(key,vb);await delB(vk);
@@ -48580,7 +48639,7 @@ async function repairArt(rp){
   if(from&&from!==key&&!FXDB.has(from)){
     const ob=await getB(from);
     if(ob){
-      if(!(await getB(key))){await putB(key,ob);did.push("古いキーの画像を元の画像へ");}
+      if(!(await baseOk())){await putB(key,ob);did.push("古いキーの画像を元の画像へ");}
       else{
         const id="r"+Date.now().toString(36);await putB(artVerKey(key,id),ob);
         const l=(ART_VERS.get(key)||[]).slice();l.push({id,label:String(rp.label||"旧画像")});ART_VERS.set(key,l);
@@ -48814,6 +48873,23 @@ function openImageManager(){
     sb.textContent=mgrSort==="added"?"並び順：追加した順（タップで名前順へ）":"並び順：名前順（タップで追加した順へ）";
     sb.onclick=()=>{mgrSort=(mgrSort==="added"?"name":"added");render();};
     bar.appendChild(sb);
+    // 🩺 v16.170 壊れた画像（「？」の絵）を探して直す
+    {
+      const hb=document.createElement("button");
+      hb.className="btn small";
+      hb.textContent="🩺 壊れた画像を直す";
+      hb.title="「？」の絵になっているカードを探します。通常版などのバージョンがあればその絵を元の画像にし、無ければ壊れた画像を外します";
+      hb.onclick=async()=>{
+        toast("🩺 画像を調べています…");
+        const r=await repairBrokenImages();
+        await persistArt();
+        renderAll();try{refreshLazyImages();}catch(e){}
+        const msg=`🩺 ${r.checked}枚を調べました。\n・直した：${r.fixed.length}枚${r.fixed.length?"\n　"+r.fixed.slice(0,12).join("\n　"):""}\n・壊れた画像を外した（バージョンなし）：${r.cleared.length}枚${r.cleared.length?"\n　"+r.cleared.slice(0,12).join("、")+"\n　→ 効果登録の「🖼 画像を変更」で入れ直してください":""}`;
+        await ask(msg);
+        render();
+      };
+      bar.appendChild(hb);
+    }
     // 🗜 登録画像をまとめて小さく保存し直す（Safariのメモリ落ち対策の根本策）
     {
       const zb=document.createElement("button");
