@@ -6188,7 +6188,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.199";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.200";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -16205,7 +16205,8 @@ function twinBattleCastCount(pi){
 /* ♾ v16.190 輪廻∞（天地命動 バラギアラ型）：このカードの呪文側を、バトルゾーンに置いたまま唱えてもよい（コストは支払う）。
    そうした時、自分の《天地命動 バラギアラ》（名前に rinneInfName を含むクリーチャー）1体につき、山札の上から1枚をマナへ。
    コスト＝呪文側のコスト−シンパシー（呪文側だけのもの）＋相手の常在のコスト増加（最低1）。マナは自動でタップする。 */
-async function castRinneInf(pi,c){
+async function castRinneInf(pi,c,opts){
+  opts=opts||{};
   const r=getReg(c);
   if(!r||!(r.twin||r.ctype==="twinpact")||!r.rinneInf){toast("♾ 輪廻∞を持つツインパクトではありません");return false;}
   const Z=zonesOf(pi);
@@ -16229,7 +16230,8 @@ async function castRinneInf(pi,c){
   const civs=(Array.isArray(r.civs2)&&r.civs2.length)?r.civs2:(r.civs||[]);
   const un=Z.mana.filter(m=>!m.tapped).length;
   if(un<cost){toast(`♾ マナが足りません（コスト${cost}・アンタップのマナ${un}枚）`);return false;}
-  if(!await ask(`♾ 輪廻∞（${faceNameOf(c)}）\n呪文側「${spName}」をコスト${cost}を支払って唱えますか？\n（このクリーチャーはバトルゾーンに残ります。唱えたあと、自分の《${r.rinneInfName||"バラギアラ"}》1体につき山札の上から1枚をマナへ）`))return false;
+  /* ♾ v16.200 ボタンから使った時は、押したこと自体が「唱える」の選択なので聞き直さない */
+  if(!opts.noAsk&&!await ask(`♾ 輪廻∞（${faceNameOf(c)}）\n呪文側「${spName}」をコスト${cost}を支払って唱えますか？\n（このクリーチャーはバトルゾーンに残ります。唱えたあと、自分の《${r.rinneInfName||"バラギアラ"}》1体につき山札の上から1枚をマナへ）`))return false;
   snap();
   if(!ghostPayManaN(Z,cost,civs)){toast(`♾ 必要な文明のマナがそろっていません（${civs.join("・")}）`);return false;}
   toast(`♾ 輪廻∞：${spName} を唱える（マナ${cost}枚をタップ・場に残る）`);
@@ -16269,7 +16271,7 @@ async function castRinneInf(pi,c){
         break;
       }
     }
-    toast(`♾ 輪廻∞：《${nm}》${cnt}体 → 山札の上から${done}枚をマナへ`);
+    toast(`♾ 輪廻∞：自分の《${nm}》${cnt}体 → 山札の上から${done}枚をマナへ（強制）`);
   }
   renderAll();
   return true;
@@ -27104,7 +27106,7 @@ async function manualRunCip(pi,c){
   if(reg&&reg.rinneInf&&zonesOf(pi).battle.some(x=>x.id===c.id)){
     const jr=await askChoice(`《${faceNameOf(c)}》`,["♾ 輪廻∞：呪文側を唱える（コストを支払う・場に残る・マナ加速）","⚡ 出た時（CIP）をもう一度使う","やめる"]);
     if(jr===null||jr===2)return;
-    if(jr===0){await castRinneInf(pi,c);return;}
+    if(jr===0){await castRinneInf(pi,c,{noAsk:true});return;}
   }
   if(c._repPending)c._repPending=false; // 手動実行なので置換効果の保留は解除
   toast(`⚡ 手動：${faceNameOf(c)} の出た時（CIP）を実行します`);
@@ -46785,7 +46787,7 @@ function openCardSheet(ctx){
     const hasCipReg=!!(rC&&(cipFx(rC,0).length||(rC.twin&&faceFx(rC,1).length)||(rC.modeN|0)>0||rC.soulRaid||rC.momoKingX))||soulXCipFx(c).length>0;
     /* ♾ v16.199 輪廻∞のボタンを一番上に出す（下の方で見つけにくかった） */
     if(ctx.zone==="battle"&&rC&&rC.rinneInf&&(rC.twin||rC.ctype==="twinpact")&&(!S.vs||S.who===ctx.p)){
-      box.appendChild(actBtn("♾ 輪廻∞：呪文側を唱える（コストを支払う・場に残る・マナ加速）",async ()=>{closeSheet();closeSel();await castRinneInf(ctx.p,c);},"primary",true));
+      box.appendChild(actBtn("♾ 輪廻∞：呪文側を唱える（コストを支払う・場に残る・マナ加速）",async ()=>{closeSheet();closeSel();await castRinneInf(ctx.p,c,{noAsk:true});},"primary",true));
     }
     if(hasCipReg){
       const isSp=rC&&rC.ctype==="spell";
@@ -47391,7 +47393,11 @@ function openCardSheet(ctx){
         const f2=findCard(ctx.p,ctx.zone,ctx.id);if(!f2)return;
         const cc=f2.card;
         moveCardX(ctx.p,ctx.zone,ctx.id,ctx.p,"battle");   // 手で出した時と同じ流れ（回数の数え上げ・出た時など）
-        if(S.expert&&S.autoTap&&!S.freePlay)MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(ctx.p,cc)).catch(()=>{});
+        /* 💰 v16.200 墓地から出した時は、移動の処理（moveCard）がすでに「召喚しますか？」と聞いて支払う。
+           ここでも支払うと2重に召喚（2回支払う）になっていた（ダーク・ルピア型）。マナからで、移動の処理が聞かないカードだけここで支払う。 */
+        const _rCC=getReg(cc);
+        const _moveAsks=ctx.zone==="grave"||(ctx.zone==="mana"&&_rCC&&typeof manaSummonSelf==="function"&&manaSummonSelf(_rCC));
+        if(!_moveAsks&&S.expert&&S.autoTap&&!S.freePlay)MOVE_TAP_CHAIN=MOVE_TAP_CHAIN.then(()=>autoTapCost(ctx.p,cc)).catch(()=>{});
         sfx("ok");renderAll();
       },u.left?"primary":"",true));
     }
