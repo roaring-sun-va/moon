@@ -6147,7 +6147,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.163";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.164";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -48275,19 +48275,28 @@ async function openDeckLookPanel(deckName,onDone){
 /* 🎨 v16.163 絵のバージョンだけのカードパックを取り込む（登録済みのカードに別の絵を足す）。
    効果登録と元の画像には触れない。返り値：足した絵の枚数（やめた時は -1） */
 async function importArtVersionPack(data){
-  const _avN=Object.values(data.artVersions||{}).reduce((a,l)=>a+(Array.isArray(l)?l.length:0),0);
-  const names=Object.keys(data.artVersions).map(k=>(data.nameMap&&data.nameMap[k])||dispName.get(k)||k);
-  if(!await ask(`🎨 絵のバージョンのパックです（${names.length}枚のカードに${_avN}件）。\n${names.slice(0,8).join("、")}${names.length>8?" ほか":""}\n効果登録と元の画像はそのままで、別バージョンとして追加します。よろしいですか？`))return -1;
-  mergeArtVersions(data.artVersions);
+  /* 🎨 v16.164 絵の入っているバージョン（追加・差し替え）と、名前だけのもの（付け直し）を分けて知らせる */
+  const av=data.artVersions||{};
+  const imgs=data.images||{};
+  let withImg=0,nameOnly=0;
+  for(const [k,l] of Object.entries(av))for(const x of (Array.isArray(l)?l:[])){if(x&&x.id&&imgs[artVerKey(k,x.id)])withImg++;else nameOnly++;}
+  const names=Object.keys(av).filter(k=>(av[k]||[]).some(x=>x&&x.id&&imgs[artVerKey(k,x.id)])).map(k=>(data.nameMap&&data.nameMap[k])||dispName.get(k)||k);
+  if(!await ask(`🎨 絵のバージョンのパックです。\n・絵を足す／差し替える：${withImg}件（${names.length}枚のカード）${names.length?"\n　"+names.slice(0,8).join("、")+(names.length>8?" ほか":""):""}${nameOnly?`\n・名前だけ付け直す：${nameOnly}件`:""}\n効果登録と元の画像はそのままです。よろしいですか？`))return -1;
+  let renamed=0;
+  for(const [k,l] of Object.entries(av))for(const x of (Array.isArray(l)?l:[])){
+    const cur=(ART_VERS.get(k)||[]).find(y=>y.id===String(x&&x.id||""));
+    if(cur&&x.label&&cur.label!==String(x.label))renamed++;
+  }
+  mergeArtVersions(av);
   let put=0;
-  for(const [k,durl] of Object.entries(data.images||{})){
+  for(const [k,durl] of Object.entries(imgs)){
     if(!isArtVerKey(k))continue;   // バージョンの絵だけ（元の画像は上書きしない）
     try{const b=await (await fetch(durl)).blob();if(db)await idbPut("images",k,b);else memImages.set(k,b);imgURL.setBlob(k,b);put++;}catch(e){}
   }
   if(data.nameMap)for(const [k,v] of Object.entries(data.nameMap)){if(!dispName.has(k)&&typeof v==="string")dispName.set(k,v);}
   await persistArt();await persistNames();
   renderAll();sfx("ok");
-  toast(`🎨 絵のバージョンを${put}件追加しました。効果登録の画面の「🎨 絵のバージョン」や、デッキの「🎨 見た目」で選べます`);
+  toast(`🎨 絵のバージョン：絵を${put}件入れました${renamed?`・名前を${renamed}件付け直しました`:""}。効果登録の画面の「🎨 絵のバージョン」や、デッキの「🎨 見た目」で選べます`);
   return put;
 }
 /* 🎨 v16.163 スリーブ・プレマ・アイコン用の絵を、並べて選ぶ。
