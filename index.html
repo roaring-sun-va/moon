@@ -6188,7 +6188,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.200";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.201";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -16230,7 +16230,7 @@ async function castRinneInf(pi,c,opts){
   const civs=(Array.isArray(r.civs2)&&r.civs2.length)?r.civs2:(r.civs||[]);
   const un=Z.mana.filter(m=>!m.tapped).length;
   if(un<cost){toast(`♾ マナが足りません（コスト${cost}・アンタップのマナ${un}枚）`);return false;}
-  /* ♾ v16.200 ボタンから使った時は、押したこと自体が「唱える」の選択なので聞き直さない */
+  /* ♾ v16.201 唱えるかどうかは任意なので、コストを見せて確認する（唱えた後のマナ置きは強制で聞かない） */
   if(!opts.noAsk&&!await ask(`♾ 輪廻∞（${faceNameOf(c)}）\n呪文側「${spName}」をコスト${cost}を支払って唱えますか？\n（このクリーチャーはバトルゾーンに残ります。唱えたあと、自分の《${r.rinneInfName||"バラギアラ"}》1体につき山札の上から1枚をマナへ）`))return false;
   snap();
   if(!ghostPayManaN(Z,cost,civs)){toast(`♾ 必要な文明のマナがそろっていません（${civs.join("・")}）`);return false;}
@@ -27106,7 +27106,7 @@ async function manualRunCip(pi,c){
   if(reg&&reg.rinneInf&&zonesOf(pi).battle.some(x=>x.id===c.id)){
     const jr=await askChoice(`《${faceNameOf(c)}》`,["♾ 輪廻∞：呪文側を唱える（コストを支払う・場に残る・マナ加速）","⚡ 出た時（CIP）をもう一度使う","やめる"]);
     if(jr===null||jr===2)return;
-    if(jr===0){await castRinneInf(pi,c,{noAsk:true});return;}
+    if(jr===0){await castRinneInf(pi,c);return;}
   }
   if(c._repPending)c._repPending=false; // 手動実行なので置換効果の保留は解除
   toast(`⚡ 手動：${faceNameOf(c)} の出た時（CIP）を実行します`);
@@ -46787,7 +46787,7 @@ function openCardSheet(ctx){
     const hasCipReg=!!(rC&&(cipFx(rC,0).length||(rC.twin&&faceFx(rC,1).length)||(rC.modeN|0)>0||rC.soulRaid||rC.momoKingX))||soulXCipFx(c).length>0;
     /* ♾ v16.199 輪廻∞のボタンを一番上に出す（下の方で見つけにくかった） */
     if(ctx.zone==="battle"&&rC&&rC.rinneInf&&(rC.twin||rC.ctype==="twinpact")&&(!S.vs||S.who===ctx.p)){
-      box.appendChild(actBtn("♾ 輪廻∞：呪文側を唱える（コストを支払う・場に残る・マナ加速）",async ()=>{closeSheet();closeSel();await castRinneInf(ctx.p,c,{noAsk:true});},"primary",true));
+      box.appendChild(actBtn("♾ 輪廻∞：呪文側を唱える（コストを支払う・場に残る・マナ加速）",async ()=>{closeSheet();closeSel();await castRinneInf(ctx.p,c);},"primary",true));
     }
     if(hasCipReg){
       const isSp=rC&&rC.ctype==="spell";
@@ -50229,8 +50229,13 @@ async function blobArtSec(b){
   const d=cx.getImageData(ART_SEC_RX,ART_SEC_RY,ART_SEC_RW,ART_SEC_RH).data;
   try{if(img.close)img.close();}catch(e){}
   cv.width=cv.height=0;
-  return artSecFromScore(artSecScoreRegion(grayFromRGBA(d,ART_SEC_RW,ART_SEC_RH),ART_SEC_RW,ART_SEC_RH));
+  const _sc=artSecScoreRegion(grayFromRGBA(d,ART_SEC_RW,ART_SEC_RH),ART_SEC_RW,ART_SEC_RH);
+  try{ART_SEC_SCORE.set(b,_sc);}catch(e){}
+  return artSecFromScore(_sc);
 }
+/* 🩺 v16.201 点検の理由を記録に出すため、画像ごとの「Sec」の印の値を覚えておく */
+const ART_SEC_SCORE=new WeakMap();
+function artSecScoreText(b){try{const v=ART_SEC_SCORE.get(b);return (v==null)?"":v.toFixed(2);}catch(e){return "";}}
 /* 読めない・待っても返ってこない時は null（分からない）。TCG 版の登録（キーが -tcg）は見ない */
 /* ⚡ v16.194 画像を描けない環境（テストの jsdom など）では待たずに「分からない」を返す。
    これまでは1枚ごとに4秒待っていたので、点検のテスト（artbase.js）が2分近くかかっていた。 */
@@ -50323,6 +50328,7 @@ async function auditBaseArts(){
       }
     }
     let label=knownOf(ph,bsec);
+    const _why=(ph&&knownNonNormalLabel(ph))?"既知の目印":(bsec===true?`Sec印${artSecScoreText(b)}`:"");
     if(!label&&bsec!==false){
       /* 元の画像が非通常の名前のバージョンと同じ絵なら、元の画像もその括り。
          🏷 v16.188 ただし元の画像に「Sec」の印が無い（通常版と分かる）なら、名前の方が間違い（重複として外すだけ） */
@@ -50356,7 +50362,9 @@ async function auditBaseArts(){
     if(label){
       // 入れ替える通常版は、付け直しの対象から外す（入れ替えで元の画像の名前が付く）
       const rel=relabel.filter(r=>r.id!==normalId);
-      found.push({key:k,name:dispName.get(k)||k,label,normalId,misnamed,misLabel:misnamed?String((vers.find(y=>y.id===normalId)||{}).label||""):"",relabel:rel,dups});
+      const _nv=normalId?vinfo.find(v=>v.x.id===normalId):null;
+      const _whyN=_nv?`通常版の候補「${lab(_nv)}」${_nv.vsec===false?"（Sec印なし）":_nv.vsec===true?"（Sec印あり）":"（Sec印は分からない）"}`:"";
+      found.push({key:k,name:dispName.get(k)||k,label,normalId,misnamed,misLabel:misnamed?String((vers.find(y=>y.id===normalId)||{}).label||""):"",relabel:rel,dups,why:[_why||`「${label}」の名前のバージョンと同じ絵`,_whyN].filter(Boolean).join("・")});
     }else{
       if(relabel.length||dups.length)found.push({key:k,name:dispName.get(k)||k,label:null,normalId:null,relabel,dups,tidyOnly:true});
     }
@@ -50390,7 +50398,8 @@ async function runAuditBaseArts(){
   try{
     const _fx=f.filter(x=>x.normalId),_nf=f.filter(x=>!x.normalId);
     if(_nf.length)logOnly(`🩺 通常版の画像が要るカード（${_nf.length}件）：${_nf.map(x=>x.name).join("、")}`);
-    if(_fx.length)logOnly(`🩺 入れ替えで直せるカード（${_fx.length}件）：${_fx.map(x=>x.name).join("、")}`);
+    if(_fx.length)logOnly(`🩺 入れ替えで直せるカード（${_fx.length}件）：${_fx.map(x=>`${x.name}〔${x.why||""}〕`).join("、")}`);
+    if(_nf.length)logOnly(`🩺 判定の理由（通常版が要るカード）：${_nf.map(x=>`${x.name}〔${x.why||""}〕`).join("、")}`);
   }catch(e){}
   for(const x of f)logOnly(`🩺 元の画像が${x.label}：${x.name}${x.normalId?(x.misnamed?`（通常版は「${x.misLabel}」という名前で入っていた）`:"（通常版あり）"):"（通常版の画像なし）"}`);
   const nRel=tidy.reduce((a,x)=>a+x.relabel.length,0),nDup=tidy.reduce((a,x)=>a+x.dups.length,0);
@@ -50406,7 +50415,12 @@ async function runAuditBaseArts(){
       for(const x of fix){
         if(x.sel){ART_SEL.delete(x.key);n++;continue;}   // ふだん出す絵を元の画像（通常版）に戻す
         const _res=await swapArtBase({key:x.key,id:x.normalId,label:x.label});
-        if(_res==="ok")n++;else _ng.push(`${x.name}（${{same:"同じ絵",keep:"既知のシークレット版なので止めた",noimage:"画像が読めない",missing:"バージョンが無い"}[_res]||_res}）`);
+        if(_res==="ok"){
+          n++;
+          /* 🩺 v16.201 入れ替えた後の元の画像も、まだシークレット版と見えるなら知らせる（次の点検で同じカードがまた出る原因） */
+          try{const nb=db?await idbGet("images",x.key):memImages.get(x.key);const s2=nb?await blobArtSecSafe(nb,x.key):null;const p2=nb?await blobPHashSafe(nb):null;
+            if(s2===true||(p2&&knownNonNormalLabel(p2)))_ng.push(`${x.name}（入れ替えたが、新しい元の画像もシークレット版に見える：Sec印${artSecScoreText(nb)}）`);}catch(e){}
+        }else _ng.push(`${x.name}（${{same:"同じ絵",keep:"既知のシークレット版なので止めた",noimage:"画像が読めない",missing:"バージョンが無い"}[_res]||_res}）`);
       }
       /* 🩺 v16.196 入れ替えられなかったものを知らせる（これまでは件数が減るだけで分からなかった） */
       if(_ng.length){toast(`⚠ 入れ替えられなかったもの：${_ng.length}件（記録に一覧）`);try{logOnly(`🩺 入れ替えられなかった：${_ng.join("、")}`);}catch(e){}}
