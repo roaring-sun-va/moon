@@ -6160,7 +6160,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.184";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.185";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -49459,7 +49459,7 @@ const ART_KNOWN_NONNORMAL={};   // v16.182 見た目の目印（ART_KNOWN_PH）�
    バックアップや端末間の受け渡しで画像が WebP／JPEG に作り直されると、中身の目印（blobHashFnv）は変わってしまう。
    そこで、縁（6%）を除いた部分を16×16に区切った明るさの平均で、見た目が同じかを比べる。
    同じ絵なら0〜数ビット、通常版とシークレット版は90ビット前後ちがう。20ビット以内を「同じ絵」とみなす。 */
-const ART_KNOWN_PH={/* v16.184 追加 */"7fff83f4807e803f00d603c440bf273d313c780ec183c1ea43c26142dfe6cffb": ["伝説の正体ギュウジン丸", "シークレット版"], "ffff1bf0fce0efc0afe1c3c12384049e8479c001c00190233c032f87ffea97fb": ["ミラクル・ミラダンテ", "シークレット版"], "3fdfffefd3e4ebc7ed87fe9fffa97e349dde70044000c600e7007f8018000000": ["ボルシャック・ドギラゴン", "シークレット版"], /* v16.183 追加 */"8fe39fe07bc1f900ff2ce02d882fe0b0e02078607d00cd8ffbcff3cf366500e8": ["禁断機関vv-8", "シークレット版（禁断文字）"], "cffbc0fb80d1879c8905a10fdc05900200613031fc3cd808fffff7ded5f0c9db": ["禁断機関vv-8", "シークレット版（白黒）"], "b305920fc7cfcac3fee7f7ccfffebffc47830000c00040000487cd0f0e1f1f7e": ["時の法皇ミラダンテxii", "シークレット版"], "dff43ff0319f7443cc13b33172307e0601e24060403e803b81c57e83dfa37fff": ["超天星ライゾウ「灼」", "シークレット版"], "fff16030ef1c7f58117808609177e1c1c1e0fa0cff806bb8f670fc1cf39e6980": ["永久龍程式q.e.d.=x", "シークレット版"], "bf803f07f206703881fef03e2cc6ffd2f8148f18fb9c41e16143fc01fe00ff11": ["龍波弩級戦艦エビデックス", "シークレット版"], "9fe01fd03ff81ff8dbdb2ffe7df9ffbc0ffc003cbee79e00c0000020026003c0": ["「誣」の頂ウェディング・イノセンス", "シークレット版"], "9fffb1ffeda2023230ceb107b0077b6ff3011f02d042061717d7224f20df01fe": ["百族の長プチョヘンザ", "シークレット版"], "df133800f82cfcf0fef87ef5bfe37fee203a981b464f05ed19f608730818c000": ["蒼き団長ドギラゴン剣", "シークレット版"], "3f02ffe0b9f43cf8e4d1404661f15f9d38302e7c1fe00bff0b3f461bc00b902b": ["蒼き団長ドギラゴン剣", "シークレット版（白黒）"], "de3d5e2c0e1d6fff77f9dffefffeff88fa40f304fd50ac98003000000300a001": ["煌世主サッヴァーク†", "シークレット版（青）"], "feff7cffe078c070f810e000d400e800e8007c02fe20ff30c7dbc1fff0fcf87e": ["煌世主サッヴァーク†", "シークレット版（赤）"], "821f000e000707c40f631df362002400b081f009e02fa1f3de7f7fff7ffeffff": ["ニコル・ボーラス", "UGC"], "fe003e009e00cac4f0fcf1b7f4b91ef00fceffc6fffe3ff77fc441e000040000": ["ドラゴンズ・サイン", "UGC"], "bfdc7cfefc56c29c474c4f10610090270401003e0e7c9e7ed87cca7e4b7efa63": ["轟轟轟ブランド", "シークレット版"], "c7f841e01fe007a02fc07f9c37be37ce1c322f10fc10fb1ec79ed97f8003f003": ["煌メク聖戦絶十", "シークレット版"], "bf3f083678e3c8d54500ff01c7010f31ff81f0179e07fee7f077f81ff09e0000": ["龍装艦チェンジザ", "シークレット版"], "ffc0fffcfffeffe73f03ffe13360616018780078e80168010c1342fc003f810f": ["蒼神龍バイケン", "UGC"], "fffcfbbcfd71fd2189008203800380010000f001f9c347871f9f9fbf0fff7f8e": ["ジョット・ガン・ジョラゴン", "シークレット版"], "cffe010c122c05f11fbaf1f8fff6ffffffe320c10fc00000f000fffd0000f183": ["龍装鬼オブザ08号", "シークレット版"], "efb9e7e103f1c9f28f57601e40003080e020402080c7cfa3f3ca5fdcde7dfffd": ["百万超邪クロスファイア", "UGC"], "bfdc3fb81fe70ffc7ffe3ffefff8dffc0fefb9ffd85100000001000000000000": ["ヘブンズ・ゲート", "UGC"], "fffffdbff1aff9e1e744e007f00fec1ff00ff80ff8078983408200880180fc01": ["終末の時計ザ・クロック", "UGC"], "ce9e3fb8764e09cf20ff7e7ef733fcc0e7800597200cfe8527c602048b0cfb80": ["卍デ・スザーク卍", "シークレット版①"], "c0c20001e206f3fffdca7fef3fdf0ffb01f07ef0f834e1c1a844ca478264f100": ["卍デ・スザーク卍", "シークレット版②"], "dddf200962054a410a411ac8ffc05e430ffc8e02f800f000fffcfbe3ffeff389": ["龍装艦ゴクガ・ロイザー", "シークレット版"], "fffcbffdb7edb30dbe0d8009e007000000803000e803f087e5f7c003fffffff4": ["ジョット・ガン・ジョラゴンjoe", "シークレット版"], "c60116001bc03ff2707ef31f7febfd22fd801f91ffc91fe48ff08f780018c00c": ["煌龍サッヴァーク", "シークレット版"], "8ced0bff9d7ff83fc0ff8fff83fd82078139c209878981845937f0012d1101e2": ["天風のゲイル・ヴェスパー", "シークレット版"], "9dffe08f4f61c7e18f8389ffe603d00dd2074e000e49100d9006de289fff0bff": ["水上第九院シャコガイル", "シークレット版"], "bfff7807ff1ff83ff07ff677e7f0c6183c0c70002003001f400f1c001b823fee": ["伝説のレジェンドドギラゴン", "UGC"], "fffe7ff83ff83ffcc80ec03fb417200bd80fd807f81f879fdc6c000000064f40": ["音感の精霊龍エメラルーダ", "UGC"], "ff80000001030182008301c303ff401b0003e01ffc7fb0ffbe7fee7fffff7ffe": ["閃光の守護者ホーリー", "UGC"], "3e764fd2944310e1c049c03981f802ce7c8eff8bc61f005dc00d0aee7ffe3ffc": ["フェアリー・シャワー", "UGC"], "fffcff8ffffffd0fed17f64e7f098a0884000346f878cb1e8200c0005800f986": ["サッヴァークdg", "シークレット版"], "ce0e080842e012f38d3ff42ff9f19de1c8473b07fa0f0dff0b7f13cf0007013f": ["赤攻銀マルハヴァン", "シークレット版"], "ffe4cbe0ea00c201e01fe1ff71fef983713f207df401c000b9dcdde690dbf001": ["第九魔導執行官コーラレヒト", "シークレット版"], "fefc1fe30f221f37df977d987db07dc01fc026e0786039f07d787fb06c000000": ["刻解人形ジェニー・ジェーン", "シークレット版"], "e042e112f002f6c0f54020007860fc001c7f3fc13fff3f7f1ff9dd389377d178": ["q.q.qx.", "シークレット版"], "98fe3cacbc2cbc7c3ec07700ffd727f7efc100610fe01fa1f420937034b8f880": ["卍月ガ・リュザーク卍", "シークレット版"], "ffff6014e20ee4c201e017e88220c07bfefb0ffbfc17e03f090f01050cc39ff9": ["超機動罠デンジャデオン", "シークレット版"], "9db16440478c0f8002fe03fffbfefff8e2013025cff018fb00e6eff4fa207801": ["ゴリガン砕車ゴルドーザ", "シークレット版"], "ffadfffdffefffbebffc070e103625700fa00cb000634143520e4edc0000b803": ["絶叫の悪魔龍イーヴィル・ヒート", "UGC"], "bff1fff98fb307f713e3a7ff3f7ff43f40e9203ff6210642838001c00001400e": ["アルカディア・スパーク", "UGC"], "df7007f007fd03ff3fff5fef7ff30fff0ff806018870707041fb413209000000": ["大獄の封殺ディアスz", "シークレット版"], "ff1cd984a80434004401e0c2f400e000f08065f07f78ffff5ff5661ffc3fff8f": ["破獄の殲滅者ディアボロスz", "シークレット版"], "3ffdfffffffbfdfbfe1ffc3ffe5ff03ff003ee61d88000000000000004008200": ["オリオティス・ジャッジ", "PCC"], "fe7cff3ffd3ffedf7e171e03040f003900110001fe0bff87ff873f8031800180": ["ジョリー・ザ・ジョニー", "シークレット版"], "bbed0eff3fff4f7f6fc7ef8f060f185c1c780256005088988a03fb830026f803": ["“罰怒”ブランド", "シークレット版"], "a738ef08bf0200008050f875f9f7fa1ffe477f621fc119fd436f507f00f07860": ["偽りの王ヴィルヘルム", "UGC"], "f7e1f101fbe0ff20ffa40fd8abc0aef007800200d85f00035efff35e4f8ec01f": ["ドンドン吸い込むナウ", "UGC"], "d01fe03ff0fffffffffdfff3afc346c3a0dfa1cfd80360015040006410c00001": ["アルカディア・スパーク", "元の画像"], "effe135a3ef01fe1ffe0f963f007f887747f400d60009c010c000e160fe63ffe": ["ミラクル・ミラダンテ", "元の画像"]};
+const ART_KNOWN_PH={/* v16.185 追加 */"f4008003c004526656ffedfffefff9ff9b7fefeffbf8b278e000000080008819": ["神聖青ニューゲイズ", "シークレット版"], "bbf8bfff8fff1fbf14be7f397e12fe87fe07020702b007700140803000f8089c": ["紫電ボルメテウス・武者・ドラゴン", "シークレット版"], "bc7f7fdfffdffb07fcfdefaf88a08000400505ee01ed011f00fe81f88011a830": ["超神星ヴァルカン・アンチャンス", "シークレット版"], "ffff3dff01ffc0ff03b720e2f0a7043b1e090180fc01fe007e0263277e0c7099": ["暗黒神羅凰ゼロ・フェニックス", "シークレット版"], /* v16.184 追加 */"7fff83f4807e803f00d603c440bf273d313c780ec183c1ea43c26142dfe6cffb": ["伝説の正体ギュウジン丸", "シークレット版"], "ffff1bf0fce0efc0afe1c3c12384049e8479c001c00190233c032f87ffea97fb": ["ミラクル・ミラダンテ", "シークレット版"], "3fdfffefd3e4ebc7ed87fe9fffa97e349dde70044000c600e7007f8018000000": ["ボルシャック・ドギラゴン", "シークレット版"], /* v16.183 追加 */"8fe39fe07bc1f900ff2ce02d882fe0b0e02078607d00cd8ffbcff3cf366500e8": ["禁断機関vv-8", "シークレット版（禁断文字）"], "cffbc0fb80d1879c8905a10fdc05900200613031fc3cd808fffff7ded5f0c9db": ["禁断機関vv-8", "シークレット版（白黒）"], "b305920fc7cfcac3fee7f7ccfffebffc47830000c00040000487cd0f0e1f1f7e": ["時の法皇ミラダンテxii", "シークレット版"], "dff43ff0319f7443cc13b33172307e0601e24060403e803b81c57e83dfa37fff": ["超天星ライゾウ「灼」", "シークレット版"], "fff16030ef1c7f58117808609177e1c1c1e0fa0cff806bb8f670fc1cf39e6980": ["永久龍程式q.e.d.=x", "シークレット版"], "bf803f07f206703881fef03e2cc6ffd2f8148f18fb9c41e16143fc01fe00ff11": ["龍波弩級戦艦エビデックス", "シークレット版"], "9fe01fd03ff81ff8dbdb2ffe7df9ffbc0ffc003cbee79e00c0000020026003c0": ["「誣」の頂ウェディング・イノセンス", "シークレット版"], "9fffb1ffeda2023230ceb107b0077b6ff3011f02d042061717d7224f20df01fe": ["百族の長プチョヘンザ", "シークレット版"], "df133800f82cfcf0fef87ef5bfe37fee203a981b464f05ed19f608730818c000": ["蒼き団長ドギラゴン剣", "シークレット版"], "3f02ffe0b9f43cf8e4d1404661f15f9d38302e7c1fe00bff0b3f461bc00b902b": ["蒼き団長ドギラゴン剣", "シークレット版（白黒）"], "de3d5e2c0e1d6fff77f9dffefffeff88fa40f304fd50ac98003000000300a001": ["煌世主サッヴァーク†", "シークレット版（青）"], "feff7cffe078c070f810e000d400e800e8007c02fe20ff30c7dbc1fff0fcf87e": ["煌世主サッヴァーク†", "シークレット版（赤）"], "821f000e000707c40f631df362002400b081f009e02fa1f3de7f7fff7ffeffff": ["ニコル・ボーラス", "UGC"], "fe003e009e00cac4f0fcf1b7f4b91ef00fceffc6fffe3ff77fc441e000040000": ["ドラゴンズ・サイン", "UGC"], "bfdc7cfefc56c29c474c4f10610090270401003e0e7c9e7ed87cca7e4b7efa63": ["轟轟轟ブランド", "シークレット版"], "c7f841e01fe007a02fc07f9c37be37ce1c322f10fc10fb1ec79ed97f8003f003": ["煌メク聖戦絶十", "シークレット版"], "bf3f083678e3c8d54500ff01c7010f31ff81f0179e07fee7f077f81ff09e0000": ["龍装艦チェンジザ", "シークレット版"], "ffc0fffcfffeffe73f03ffe13360616018780078e80168010c1342fc003f810f": ["蒼神龍バイケン", "UGC"], "fffcfbbcfd71fd2189008203800380010000f001f9c347871f9f9fbf0fff7f8e": ["ジョット・ガン・ジョラゴン", "シークレット版"], "cffe010c122c05f11fbaf1f8fff6ffffffe320c10fc00000f000fffd0000f183": ["龍装鬼オブザ08号", "シークレット版"], "efb9e7e103f1c9f28f57601e40003080e020402080c7cfa3f3ca5fdcde7dfffd": ["百万超邪クロスファイア", "UGC"], "bfdc3fb81fe70ffc7ffe3ffefff8dffc0fefb9ffd85100000001000000000000": ["ヘブンズ・ゲート", "UGC"], "fffffdbff1aff9e1e744e007f00fec1ff00ff80ff8078983408200880180fc01": ["終末の時計ザ・クロック", "UGC"], "ce9e3fb8764e09cf20ff7e7ef733fcc0e7800597200cfe8527c602048b0cfb80": ["卍デ・スザーク卍", "シークレット版①"], "c0c20001e206f3fffdca7fef3fdf0ffb01f07ef0f834e1c1a844ca478264f100": ["卍デ・スザーク卍", "シークレット版②"], "dddf200962054a410a411ac8ffc05e430ffc8e02f800f000fffcfbe3ffeff389": ["龍装艦ゴクガ・ロイザー", "シークレット版"], "fffcbffdb7edb30dbe0d8009e007000000803000e803f087e5f7c003fffffff4": ["ジョット・ガン・ジョラゴンjoe", "シークレット版"], "c60116001bc03ff2707ef31f7febfd22fd801f91ffc91fe48ff08f780018c00c": ["煌龍サッヴァーク", "シークレット版"], "8ced0bff9d7ff83fc0ff8fff83fd82078139c209878981845937f0012d1101e2": ["天風のゲイル・ヴェスパー", "シークレット版"], "9dffe08f4f61c7e18f8389ffe603d00dd2074e000e49100d9006de289fff0bff": ["水上第九院シャコガイル", "シークレット版"], "bfff7807ff1ff83ff07ff677e7f0c6183c0c70002003001f400f1c001b823fee": ["伝説のレジェンドドギラゴン", "UGC"], "fffe7ff83ff83ffcc80ec03fb417200bd80fd807f81f879fdc6c000000064f40": ["音感の精霊龍エメラルーダ", "UGC"], "ff80000001030182008301c303ff401b0003e01ffc7fb0ffbe7fee7fffff7ffe": ["閃光の守護者ホーリー", "UGC"], "3e764fd2944310e1c049c03981f802ce7c8eff8bc61f005dc00d0aee7ffe3ffc": ["フェアリー・シャワー", "UGC"], "fffcff8ffffffd0fed17f64e7f098a0884000346f878cb1e8200c0005800f986": ["サッヴァークdg", "シークレット版"], "ce0e080842e012f38d3ff42ff9f19de1c8473b07fa0f0dff0b7f13cf0007013f": ["赤攻銀マルハヴァン", "シークレット版"], "ffe4cbe0ea00c201e01fe1ff71fef983713f207df401c000b9dcdde690dbf001": ["第九魔導執行官コーラレヒト", "シークレット版"], "fefc1fe30f221f37df977d987db07dc01fc026e0786039f07d787fb06c000000": ["刻解人形ジェニー・ジェーン", "シークレット版"], "e042e112f002f6c0f54020007860fc001c7f3fc13fff3f7f1ff9dd389377d178": ["q.q.qx.", "シークレット版"], "98fe3cacbc2cbc7c3ec07700ffd727f7efc100610fe01fa1f420937034b8f880": ["卍月ガ・リュザーク卍", "シークレット版"], "ffff6014e20ee4c201e017e88220c07bfefb0ffbfc17e03f090f01050cc39ff9": ["超機動罠デンジャデオン", "シークレット版"], "9db16440478c0f8002fe03fffbfefff8e2013025cff018fb00e6eff4fa207801": ["ゴリガン砕車ゴルドーザ", "シークレット版"], "ffadfffdffefffbebffc070e103625700fa00cb000634143520e4edc0000b803": ["絶叫の悪魔龍イーヴィル・ヒート", "UGC"], "bff1fff98fb307f713e3a7ff3f7ff43f40e9203ff6210642838001c00001400e": ["アルカディア・スパーク", "UGC"], "df7007f007fd03ff3fff5fef7ff30fff0ff806018870707041fb413209000000": ["大獄の封殺ディアスz", "シークレット版"], "ff1cd984a80434004401e0c2f400e000f08065f07f78ffff5ff5661ffc3fff8f": ["破獄の殲滅者ディアボロスz", "シークレット版"], "3ffdfffffffbfdfbfe1ffc3ffe5ff03ff003ee61d88000000000000004008200": ["オリオティス・ジャッジ", "PCC"], "fe7cff3ffd3ffedf7e171e03040f003900110001fe0bff87ff873f8031800180": ["ジョリー・ザ・ジョニー", "シークレット版"], "bbed0eff3fff4f7f6fc7ef8f060f185c1c780256005088988a03fb830026f803": ["“罰怒”ブランド", "シークレット版"], "a738ef08bf0200008050f875f9f7fa1ffe477f621fc119fd436f507f00f07860": ["偽りの王ヴィルヘルム", "UGC"], "f7e1f101fbe0ff20ffa40fd8abc0aef007800200d85f00035efff35e4f8ec01f": ["ドンドン吸い込むナウ", "UGC"]};
 function phashFromGray(g,w,h){
   const N=16;
   const x0=Math.floor(w*0.06),x1=w-Math.floor(w*0.06),y0=Math.floor(h*0.06),y1=h-Math.floor(h*0.06);
@@ -49505,60 +49505,117 @@ function knownNonNormalLabel(ph){
   for(const [k,v] of Object.entries(ART_KNOWN_PH))if(phashDist(ph,k)<=20)return v[1];
   return null;
 }
+/* 🩺 v16.185 元の画像の点検を「中身（見た目の目印）」で判断するように作り直した。
+   それまでは「通常版」という名前のバージョンがある時だけ直せたので、入れ替えを2回行ったなどで
+   通常版の絵が「シークレット版」という名前のバージョンに入っていると、「通常版の画像が無い」と出ていた。
+   ・元の画像が既知のシークレット版など（ART_KNOWN_PH）か、非通常の括り（シークレット／UGC／PCC／コラボ／プロモ）の
+     バージョンと同じ絵なら「直す対象」
+   ・通常版の候補：名前が通常版のもの → 無ければ、中身が既知のシークレット版などではなく、元の画像とも違う、
+     非通常の括り（UGC／PCC／コラボ／プロモ）以外のバージョン（名前を取り違えた通常版）
+   ・「元の画像」「旧画像」という名前のバージョンは括りとしては見ない（元の画像と同じ絵でも誤検出にしない）
+   ・名前が通常版なのに中身が既知のシークレット版などのバージョンは、名前を付け直す
+   ・元の画像とまったく同じ絵のバージョンは、重複として外す */
+const ART_NONNORMAL_RE=/シークレット|UGC|PCC|コラボ|プロモ|金枠/;
+const ART_NOT_NORMAL_CAND_RE=/UGC|PCC|コラボ|プロモ|金枠/;
 async function auditBaseArts(){
   const found=[];
   const keys=new Set([...FXDB.keys(),...ART_VERS.keys()]);
+  const getB=async k=>{let b=null;try{b=db?await idbGet("images",k):memImages.get(k);}catch(e){}return b;};
   for(const k of keys){
     if(isArtVerKey(k))continue;
-    let b=null;try{b=db?await idbGet("images",k):memImages.get(k);}catch(e){}
+    const b=await getB(k);
     if(!b)continue;
     let ph="";try{ph=await blobPHash(b);}catch(e){continue;}
     const vers=ART_VERS.get(k)||[];
-    const verPh=async x=>{let vb=null;try{vb=db?await idbGet("images",artVerKey(k,x.id)):memImages.get(artVerKey(k,x.id));}catch(e){}if(!vb)return null;try{return await blobPHash(vb);}catch(e){return null;}};
-    const nor=vers.find(x=>x&&/^(通常版|デュエプレ版)$/.test(String(x.label||"")));
-    // 通常版のバージョンと同じ絵なら、元の画像はもう通常版
-    if(nor){const nph=await verPh(nor);if(nph&&phashDist(ph,nph)<=20)continue;}
+    const vinfo=[];
+    for(const x of vers){
+      if(!x||!x.id)continue;
+      const vb=await getB(artVerKey(k,x.id));
+      let vph=null;if(vb){try{vph=await blobPHash(vb);}catch(e){}}
+      vinfo.push({x,vph,known:vph?knownNonNormalLabel(vph):null,same:!!(vph&&phashDist(ph,vph)<=20)});
+    }
+    const relabel=vinfo.filter(v=>v.known&&/^(通常版|デュエプレ版)$/.test(String(v.x.label||""))).map(v=>({id:v.x.id,label:v.known}));
+    const dups=vinfo.filter(v=>v.same&&!ART_SEL_IS(k,v.x.id)).map(v=>v.x.id);
     let label=knownNonNormalLabel(ph);
     if(!label){
-      for(const x of vers){
-        if(!x||/^(通常版|デュエプレ版)$/.test(String(x.label||"")))continue;
-        const vph=await verPh(x);
-        if(vph&&phashDist(ph,vph)<=20){label=String(x.label||"シークレット版");break;}
-      }
+      const m=vinfo.find(v=>v.same&&ART_NONNORMAL_RE.test(String(v.x.label||"")));
+      if(m)label=String(m.x.label);
     }
-    if(label)found.push({key:k,name:dispName.get(k)||k,label,normalId:nor?nor.id:null});
+    let normalId=null,misnamed=false;
+    if(label){
+      const byName=vinfo.find(v=>/^(通常版|デュエプレ版)$/.test(String(v.x.label||""))&&v.vph&&!v.known&&!v.same);
+      if(byName)normalId=byName.x.id;
+      else{
+        const byContent=vinfo.find(v=>v.vph&&!v.known&&!v.same&&!ART_NOT_NORMAL_CAND_RE.test(String(v.x.label||"")));
+        if(byContent){normalId=byContent.x.id;misnamed=true;}
+      }
+      found.push({key:k,name:dispName.get(k)||k,label,normalId,misnamed,misLabel:misnamed?String((vers.find(y=>y.id===normalId)||{}).label||""):"",relabel,dups});
+    }else if(relabel.length||dups.length){
+      found.push({key:k,name:dispName.get(k)||k,label:null,normalId:null,relabel,dups,tidyOnly:true});
+    }
   }
-  /* 🩺 ふだん出す絵（ART_SEL）が通常版以外のバージョンになっているもの。元の画像に戻せば通常版が出る */
+  /* 🩺 ふだん出す絵（ART_SEL）が通常版以外のバージョンになっているもの。
+     選んでいるバージョンの中身が既知のシークレット版などなら、ふだん出す絵を元の画像に戻す。
+     中身が通常版（名前の取り違え）なら触らない（元の画像のほうを上で直す）。 */
   for(const [k,id] of ART_SEL){
     if(!id||id==="base")continue;
     const x=(ART_VERS.get(k)||[]).find(y=>y&&y.id===id);
     if(!x||/^(通常版|デュエプレ版)$/.test(String(x.label||"")))continue;
-    if(found.some(f=>f.key===k))continue;
-    found.push({key:k,name:dispName.get(k)||k,label:`ふだん出す絵が${x.label}`,sel:true,normalId:"base"});
+    if(found.some(f=>f.key===k&&!f.tidyOnly))continue;
+    const vb=await getB(artVerKey(k,id));let vph=null;if(vb){try{vph=await blobPHash(vb);}catch(e){}}
+    const kn=vph?knownNonNormalLabel(vph):null;
+    if(!kn&&!ART_NONNORMAL_RE.test(String(x.label||"")))continue;
+    if(vph&&!kn)continue;   // 名前はシークレット版でも中身が通常版なら、ふだん出す絵はそのまま
+    found.push({key:k,name:dispName.get(k)||k,label:`ふだん出す絵が${kn||x.label}`,sel:true,normalId:"base",relabel:[],dups:[]});
   }
   return found;
 }
+function ART_SEL_IS(k,id){try{return ART_SEL.get(k)===id;}catch(e){return false;}}
 async function runAuditBaseArts(){
   toast("🩺 元の画像を点検しています…");
-  const f=await auditBaseArts();
-  if(!f.length){await ask("🩺 元の画像の点検：シークレット版などが元の画像になっているカードは見つかりませんでした。\n（これまでのパックで送った絵と、各カードのバージョンの絵で照らし合わせています）");return f;}
+  const all=await auditBaseArts();
+  const f=all.filter(x=>!x.tidyOnly);
+  const tidy=all.filter(x=>(x.relabel&&x.relabel.length)||(x.dups&&x.dups.length));
+  if(!f.length&&!tidy.length){await ask("🩺 元の画像の点検：シークレット版などが元の画像になっているカードは見つかりませんでした。\n（これまでのパックで送った絵と、各カードのバージョンの絵で照らし合わせています）");return all;}
   const fix=f.filter(x=>x.normalId),nofix=f.filter(x=>!x.normalId);
-  for(const x of f)logOnly(`🩺 元の画像が${x.label}：${x.name}${x.normalId?"（通常版あり）":"（通常版の画像なし）"}`);
+  for(const x of f)logOnly(`🩺 元の画像が${x.label}：${x.name}${x.normalId?(x.misnamed?`（通常版は「${x.misLabel}」という名前で入っていた）`:"（通常版あり）"):"（通常版の画像なし）"}`);
+  const nRel=tidy.reduce((a,x)=>a+x.relabel.length,0),nDup=tidy.reduce((a,x)=>a+x.dups.length,0);
   const txt=`🩺 元の画像の点検：${f.length}件\n`+
-    (fix.length?`\n■ 通常版があり、入れ替えで直せる：${fix.length}件\n`+fix.slice(0,25).map(x=>`・${x.name}（いまの元の画像：${x.label}）`).join("\n")+(fix.length>25?`\n　ほか${fix.length-25}件`:""):"")+
+    (fix.length?`\n■ 通常版があり、入れ替えで直せる：${fix.length}件\n`+fix.slice(0,25).map(x=>`・${x.name}（いまの元の画像：${x.label}${x.misnamed?`／通常版は「${x.misLabel}」の名前で入っていた`:""}）`).join("\n")+(fix.length>25?`\n　ほか${fix.length-25}件`:""):"")+
     (nofix.length?`\n\n■ 通常版の画像が無い：${nofix.length}件（通常版の画像が要ります）\n`+nofix.slice(0,25).map(x=>`・${x.name}（いまの元の画像：${x.label}）`).join("\n")+(nofix.length>25?`\n　ほか${nofix.length-25}件`:""):"")+
-    (fix.length?`\n\n通常版と入れ替えますか？（いまの元の画像は「${fix[0].label}」などのバージョンとして残ります）`:"");
-  if(fix.length){
+    ((nRel||nDup)?`\n\n■ 片づけ：名前の付け直し${nRel}件・元の画像と同じ絵のバージョン${nDup}件`:"")+
+    ((fix.length||nRel||nDup)?`\n\n直しますか？（いまの元の画像は「${fix.length?fix[0].label:"シークレット版"}」などのバージョンとして残ります）`:"");
+  if(fix.length||nRel||nDup){
     if(await ask(txt)){
-      let n=0;for(const x of fix){
+      let n=0,r=0,d=0;
+      for(const x of fix){
         if(x.sel){ART_SEL.delete(x.key);n++;continue;}   // ふだん出す絵を元の画像（通常版）に戻す
         if(await swapArtBase({key:x.key,id:x.normalId,label:x.label})==="ok")n++;
       }
+      // 名前の付け直し（中身が既知のシークレット版などなのに「通常版」になっていたもの）
+      for(const x of tidy)for(const rl of (x.relabel||[])){
+        const v=(ART_VERS.get(x.key)||[]).find(y=>y.id===rl.id);if(v&&v.label!==rl.label){v.label=rl.label;r++;}
+      }
+      // 入れ替えたあとに、元の画像とまったく同じ絵になったバージョンも外す（見直してから）
+      for(const k of new Set(all.map(x=>x.key))){
+        const b=db?await idbGet("images",k):memImages.get(k);if(!b)continue;
+        let ph="";try{ph=await blobPHash(b);}catch(e){continue;}
+        for(const v of (ART_VERS.get(k)||[]).slice()){
+          if(ART_SEL_IS(k,v.id))continue;
+          const vk=artVerKey(k,v.id);const vb=db?await idbGet("images",vk):memImages.get(vk);if(!vb)continue;
+          let vph="";try{vph=await blobPHash(vb);}catch(e){continue;}
+          if(phashDist(ph,vph)<=20){
+            try{if(db)await idbDel("images",vk);else memImages.delete(vk);}catch(e){}try{imgURL.delete(vk);}catch(e){}
+            const l=(ART_VERS.get(k)||[]).filter(y=>y.id!==v.id);if(l.length)ART_VERS.set(k,l);else ART_VERS.delete(k);
+            d++;
+          }
+        }
+      }
       await persistArt();renderAll();try{refreshLazyImages();}catch(e){}
-      toast(`🩺 元の画像を通常版に戻しました：${n}件`);
+      toast(`🩺 元の画像を通常版に戻しました：${n}件${r?`・名前の付け直し${r}件`:""}${d?`・重複した絵${d}件を外しました`:""}`);
     }
   }else await ask(txt);
-  return f;
+  return all;
 }
 /* 🩹 v16.180 画像の中身の目印（FNV-1a 32bit の16進＋":"＋バイト数）。パックの artFixBase で使う */
 async function blobHashFnv(b){
