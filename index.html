@@ -6149,7 +6149,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.170";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.171";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -13332,6 +13332,15 @@ const FX_TYPES=[
   ["charge","n枚マナ加速（山上→マナ）"],
   ["zoneMove","↔ 自分の〔元〕から条件に合うカードをn枚〔先〕へ移動（条件欄に「墓地→マナ:スノーフェアリー」のように元→先:対象を指定・墓地→マナもこれで）"],
   ["chargeTap","n枚マナ加速（山上→タップしてマナに置く）"],
+  ["destroySumCostN","💥 相手のクリーチャーを、コストの合計がn以下になるように好きな数選び、破壊する（爆殺!! 覇悪怒楽苦型／条件欄で対象を絞れる）"],
+  ["allBattleToManaBoth","🌏 各プレイヤーは、バトルゾーンにある自身のカードをすべてマナゾーンに置く（ギガタック・ハイパー・トラップ型）"],
+  ["killPowLtSelfAll","💥 このクリーチャーよりパワーが小さい相手のクリーチャーをすべて破壊する（激竜王ガイアール・オウドラゴン型）"],
+  ["redeckHandShield","🔄 プレイヤー1人を選ぶ。そのプレイヤーは手札をすべてランダムな順番で山札の下に置き、同じ枚数を引く。その後、シールドをすべてランダムな順番で山札の下に置き、同じ枚数を山札の上からシールド化する（Vチャロン型）"],
+  ["toManaThenRevealPlay","🌿 クリーチャー1体を持ち主のマナゾーンに置く。その後、そのプレイヤーは山札をシャッフルし、上から1枚目を表向きにする。クリーチャーならバトルゾーンに出してもよい（幻影 ミスキュー型）"],
+  ["revealTopHandRestMana","🎴 自分の山札の上からn枚を表向きにし、条件に合うカード1枚を手札に加えてもよい。残りをマナゾーンに置く（カブトリアル・クーガ型／条件欄＝例：クリーチャー）"],
+  ["shuffleTopPlayElseMana","🎴 自分の山札をシャッフルし、上から1枚目を表向きにする。クリーチャーならバトルゾーンに出し、それ以外ならマナゾーンに置く（ミステリー・ディザスター型）"],
+  ["bottomFoeIfAllyCount","⬇ 自分のバトルゾーンとマナゾーンに条件に合うカードが合計n枚以上あれば、相手のクリーチャー1体を山札の一番下に置く（バイナラドア型／条件欄＝数えるカード：例 ジョーカーズ）"],
+  ["foeToDeckShuffleDraw","🔀 相手のクリーチャー1体を相手の山札に加えてシャッフルする。そのクリーチャーが山札に加えられたなら、相手はカードを1枚引く（アルカディア・スパーク型）"],
   ["choosePlayerCharge","🌱 プレイヤー1人を選ぶ。そのプレイヤーは自身の山札の上からn枚をマナゾーンに置く（H.D.2.型）"],
   ["selfDiscardKillLtCost","🗑💥 自分の手札を1枚捨てる（必ず）。こうして捨てたカード**よりコストが小さい**相手クリーチャーを1体選び、破壊してもよい（芸魔温泉！オンセン・ガロウズ型／条件欄で捨てる対象を絞れる）"],
   ["skipTurnRest","⏭ ターンの残りをとばす（終末の時計 ザ・クロック型・いまの効果を解決し終えたら、そのターンを終える）"],
@@ -23556,6 +23565,128 @@ async function runFxList(pi,list,srcCard,inPump){
       if(!fieldG.length){toast("⚙ クロスできる自分のクロスギアがありません");continue;}
       const k=await pickCard(`⚙ 《${faceNameOf(srcCard)}》に無料でクロスするギアを選択（キャンセルでクロスしない）`,fieldG,{hint:"任意：コストは支払いません"});
       if(k!==null)await crossGearTo(pi,fieldG[k].id,{free:true,hostId:srcCard.id});
+    }else if(f.t==="destroySumCostN"){
+      /* 💥 v16.171 コストの合計が n 以下になるように好きな数（覇悪怒楽苦型）。キャンセルでそこまでを確定 */
+      if(!S.vs){toast("（ソロのためスキップ）");continue;}
+      const filt=String(f.cond||"").trim();const OZ2=zonesOf(op);const picked=[];let budget=n;
+      for(let guard=0;guard<20;guard++){
+        let pool=OZ2.battle.filter(x=>{const rx=getReg(x);return isCreatureReg(rx)&&!picked.some(y=>y.id===x.id)&&!(((rx&&rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,op));});
+        if(filt)pool=pool.filter(x=>lockFilterOk(filt,getReg(x),x));
+        const ok2=pool.filter(x=>(+((getReg(x)||{}).cost)||0)<=budget);
+        if(!ok2.length){if(!picked.length)toast(`対象のクリーチャーがいません（コスト合計${n}以下）`);break;}
+        const j=await pickCard(`💥 破壊するクリーチャーを選択（残りコスト ${budget}${picked.length?`／選択中 ${picked.length}体`:""}・キャンセルで確定）`,ok2,{sub:x=>`コスト${+((getReg(x)||{}).cost)||0}`});
+        if(j===null||j===undefined)break;
+        const tgt=ok2[j];picked.push(tgt);budget-=(+((getReg(tgt)||{}).cost)||0);
+      }
+      if(picked.length){snap();for(const tgt of picked){if(!OZ2.battle.find(x=>x.id===tgt.id))continue;await destroyWithReplace(op,tgt);renderAll();}sfx("grave");}
+      renderAll();
+    }else if(f.t==="allBattleToManaBoth"){
+      /* 🌏 v16.171 各プレイヤーはバトルゾーンの自身のカードをすべてマナへ（ターンプレイヤーから） */
+      snap();
+      for(const p2 of (S.vs?[S.who|0,1-(S.who|0)]:[pi])){
+        const Zb=zonesOf(p2);
+        for(const x of Zb.battle.slice()){
+          const bi=Zb.battle.findIndex(y=>y.id===x.id);if(bi<0)continue;
+          Zb.battle.splice(bi,1);
+          const all=[x,...(x.under||[]),...(x.gear||[])];x.under=[];x.gear=[];
+          for(const y of all){y.faceup=true;y.tapped=false;y.sideways=false;Zb.mana.push(y);}
+          try{applyManaTapIn(p2,x);}catch(e){}
+        }
+      }
+      sfx("move");renderAll();toast("🌏 各プレイヤーはバトルゾーンのカードをすべてマナゾーンに置いた");
+    }else if(f.t==="killPowLtSelfAll"){
+      if(!S.vs||!srcCard){continue;}
+      const myP=await effPower(srcCard,false,false);
+      const tg=[];for(const x of zonesOf(op).battle){const rx=getReg(x);if(!isCreatureReg(rx))continue;if((await effPower(x,false,false))<myP)tg.push(x);}
+      if(!tg.length){toast(`💥 パワー${myP}より小さい相手クリーチャーはいません`);continue;}
+      snap();for(const x of tg){if(zonesOf(op).battle.some(y=>y.id===x.id))await destroyWithReplace(op,x);}
+      sfx("grave");renderAll();toast(`💥 パワー${myP}より小さい相手クリーチャー${tg.length}体を破壊`);
+    }else if(f.t==="redeckHandShield"){
+      /* 🔄 v16.171 Vチャロン型 */
+      let tp=pi;
+      if(S.vs){const j=await askChoice("🔄 手札とシールドを入れ替えるプレイヤーを選ぶ",[`自分（${S.players[pi].label}）`,`相手（${S.players[op].label}）`]);tp=(j===1)?op:pi;}
+      const TZ=zonesOf(tp);snap();
+      const rnd=a=>{for(let i=a.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[a[i],a[k]]=[a[k],a[i]];}return a;};
+      const hn=TZ.hand.length;const hs=rnd(TZ.hand.splice(0));hs.forEach(c=>{c.faceup=false;TZ.deck.push(c);});
+      for(let i=0;i<hn&&TZ.deck.length;i++){const c=TZ.deck.shift();c.faceup=true;toHand(TZ,c);markArrive(c);}
+      if(hn)bumpEv("draws",tp,hn);
+      const sn=TZ.shield.length;const ss=rnd(TZ.shield.splice(0));ss.forEach(c=>{c.faceup=false;TZ.deck.push(c);});
+      const _newSh=[];
+      for(let i=0;i<sn&&TZ.deck.length;i++){const c=TZ.deck.shift();c.faceup=false;TZ.shield.push(c);markArrive(c);_newSh.push(c);}
+      if(_newSh.length){try{await notifyShieldPlaced(tp,_newSh);}catch(e){}}   // 🛡「盾が置かれた時」へ通知
+      sfx("move");renderAll();toast(`🔄 ${S.players[tp].label}：手札${hn}枚とシールド${sn}枚を山札の下に置き、同じ枚数を引いて／シールド化した`);
+      logOnly(`🔄 ${S.players[tp].label}：手札${hn}枚・シールド${sn}枚を入れ替え（${srcCard?faceNameOf(srcCard):"効果"}）`);
+    }else if(f.t==="toManaThenRevealPlay"){
+      /* 🌿 v16.171 ミスキュー型 */
+      const pool=[];for(const p2 of (S.vs?[0,1]:[pi]))for(const x of zonesOf(p2).battle){const rx=getReg(x);if(isCreatureReg(rx)&&!(p2!==pi&&((rx&&rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,p2)))pool.push({x,p2});}
+      if(!pool.length){toast("🌿 対象のクリーチャーがいません");continue;}
+      const j=pool.length===1?0:await pickCard("🌿 持ち主のマナゾーンに置くクリーチャーを選択",pool.map(o=>o.x),{sub:x=>{const o=pool.find(y=>y.x.id===x.id);return o&&o.p2!==pi?"相手":"自分";}});
+      if(j===null||j===undefined)continue;
+      const {x:tg,p2:own}=pool[j];const OZm=zonesOf(own);
+      snap();
+      const bi=OZm.battle.findIndex(y=>y.id===tg.id);if(bi<0)continue;
+      OZm.battle.splice(bi,1);for(const y of [tg,...(tg.under||[])]){y.faceup=true;y.tapped=false;OZm.mana.push(y);}tg.under=[];
+      renderAll();toast(`🌿 ${faceNameOf(tg)} を持ち主のマナゾーンへ`);
+      shuffle(OZm.deck);
+      const top=OZm.deck[0];
+      if(!top){toast("🌿 山札がありません");continue;}
+      top.faceup=true;top.seen=true;
+      const rt=getReg(top);
+      toast(`🎴 ${S.players[own].label} の山札の上：${faceNameOf(top)}`);
+      if(isCreatureReg(rt)&&await ask(`🎴 ${faceNameOf(top)}（${S.players[own].label}の山札の上）をバトルゾーンに出しますか？`,top)){
+        OZm.deck.shift();top.faceup=true;top.tapped=false;
+        if(!cheatEnterBattle(own,top)){renderAll();continue;}
+        emitEvent(own,"summon");enqueueFx(own,top);
+      }
+      renderAll();
+    }else if(f.t==="revealTopHandRestMana"){
+      /* 🎴 v16.171 クーガ型 */
+      const filt=String(f.cond||"").trim();
+      const shown=Z.deck.splice(0,Math.min(n,Z.deck.length));
+      if(!shown.length){toast("🎴 山札がありません");continue;}
+      snap();shown.forEach(c=>{c.faceup=true;c.seen=true;});
+      toast(`🎴 山札の上から${shown.length}枚：${shown.map(faceNameOf).join("、")}`);
+      const cand=shown.filter(c=>!filt||lockFilterOk(filt,getReg(c),c));
+      let pick=null;
+      if(cand.length){const j=await pickCard(`🎴 手札に加えるカードを選択（${filt||"どれでも"}・加えなくてもよい）`,cand,{hint:"キャンセルで加えない"});if(j!==null&&j!==undefined&&cand[j])pick=cand[j];}
+      for(const c of shown){if(pick&&c.id===pick.id){toHand(Z,c);markArrive(c);}else{c.tapped=false;Z.mana.push(c);markArrive(c);try{applyManaTapIn(pi,c);}catch(e){}}}
+      sfx("move");renderAll();
+      toast(`🎴 ${pick?`${faceNameOf(pick)} を手札へ・`:""}残り${shown.length-(pick?1:0)}枚をマナへ`);
+    }else if(f.t==="shuffleTopPlayElseMana"){
+      shuffle(Z.deck);
+      const top=Z.deck.shift();
+      if(!top){toast("🎴 山札がありません");continue;}
+      top.faceup=true;top.seen=true;
+      const rt=getReg(top);
+      if(isCreatureReg(rt)){
+        toast(`🎴 ${faceNameOf(top)}（クリーチャー）をバトルゾーンへ`);
+        top.tapped=false;if(!cheatEnterBattle(pi,top)){renderAll();continue;}
+        emitEvent(pi,"summon");enqueueFx(pi,top);
+      }else{top.tapped=false;Z.mana.push(top);markArrive(top);try{applyManaTapIn(pi,top);}catch(e){}toast(`🎴 ${faceNameOf(top)} をマナゾーンへ`);}
+      sfx("move");renderAll();
+    }else if(f.t==="bottomFoeIfAllyCount"){
+      const filt=String(f.cond||"").trim();
+      const cnt=[...Z.battle,...Z.mana].filter(c=>{const rx=getReg(c);return !filt||(rx&&lockFilterOk(filt,rx,c));}).length;
+      if(cnt<n){toast(`⬇ ${filt||"カード"}が合計${cnt}枚（${n}枚以上で発動）`);continue;}
+      if(!S.vs)continue;
+      const pool=zonesOf(op).battle.filter(x=>{const rx=getReg(x);return isCreatureReg(rx)&&!(((rx&&rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,op));});
+      if(!pool.length){toast("⬇ 相手のクリーチャーがいません");continue;}
+      const j=pool.length===1?0:await pickCard("⬇ 山札の一番下に置く相手のクリーチャーを選択",pool);
+      if(j===null||j===undefined)continue;
+      const tg=pool[j];const OZb=zonesOf(op);const bi=OZb.battle.findIndex(y=>y.id===tg.id);if(bi<0)continue;
+      snap();OZb.battle.splice(bi,1);for(const y of [tg,...(tg.under||[])]){y.faceup=false;y.tapped=false;OZb.deck.push(y);}tg.under=[];
+      sfx("move");renderAll();toast(`⬇ ${faceNameOf(tg)} を相手の山札の一番下へ`);
+    }else if(f.t==="foeToDeckShuffleDraw"){
+      if(!S.vs)continue;
+      const pool=zonesOf(op).battle.filter(x=>{const rx=getReg(x);return isCreatureReg(rx)&&!(((rx&&rx.noChoose)||momoUntouchable(x))&&!isIgnored(x,op));});
+      if(!pool.length){toast("🔀 相手のクリーチャーがいません");continue;}
+      const j=pool.length===1?0:await pickCard("🔀 相手の山札に加えるクリーチャーを選択",pool);
+      if(j===null||j===undefined)continue;
+      const tg=pool[j];const OZd=zonesOf(op);const bi=OZd.battle.findIndex(y=>y.id===tg.id);if(bi<0)continue;
+      snap();OZd.battle.splice(bi,1);for(const y of [tg,...(tg.under||[])]){y.faceup=false;y.tapped=false;OZd.deck.push(y);}tg.under=[];
+      shuffle(OZd.deck);
+      draw(op,1);
+      sfx("move");renderAll();toast(`🔀 ${faceNameOf(tg)} を相手の山札に加えてシャッフル → 相手は1枚引く`);
     }else if(f.t==="destroySumPow"){
       // 💥 パワーの合計がn以下になるように好きな数選んで破壊（スクラッパーレッド型）。
       //    残り予算より大きいクリーチャーは選択肢に出さない。キャンセルでそこまでの選択を実行。
@@ -39116,7 +39247,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
           });
           if(src){
             const rS=getReg(src);
-            const lim=manaSummonGrantN(rS)||1;
+            const lim=Math.max(1,summonGrantLimit(pTo,fromZone,false,c)||(manaSummonGrantN(rS)||1));   // v16.171 1体につき
             S._manaSummonUsed=S._manaSummonUsed||{};
             const key=`${S.turn}:${pTo}`;
             if(S._manaSummonUsed.key!==key)S._manaSummonUsed={key,n:0};
@@ -39150,7 +39281,7 @@ function moveCardX(pFrom,fromZone,id,pTo,toZone,skipRep){
           });
           if(src){
             const rS=getReg(src);
-            const lim=+rS.graveSummonGrant||1;
+            const lim=Math.max(1,summonGrantLimit(pTo,"grave",true,c)||(+rS.graveSummonGrant||1));   // v16.171 1体につき
             if(S.vs&&S.who!==pTo)toast(`⚠ ${faceNameOf(src)} の墓地からの召喚は自分のターン中だけです`);
             else{
               S._graveSummonUsed=S._graveSummonUsed||{};
@@ -45935,7 +46066,7 @@ function openCardSheet(ctx){
   if(S.expert&&(ctx.zone==="grave"||ctx.zone==="mana")&&!(S.vs&&ctx.p!==(S.seat|0)&&S.hideOpp)){
     const src=summonGrantSrc(ctx.p,ctx.zone,c);
     if(src){
-      const u=summonGrantUse(ctx.p,ctx.zone,src);
+      const u=summonGrantUse(ctx.p,ctx.zone,src,c);
       const zl=ctx.zone==="grave"?"墓地":"マナ";
       box.appendChild(actBtn(`${u.icon} ${zl}から召喚（${faceNameOf(src)}・このターン ${u.used}/${u.lim}${u.left?"":"・使い切り"}）`,async ()=>{
         if(!u.left&&!await ask(`${u.icon} ${faceNameOf(src)} の「${zl}から召喚」は、このターン使い切っています。それでも出しますか？`,c))return;
@@ -48514,10 +48645,31 @@ function summonGrantSrc(pi,kind,card){
     return manaSummonGrantN(rx)>0;
   })||null;
 }
-function summonGrantUse(pi,kind,src){
+/* ⚰🌱 v16.171 回数は「与えているカード1体につき」。同じ種類の元が2体いれば2回（ダピコ型）。card を渡すと、そのカードを出せる元だけ数える */
+function summonGrantLimit(pi,kind,viaGrave,card){
+  const rC=card?getReg(card):null;
+  let sum=0;
+  for(const x of (zonesOf(pi).battle||[])){
+    if(card&&x.id===card.id)continue;
+    const rx=getReg(x);
+    if(!rx||isSealed(x)||isIgnored(x,pi))continue;
+    if(viaGrave){
+      if(!(+rx.graveSummonGrant>0))continue;
+      const ff=String(rx.graveSummonFilt||"").trim();
+      if(card&&ff&&!lockFilterOk(ff,rC,card))continue;
+      sum+=(+rx.graveSummonGrant||1);
+    }else{
+      const m=manaSummonGrantN(rx);if(!(m>0))continue;
+      if(kind==="grave"&&!rx.manaSummonGrave)continue;
+      sum+=m;
+    }
+  }
+  return sum;
+}
+function summonGrantUse(pi,kind,src,card){
   const rx=src?getReg(src):null;
   const viaGrave=kind==="grave"&&rx&&+rx.graveSummonGrant>0;
-  const lim=viaGrave?(+rx.graveSummonGrant||1):(manaSummonGrantN(rx)||1);
+  const lim=Math.max(1,summonGrantLimit(pi,kind,viaGrave,card)||(viaGrave?(+rx.graveSummonGrant||1):(manaSummonGrantN(rx)||1)));
   const box=viaGrave?S._graveSummonUsed:S._manaSummonUsed;
   const used=(box&&box.key===`${S.turn}:${pi}`)?(box.n|0):0;
   return {used,lim,left:Math.max(0,lim-used),icon:viaGrave?"⚰":"🌱"};
