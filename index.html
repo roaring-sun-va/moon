@@ -2465,6 +2465,7 @@ body.shake{animation:bodyShake .4s ease-out}
         <div class="row" style="gap:6px;margin:0">
           <button class="btn small ghost" id="fxChgImg" style="padding:4px 10px;flex:0 0 auto">🖼 画像を変更</button>
           <button class="btn small ghost" id="fxZoomImg" style="padding:4px 10px;flex:0 0 auto">🔍 拡大表示</button>
+          <button class="btn small ghost" id="fxArtVer" style="padding:4px 10px;flex:0 0 auto" title="通常版・コラボ版など、このカードの別の絵を登録して、ふだん出す絵を選びます（デッキごとにも変えられます）">🎨 絵のバージョン</button>
         </div>
         <div class="hint">EX中、バトルゾーン/解決中に置いた時に自動処理。戦闘属性は攻撃ボタンの処理に使われます。左のカード画像をタップしても拡大できます。</div>
       </div>
@@ -5818,6 +5819,88 @@ function imageLoadingIsLazy(){
   const lowMem=Number(navigator.deviceMemory||8)<=4;
   return ios||mobile||lowMem;
 }
+/* 🎨 v16.161 カードの絵のバージョン（通常版・コラボ版・プロモ…）。
+   効果登録は1つのまま、画像だけ何枚でも持てる。バージョンの画像は images に「キー@@v:ID」で入れる。
+   ・ART_VERS：キー → [{id,label}]（登録してあるバージョン）
+   ・ART_SEL ：キー → id（ふだん出すバージョン。無ければ元の画像）
+   ・デッキごとの上書き：デッキの artSel（キー → id／"base"＝元の画像）。配る時にカードへ c.art として付ける。
+   画像の取り出し口（imgURL.get）で差し替えるので、盤面・一覧・ビューア・ログのどこでも同じ絵になる。 */
+const ART_SEP="@@v:";
+var ART_VERS=new Map();
+var ART_SEL=new Map();
+function isArtVerKey(k){return String(k==null?"":k).includes(ART_SEP);}
+function artVerKey(k,id){return String(k)+ART_SEP+String(id);}
+function artBaseKey(k){const t=String(k==null?"":k);const i=t.indexOf(ART_SEP);return i>=0?t.slice(0,i):t;}
+/* 実際に読む画像のキーを決める。has＝その画像が保存されているか */
+function artResolveWith(k,has){
+  const t=String(k==null?"":k);
+  const i=t.indexOf(ART_SEP);
+  if(i>=0){
+    const base=t.slice(0,i),id=t.slice(i+ART_SEP.length);
+    if(!id||id==="base")return base;              // デッキで「元の画像」を選んだ時は、ふだんの選択より優先
+    return has(t)?t:artResolveWith(base,has);    // その端末に無いバージョンは、ふだんの選択へ
+  }
+  const sel=ART_SEL.get(t);
+  if(sel){const vk=artVerKey(t,sel);if(has(vk))return vk;}
+  return t;
+}
+async function persistArt(){
+  if(!db)return;
+  await idbPut("misc","artVers",Object.fromEntries(ART_VERS));
+  await idbPut("misc","artSel",Object.fromEntries(ART_SEL));
+}
+/* パック・デッキの書き出しに付けるバージョン情報 */
+function artVersionsFor(keys){
+  const o={};
+  for(const k of (keys||[])){const v=ART_VERS.get(k);if(v&&v.length)o[k]=v.map(x=>({id:String(x.id),label:String(x.label||"")}));}
+  return o;
+}
+/* 受け取ったバージョン情報を足す（同じIDは名前だけ新しくする） */
+function mergeArtVersions(av){
+  let n=0;
+  if(!av||typeof av!=="object")return 0;
+  for(const [k,list] of Object.entries(av)){
+    if(!Array.isArray(list))continue;
+    const cur=(ART_VERS.get(k)||[]).slice();
+    for(const x of list){
+      if(!x||!x.id)continue;
+      const id=String(x.id).replace(/[^A-Za-z0-9_-]/g,"").slice(0,24);if(!id||id==="base")continue;
+      const hit=cur.find(y=>y.id===id);
+      if(hit){hit.label=String(x.label||hit.label||"");}else{cur.push({id,label:String(x.label||"")});n++;}
+    }
+    if(cur.length)ART_VERS.set(k,cur);
+  }
+  return n;
+}
+/* 盤面のカードの絵のキー（デッキで選んだバージョンがあればそれ） */
+function artKeyOf(c){
+  const k=faceKeyOf(c);
+  const a=c&&c.art;
+  if(a&&typeof a==="object"&&Object.prototype.hasOwnProperty.call(a,k))return artVerKey(k,a[k]||"base");
+  return k;
+}
+/* デッキの artSel を、そのデッキのカードに付ける（配る時・デッキの見た目を変えた時） */
+function stampDeckArt(pi){
+  try{
+    const P=S.players[pi];if(!P)return 0;
+    const sel=P.artSel&&typeof P.artSel==="object"?P.artSel:null;
+    const Z=P.zones||{};
+    let n=0;
+    const each=c=>{
+      if(!c||typeof c!=="object")return;
+      if(sel&&Object.keys(sel).length){
+        const keys=fxLinkGroup([normName(c.name)]);keys.add(canonicalCardKey(normName(c.name)));
+        const a={};for(const k of keys)if(Object.prototype.hasOwnProperty.call(sel,k))a[k]=sel[k];
+        if(Object.keys(a).length){c.art=a;n++;}else if(c.art)delete c.art;
+      }else if(c.art)delete c.art;
+      for(const u of (c.under||[]))each(u);
+      for(const u of (c.seals||[]))each(u);
+      for(const u of (c.gear||[]))each(u);
+    };
+    for(const zn of Object.keys(Z)){const arr=Z[zn];if(Array.isArray(arr))arr.forEach(each);}
+    return n;
+  }catch(e){return 0;}
+}
 const imgURL=(()=>{
   const known=new Set(); // IndexedDBに存在するキー。画像本体は必要になるまで読まない
   const blobs=new Map(); // キー→画像データ
@@ -5922,9 +6005,13 @@ const imgURL=(()=>{
     has(k){return known.has(k);},
     /* 🖼 v16.71 いまメモリに載っているか（読み込みを起こさずに確かめる）。
        一覧を作る時に get() を呼ぶと、その場で読み込みが始まってしまうため。 */
-    ready(k){return blobs.has(k);},
+    _ready(k){return blobs.has(k);},   // キーそのまま
+    ready(k){return blobs.has(artResolveWith(k,x=>known.has(x)));},   // 🎨 v16.161 バージョンを解決してから
     keys(){return known.keys();},
+    /* 🎨 v16.161 実際に読むキー（バージョンを解決したもの） */
+    resolve(k){return artResolveWith(k,x=>known.has(x));},
     get(k){
+      k=artResolveWith(k,x=>known.has(x));   // 🎨 v16.161 選んだバージョンの絵を出す
       if(!blobs.has(k)){request(k);return undefined;}
       used.set(k,++useSeq);   // 画面に出ているものほど新しくなり、捨てられにくくなる
       let u=urls.get(k);
@@ -5948,7 +6035,8 @@ const imgURL=(()=>{
     preloadKeys(keys){
       if(!db)return Promise.resolve(0);
       let asked=0;
-      for(const k of (keys||[])){
+      for(const k0 of (keys||[])){
+        const k=k0?artResolveWith(k0,x=>known.has(x)):k0;   // 🎨 v16.161
         if(!k||blobs.has(k)||!known.has(k))continue;
         request(k);asked++;
       }
@@ -5991,7 +6079,7 @@ const imgURL=(()=>{
     },
     delete(k){known.delete(k);loading.delete(k);forget(k);return true;},
     clear(){known.clear();loading.clear();queue.length=0;urls.forEach(u=>{URL.revokeObjectURL(u);URL_FREED++;});urls.clear();blobs.clear();used.clear();bytes=0;},
-    forEach(fn){[...blobs.keys()].forEach(k=>fn(api.get(k),k));},
+    forEach(fn){[...blobs.keys()].forEach(k=>{let u=urls.get(k);if(!u){u=URL.createObjectURL(blobs.get(k));URL_MADE++;urls.set(k,u);}fn(u,k);});},   // 🎨 v16.161 キーそのままの絵（バージョンで差し替えない）
     liveCount(){return urls.size;},        // 実際に一時URLを作った枚数
     /* 🩺 v16.18 一時URLから元の名前を引く（いちばん大きい絵がどれか出すため） */
     keyOfUrl(u){try{for(const [k,v] of urls)if(v===u)return k;}catch(e){}return "";},
@@ -6059,7 +6147,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.160";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.161";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -9454,7 +9542,7 @@ let ART_KEYS=new Set();
 const ART_PREFIX="__art__";   // 🎴 スリーブ・プレマ専用の置き場（カードとは別の名前で保存する）
 const ART_NAME_RE=/^(スリーブ|プレマ|プレイマット|背景|sleeve|mat|playmat)/i;
 /* 🔧 仕組みが内部で使う鍵。カードではないので、どのカード一覧にも出さない */
-function isSystemKey(k){const t=String(k);return t==="__back__"||t.startsWith("__mat");}
+function isSystemKey(k){const t=String(k);return t==="__back__"||t.startsWith("__mat")||t.includes(ART_SEP);}   // 🎨 v16.161 バージョンの画像も一覧に出さない
 function isArtKey(k){const t=String(k);return t.startsWith(ART_PREFIX)||ART_KEYS.has(t);}
 async function persistArtKeys(){
   try{if(db)await idbPut("misc","artKeys",[...ART_KEYS]);}catch(e){}
@@ -9639,6 +9727,7 @@ async function reorderDeck(src,tgt,allNames){
   if(DECK_SORT!=="manual")await saveDeckSort("manual");
 }
 async function saveDeck(name,main,gr,hy,sp,ex,cover,coverY,coverRot){
+  const ext=arguments[9];   // 🎨 v16.161 10番目の引数＝デッキの見た目 {artSel,look}（省略したら前の値を引き継ぐ）
   await loadDeckOrder();
   markDeckCreated(name);
   // 🖼 coverY＝表紙の上下位置（0=上端〜100=下端。null=既定の20%）。
@@ -9655,8 +9744,16 @@ async function saveDeck(name,main,gr,hy,sp,ex,cover,coverY,coverRot){
     try{const prev=await getDeck(name);crot=(prev&&prev.coverRot!=null)?prev.coverRot:0;}catch(e){crot=0;}
   }
   crot=([0,90,180,270].includes(+crot))?+crot:0;
-  if(db)await idbPut("decks",name,{main,gr,hy,sp,ex,cover:cover||null,coverY:cy,coverRot:crot});
-  else memDecks.set(name,{main,gr,hy,sp,ex,cover:cover||null,coverY:cy,coverRot:crot});
+  /* 🎨 v16.161 デッキごとの見た目（カードの絵のバージョン artSel・スリーブ／プレマ／アイコン look）。
+     ext を渡さなかった時は前の値を引き継ぐ（編成を保存しても消えない）。 */
+  let artSel=null,look=null;
+  if(ext&&typeof ext==="object"){artSel=ext.artSel||null;look=ext.look||null;}
+  else{try{const prev=await getDeck(name);if(prev){artSel=prev.artSel||null;look=prev.look||null;}}catch(e){}}
+  const _dObj={main,gr,hy,sp,ex,cover:cover||null,coverY:cy,coverRot:crot};
+  if(artSel&&Object.keys(artSel).length)_dObj.artSel=artSel;
+  if(look&&Object.keys(look).some(k=>look[k]))_dObj.look=look;
+  if(db)await idbPut("decks",name,_dObj);
+  else memDecks.set(name,_dObj);
 }
 /* 🔄 v16.85 表紙の回転。背景画像は回せないので、回す時だけ中に画像の層を1枚敷く。
    90度・270度では縦横が入れ替わるため、親の大きさを測って幅と高さを入れ替える。
@@ -9729,12 +9826,50 @@ function deckCoverPos(d){
   const y=(d&&d.coverY!=null&&!isNaN(+d.coverY))?Math.max(0,Math.min(100,+d.coverY)):20;
   return `50% ${y}%`;
 }
+/* 🎨 v16.161 デッキごとのスリーブ・プレマ・アイコン。
+   デッキに設定があれば、席の設定を控えてから差し替える。設定の無いデッキに替えたら控えに戻す。
+   差し替えは画面だけ（端末に保存している席の設定は書き換えない）ので、読み込み直すと席の設定に戻る。 */
+async function applyDeckLook(pi,look){
+  S.seatLookBase=S.seatLookBase||[null,null];
+  S.sleeve=S.sleeve||[null,null];S.matKey=S.matKey||[null,null];S.fxIcon=S.fxIcon||[null,null];S.fxIconKey=S.fxIconKey||[null,null];
+  const has=look&&(look.sleeve||look.matKey||look.icon);
+  if(!has&&!S.seatLookBase[pi])return false;
+  if(has&&!S.seatLookBase[pi]){
+    S.seatLookBase[pi]={sleeve:S.sleeve[pi]||null,matKey:S.matKey[pi]||null,iconKey:S.fxIconKey[pi]||null,icon:S.fxIcon[pi]||null};
+  }
+  const base=S.seatLookBase[pi];
+  const want=has?{sleeve:look.sleeve||base.sleeve,matKey:look.matKey||base.matKey,iconKey:look.icon||base.iconKey}
+               :{sleeve:base.sleeve,matKey:base.matKey,iconKey:base.iconKey};
+  S.sleeve[pi]=want.sleeve||null;
+  // プレマ：盤面は「__matN__」の画像を見ているので、そこへ写す（端末には保存しない）
+  try{
+    if(want.matKey&&want.matKey!==S.matKey[pi]){
+      const blob=db?await idbGet("images",want.matKey):memImages.get(want.matKey);
+      if(blob)imgURL.setBlob("__mat"+pi+"__",blob);
+    }
+    S.matKey[pi]=want.matKey||null;
+  }catch(e){}
+  // アイコン：小さくした絵を持つ
+  try{
+    if(!has&&base){S.fxIcon[pi]=base.icon||null;S.fxIconKey[pi]=base.iconKey||null;}
+    else if(want.iconKey&&want.iconKey!==S.fxIconKey[pi]){
+      const blob=db?await idbGet("images",want.iconKey):memImages.get(want.iconKey);
+      if(blob){const u=URL.createObjectURL(blob);try{S.fxIcon[pi]=await fxIconShrink(u);}finally{URL.revokeObjectURL(u);}S.fxIconKey[pi]=want.iconKey;}
+    }
+  }catch(e){}
+  if(!has)S.seatLookBase[pi]=null;
+  try{buildBoards();}catch(e){}
+  try{renderAll();}catch(e){}
+  return true;
+}
 async function getDeck(name){return db?await idbGet("decks",name):memDecks.get(name);}
 async function deckNames(){return db?await idbKeys("decks"):Array.from(memDecks.keys());}
 function setPlayerDeck(pi,name,d){
   try{touchDeckUsed(name);}catch(e){}
   const P=S.players[pi];
   P.deckName=name;P.mainList=d.main;P.grList=d.gr||[];P.hyList=d.hy||[];P.spList=d.sp||[];P.exList=d.ex||[];
+  P.artSel=(d.artSel&&typeof d.artSel==="object")?d.artSel:null;   // 🎨 v16.161 このデッキで出す絵
+  try{applyDeckLook(pi,d.look||null);}catch(e){}                      // 🎨 v16.161 このデッキのスリーブ・プレマ・アイコン
   /* 🖼 v16.7 デッキを選んだ時点で、そのデッキの画像を読み始める。
      対戦開始の瞬間から読み始めるのでは間に合わず、手札が名前だけで出ていた
      （実測で、開始直後は数枚しか読めていなかった）。
@@ -9833,6 +9968,7 @@ function dealPlayer(pi,pick){
       P.zones.battle.push(c);
     }
   }
+  try{stampDeckArt(S.players.indexOf(P));}catch(e){}   // 🎨 v16.161 デッキで選んだ絵をカードに付ける
 }
 function startGame(picks){
   SHIELD_SEEN=null;   // 🛡 v16.156
@@ -35686,6 +35822,7 @@ $("fxTwin").addEventListener("change",()=>{FXEDIT.twin=$("fxTwin").checked;rende
 $("fxAdd0").addEventListener("click",()=>{FXEDIT.faces[0].push({t:"draw",n:1});renderFxEditor();});
 $("fxTrigAdd").addEventListener("click",()=>{if(!FXEDIT)return;FXEDIT.watchFx.push({ev:"turnEndMine",t:"draw",n:1});renderFxEditor();});
 $("fxAdd1").addEventListener("click",()=>{FXEDIT.faces[1].push({t:"draw",n:1});renderFxEditor();});
+{const b=document.getElementById("fxArtVer");if(b)b.addEventListener("click",()=>{if(!FXEDIT)return;openArtVersionPanel(FXEDIT.key,FXEDIT.name,()=>{try{renderFxThumb();}catch(e){}});});}
 {const b=document.getElementById("fxChgImg");if(b)b.addEventListener("click",async ()=>{if(!FXEDIT)return;const ok=await changeCardImage(FXEDIT.key,FXEDIT.name);if(ok)renderFxThumb();});}
 {const b=document.getElementById("fxZoomImg");if(b)b.addEventListener("click",()=>{if(!FXEDIT)return;showBigCardImage(FXEDIT.key,FXEDIT.name);});}
 $("fxCancel").addEventListener("click",fxBackToSettings);
@@ -37872,7 +38009,7 @@ function openLinkProgress(pi,id){
   // パーツ決定：①under（零龍の儀方式）②psyLink登録（ゴッド/覚醒リンク：場に相手が揃っているか）
   let parts=[],mode="under";
   if(c.under&&c.under.length){
-    parts=c.under.map(x=>({img:imgURL.get(faceKeyOf(x)),name:x.name,on:true}));
+    parts=c.under.map(x=>({img:imgURL.get(artKeyOf(x)),name:x.name,on:true}));
   }else if(reg&&reg.psyLink){
     mode="psy";
     const names=reg.psyLink.split(/[／\/、,]/).map(t=>t.trim()).filter(Boolean);
@@ -37918,7 +38055,7 @@ function openLinkProgress(pi,id){
     const on=pt?pt.on!==false:(i<lit);
     sl.appendChild(mkImg(pt,on,i));
   });
-  const hu=imgURL.get(faceKeyOf(c));
+  const hu=imgURL.get(artKeyOf(c));
   const hw=document.createElement("div");
   hw.style.cssText="position:relative;width:100%";
   if(hu){
@@ -39877,7 +40014,7 @@ function gearSideEl(pi,host,g){
   const isCrossG2=!!(g.isCross||(rg&&(rg.ctype==="crossgear"||rg.ctype==="evocrossgear")));
   if(isAuraG)el.classList.add("auraside");
   else if(isCrossG2)el.classList.add("crossside"); // ⚙ クロス中はカード画像だけを縦向きで表示
-  const u=imgURL.get(faceKeyOf(g));
+  const u=imgURL.get(artKeyOf(g));
   if(u){const im=document.createElement("img");im.src=u;im.draggable=false;el.appendChild(im);}
   else{const np=document.createElement("div");np.className="nameplate";np.textContent=faceNameOf(g);el.appendChild(np);}
   // クロスギアには「クロス」やカード名を重ねず、登録画像そのものだけを見せる。
@@ -40293,7 +40430,7 @@ function cardEl(pi,zone,c){
     for(const pt of _glParts){
       const cell=document.createElement("div");
       cell.style.cssText="flex:1 1 0;min-width:0;position:relative;overflow:hidden";
-      const u=imgURL.get(faceKeyOf(pt));
+      const u=imgURL.get(artKeyOf(pt));
       if(u){
         const im=document.createElement("img");
         im.src=u;im.alt="";im.draggable=false;
@@ -40316,7 +40453,7 @@ function cardEl(pi,zone,c){
      （＝ターンが変わると直る、の正体）。
      印を付け、画像がまだでも空の絵札を置いておけば、届いた時点で refreshLazyImages() が
      その1枚だけ差し替えて名前札を外す。描き直しの負荷は増えない。 */
-  const ikey=showFace?faceKeyOf(c):(topOver?faceKeyOf(topOver):null);
+  const ikey=showFace?artKeyOf(c):(topOver?artKeyOf(topOver):null);   // 🎨 v16.161 デッキで選んだ絵
   const url=ikey?imgURL.get(ikey):backURL(pi);
   if(url||ikey){const im=document.createElement("img");if(ikey)im.dataset.imgKey=ikey;if(url)im.src=url;im.alt="";im.draggable=false;if(!showFace&&!topOver)applySleevePosition(im,pi);if(!showFace&&!topOver&&pi!==S.seat)im.style.transform="rotate(180deg)";el.appendChild(im);}
   if(!url){const np=document.createElement("div");np.className="nameplate";np.textContent=showFace?faceNameOf(c):(topOver?topOver.name:(zone==="shield"?"盾":"?"));el.appendChild(np);}
@@ -40880,7 +41017,7 @@ function renderPlayer(pi){
   if(S.players[pi].hyList.length||Z.hyper.length){
     const hwrap=document.createElement("div");hwrap.className="pilewrap";
     hwrap.appendChild(pileEl({n:Z.hyper.length,label:"超次元",dz:"hyper",
-      img:Z.hyper[0]&&imgURL.get(faceKeyOf(Z.hyper[0]))||null,
+      img:Z.hyper[0]&&imgURL.get(artKeyOf(Z.hyper[0]))||null,
       onTap:()=>openHyperViewer(pi)}));
     const hl=document.createElement("button");hl.className="pmenu";hl.textContent="タップ=一覧";
     hwrap.appendChild(hl);
@@ -40890,7 +41027,7 @@ function renderPlayer(pi){
     const xwrap=document.createElement("div");xwrap.className="pilewrap";
     const xtop=Z.exile[Z.exile.length-1];
     xwrap.appendChild(pileEl({n:Z.exile.length,label:"ゲーム外",dz:"exile",
-      img:xtop&&imgURL.get(faceKeyOf(xtop))||null,
+      img:xtop&&imgURL.get(artKeyOf(xtop))||null,
       onTap:()=>openExileViewer(pi)}));
     const xl=document.createElement("button");xl.className="pmenu";xl.textContent="タップ=一覧";
     xwrap.appendChild(xl);
@@ -40899,7 +41036,7 @@ function renderPlayer(pi){
   const gwrap=document.createElement("div");gwrap.className="pilewrap";
   const top=Z.grave[Z.grave.length-1];
   gwrap.appendChild(pileEl({n:Z.grave.length,label:"墓地",cls:"gravepile",dz:"grave",
-    img:top&&imgURL.get(faceKeyOf(top))||null,
+    img:top&&imgURL.get(artKeyOf(top))||null,
     onTap:()=>openGraveViewer(pi)}));
   const gb=document.createElement("button");gb.className="pmenu";gb.textContent="山上→墓地";
   gb.addEventListener("click",async e=>{
@@ -40917,7 +41054,7 @@ function renderPlayer(pi){
   if(S.shieldMode==="compact"){
     const faceUp=Z.shield.filter(s=>s.faceup).length;
     const seenCnt=Z.shield.filter(s=>!s.faceup&&s.seen).length;
-    const topImg=(()=>{const fu=Z.shield.find(s=>s.faceup);return fu?imgURL.get(faceKeyOf(fu)):null;})();
+    const topImg=(()=>{const fu=Z.shield.find(s=>s.faceup);return fu?imgURL.get(artKeyOf(fu)):null;})();
     const bparts=[];
     if(faceUp)bparts.push(`表${faceUp}`);
     if(seenCnt)bparts.push(`👁${seenCnt}`);
@@ -41043,7 +41180,7 @@ function renderPlayer(pi){
       // 🥧 既定ではマナ山の輪に文明の円グラフを出す（一番上のカードの透かし表示の代わり）
       const pieCss=(S.manaCivView||"pie")==="pie"?manaCivPie(pi):"";
       const pile=pileEl({n:`${untap}/${manaSumOf(pi,false)}`,label:"マナ",dz:"mana",cls:"manapile",
-        img:pieCss?null:(top&&imgURL.get(faceKeyOf(top))||null),
+        img:pieCss?null:(top&&imgURL.get(artKeyOf(top))||null),
         onTap:()=>openManaViewer(pi)});
       if(pieCss){
         const pie=document.createElement("div");
@@ -41737,6 +41874,7 @@ function setupConn(conn){
         FX_INBOX.items[k]=v;
       }
       if(msg.names&&typeof msg.names==="object")for(const [k,v] of Object.entries(msg.names)){if(typeof v==="string")FX_INBOX.names[k]=v.slice(0,60);}
+      try{if(msg.artVersions&&mergeArtVersions(msg.artVersions)>0)persistArt();}catch(e){}   // 🎨 v16.161
       if(msg.links&&typeof msg.links==="object")for(const [k,v] of Object.entries(msg.links)){if(Array.isArray(v))FX_INBOX.links[k]=v.filter(x=>typeof x==="string").slice(0,8);}
       const cnt=fxInboxCount();
       if((msg.chunk|0)+1>=(msg.total|0)){
@@ -43597,7 +43735,8 @@ async function olSendFx(keys,label){
     // 🔗 v16.155 この分にかかわるリンクは、キーが裏の面でも送る。登録の無い面の名前も付ける
     const links=fxLinksFor(part);
     Object.assign(names,fxLinkNames(links));
-    try{ONLINE.conn.send({t:"fx",from:me,chunk:i,total,items,names,links});}
+    const artVersions=artVersionsFor(fxLinkGroup(part));   // 🎨 v16.161
+    try{ONLINE.conn.send({t:"fx",from:me,chunk:i,total,items,names,links,artVersions});}
     catch(e){toast("送信に失敗しました");return;}
     if(total>4&&i%4===3)toast(`📤 カード登録を送信中… ${Math.min((i+1)*CH,keys.length)}/${keys.length}`);
     await new Promise(r=>setTimeout(r,60));
@@ -43922,7 +44061,10 @@ $("olFxShare").addEventListener("click",async ()=>{
   // 🖼 画像も一緒に送れるようにする（画像は容量が大きいので、枚数を見せてから確認する）
   if(ONLINE.conn&&ONLINE.conn.open){
     const imgKeys=[];
-    for(const k of fxLinkGroup(keys))if(imgURL.has(k))imgKeys.push(k);   // 🔗 v16.155 全部の面の画像
+    for(const k of fxLinkGroup(keys)){
+      if(imgURL.has(k))imgKeys.push(k);
+      for(const x of (ART_VERS.get(k)||[])){const vk=artVerKey(k,x.id);if(imgURL.has(vk))imgKeys.push(vk);}   // 🎨 v16.161 絵のバージョンも
+    }   // 🔗 v16.155 全部の面の画像
     // 🖼 表紙のカードに効果登録が無いと keys に入らないので、ここで足す
     if(_sendDeckObj&&_sendDeckObj.deck&&_sendDeckObj.deck.cover&&imgURL.has(_sendDeckObj.deck.cover))imgKeys.push(_sendDeckObj.deck.cover);
     const nImg=new Set(imgKeys).size;
@@ -43938,6 +44080,8 @@ $("olFxShare").addEventListener("click",async ()=>{
    ・自分の手が入った登録（_src が "self"） → 黙って上書きせず、確認用に取り置く
    戻り値：{applied:自動で入れた件数, held:取り置いた件数, heldItems} */
 async function fxMergeIncoming(pack,from,opts={}){
+  // 🎨 v16.161 絵のバージョンの情報（画像そのものは呼び出し側で images に入れる）
+  try{if(pack&&pack.artVersions&&mergeArtVersions(pack.artVersions)>0&&!opts.noPersist)await persistArt();}catch(e){}
   const cardFx=(pack&&pack.cardFx)||{};
   const names=(pack&&pack.nameMap)||{};
   const links=(pack&&pack.faceLinks)||{};
@@ -44109,7 +44253,7 @@ function openShieldStack(pi,id){
     const cell=document.createElement("div");
     cell.style.cssText="position:relative;width:96px;cursor:pointer";
     const isHost=x.id===host.id;
-    const u=x.faceup?imgURL.get(faceKeyOf(x)):null;
+    const u=x.faceup?imgURL.get(artKeyOf(x)):null;
     if(u){
       const im=document.createElement("img");
       im.src=u;im.draggable=false;
@@ -44280,7 +44424,7 @@ function showCardPreview(ctx){
   const ol=document.createElement("div");
   ol.id="cardPreviewOlay";
   ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:95;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px";
-  const u=c.faceup?imgURL.get(faceKeyOf(c)):null;
+  const u=c.faceup?imgURL.get(artKeyOf(c)):null;
   if(u){
     const wrap=document.createElement("div");
     wrap.style.cssText="position:relative;display:inline-block";
@@ -44846,7 +44990,7 @@ function openCardSheet(ctx){
   const rerender=()=>{renderAll();openCardSheet(ctx);};
 
   {
-    const u=(!masked&&c.faceup)?imgURL.get(faceKeyOf(c)):null;
+    const u=(!masked&&c.faceup)?imgURL.get(artKeyOf(c)):null;
     if(u){
       const pv=document.createElement("img");
       pv.src=u;pv.draggable=false;
@@ -46020,7 +46164,7 @@ function openCardSheet(ctx){
       if(!c.faceup){c.seen=true;renderAll();}
       const ol=document.createElement("div");
       ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:990;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:zoom-out";
-      const u=imgURL.get(faceKeyOf(c));
+      const u=imgURL.get(artKeyOf(c));
       if(u){
         const big=document.createElement("img");
         big.src=u;big.draggable=false;
@@ -47983,6 +48127,151 @@ function showBigCardImage(key,name){
   ol.addEventListener("click",()=>ol.remove());
   document.body.appendChild(ol);
 }
+/* 🎨 v16.161 絵のバージョンを足す・消す・名前を変える・ふだん出す絵にする */
+async function addArtVersion(key,label,file){
+  const id="v"+Date.now().toString(36)+Math.floor(Math.random()*36*36).toString(36);
+  const vk=artVerKey(key,id);
+  if(db)await idbPut("images",vk,file);else memImages.set(vk,file);
+  imgURL.setBlob(vk,file);
+  const list=(ART_VERS.get(key)||[]).slice();list.push({id,label:String(label||"").trim()||`バージョン${list.length+2}`});
+  ART_VERS.set(key,list);
+  await persistArt();
+  return id;
+}
+async function deleteArtVersion(key,id){
+  const vk=artVerKey(key,id);
+  try{if(db)await idbDel("images",vk);else memImages.delete(vk);}catch(e){}
+  try{imgURL.delete(vk);}catch(e){}
+  const list=(ART_VERS.get(key)||[]).filter(x=>x.id!==id);
+  if(list.length)ART_VERS.set(key,list);else ART_VERS.delete(key);
+  if(ART_SEL.get(key)===id)ART_SEL.delete(key);
+  await persistArt();
+}
+async function setArtDefault(key,id){
+  if(id&&id!=="base")ART_SEL.set(key,String(id));else ART_SEL.delete(key);
+  await persistArt();
+}
+function openArtVersionPanel(key,name,onClose){
+  const ol=document.createElement("div");
+  ol.className="artVerOlay";
+  ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:996;display:flex;align-items:center;justify-content:center;padding:12px";
+  const box=document.createElement("div");
+  box.style.cssText="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:14px;max-width:560px;width:100%;max-height:88dvh;overflow:auto;padding:14px";
+  ol.appendChild(box);
+  const close=()=>{ol.remove();try{renderAll();refreshLazyImages();}catch(e){}if(onClose)onClose();};
+  ol.addEventListener("click",e=>{if(e.target===ol)close();});
+  const draw=()=>{
+    box.innerHTML="";
+    const h=document.createElement("div");h.style.cssText="font-weight:900;font-size:15px;margin-bottom:6px";
+    h.textContent=`🎨 絵のバージョン：${name||dispName.get(key)||key}`;box.appendChild(h);
+    const note=document.createElement("div");note.style.cssText="font-size:12px;color:#94a3b8;margin-bottom:10px";
+    note.textContent="効果の登録は1つのまま、絵だけ何枚でも持てます。「ふだん出す」を選んだ絵が、盤面・一覧・ログのどこでも出ます。デッキごとに変えたい時は、デッキ一覧の🎨から選べます。";
+    box.appendChild(note);
+    const cur=ART_SEL.get(key)||"";
+    const rows=[{id:"",label:"元の画像",vk:artVerKey(key,"base")}].concat((ART_VERS.get(key)||[]).map(x=>({id:x.id,label:x.label||x.id,vk:artVerKey(key,x.id)})));
+    for(const r of rows){
+      const row=document.createElement("div");
+      row.style.cssText="display:flex;gap:10px;align-items:center;padding:6px;border-radius:10px;margin-bottom:6px;background:"+(r.id===cur?"#1e3a5f":"#111827");
+      const im=document.createElement("img");im.dataset.imgKey=r.vk;{const u=imgURL.get(r.vk);if(u)im.src=u;}
+      im.style.cssText="width:64px;height:90px;object-fit:cover;border-radius:6px;background:#1f2937;flex:0 0 auto";im.draggable=false;
+      im.addEventListener("click",()=>{const u=imgURL.get(r.vk);if(!u)return;const bo=document.createElement("div");bo.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:997;display:flex;align-items:center;justify-content:center";const bi=document.createElement("img");bi.src=u;bi.style.cssText="max-width:94vw;max-height:92dvh;object-fit:contain;border-radius:12px";bo.appendChild(bi);bo.addEventListener("click",()=>bo.remove());document.body.appendChild(bo);});
+      row.appendChild(im);
+      const mid=document.createElement("div");mid.style.cssText="flex:1;min-width:0";
+      const lb=document.createElement("div");lb.style.cssText="font-weight:800";lb.textContent=r.label+(r.id===cur?"（ふだん出す）":"");mid.appendChild(lb);
+      const bar=document.createElement("div");bar.style.cssText="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px";
+      const btn=(t,fn,title)=>{const b=document.createElement("button");b.type="button";b.className="btn small ghost";b.textContent=t;if(title)b.title=title;b.addEventListener("click",async e=>{e.stopPropagation();await fn();draw();});bar.appendChild(b);};
+      if(r.id!==cur)btn("ふだん出す",async()=>{await setArtDefault(key,r.id);toast(`🎨 ふだんは「${r.label}」を出します`);});
+      if(r.id){
+        btn("名前",async()=>{const nn=prompt("このバージョンの名前（例：コラボ版・通常版・プロモ）",r.label);if(nn==null)return;const list=ART_VERS.get(key)||[];const x=list.find(y=>y.id===r.id);if(x){x.label=String(nn).trim()||x.label;await persistArt();}});
+        btn("絵を差し替え",async()=>{const f=await pickOneImageFile();if(!f)return;const vk=artVerKey(key,r.id);if(db)await idbPut("images",vk,f);else memImages.set(vk,f);imgURL.setBlob(vk,f);toast("🎨 絵を差し替えました");});
+        btn("削除",async()=>{if(!await ask(`バージョン「${r.label}」を削除しますか？`))return;await deleteArtVersion(key,r.id);toast(`🎨「${r.label}」を削除しました`);});
+      }
+      mid.appendChild(bar);row.appendChild(mid);box.appendChild(row);
+    }
+    const foot=document.createElement("div");foot.style.cssText="display:flex;gap:8px;justify-content:space-between;margin-top:10px";
+    const add=document.createElement("button");add.type="button";add.className="btn small primary";add.textContent="＋ 別バージョンを追加";
+    add.addEventListener("click",async()=>{
+      const f=await pickOneImageFile();if(!f)return;
+      const okType=(f.type&&f.type.startsWith("image/"))||/\.(png|jpe?g|gif|webp|heic|heif|bmp|avif)$/i.test(f.name||"");
+      if(!okType){toast("画像ファイルを認識できませんでした");return;}
+      const lab=prompt("このバージョンの名前（例：コラボ版・通常版・プロモ）","");
+      const id=await addArtVersion(key,lab||"",f);
+      toast("🎨 バージョンを追加しました");
+      if(await ask("追加した絵を、ふだん出す絵にしますか？"))await setArtDefault(key,id);
+      draw();
+    });
+    const cl=document.createElement("button");cl.type="button";cl.className="btn small ghost";cl.textContent="閉じる";cl.addEventListener("click",close);
+    foot.appendChild(add);foot.appendChild(cl);box.appendChild(foot);
+  };
+  draw();
+  document.body.appendChild(ol);
+}
+/* 🎨 v16.161 デッキごとの見た目（カードの絵・スリーブ・プレマ・アイコン） */
+async function openDeckLookPanel(deckName,onDone){
+  const d=await getDeck(deckName);
+  if(!d){toast("デッキが見つかりません");return;}
+  const look=Object.assign({},d.look||{});
+  const artSel=Object.assign({},d.artSel||{});
+  const names=[...(d.main||[]),...(d.gr||[]),...(d.hy||[]),...(d.sp||[]),...(d.ex||[])].map(e=>e&&e.name).filter(Boolean);
+  const keys=[...fxLinkGroup(names.map(n=>normName(n)))].concat(names.map(n=>canonicalCardKey(normName(n))));
+  const verKeys=[...new Set(keys)].filter(k=>(ART_VERS.get(k)||[]).length);
+  const artKeys=[...imgURL.keys()].filter(k=>isArtKey(k)&&!isArtVerKey(k)&&!String(k).startsWith("__mat")).sort((a,b)=>String(dispName.get(a)||a).localeCompare(String(dispName.get(b)||b),"ja"));
+  const ol=document.createElement("div");
+  ol.className="deckLookOlay";
+  ol.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:996;display:flex;align-items:center;justify-content:center;padding:12px";
+  const box=document.createElement("div");
+  box.style.cssText="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:14px;max-width:560px;width:100%;max-height:88dvh;overflow:auto;padding:14px";
+  ol.appendChild(box);
+  const h=document.createElement("div");h.style.cssText="font-weight:900;font-size:15px;margin-bottom:6px";h.textContent=`🎨 デッキの見た目：${deckName}`;box.appendChild(h);
+  const note=document.createElement("div");note.style.cssText="font-size:12px;color:#94a3b8;margin-bottom:10px";
+  note.textContent="このデッキを席に選んだ時だけ使います。「席の設定のまま」「ふだんの絵」を選んだ所は、今までどおりです。";box.appendChild(note);
+  const sec=t=>{const x=document.createElement("div");x.style.cssText="font-weight:800;margin:10px 0 4px";x.textContent=t;box.appendChild(x);};
+  const mkSel=(label,opts,val,onch)=>{
+    const row=document.createElement("label");row.style.cssText="display:flex;gap:8px;align-items:center;margin:4px 0;font-size:13px";
+    const sp=document.createElement("span");sp.style.cssText="flex:0 0 110px";sp.textContent=label;row.appendChild(sp);
+    const se=document.createElement("select");se.style.cssText="flex:1;min-width:0";
+    for(const [v,t] of opts){const o=document.createElement("option");o.value=v;o.textContent=t;if(v===val)o.selected=true;se.appendChild(o);}
+    se.addEventListener("change",()=>onch(se.value));row.appendChild(se);box.appendChild(row);return se;
+  };
+  sec("スリーブ・プレマ・アイコン");
+  const artOpts=[["","（席の設定のまま）"]].concat(artKeys.map(k=>[k,dispName.get(k)||k]));
+  const withCur=(opts,v)=>(v&&!opts.some(o=>o[0]===v))?opts.concat([[v,dispName.get(v)||v]]):opts;
+  mkSel("🂠 スリーブ",withCur(artOpts,look.sleeve),look.sleeve||"",v=>{look.sleeve=v||null;});
+  mkSel("🟫 プレマ",withCur(artOpts,look.matKey),look.matKey||"",v=>{look.matKey=v||null;});
+  mkSel("🙂 アイコン",withCur(artOpts,look.icon),look.icon||"",v=>{look.icon=v||null;});
+  sec("カードの絵");
+  if(!verKeys.length){const x=document.createElement("div");x.style.cssText="font-size:12px;color:#94a3b8";x.textContent="このデッキには、別バージョンの絵を登録したカードがありません（効果登録の画面の「🎨 絵のバージョン」で追加できます）。";box.appendChild(x);}
+  for(const k of verKeys){
+    const def=ART_SEL.get(k);const defLbl=def?((ART_VERS.get(k)||[]).find(x=>x.id===def)||{}).label||def:"元の画像";
+    const opts=[["",`ふだんの絵（${defLbl}）`],["base","元の画像"]].concat((ART_VERS.get(k)||[]).map(x=>[x.id,x.label||x.id]));
+    mkSel(dispName.get(k)||k,opts,artSel[k]||"",v=>{if(v)artSel[k]=v;else delete artSel[k];});
+  }
+  const foot=document.createElement("div");foot.style.cssText="display:flex;gap:8px;justify-content:flex-end;margin-top:12px";
+  const cancel=document.createElement("button");cancel.type="button";cancel.className="btn small ghost";cancel.textContent="やめる";cancel.addEventListener("click",()=>ol.remove());
+  const ok=document.createElement("button");ok.type="button";ok.className="btn small primary";ok.textContent="保存";
+  ok.addEventListener("click",async()=>{
+    await saveDeckLook(deckName,artSel,look);
+    ol.remove();
+    toast(`🎨「${deckName}」の見た目を保存しました`);
+    if(onDone)onDone();
+  });
+  foot.appendChild(cancel);foot.appendChild(ok);box.appendChild(foot);
+  document.body.appendChild(ol);
+}
+/* 🎨 v16.161 デッキの見た目を保存し、いまそのデッキを使っている席にもすぐ反映する */
+async function saveDeckLook(deckName,artSel,look){
+  const d=await getDeck(deckName);if(!d)return false;
+  await saveDeck(deckName,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover||null,d.coverY!=null?d.coverY:null,d.coverRot,{artSel,look});
+  for(const pi of [0,1]){
+    const P=S.players[pi];
+    if(!P||P.deckName!==deckName)continue;
+    P.artSel=(artSel&&Object.keys(artSel).length)?artSel:null;
+    stampDeckArt(pi);
+    await applyDeckLook(pi,look);
+  }
+  try{renderAll();refreshLazyImages();}catch(e){}
+  return true;
+}
 /* 🖼 カード画像を差し替え／新規登録（効果登録・名前・登録順は保持）。効果登録・デッキ編成の各所から共通利用 */
 async function changeCardImage(key,name){
   if(key==="__back__"){toast("裏面はここでは変更できません");return false;}
@@ -48118,7 +48407,7 @@ function openImageManager(){
     }
     g.appendChild(bar);
     const q=normName(search.value);
-    const keys=Array.from(imgURL.keys()).filter(k=>!k.startsWith("__mat")).sort((a,b)=>{
+    const keys=Array.from(imgURL.keys()).filter(k=>!k.startsWith("__mat")&&!isArtVerKey(k)).sort((a,b)=>{
       if(a==="__back__")return -1;if(b==="__back__")return 1;
       if(mgrSort==="added"){
         const oa=imgOrder.has(a)?imgOrder.get(a):Infinity, ob=imgOrder.has(b)?imgOrder.get(b):Infinity;
@@ -48351,7 +48640,7 @@ function openSleevePicker(pi){
   const render=()=>{
     g.innerHTML="";
     const q=normName(search.value);
-    const _all=Array.from(imgURL.keys()).filter(k=>!String(k).startsWith("__mat"));
+    const _all=Array.from(imgURL.keys()).filter(k=>!String(k).startsWith("__mat")&&!isArtVerKey(k));
     _st.nArt=_all.filter(isArtKey).length;
     if(!_st.nArt)_st.all=true;   // 専用の画像が無ければ全部出す
     g.appendChild(artPickBar(_st,render));
@@ -48412,7 +48701,7 @@ function openMatPicker(pi){
   const render=()=>{
     g.innerHTML="";
     const q=normName(search.value);
-    const _all=Array.from(imgURL.keys()).filter(k=>!String(k).startsWith("__mat"));
+    const _all=Array.from(imgURL.keys()).filter(k=>!String(k).startsWith("__mat")&&!isArtVerKey(k));
     _st.nArt=_all.filter(isArtKey).length;
     if(!_st.nArt)_st.all=true;
     g.appendChild(artPickBar(_st,render));
@@ -48502,7 +48791,7 @@ function openFxIconPicker(side,adjustOnly){
   const render=()=>{
     g.innerHTML="";
     const q=normName(search.value||"");
-    const _all=Array.from(imgURL.keys()).filter(k=>!String(k).startsWith("__mat"));
+    const _all=Array.from(imgURL.keys()).filter(k=>!String(k).startsWith("__mat")&&!isArtVerKey(k));
     _st.nArt=_all.filter(isArtKey).length;
     if(!_st.nArt)_st.all=true;
     if(!adjustOnly)g.appendChild(artPickBar(_st,render));
@@ -49298,6 +49587,7 @@ async function openDeckPick(selId,title){
       mkTool("📋","中身を見る（このデッキのカード一覧）",()=>openDeckListViewer(dk.name));
       mkTool("🧩","編成する（このデッキを編集画面で開く）",()=>editDeckByName(dk.name));
       mkTool("🖼","表紙を変える（一覧に出す絵を選ぶ）",()=>pickDeckCover(dk.name,()=>openDeckPick(DP_TARGET,$("dpTitle").textContent)));
+      mkTool("🎨","見た目を変える（このデッキで出すカードの絵・スリーブ・プレマ・アイコン）",()=>openDeckLookPanel(dk.name,()=>openDeckPick(DP_TARGET,$("dpTitle").textContent)));
       el.appendChild(tools);
       const cap=document.createElement("div");cap.className="dpCap";
       const nm=document.createElement("div");nm.className="dpName";
@@ -50645,6 +50935,9 @@ async function exportCardPack(keys){
     const b=db?await idbGet("images",k):memImages.get(k);
     if(b)data.images[k]=await blobToDataURL(b);
   }
+  // 🎨 v16.161 絵のバージョンも一緒に
+  data.artVersions=artVersionsFor(all);
+  for(const [k,list] of Object.entries(data.artVersions))for(const x of list){const vk=artVerKey(k,x.id);const b=db?await idbGet("images",vk):memImages.get(vk);if(b)data.images[vk]=await blobToDataURL(b);}
   const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
@@ -50674,6 +50967,8 @@ async function exportDeckShare(deckNames,withImg){
     if(d.cover)keys.add(d.cover);
   }
   for(const f of fxLinkGroup([...keys]))keys.add(f);   // 🔗 v16.155 どちらの向きからでも全部の面
+  // 🎨 v16.161 デッキの見た目（スリーブ・プレマ・アイコン）の画像も付ける
+  for(const {deck:d} of decks){const lk=d.look||{};for(const x of [lk.sleeve,lk.matKey,lk.icon])if(x)keys.add(x);}
   const shortName=n=>n.includes("/")?n.slice(n.indexOf("/")+1):n;
   toast(`📤 ${multi?`${decks.length}個のデッキ`:`「${shortName(decks[0].name)}」`}を書き出し中…（カード${keys.size}種）`);
   const cardFx={},faceLinks=fxLinksFor(keys),nameMap={},images={};
@@ -50685,16 +50980,19 @@ async function exportDeckShare(deckNames,withImg){
       if(b)images[k]=await blobToDataURL(b);
     }
   }
+  // 🎨 v16.161 絵のバージョン
+  const artVersions=artVersionsFor(keys);
+  if(withImg)for(const [k,list] of Object.entries(artVersions))for(const x of list){const vk=artVerKey(k,x.id);const b=db?await idbGet("images",vk):memImages.get(vk);if(b)images[vk]=await blobToDataURL(b);}
   let data,fname;
   if(multi){
     data={v:5,type:"deckPack",exported:new Date().toISOString(),
       decks:decks.map(x=>({name:shortName(x.name),deck:x.deck})),
-      cardFx,faceLinks,nameMap,images};
+      cardFx,faceLinks,nameMap,images,artVersions};
     fname=`dmrv-decks-${decks.length}個-${new Date().toISOString().slice(0,10)}.json`;
   }else{
     data={v:5,type:"deck",exported:new Date().toISOString(),
       deckName:shortName(decks[0].name),deck:decks[0].deck,
-      cardFx,faceLinks,nameMap,images};
+      cardFx,faceLinks,nameMap,images,artVersions};
     fname=`dmrv-deck-${shortName(decks[0].name).replace(/[\\/:*?"<>|]/g,"_")}-${new Date().toISOString().slice(0,10)}.json`;
   }
   const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
@@ -51113,6 +51411,7 @@ $("btnExport").addEventListener("click",async ()=>{
     v:6, exported:new Date().toISOString(),
     decks:{}, cardFx:Object.fromEntries(FXDB), faceLinks:Object.fromEntries(LINKS),
     nameMap:Object.fromEntries(dispName),
+    artVersions:Object.fromEntries(ART_VERS), artSel:Object.fromEntries(ART_SEL),   // 🎨 v16.161 絵のバージョン
     sleeve:S.sleeve, sleevePos:S.sleevePos, sleevePosX:S.sleevePosX, matKey:S.matKey,
     matFit:S.matFit||"cover", matPosX:S.matPosX!=null?S.matPosX:50, matPosY:S.matPosY!=null?S.matPosY:50,
     // 🖼 プレイヤーごとの見せ方
@@ -51215,7 +51514,7 @@ $("importInput").addEventListener("change",async e=>{
         }
       }
       const dk=data.deck;
-      await saveDeck(nm,dk.main||[],dk.gr||[],dk.hy||[],dk.sp||[],dk.ex||[],dk.cover,dk.coverY!=null?dk.coverY:null);
+      await saveDeck(nm,dk.main||[],dk.gr||[],dk.hy||[],dk.sp||[],dk.ex||[],dk.cover,dk.coverY!=null?dk.coverY:null,undefined,{artSel:dk.artSel||null,look:dk.look||null});
       await loadAllImages();
       await refreshDeckSelects();
       renderAll();sfx("ok");
@@ -51253,7 +51552,7 @@ $("importInput").addEventListener("change",async e=>{
         }
         existing.add(nm);
         const dk=entry.deck;
-        await saveDeck(nm,dk.main||[],dk.gr||[],dk.hy||[],dk.sp||[],dk.ex||[],dk.cover,dk.coverY!=null?dk.coverY:null);
+        await saveDeck(nm,dk.main||[],dk.gr||[],dk.hy||[],dk.sp||[],dk.ex||[],dk.cover,dk.coverY!=null?dk.coverY:null,undefined,{artSel:dk.artSel||null,look:dk.look||null});
         saved++;
       }
       await loadAllImages();
@@ -51292,6 +51591,10 @@ $("importInput").addEventListener("change",async e=>{
     if(!await ask("このファイルの内容を読み込みます。\n同名のデッキ・登録は上書きされます。よろしいですか？"))return;
     // 🖼 表紙（cover）と超次元（ex）を落とさない。古いバックアップ（v5以前）には無いので null になるだけ
     for(const [n,d] of Object.entries(data.decks||{}))await saveDeck(n,d.main||[],d.gr||[],d.hy||[],d.sp||[],d.ex||[],d.cover||null,d.coverY!=null?d.coverY:null);
+    // 🎨 v16.161 バックアップの見た目（絵のバージョン・スリーブ等）をそのまま戻す
+    for(const [n,d] of Object.entries(data.decks||{})){const dd=await getDeck(n);if(!dd)continue;
+      if(d&&d.artSel)dd.artSel=d.artSel;else delete dd.artSel;if(d&&d.look)dd.look=d.look;else delete dd.look;
+      if(db)await idbPut("decks",n,dd);else memDecks.set(n,dd);}
     // 🗂 並び順を引き継ぐ。こちらにしか無いデッキは消さず、読んだ順のあとろに残す
     await mergeDeckOrder(data);
     if(Array.isArray(data.artKeys)){
@@ -51300,6 +51603,12 @@ $("importInput").addEventListener("change",async e=>{
     }
     if(data.cardFx){FXDB.clear();for(const [k,v] of Object.entries(data.cardFx))FXDB.set(k,fxAliasReg(v));await persistFx();}
     if(data.faceLinks){LINKS.clear();for(const [k,v] of Object.entries(data.faceLinks))LINKS.set(k,v);await persistLinks();}
+    /* 🎨 v16.161 絵のバージョン（画像はバックアップの images に「キー@@v:ID」で入っている） */
+    if(data.artVersions||data.artSel){
+      ART_VERS.clear();for(const [k,v] of Object.entries(data.artVersions||{}))if(Array.isArray(v)&&v.length)ART_VERS.set(k,v);
+      ART_SEL.clear();for(const [k,v] of Object.entries(data.artSel||{}))if(v)ART_SEL.set(k,String(v));
+      await persistArt();
+    }
     if(data.nameMap){for(const [k,v] of Object.entries(data.nameMap))dispName.set(k,v);await persistNames();}
     if(Array.isArray(data.sleeve)){
       S.sleeve=data.sleeve;
@@ -53765,7 +54074,7 @@ function splashRun(off){
   for(const k of imgURL.keys())if(!isSystemKey(k)&&!dispName.has(k))dispName.set(k,k);
   for(const k of [...dispName.keys()])if(isSystemKey(k))dispName.delete(k);   // 以前の版で紛れ込んだ分を取り除く
   // 登録順メタを持たない既存画像は、初回だけ名前順で末尾に採番（以降の追加は正しく後ろへ付く）
-  {const miss=[...imgURL.keys()].filter(k=>k!=="__back__"&&!k.startsWith("__mat")&&!imgOrder.has(k));
+  {const miss=[...imgURL.keys()].filter(k=>k!=="__back__"&&!k.startsWith("__mat")&&!isArtVerKey(k)&&!imgOrder.has(k));
    if(miss.length){miss.sort((a,b)=>(dispName.get(a)||a).localeCompare(dispName.get(b)||b,"ja"));for(const k of miss)imgOrder.set(k,++imgSeq);await persistImgOrder();}}
   const fx=db?await idbGet("misc","cardFx"):null;
   if(fx)for(const [k,v] of Object.entries(fx))FXDB.set(k,v);
@@ -53854,6 +54163,13 @@ function splashRun(off){
   }
   if(typeof syncMatUI==="function")syncMatUI();
   for(const pi of [0,1]){const mk=db?await idbGet("misc",`matKey${pi}`):null;if(mk)S.matKey[pi]=mk;}
+  /* 🎨 v16.161 絵のバージョン */
+  try{
+    const av=db?await idbGet("misc","artVers"):null;
+    if(av&&typeof av==="object")for(const [k,v] of Object.entries(av))if(Array.isArray(v)&&v.length)ART_VERS.set(k,v);
+    const asl=db?await idbGet("misc","artSel"):null;
+    if(asl&&typeof asl==="object")for(const [k,v] of Object.entries(asl))if(v)ART_SEL.set(k,String(v));
+  }catch(e){}
   const an=db?await idbGet("misc","anim"):null;
   if(an!=null){S.anim=an;$("setAnim").checked=!!an;}
   const as2=db?await idbGet("misc","animSet"):null;
