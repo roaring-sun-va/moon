@@ -6188,7 +6188,7 @@ const LINKS=new Map();
 const BACK_KEYS=new Set(["裏面","カード裏面","カード裏","裏","cardback","back"].map(normName));
 let db=null;
 /* 🏷 バージョン。更新のたびにここだけ書き換える（タイトルと画面表記の両方に反映される） */
-const APP_VER="v16.201";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
+const APP_VER="v16.202";   // 🔢 大型アプデ（UIの大改修など）では 14→15 のように整数部を上げる（雷鳴神さんの運用ルール）
 /* ============================================================
    🔄 更新まわりの安全装置（v10.36）
    症状：デプロイしても古いバージョン（例 v10.15）が表示され続ける／盤面が真っ白になる。
@@ -6565,7 +6565,15 @@ function ignoreCantAtkOn(pi){
    （覇帝なき侵略 レッドゾーンF／最終勝首領 カツマスター型）。
    攻撃を宣言するたびに S._noGSAtk を入れ替えるので、消す処理は要らない。 */
 function noGSNow(){
-  try{return !!(S.expert&&S._noGSAtk&&S._noGSAtk===`${S.turn}:${S.who}`);}catch(e){return false;}
+  try{
+    if(S.expert&&S._noGSAtk&&S._noGSAtk===`${S.turn}:${S.who}`)return true;
+    /* 🚫 v16.202 攻撃中に覚醒して「攻撃中はG・ストライクを使えない」面になった時も効かせる（カツキング→カツマスター） */
+    if(S.expert&&typeof CUR_ATTACKER!=="undefined"&&CUR_ATTACKER!=null){
+      const Za=zonesOf(S.who);const a=Za&&Za.battle.find(x=>x.id===CUR_ATTACKER);
+      if(a){const ra=getReg(a);if(ra&&ra.noGSAtk&&!isSealed(a)&&!isIgnored(a,S.who))return true;}
+    }
+    return false;
+  }catch(e){return false;}
 }
 /* 🧬 v15.69 進化かどうかのざっくり判定（登録の ctype だけで見る）。
    「進化ではないクリーチャーの上に置いた時」（時空の禁断 レッドゾーンX型）の判定に使う。 */
@@ -7721,7 +7729,10 @@ async function checkAwaken(pi,ev,trigCard){
         }
         /* 🔄 v16.175 覚醒は裏返るだけなので、タップ／アンタップはそのまま（以前はアンタップしていた） */
         c.face=_toFace;
+        const _wasSick=!!c.sick;
         markArrive(c,{flip:true});   // 🔄 覚醒＝裏返っただけ（出たわけではない）
+        /* 😴 v16.202 サイキック・クリーチャーは覚醒したら召喚酔いがなくなる（出たターンでも）。それ以外は裏返る前のまま */
+        try{const rN=getReg(c);if(rN&&(rN.ctype==="psychic"||rN.ctype==="psyevo"))c.sick=false;else c.sick=_wasSick;}catch(e){}
         sfx("flip");renderAll();
         try{offerHyperCall(side,`自分の《${faceNameOf(c)}》が覚醒しました`);}catch(e){}   // 🌌 超時空ストームG・XX 型
         toast(`🔄 ${r.ctype==="dhfortress"||r.ctype==="dragheart"?"龍解":"覚醒"}！ ${faceNameOf(c)}${cond?`（条件：${cond}）`:""}`);
@@ -28068,6 +28079,8 @@ async function offerTrueEscape(pi,c){
       c.face=Math.max(0,(c.face|0)-1);
       c.buff=null;c.mark=false;c.sideways=false;
       {const rB=FXDB.get(lkB[c.face|0]);c.rot=isWideReg(rB)?c.rot:0;}
+      /* 😴 v16.202 覚醒前に戻ったら、このターンに出たクリーチャーは召喚酔いに戻る */
+      try{const rB2=FXDB.get(lkB[c.face|0]);if(rB2&&!rB2.sa&&c.bornTurn===S.turn)c.sick=true;}catch(e){}
       toast(`🔄 解除！ ${was} は離れるかわりに《${faceNameOf(c)}》へ裏返った`);
       logOnly(`🔄 解除：${S.players[pi].label} の《${was}》→《${faceNameOf(c)}》（離場をキャンセル）`);
       try{fxShare("awake","解除！","離れるかわりに裏返る",true,c.name,pi);}catch(e){}
@@ -30535,6 +30548,9 @@ async function startAttack(pi,id){
   if(tg.kind==="creature"&&await offerAtkedFlipBack(op,tg.cid,c)){renderAll();return;}
   c._sxAtkDone=false;
   c._mbDone=false;
+  /* ⚔ v16.202 攻撃を宣言するたびに「侵略・革命チェンジの宣言済み」「スマッシュ・バースト使用済み」を戻す。
+     これまで一度も戻していなかったので、侵略したクリーチャーは次のターン以降、侵略も革命チェンジも宣言できなかった。 */
+  c._invDeclDone=false;c._smashDone=false;
   const wnames=watchNames(pi,tg.kind==="creature"?"atkC":"atkP");
   if(wnames.length){
     const q=await askChoice(`⚡誘発確認（${tg.kind==="creature"?"クリーチャーへの攻撃":"プレイヤーへの攻撃"}時）\n${wnames.join("、")}\n\n効果を処理しますか？`,
@@ -55429,6 +55445,8 @@ function zoneCondOk(expr,pi,selfCard){
       const mFace=key.match(/^(盾|シールド)(表向き|裏向き)$/);
       if(mFace)return mFace[2]==="表向き"?faceUpShieldCards(ZZ).length:zoneCards(ZZ,"shield").filter(x=>!x.faceup).length;   // 🛡 v16.115 重なりの中の表向きも数える
       if(key==="シールド")key="盾";
+      /* 🐉 v16.202 「クリーチャー」「バトルクリーチャー」＝バトルゾーンのクリーチャーだけ（禁断・フォートレス・フィールドなどは数えない・カツドン型） */
+      if(key==="クリーチャー"||key==="バトルクリーチャー")return (ZZ.battle||[]).filter(x=>{const rx=getReg(x);return !rx||isCreatureReg(rx);}).length;
       const map={"盾":"shield","墓地":"grave","手札":"hand","バトル":"battle","マナ":"mana","山札":"deck"};
       return map[key]!=null?zoneCards(ZZ,map[key]).length:null; // ⚙ バトルはクロス中のギアも含む
     };
@@ -55549,7 +55567,8 @@ function zoneCondOk(expr,pi,selfCard){
       "盾表向き":faceUpShieldCards(Z).map(o=>o.card),"盾裏向き":Z.shield.filter(x=>!x.faceup),   // 🛡 v16.115 重なりの中の表向きも数える
       "相手盾表向き":faceUpShieldCards(OZ).map(o=>o.card),"相手盾裏向き":OZ.shield.filter(x=>!x.faceup),"盾合計":[...Z.shield,...OZ.shield],"盾最少":(Z.shield.length<=OZ.shield.length?Z.shield:OZ.shield),"バトル":Z.battle,"バトル他":Z.battle.filter(x=>!(selfCard&&x.id===selfCard.id)),"バトル合計":[...Z.battle,...OZ.battle],"バトルマナ":[...Z.battle,...Z.mana],"相手バトル":OZ.battle,"手札":Z.hand,"相手手札":OZ.hand,"相手山札":OZ.deck,"山札":Z.deck,"相手マナ":OZ.mana}[zn];
       if(!arrs)return false;
-      const cnt=(!filt)?arrs.length:zoneFiltCount(arrs,filt);
+      /* 🐉 v16.202 「バトルクリーチャー」「バトル:クリーチャー」＝クリーチャーだけ（禁断・フォートレス・フィールド等は数えない） */
+      const cnt=(filt==="クリーチャー")?arrs.filter(x=>{const rx=getReg(x);return !rx||isCreatureReg(rx);}).length:((!filt)?arrs.length:zoneFiltCount(arrs,filt));
       if(opr==="<="||opr==="≦")return cnt<=n;
       if(opr==="="||opr==="＝")return cnt===n;
       return cnt>=n;
